@@ -1,20 +1,24 @@
 //! Wisp connection handler: handshake, auth, guard, adblock, and
 //! task-per-stream multiplexing with CONTINUE-honoring flow control.
+//! TCP and UDP streams are both supported; UDP datagrams carry the
+//! Wisp address prefix ([len u8][host][port BE u16]) in each payload.
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::HeaderMap;
 use bytes::BytesMut;
 use guard::{DestinationPolicy, Verdict};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::{mpsc, Notify};
 use wisp_core::packet::{CloseReason, Packet, StreamKind};
 use wisp_core::{encode_packet, Frame, ServerHandshake};
 use wisp_extensions::PasswordAuth;
 
 const CHUNK: usize = 16 * 1024;
+const MAX_UDP_REMOTE: usize = 32;
 
 /// Shared server configuration for all connections.
 pub struct ProxyState {
@@ -97,9 +101,16 @@ impl Window {
     }
 }
 
+/// Client-originated payload routed to the upstream writer task.
+enum ClientMsg {
+    /// Raw TCP payload.
+    Bytes(Vec<u8>),
+    /// UDP datagram for a resolved remote address.
+    Datagram(SocketAddr, Vec<u8>),
+}
+
 struct Stream {
-    /// Sender of client payload into the socket-writer task.
-    write_tx: mpsc::Sender<Vec<u8>>,
+    write_tx: mpsc::Sender<ClientMsg>,
     window: Arc<Window>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
 }
@@ -246,7 +257,7 @@ async fn handle_connection(
                                             },
                                         )
                                         .await;
-                                        spawn_stream(&mut streams, events_tx.clone(), stream_id, tcp);
+                                        spawn_tcp_stream(&mut streams, events_tx.clone(), stream_id, tcp);
                                     }
                                     Err(_) => {
                                         let _ = send_packet(
@@ -258,18 +269,52 @@ async fn handle_connection(
                                 }
                             }
                             StreamKind::Udp => {
-                                // UDP relay is the next roadmap item; refuse cleanly.
-                                let _ = send_packet(
-                                    &mut socket,
-                                    &Packet::Close { stream_id, reason: CloseReason::Blocked },
-                                )
-                                .await;
+                                // Resolve the CONNECT hostname so client datagrams
+                                // can be forwarded even without an address prefix.
+                                let resolved = tokio::net::lookup_host((hostname.as_str(), port))
+                                    .await
+                                    .and_then(|mut it| it.next().ok_or(std::io::Error::new(
+                                        std::io::ErrorKind::NotFound,
+                                        "no addresses",
+                                    )));
+                                let Some(primary) = resolved else {
+                                    let _ = send_packet(
+                                        &mut socket,
+                                        &Packet::Close { stream_id, reason: CloseReason::UnreachableHost },
+                                    )
+                                    .await;
+                                    continue;
+                                };
+                                match UdpSocket::bind(("0.0.0.0", 0)).await {
+                                    Ok(udp) => {
+                                        let _ = send_packet(
+                                            &mut socket,
+                                            &Packet::Continue {
+                                                stream_id,
+                                                buffer_remaining: wisp_core::handshake::INITIAL_BUFFER_SIZE,
+                                            },
+                                        )
+                                        .await;
+                                        spawn_udp_stream(&mut streams, events_tx.clone(), stream_id, udp, primary);
+                                    }
+                                    Err(_) => {
+                                        let _ = send_packet(
+                                            &mut socket,
+                                            &Packet::Close { stream_id, reason: CloseReason::UnreachableHost },
+                                        )
+                                        .await;
+                                    }
+                                }
                             }
                         }
                     }
                     Packet::Data { stream_id, payload } => {
                         if let Some(stream) = streams.get(&stream_id) {
-                            if stream.write_tx.send(payload).await.is_err() {
+                            // Streams track their own transport kind on the
+                            // writer task side via the ClientMsg variant.
+                            // UDP frames without a valid prefix fall back to
+                            // the stream default remote (handled downstream).
+                            if stream.write_tx.send(ClientMsg::Bytes(payload)).await.is_err() {
                                 remove_stream(&mut streams, &stream_id);
                             }
                         }
@@ -303,21 +348,23 @@ async fn handle_connection(
     limiter.lock().unwrap().forget_connection(conn_id, None);
 }
 
-fn spawn_stream(
+fn spawn_tcp_stream(
     streams: &mut HashMap<u32, Stream>,
     events: mpsc::Sender<StreamEvent>,
     stream_id: u32,
     tcp: TcpStream,
 ) {
     let (mut reader, mut writer) = tcp.into_split();
-    let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (write_tx, mut write_rx) = mpsc::channel::<ClientMsg>(64);
     let window = Window::new(wisp_core::handshake::INITIAL_BUFFER_SIZE);
 
     // Socket writer: drains client payload into the upstream socket.
     let writer_task = tokio::spawn(async move {
-        while let Some(chunk) = write_rx.recv().await {
-            if writer.write_all(&chunk).await.is_err() {
-                break;
+        while let Some(msg) = write_rx.recv().await {
+            if let ClientMsg::Bytes(chunk) = msg {
+                if writer.write_all(&chunk).await.is_err() {
+                    break;
+                }
             }
         }
     });
@@ -354,6 +401,115 @@ fn spawn_stream(
     );
 }
 
+fn spawn_udp_stream(
+    streams: &mut HashMap<u32, Stream>,
+    events: mpsc::Sender<StreamEvent>,
+    stream_id: u32,
+    udp: UdpSocket,
+    primary: SocketAddr,
+) {
+    let socket = Arc::new(udp);
+    let (write_tx, mut write_rx) = mpsc::channel::<ClientMsg>(64);
+    let window = Window::new(wisp_core::handshake::INITIAL_BUFFER_SIZE);
+
+    // Datagrams from the client. Each payload begins with the Wisp
+    // address prefix [len u8][hostname][port BE u16]; when absent or
+    // malformed the CONNECT-time remote is used.
+    let send_socket = socket.clone();
+    let writer_task = tokio::spawn(async move {
+        let mut remotes: HashMap<String, SocketAddr> = HashMap::new();
+        let mut default_remote = primary;
+        while let Some(msg) = write_rx.recv().await {
+            let ClientMsg::Bytes(payload) = msg;
+            let (remote, data) = match split_udp_prefix(&payload) {
+                Some((host, port)) => {
+                    let key = format!("{host}:{port}");
+                    let addr = if let Some(a) = remotes.get(&key) {
+                        *a
+                    } else if let Ok(a) = tokio::net::lookup_host((host.as_str(), port))
+                        .await
+                        .and_then(|mut it| it.next().ok_or(std::io::Error::new(
+                            std::io::ErrorKind::NotFound, "no addresses",
+                        )))
+                    {
+                        if remotes.len() >= MAX_UDP_REMOTE {
+                            remotes.clear();
+                        }
+                        remotes.insert(key, a);
+                        a
+                    } else {
+                        continue;
+                    };
+                    (addr, data)
+                }
+                None => (default_remote, payload),
+            };
+            let _ = send_socket.send_to(&data, remote).await;
+        }
+    });
+
+    // Datagrams from upstream; prefixed with the sender address.
+    let recv_socket = socket.clone();
+    let win = window.clone();
+    let reader_task = tokio::spawn(async move {
+        let mut buf = vec![0u8; CHUNK];
+        loop {
+            match recv_socket.recv_from(&mut buf).await {
+                Ok((0, _)) => continue,
+                Ok((n, peer)) => {
+                    let mut frame = encode_udp_prefix(&peer);
+                    frame.extend_from_slice(&buf[..n]);
+                    win.acquire(frame.len()).await;
+                    if events.send(StreamEvent::Data(stream_id, frame)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    let _ = events.send(StreamEvent::Errored(stream_id)).await;
+                    break;
+                }
+            }
+        }
+    });
+
+    streams.insert(
+        stream_id,
+        Stream { write_tx, window, tasks: vec![writer_task, reader_task] },
+    );
+}
+
+/// Split a Wisp UDP address prefix off the front of a client datagram.
+/// Returns (hostname, port, payload) as (host, port) plus the tail.
+fn split_udp_prefix(payload: &[u8]) -> Option<(String, u16)> {
+    if payload.is_empty() {
+        return None;
+    }
+    let host_len = payload[0] as usize;
+    if host_len == 0 || payload.len() < 1 + host_len + 2 {
+        return None;
+    }
+    let host = std::str::from_utf8(&payload[1..1 + host_len]).ok()?;
+    let port = u16::from_be_bytes([payload[1 + host_len], payload[2 + host_len]]);
+    // Port 0 is never a valid remote; treat prefix-less frames as raw.
+    if port == 0 {
+        return None;
+    }
+    Some((host.to_string(), port))
+}
+
+/// Build the Wisp UDP address prefix for a datagram sent to the client.
+fn encode_udp_prefix(peer: &SocketAddr) -> Vec<u8> {
+    let host = match peer {
+        SocketAddr::V4(a) => a.ip().to_string(),
+        SocketAddr::V6(a) => a.ip().to_string(),
+    };
+    let mut out = Vec::with_capacity(1 + host.len() + 2);
+    out.push(host.len() as u8);
+    out.extend_from_slice(host.as_bytes());
+    out.extend_from_slice(&peer.port().to_be_bytes());
+    out
+}
+
 fn remove_stream(streams: &mut HashMap<u32, Stream>, stream_id: &u32) {
     if let Some(s) = streams.remove(stream_id) {
         for t in s.tasks {
@@ -375,4 +531,26 @@ fn rand_conn_id() -> u64 {
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0)
         ^ (std::process::id() as u64) << 32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn udp_prefix_roundtrip() {
+        let mut frame = encode_udp_prefix(&"93.184.216.34:443".parse().unwrap());
+        frame.extend_from_slice(b"hello");
+        let (host, port) = split_udp_prefix(&frame).unwrap();
+        assert_eq!(host, "93.184.216.34");
+        assert_eq!(port, 443);
+        assert_eq!(&frame[1 + host.len() + 2..], b"hello");
+    }
+
+    #[test]
+    fn prefixless_datagram_is_raw() {
+        // A raw DNS query has no prefix; must not be misparsed.
+        assert!(split_udp_prefix(b"\x00\x01abc").is_none());
+        assert!(split_udp_prefix(b"short").is_none());
+    }
 }
