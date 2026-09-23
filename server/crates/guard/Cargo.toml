@@ -1,0 +1,9 @@
+[package]
+name = "guard"
+description = "SSRF hardening, rate limiting, and flood detection for LobsterBrowse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wisp-core = { path = "../wisp-core" }
