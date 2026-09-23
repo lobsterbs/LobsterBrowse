@@ -28,7 +28,7 @@ impl PasswordAuth {
             required,
             users: users
                 .into_iter()
-                .map(|(u, p)| (u, Self::hash(&u, &p)))
+                .map(|(u, p)| (u.clone(), Self::hash(&u, &p)))
                 .collect(),
         }
     }

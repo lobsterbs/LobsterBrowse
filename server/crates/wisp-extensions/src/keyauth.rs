@@ -59,7 +59,7 @@ impl KeyAuth {
             if hash.as_slice() != pubkey_hash {
                 continue;
             }
-            if user != username {
+            if *user != username {
                 continue;
             }
             let Ok(sig) = Signature::from_slice(signature) else {
