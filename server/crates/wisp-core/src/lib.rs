@@ -11,5 +11,6 @@ pub mod extension;
 pub mod handshake;
 
 pub use error::{Result, WispError};
-pub use frame::Frame;
+pub use frame::{encode_packet, Frame};
+pub use handshake::ServerHandshake;
 pub use packet::{CloseReason, Packet, PacketType, StreamKind};
