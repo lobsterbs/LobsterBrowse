@@ -3,13 +3,15 @@
 //! Routes HTTP traffic normally and upgrades /wisp/ (configurable path)
 //! to the Wisp protocol: v2 INFO handshake when a Sec-WebSocket-Protocol
 //! header is present, v1 fallback otherwise. All CONNECTs pass through
-//! the guard layer (destination policy + rate limits) before sockets open.
+//! the guard layer (destination policy + rate limits) and the adblock
+//! filter set before sockets open.
 
 mod proxy;
 
 use axum::{routing::get, Router};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use tower_http::cors::CorsLayer;
 use tracing::info;
 
 #[tokio::main]
@@ -45,7 +47,9 @@ async fn main() {
                 let limiter = limiter.clone();
                 move |ws, headers| proxy::handle_upgrade(ws, headers, state, limiter)
             }),
-        );
+        )
+        // The static UI reads /healthz from the browser to show server status.
+        .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("LobsterBrowse wisp server listening on {addr} at {wisp_path}");

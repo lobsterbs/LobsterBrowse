@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for the LobsterBrowse Rust Wisp server.
-FROM rust:1.83-slim AS builder
+# Builder tracks latest stable Rust: zeroize 1.9+ manifests need cargo >= 1.85.
+FROM rust:1-slim AS builder
 WORKDIR /build
 
 COPY server/ ./
