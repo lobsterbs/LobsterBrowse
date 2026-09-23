@@ -1,0 +1,10 @@
+[package]
+name = "wisp-core"
+description = "Clean-room Wisp v2.1 protocol implementation (framing, packets, handshake)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+thiserror = { workspace = true }
