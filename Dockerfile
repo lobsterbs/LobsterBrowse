@@ -3,13 +3,8 @@
 FROM rust:1.83-slim AS builder
 WORKDIR /build
 
-# Cache workspace manifest first.
-COPY server/Cargo.toml ./Cargo.toml
-COPY server/Cargo.lock* ./
-COPY server/crates ./crates
-COPY server/bin ./bin
-RUN mkdir -p .cargo && cargo build --release -p lobster-server 2>&1 | tee /tmp/build.log; \
-    test -x target/release/lobster-server || (cargo build --release -p lobster-server && true)
+COPY server/ ./
+RUN cargo build --release -p lobster-server
 
 FROM debian:bookworm-slim
 RUN apt-get update \
