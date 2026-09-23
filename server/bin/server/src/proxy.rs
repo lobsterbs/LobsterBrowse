@@ -101,16 +101,9 @@ impl Window {
     }
 }
 
-/// Client-originated payload routed to the upstream writer task.
-enum ClientMsg {
-    /// Raw TCP payload.
-    Bytes(Vec<u8>),
-    /// UDP datagram for a resolved remote address.
-    Datagram(SocketAddr, Vec<u8>),
-}
-
 struct Stream {
-    write_tx: mpsc::Sender<ClientMsg>,
+    /// Sender of client payload into the upstream writer task.
+    write_tx: mpsc::Sender<Vec<u8>>,
     window: Arc<Window>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
 }
@@ -269,14 +262,12 @@ async fn handle_connection(
                                 }
                             }
                             StreamKind::Udp => {
-                                // Resolve the CONNECT hostname so client datagrams
-                                // can be forwarded even without an address prefix.
-                                let resolved = tokio::net::lookup_host((hostname.as_str(), port))
-                                    .await
-                                    .and_then(|mut it| it.next().ok_or(std::io::Error::new(
-                                        std::io::ErrorKind::NotFound,
-                                        "no addresses",
-                                    )));
+                                // Resolve the CONNECT hostname once so client
+                                // datagrams without a prefix still reach it.
+                                let resolved = match tokio::net::lookup_host((hostname.as_str(), port)).await {
+                                    Ok(mut it) => it.next(),
+                                    Err(_) => None,
+                                };
                                 let Some(primary) = resolved else {
                                     let _ = send_packet(
                                         &mut socket,
@@ -310,11 +301,7 @@ async fn handle_connection(
                     }
                     Packet::Data { stream_id, payload } => {
                         if let Some(stream) = streams.get(&stream_id) {
-                            // Streams track their own transport kind on the
-                            // writer task side via the ClientMsg variant.
-                            // UDP frames without a valid prefix fall back to
-                            // the stream default remote (handled downstream).
-                            if stream.write_tx.send(ClientMsg::Bytes(payload)).await.is_err() {
+                            if stream.write_tx.send(payload).await.is_err() {
                                 remove_stream(&mut streams, &stream_id);
                             }
                         }
@@ -355,16 +342,14 @@ fn spawn_tcp_stream(
     tcp: TcpStream,
 ) {
     let (mut reader, mut writer) = tcp.into_split();
-    let (write_tx, mut write_rx) = mpsc::channel::<ClientMsg>(64);
+    let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
     let window = Window::new(wisp_core::handshake::INITIAL_BUFFER_SIZE);
 
     // Socket writer: drains client payload into the upstream socket.
     let writer_task = tokio::spawn(async move {
-        while let Some(msg) = write_rx.recv().await {
-            if let ClientMsg::Bytes(chunk) = msg {
-                if writer.write_all(&chunk).await.is_err() {
-                    break;
-                }
+        while let Some(chunk) = write_rx.recv().await {
+            if writer.write_all(&chunk).await.is_err() {
+                break;
             }
         }
     });
@@ -409,38 +394,38 @@ fn spawn_udp_stream(
     primary: SocketAddr,
 ) {
     let socket = Arc::new(udp);
-    let (write_tx, mut write_rx) = mpsc::channel::<ClientMsg>(64);
+    let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
     let window = Window::new(wisp_core::handshake::INITIAL_BUFFER_SIZE);
 
-    // Datagrams from the client. Each payload begins with the Wisp
-    // address prefix [len u8][hostname][port BE u16]; when absent or
-    // malformed the CONNECT-time remote is used.
+    // Datagrams from the client. Each payload usually begins with the
+    // Wisp address prefix [len u8][hostname][port BE u16]; when absent
+    // or malformed the CONNECT-time remote is used.
     let send_socket = socket.clone();
     let writer_task = tokio::spawn(async move {
         let mut remotes: HashMap<String, SocketAddr> = HashMap::new();
-        let mut default_remote = primary;
-        while let Some(msg) = write_rx.recv().await {
-            let ClientMsg::Bytes(payload) = msg;
+        let default_remote = primary;
+        while let Some(payload) = write_rx.recv().await {
             let (remote, data) = match split_udp_prefix(&payload) {
-                Some((host, port)) => {
+                Some((host, port, tail)) => {
                     let key = format!("{host}:{port}");
                     let addr = if let Some(a) = remotes.get(&key) {
                         *a
-                    } else if let Ok(a) = tokio::net::lookup_host((host.as_str(), port))
-                        .await
-                        .and_then(|mut it| it.next().ok_or(std::io::Error::new(
-                            std::io::ErrorKind::NotFound, "no addresses",
-                        )))
-                    {
-                        if remotes.len() >= MAX_UDP_REMOTE {
-                            remotes.clear();
-                        }
-                        remotes.insert(key, a);
-                        a
                     } else {
-                        continue;
+                        match tokio::net::lookup_host((host.as_str(), port)).await {
+                            Ok(mut it) => match it.next() {
+                                Some(a) => {
+                                    if remotes.len() >= MAX_UDP_REMOTE {
+                                        remotes.clear();
+                                    }
+                                    remotes.insert(key, a);
+                                    a
+                                }
+                                None => continue,
+                            },
+                            Err(_) => continue,
+                        }
                     };
-                    (addr, data)
+                    (addr, tail.to_vec())
                 }
                 None => (default_remote, payload),
             };
@@ -479,8 +464,8 @@ fn spawn_udp_stream(
 }
 
 /// Split a Wisp UDP address prefix off the front of a client datagram.
-/// Returns (hostname, port, payload) as (host, port) plus the tail.
-fn split_udp_prefix(payload: &[u8]) -> Option<(String, u16)> {
+/// Returns (hostname, port, payload tail) when a valid prefix exists.
+fn split_udp_prefix(payload: &[u8]) -> Option<(String, u16, &[u8])> {
     if payload.is_empty() {
         return None;
     }
@@ -490,11 +475,11 @@ fn split_udp_prefix(payload: &[u8]) -> Option<(String, u16)> {
     }
     let host = std::str::from_utf8(&payload[1..1 + host_len]).ok()?;
     let port = u16::from_be_bytes([payload[1 + host_len], payload[2 + host_len]]);
-    // Port 0 is never a valid remote; treat prefix-less frames as raw.
+    // Port 0 is never a valid remote; treat such frames as prefix-less.
     if port == 0 {
         return None;
     }
-    Some((host.to_string(), port))
+    Some((host.to_string(), port, &payload[3 + host_len..]))
 }
 
 /// Build the Wisp UDP address prefix for a datagram sent to the client.
@@ -541,10 +526,10 @@ mod tests {
     fn udp_prefix_roundtrip() {
         let mut frame = encode_udp_prefix(&"93.184.216.34:443".parse().unwrap());
         frame.extend_from_slice(b"hello");
-        let (host, port) = split_udp_prefix(&frame).unwrap();
+        let (host, port, tail) = split_udp_prefix(&frame).unwrap();
         assert_eq!(host, "93.184.216.34");
         assert_eq!(port, 443);
-        assert_eq!(&frame[1 + host.len() + 2..], b"hello");
+        assert_eq!(tail, b"hello");
     }
 
     #[test]
@@ -552,5 +537,6 @@ mod tests {
         // A raw DNS query has no prefix; must not be misparsed.
         assert!(split_udp_prefix(b"\x00\x01abc").is_none());
         assert!(split_udp_prefix(b"short").is_none());
+        assert!(split_udp_prefix(&[]).is_none());
     }
 }
