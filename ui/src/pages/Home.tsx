@@ -30,7 +30,7 @@ export default function HomePage() {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end", margin: "16px 0" }}>
         <m3e-form-field variant="outlined" style={{ flex: 1 }}>
           <label slot="label" htmlFor="url">Enter a URL</label>
-          <input id="url" value={url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrl(e.target.value)} placeholder="example.com" />
+          <input id="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" />
         </m3e-form-field>
         <m3e-button variant="filled" size="large" onClick={() => { (globalThis as any).M3eSnackbar?.open("Wisp transport wiring lands with the Scramjet fork — server is live at " + SERVER_URL); }}>Go</m3e-button>
       </div>

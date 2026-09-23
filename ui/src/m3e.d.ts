@@ -11,6 +11,8 @@ type M3eBase = {
   key?: React.Key;
   children?: React.ReactNode;
   onClick?: (event: React.MouseEvent) => void;
+  "aria-label"?: string;
+  "aria-hidden"?: boolean;
 };
 
 declare module "react" {
