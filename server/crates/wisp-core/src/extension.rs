@@ -1,4 +1,4 @@
-//! Wisp v2 protocol extension IDs and metadata encoding.
+//! Wisp v2 protocol extension IDs and metadata encoding/decoding.
 
 use crate::error::{Result, WispError};
 
@@ -50,9 +50,28 @@ pub fn password_auth_client(username: &str, password: &str) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Decode a PasswordAuth client message into (username, password).
+pub fn password_auth_client_decode(payload: &[u8]) -> Option<(String, String)> {
+    if payload.is_empty() {
+        return None;
+    }
+    let user_len = payload[0] as usize;
+    if payload.len() - 1 < user_len {
+        return None;
+    }
+    let username = std::str::from_utf8(&payload[1..1 + user_len]).ok()?.to_string();
+    let password = String::from_utf8_lossy(&payload[1 + user_len..]).into_owned();
+    Some((username, password))
+}
+
 /// Encode a MOTD server message: raw UTF-8 string bytes.
 pub fn motd_server(message: &str) -> Vec<u8> {
     message.as_bytes().to_vec()
+}
+
+/// Decode a MOTD server message.
+pub fn motd_decode(payload: &[u8]) -> String {
+    String::from_utf8_lossy(payload).into_owned()
 }
 
 /// Encode a KeyAuth server message:
@@ -65,21 +84,38 @@ pub fn key_auth_server(required: bool, algorithms: u8, challenge: &[u8]) -> Vec<
     out
 }
 
+/// Decode a KeyAuth server message.
+pub fn key_auth_server_decode(payload: &[u8]) -> Option<(bool, u8, Vec<u8>)> {
+    if payload.len() < 2 {
+        return None;
+    }
+    Some((payload[0] != 0, payload[1], payload[2..].to_vec()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn password_client_roundtrip_shape() {
+    fn password_client_roundtrip() {
         let msg = password_auth_client("ada", "hunter2").unwrap();
-        assert_eq!(msg[0], 3);
-        assert_eq!(&msg[1..4], b"ada");
-        assert_eq!(&msg[4..], b"hunter2");
+        let (u, p) = password_auth_client_decode(&msg).unwrap();
+        assert_eq!(u, "ada");
+        assert_eq!(p, "hunter2");
     }
 
     #[test]
-    fn key_auth_server_shape() {
+    fn malformed_password_payloads_rejected() {
+        assert!(password_auth_client_decode(&[]).is_none());
+        assert!(password_auth_client_decode(&[9, 97]).is_none()); // claims 9-byte user, has 1
+    }
+
+    #[test]
+    fn key_auth_server_roundtrip() {
         let msg = key_auth_server(true, sig_algorithms::ED25519, &[1, 2, 3]);
-        assert_eq!(msg, vec![1, 1, 1, 2, 3]);
+        let (req, alg, chal) = key_auth_server_decode(&msg).unwrap();
+        assert!(req);
+        assert_eq!(alg, sig_algorithms::ED25519);
+        assert_eq!(chal, vec![1, 2, 3]);
     }
 }

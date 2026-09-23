@@ -1,0 +1,20 @@
+[package]
+name = "lobster-server"
+description = "LobsterBrowse Wisp server: tokio + axum WSS entrypoint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lobster-server"
+path = "src/main.rs"
+
+[dependencies]
+wisp-core = { path = "../../crates/wisp-core" }
+guard = { path = "../../crates/guard" }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.7", features = ["ws"] }
+futures-util = "0.3"
+bytes = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
