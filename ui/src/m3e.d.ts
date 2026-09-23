@@ -1,36 +1,44 @@
-/* JSX intrinsics for M3E web components (element names/attributes verified
-   against https://matraic.github.io/m3e docs). */
-import "./types";
+/* JSX intrinsics for M3E web components.
+   Element names/attributes verified against https://matraic.github.io/m3e.
+   React 18 + jsx:react-jsx resolves IntrinsicElements from React.JSX,
+   so we augment that namespace rather than the global one. */
+import type * as React from "react";
 
-declare global {
+type M3eBase = {
+  style?: React.CSSProperties;
+  className?: string;
+  slot?: string;
+  key?: React.Key;
+  children?: React.ReactNode;
+  onClick?: (event: React.MouseEvent) => void;
+};
+
+declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "m3e-theme": { color?: string; "strong-focus"?: boolean; children?: any };
-      "m3e-content-pane": { children?: any; class?: string };
-      "m3e-heading": { variant?: string; size?: string; level?: number; children?: any };
-      "m3e-button": { variant?: string; shape?: string; size?: string; onClick?: any; disabled?: boolean; children?: any };
-      "m3e-icon-button": { variant?: string; "aria-label"?: string; onClick?: any; children?: any };
-      "m3e-icon": { name?: string; "aria-hidden"?: boolean };
-      "m3e-card": { variant?: string; class?: string; children?: any };
-      "m3e-switch": { checked?: any; icons?: string; onClick?: any; disabled?: any };
-      "m3e-radio-group": { children?: any };
-      "m3e-radio": { value?: string; checked?: any; onClick?: any };
-      "m3e-form-field": { variant?: string; "float-label"?: string; children?: any };
-      "m3e-chip-set": { vertical?: boolean; children?: any };
-      "m3e-chip": { variant?: string; children?: any };
-      "m3e-list": { children?: any };
-      "m3e-list-item": { children?: any };
-      "m3e-nav-menu": { children?: any };
-      "m3e-nav-menu-item": { open?: boolean; onClick?: any; children?: any };
-      "m3e-tabs": { children?: any };
-      "m3e-tab": { for?: string; selected?: boolean; children?: any };
-      "m3e-tab-panel": { id?: string; children?: any };
-      "m3e-slider": { min?: string; max?: string; step?: string; children?: any };
-      "m3e-slider-thumb": { value?: string };
-      "m3e-divider": any;
-      "m3e-snackbar": any;
+      "m3e-theme": M3eBase & { color?: string; "strong-focus"?: boolean };
+      "m3e-content-pane": M3eBase;
+      "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
+      "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean };
+      "m3e-icon": M3eBase & { name?: string };
+      "m3e-card": M3eBase & { variant?: string };
+      "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean };
+      "m3e-radio-group": M3eBase;
+      "m3e-radio": M3eBase & { value?: string; checked?: boolean | string; disabled?: boolean };
+      "m3e-form-field": M3eBase & { variant?: string; "float-label"?: string };
+      "m3e-chip-set": M3eBase & { vertical?: boolean };
+      "m3e-chip": M3eBase & { variant?: string };
+      "m3e-list": M3eBase;
+      "m3e-list-item": M3eBase;
+      "m3e-nav-menu": M3eBase;
+      "m3e-nav-menu-item": M3eBase & { open?: boolean };
+      "m3e-tabs": M3eBase;
+      "m3e-tab": M3eBase & { for?: string; selected?: boolean };
+      "m3e-tab-panel": M3eBase & { id?: string };
+      "m3e-slider": M3eBase & { min?: string | number; max?: string | number; step?: string | number };
+      "m3e-slider-thumb": M3eBase & { value?: string | number };
+      "m3e-divider": M3eBase;
     }
   }
 }
-
-export {};
