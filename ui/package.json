@@ -9,9 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@m3e/react": "^2.0.0",
-    "@m3e/web": "^2.0.0",
-    "@m3e/icons": "^2.0.0",
+    "@m3e/react": "^2.8.0",
+    "@m3e/web": "^2.8.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
