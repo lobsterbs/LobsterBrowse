@@ -7,7 +7,6 @@
 //! server sends is a CONTINUE on stream 0 instead.
 
 use crate::extension::ExtensionId;
-
 use crate::packet::{CloseReason, Packet, StreamKind};
 
 /// Initial per-stream send-buffer window advertised by the server.
@@ -53,8 +52,7 @@ impl ServerHandshake {
                     .collect(),
             }]
         } else {
-            // v1: announce the initial buffer 
-size with a CONTINUE on stream 0.
+            // v1: announce the initial buffer size with a CONTINUE on stream 0.
             vec![Packet::Continue { stream_id: 0, buffer_remaining: INITIAL_BUFFER_SIZE }]
         }
     }
@@ -96,8 +94,8 @@ size with a CONTINUE on stream 0.
             return Vec::new();
         };
         self.server_extensions
+            .iter()
             .filter(|(id, _)| extensions.iter().any(|(cid, _)| *cid == *id as u8))
-            .filter(|(id, _)| extensions.iter().any(|(cid, _)| cid == *id as u8))
             .cloned()
             .collect()
     }
@@ -105,8 +103,7 @@ size with a CONTINUE on stream 0.
 
 /// Convenience: build a CLOSE packet for stream 0 (handshake rejection).
 pub fn handshake_reject(reason: CloseReason) -> Packet {
-    Packet::Close {
- stream_id: 0, reason }
+    Packet::Close { stream_id: 0, reason }
 }
 
 /// Validate a CONNECT packet destination before opening a socket.
@@ -165,8 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn newer_major_re
-jected() {
+    fn newer_major_rejected() {
         let mut hs = ServerHandshake::new(vec![]);
         assert_eq!(
             hs.handle(&info_packet(9, vec![])),
