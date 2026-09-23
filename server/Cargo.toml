@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/wisp-core", "crates/guard"]
+members = ["crates/wisp-core", "crates/guard", "crates/wisp-extensions"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,3 +10,6 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 bytes = "1"
 thiserror = "1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+sha2 = "0.10"
