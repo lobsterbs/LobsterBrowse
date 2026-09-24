@@ -155,7 +155,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     }
     setDt({ console: [...dt.console, { id: nextEntryId(), kind: "input", text: code, ts: Date.now() }] });
     try {
-      const result: unknown = w.eval(code);
+      const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
       setDt({
         console: [
           ...dt.console,

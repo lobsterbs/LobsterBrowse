@@ -403,7 +403,7 @@ async fn proxy_fetch(
                 &format!("proxy done {} {} -> {} ({} ms)", method, url, status, started.elapsed().as_millis()),
             );
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            ([(header::CONTENT_TYPE, ct)], axum_status, body).into_response()
+            (axum_status, [(header::CONTENT_TYPE, ct)], body).into_response()
         }
         Err(e) => proxy_error(StatusCode::BAD_GATEWAY, &url, &e.to_string(), &state),
     }
@@ -484,7 +484,8 @@ async fn main() {
                 move |ws, headers| proxy::handle_upgrade(ws, headers, state, limiter)
             }),
         )
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("LobsterBrowse wisp server listening on {} at {}", addr, wisp_path);
