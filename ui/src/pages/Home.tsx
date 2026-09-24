@@ -10,7 +10,7 @@ export default function HomePage() {
     // transient failure (deploy rolling over) never sticks on "Reconnecting".
     let cancelled = false;
     let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const check = () => {
       fetch("/healthz", { cache: "no-store" })
         .then((r) => { if (!cancelled) setStatus(r.ok ? "online" : "offline"); })
@@ -18,13 +18,15 @@ export default function HomePage() {
         .finally(() => {
           if (cancelled) return;
           attempt++;
-          // 2s, 3s, 5s, then every 10s
-          const delay = attempt < 3 ? 2000 : attempt < 5 ? 3000 : 10000;
-          timer = setTimeout(() => { if (!cancelled) setStatus("checking"), check(); }, delay);
+          // 2s, 2s, 3s, 3s, then every 10s
+          const delay = attempt < 2 ? 2000 : attempt < 4 ? 3000 : 10000;
+          timer = setTimeout(() => {
+            if (!cancelled) { setStatus("checking"); check(); }
+          }, delay);
         });
     };
     check();
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, []);
 
   const statusText =
