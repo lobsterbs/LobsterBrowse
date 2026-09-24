@@ -926,7 +926,8 @@ async fn engine_proxy(
         }
     }
     // Forward a couple of harmless request headers from the browser frame.
-    for h in [header::ACCEPT, header::ACCEPT_LANGUAGE] {
+    // (HeaderMap::get consumes its key, so use Copy &str keys here.)
+    for h in ["accept", "accept-language"] {
         if let Some(v) = headers.get(h) {
             if let Ok(vs) = v.to_str() {
                 if !vs.is_empty() {
