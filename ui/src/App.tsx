@@ -12,7 +12,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import type { Tab } from "./store";
+import type { Bookmark, Tab } from "./store";
 
 type View = "home" | "browser" | "settings" | "logs";
 
@@ -27,16 +27,15 @@ export default function App() {
   const [view, setView] = useState<View>("home");
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
+    for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
     return restored;
   });
-  const [activeId, setActiveId] = useState<number>(() => store.loadSessionTabs()[0]?.id ?? 0);
-  const [bookmarks, setBookmarks] = useState<Store.Bookmark[]>(() => store.loadBookmarks());
+  const [activeId, setActiveId] = useState<number>(0);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => store.loadBookmarks());
   const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
   const closedTabs = useRef<Tab[]>([]);
   const prevTitle = useRef(document.title);
-
-  type Store = typeof store;
 
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
@@ -66,16 +65,14 @@ export default function App() {
 
   const closeTab = useCallback(
     (id: number) => {
-      setTabs((prev) => {
-        const tab = prev.find((t) => t.id === id);
-        if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
-        const next = prev.filter((t) => t.id !== id);
-        if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
-        if (next.length === 0) setView("home");
-        return next;
-      });
+      const tab = tabs.find((t) => t.id === id);
+      if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
+      const next = tabs.filter((t) => t.id !== id);
+      setTabs(next);
+      if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
+      if (next.length === 0) setView("home");
     },
-    [activeId]
+    [tabs, activeId]
   );
 
   const reopenTab = useCallback(() => {
@@ -102,21 +99,19 @@ export default function App() {
   /* Navigate the active proxy tab (used by Home search). */
   const navigateTo = useCallback(
     (target: string) => {
-      setTabs((prev) => {
-        if (prev.length === 0) {
-          const tab = freshTab(target);
-          setActiveId(tab.id);
-          setView("browser");
-          return [tab];
-        }
-        const active = prev.find((t) => t.id === activeId) ?? prev[prev.length - 1];
-        const stack = [...active.stack.slice(0, active.idx + 1), target];
-        setActiveId(active.id);
-        setView("browser");
-        return prev.map((t) => (t.id === active.id ? { ...t, url: target, stack, idx: stack.length - 1, title: "" } : t));
-      });
+      if (tabs.length === 0) {
+        newTab(target);
+        return;
+      }
+      const active = tabs.find((t) => t.id === activeId) ?? tabs[tabs.length - 1];
+      const stack = [...active.stack.slice(0, active.idx + 1), target];
+      setTabs((prev) =>
+        prev.map((t) => (t.id === active.id ? { ...t, url: target, stack, idx: stack.length - 1, title: "" } : t))
+      );
+      setActiveId(active.id);
+      setView("browser");
     },
-    [activeId]
+    [tabs, activeId, newTab]
   );
 
   /* ---- Panic button ---- */
