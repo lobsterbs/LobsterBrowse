@@ -1,5 +1,5 @@
 /* Persisted settings. Stored on-device in localStorage — nothing is ever
-   sent to the server except the proxy query parameters the user's
+   sent to the server except the route query parameters the user's
    settings genuinely control. */
 
 export type EngineId = "duckduckgo" | "brave" | "startpage" | "google" | "bing" | "mojeek";
@@ -13,25 +13,9 @@ export const ENGINES: Record<EngineId, { name: string; url: string }> = {
   mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}" },
 };
 
-/* Proxy engine:
-   - "scramjet": full rewriting proxy (Scramjet). The tab renders the
-     Scramjet client (separate origin, required by its service worker),
-     which rewrites all in-page traffic. Real sites work, including
-     JS-heavy ones. In-page DevTools are not available cross-origin.
-   - "document": server-side document fetch proxy (/p). Same-origin blob
-     iframe, injected hook, in-page DevTools (console eval, network log),
-     but no URL rewriting — JS-heavy sites break. */
-export type ProxyEngine = "document" | "scramjet";
-
-/* Default Scramjet instance. The service worker that rewrites traffic
-   must own the origin it intercepts, so Scramjet cannot run on the same
-   origin as this UI. */
-export const DEFAULT_SCRAMJET_URL = "https://lobsterbrowse-scramjet.onrender.com";
-
-/* User-Agent presets. The chosen UA string is sent to /p as the "ua"
-   query parameter and applied by the server for every proxied request.
-   Scramjet requests use the browser's own UA — the rewrite happens
-   client-side. */
+/* User-Agent presets. The chosen UA string is sent on the /r route as
+   the "ua" query parameter and applied by the server for every proxied
+   request. */
 export type UaPresetId =
   | "server-default"
   | "chrome-win"
@@ -66,14 +50,14 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
   },
   "safari-ios": {
     name: "Safari (iPhone)",
-    ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17 Mobile/15E148 Safari/604.1",
+    ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
   },
 };
 
 /* Per-site rules. A rule only overrides the global setting for the
    fields it explicitly configures; the UI passes the effective values
-   to /p on every navigation, so these genuinely change proxy behavior.
-   Rules only apply in "document" engine mode. */
+   on the /r route for every navigation, so these genuinely change
+   engine behavior. */
 export type SiteRule = {
   domain: string;
   uaPreset?: UaPresetId;
@@ -84,17 +68,13 @@ export type SiteRule = {
 export type Settings = {
   seed: string;
   engine: EngineId;
-  /* Route searches/URLs through a proxy. */
+  /* Route searches/URLs through the native engine. */
   proxySearch: boolean;
-  /* Which proxy engine renders tabs. */
-  proxyEngine: ProxyEngine;
-  /* Scramjet instance base URL (engine mode "scramjet"). */
-  scramjetUrl: string;
-  /* Strip known ad hosts from proxied documents (server-side, /p). */
+  /* Strip known ad hosts from proxied documents (server-side). */
   adblock: boolean;
-  /* Strip known tracker hosts from proxied documents (server-side, /p). */
+  /* Strip known tracker hosts from proxied documents (server-side). */
   trackers: boolean;
-  /* Reject plain-http targets (server-side, /p). */
+  /* Reject plain-http targets (server-side). */
   httpsOnly: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
@@ -112,8 +92,6 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
   engine: "duckduckgo",
   proxySearch: true,
-  proxyEngine: "scramjet",
-  scramjetUrl: DEFAULT_SCRAMJET_URL,
   adblock: true,
   trackers: true,
   httpsOnly: true,
@@ -135,17 +113,11 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    const merged = {
+    return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
-      proxyEngine:
-        parsed.proxyEngine === "document" || parsed.proxyEngine === "scramjet"
-          ? parsed.proxyEngine
-          : DEFAULT_SETTINGS.proxyEngine,
     };
-    if (!merged.scramjetUrl) merged.scramjetUrl = DEFAULT_SCRAMJET_URL;
-    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -191,8 +163,8 @@ export function resolveUa(s: Settings, rules: SiteRule[], domain: string): strin
   return ua || null;
 }
 
-/* Build the /p query string for a target URL, applying global settings
-   and per-site rules. */
+/* Build the engine option query string for a target URL, applying
+   global settings and per-site rules. */
 export function proxyParams(s: Settings, rules: SiteRule[], target: string): string {
   let domain = "";
   try {
@@ -210,16 +182,47 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string): str
   return parts.join("&");
 }
 
-export function proxyUrl(s: Settings, rules: SiteRule[], target: string): string {
-  const params = proxyParams(s, rules, target);
-  return "/p?url=" + encodeURIComponent(target) + (params ? "&" + params : "");
+/* base64url of a UTF-8 string (manual, no dependencies). */
+export function b64urlEncode(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const n = (b0 << 16) | (b1 << 8) | b2;
+    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
+    if (i + 1 < bytes.length) out += B64[(n >> 6) & 63];
+    if (i + 2 < bytes.length) out += B64[n & 63];
+  }
+  return out;
 }
 
-/* Scramjet client URL that auto-navigates to a target (LobsterBrowse
-   embedding patch on the Scramjet-App client). */
-export function scramjetUrl(s: Settings, target: string): string {
-  const base = (s.scramjetUrl || DEFAULT_SCRAMJET_URL).replace(/\/+$/, "");
-  return base + "/?url=" + encodeURIComponent(target);
+/* Decode base64url back to a UTF-8 string. */
+export function b64urlDecode(s: string): string {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice(0, (4 - (s.length % 4)) % 4);
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/* Build the same-origin /r route for a target URL. */
+export function routeUrl(s: Settings, rules: SiteRule[], target: string): string {
+  const params = proxyParams(s, rules, target);
+  return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
+}
+
+/* Recover the real URL from a /r/<b64> pathname ("" when invalid). */
+export function decodeRoute(pathname: string): string {
+  if (!pathname.startsWith("/r/")) return "";
+  const seg = pathname.slice(3).split("?")[0].split("#")[0];
+  try {
+    return b64urlDecode(seg);
+  } catch {
+    return "";
+  }
 }
 
 /* Build the engine search URL for a query. */

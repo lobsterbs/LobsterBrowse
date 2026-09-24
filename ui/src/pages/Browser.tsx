@@ -1,31 +1,22 @@
-/* The in-app proxy browser surface: tabs, bottom hover toolbar,
-   proxied iframes and per-tab DevTools.
+/* The in-app proxy browser surface: tabs, frosted floating tab strip,
+   bottom hover toolbar, proxied iframes and per-tab DevTools.
 
-   Two proxy engines (settings.proxyEngine):
-   - "scramjet": the tab renders the Scramjet client (full rewriting
-     proxy, separate origin). Real sites work. Cross-origin frames
-     cannot expose their console to DevTools, so per-tab meta info
-     (title, favicon) and a META network entry are fetched via /p.
-   - "document": navigation goes through the server-side document proxy
-     (/p). Same-origin blob iframe with an injected devtools hook, so
-     full in-page DevTools work. No URL rewriting — JS-heavy sites break.
+   Single native engine: every navigation goes to /r/<base64url of the
+   target>, which the server rewrites (URL-bearing attributes, CSS urls)
+   and re-injects with a shim that routes runtime fetch/XHR and element
+   assignments. Frames are same-origin, so the UI polls each frame for
+   its real URL, title and favicon, and DevTools get full console and
+   network capture.
 
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
 
 import { useEffect, useRef, useState } from "react";
-import { proxyUrl, scramjetUrl, type Settings, type SiteRule } from "../settings";
+import { decodeRoute, routeUrl, type Settings, type SiteRule } from "../settings";
 import { pushLog, type Bookmark, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
 
 type View = "home" | "browser" | "settings" | "logs";
-
-type LoadError = {
-  url: string;
-  status: number;
-  detail: string;
-  ts: number;
-};
 
 type Props = {
   settings: Settings;
@@ -59,16 +50,17 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  const blobs = useRef<Map<number, string>>(new Map());
   /* Last URL each tab was asked to load — guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
-  const [status, setStatus] = useState<Record<number, { loading: boolean; error?: LoadError }>>({});
+  const [status, setStatus] = useState<Record<number, { loading: boolean }>>({});
   const [dt, setDtState] = useState<Record<number, DtState>>({});
   const [showBookmarks, setShowBookmarks] = useState(false);
+  /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
-  /* Real favicon per tab (blob URL, fetched through /p). */
+  /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
+  const iconCache = useRef<Map<string, string>>(new Map());
 
   /* Dock: fully visible at first load, then smoothly shrinks and tucks
      mostly out of view; hover or focus brings it back. */
@@ -105,58 +97,70 @@ export default function BrowserView(props: Props) {
     });
   };
 
-  /* ---- Tab meta: real title + favicon, fetched server-side via /p so
-     the user's IP is never exposed. Works in both engines. ---- */
-  const fetchMeta = (tabId: number, url: string) => {
-    if (!settings.proxySearch) return;
-    const started = Date.now();
-    fetch(proxyUrl(settings, rules, url))
-      .then(async (res) => {
-        addNet(tabId, { url, method: "META", status: res.status, ok: res.ok, dur: Date.now() - started });
-        const ct = res.headers.get("content-type") ?? "";
-        if (!res.ok || !ct.includes("html")) return;
-        const html = await res.text();
-        const tm = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-        const title = tm ? tm[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
-        if (title) props.updateTab(tabId, { title });
-        let iconHref = "";
-        for (const l of html.match(/<link[^>]+>/gi) ?? []) {
-          if (/rel=["'][^"']*icon/i.test(l)) {
-            const h = l.match(/href=["']([^"']+)["']/i);
-            if (h) {
-              iconHref = h[1];
-              break;
-            }
-          }
-        }
-        let abs = "";
+  /* ---- Favicon: read from the same-origin frame document, fetch the
+     icon through the engine, cache per icon URL. ---- */
+  const loadFavicon = (tabId: number, url: string, doc: Document) => {
+    let href = "";
+    const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    const attr = link ? link.getAttribute("href") || "" : "";
+    if (attr) {
+      if (attr.startsWith("/r/")) {
+        href = attr;
+      } else {
         try {
-          abs = new URL(iconHref || "/favicon.ico", url).href;
+          href = routeUrl(settings, rules, new URL(attr, url).href);
         } catch {
+          href = "";
+        }
+      }
+    }
+    if (!href) {
+      try {
+        href = routeUrl(settings, rules, new URL(url).origin + "/favicon.ico");
+      } catch {
+        return;
+      }
+    }
+    const setIcon = (obj: string) =>
+      setIcons((prev) => (prev[tabId] === obj ? prev : { ...prev, [tabId]: obj }));
+    const cached = iconCache.current.get(href);
+    if (cached !== undefined) {
+      if (cached) setIcon(cached);
+      return;
+    }
+    fetch(href)
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (!blob || blob.size === 0 || blob.size > 400000) {
+          iconCache.current.set(href, "");
           return;
         }
-        const r2 = await fetch(proxyUrl(settings, rules, abs)).catch(() => null);
-        if (!r2 || !r2.ok) return;
-        const blob = await r2.blob();
-        if (blob.size === 0 || blob.size > 400000) return;
-        if (!blob.type.startsWith("image/") && !blob.type.includes("octet-stream")) return;
-        setIcons((prev) => {
-          const old = prev[tabId];
-          if (old) URL.revokeObjectURL(old);
-          return { ...prev, [tabId]: URL.createObjectURL(blob) };
-        });
+        const obj = URL.createObjectURL(blob);
+        iconCache.current.set(href, obj);
+        setIcon(obj);
       })
-      .catch(() => {});
+      .catch(() => {
+        iconCache.current.set(href, "");
+      });
   };
 
   /* ---- Navigation ---- */
-  const load = (tab: Tab, url: string, opts?: { push?: boolean; method?: string; body?: string }) => {
+  const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
-    const method = opts?.method ?? "GET";
     lastNav.current.set(tab.id, url);
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
     const idx = push ? stack.length - 1 : tab.idx;
     props.updateTab(tab.id, { url, stack, idx, title: "" });
+    setDrafts((prev) => {
+      const n = { ...prev };
+      delete n[tab.id];
+      return n;
+    });
+    setIcons((prev) => {
+      const n = { ...prev };
+      delete n[tab.id];
+      return n;
+    });
 
     if (!settings.proxySearch) {
       /* Direct mode: hand the URL to the real browser. */
@@ -166,67 +170,11 @@ export default function BrowserView(props: Props) {
       return;
     }
 
-    fetchMeta(tab.id, url);
-
-    if (settings.proxyEngine === "scramjet") {
-      /* Full rewriting proxy: point the tab's iframe at the Scramjet
-         client, which auto-navigates to the target. */
-      const old = blobs.current.get(tab.id);
-      if (old) {
-        URL.revokeObjectURL(old);
-        blobs.current.delete(tab.id);
-      }
-      setStatus((prev) => ({ ...prev, [tab.id]: { loading: false, error: undefined } }));
-      const frame = frames.current.get(tab.id);
-      const href = scramjetUrl(settings, url);
-      if (frame) frame.src = href;
-      pushLog("info", "scramjet nav " + url);
-      return;
-    }
-
-    /* Document engine: fetch through /p and render in a blob iframe. */
-    const started = Date.now();
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true } }));
-    pushLog("info", method + " " + url + (opts?.body ? " (form body)" : ""));
-    const href = proxyUrl(settings, rules, url);
-    fetch(href, {
-      method,
-      body: opts?.body,
-      headers: opts?.body ? { "Content-Type": "application/x-www-form-urlencoded" } : undefined,
-    })
-      .then(async (res) => {
-        const ct = res.headers.get("content-type") ?? "";
-        if (!res.ok && ct.includes("application/json")) {
-          const data = (await res.json().catch(() => ({}))) as { detail?: string };
-          setStatus((prev) => ({
-            ...prev,
-            [tab.id]: {
-              loading: false,
-              error: { url, status: res.status, detail: data.detail ?? "proxy fetch failed", ts: Date.now() },
-            },
-          }));
-          pushLog("error", "proxy " + url + " → " + res.status + ": " + (data.detail ?? "failed"));
-          return;
-        }
-        const html = await res.text();
-        const blob = new Blob([html], { type: "text/html" });
-        const blobUrl = URL.createObjectURL(blob);
-        const old = blobs.current.get(tab.id);
-        blobs.current.set(tab.id, blobUrl);
-        if (old) URL.revokeObjectURL(old);
-        setStatus((prev) => ({ ...prev, [tab.id]: { loading: false, error: undefined } }));
-        pushLog("info", "proxy done " + url + " → " + res.status + " (" + (Date.now() - started) + " ms)");
-        const frame = frames.current.get(tab.id);
-        if (frame) frame.src = blobUrl;
-      })
-      .catch((err: unknown) => {
-        const detail = err instanceof Error ? err.message : String(err);
-        setStatus((prev) => ({
-          ...prev,
-          [tab.id]: { loading: false, error: { url, status: 0, detail, ts: Date.now() } },
-        }));
-        pushLog("error", "proxy " + url + " → network error: " + detail);
-      });
+    const frame = frames.current.get(tab.id);
+    const href = routeUrl(settings, rules, url);
+    if (frame) frame.src = href;
+    pushLog("info", "engine nav " + url);
   };
 
   /* ---- Auto-load: a tab whose URL was set without a navigation
@@ -240,7 +188,45 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id, active?.url, settings, rules]);
 
-  /* ---- Hook messages from proxied pages (document engine) ---- */
+  /* ---- Same-origin poll: real URL, title and favicon of the active
+     frame, read directly from the frame document. JS-driven URL
+     changes (pushState) sync back into the toolbar and tab. ---- */
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const t = active;
+      if (!t || !t.url) return;
+      const f = frames.current.get(t.id);
+      if (!f) return;
+      let doc: Document | null = null;
+      let path = "";
+      try {
+        doc = f.contentDocument;
+        path = f.contentWindow ? f.contentWindow.location.pathname : "";
+      } catch {
+        return;
+      }
+      if (!doc || !path.startsWith("/r/")) return;
+      const real = decodeRoute(path);
+      if (!real) return;
+      if (real !== t.url) {
+        const stack = [...t.stack.slice(0, t.idx + 1), real];
+        props.updateTab(t.id, { url: real, stack, idx: stack.length - 1 });
+        props.onHistory(real);
+        pushLog("info", "url sync " + real);
+      }
+      const title = (doc.title || "").trim();
+      if (title && title !== t.title) props.updateTab(t.id, { title });
+      setStatus((prev) => {
+        const cur = prev[t.id];
+        return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
+      });
+      loadFavicon(t.id, real, doc);
+    }, 1200);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id, tabs, settings, rules]);
+
+  /* ---- Hook messages from proxied pages ---- */
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
@@ -284,7 +270,7 @@ export default function BrowserView(props: Props) {
         });
       } else if (data.lb === "ready") {
         const title = String(d.title ?? "");
-        props.updateTab(tabId, { title });
+        if (title) props.updateTab(tabId, { title });
         setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false } }));
         if (tab.url) props.onHistory(tab.url);
         const w = frames.current.get(tabId)?.contentWindow;
@@ -313,22 +299,6 @@ export default function BrowserView(props: Props) {
         } else {
           load(tab, abs, { push: true });
         }
-      } else if (data.lb === "submit") {
-        const action = String(d.action ?? tab.url);
-        const abs = (() => {
-          try {
-            return new URL(action, tab.url).href;
-          } catch {
-            return action;
-          }
-        })();
-        const method = String(d.method ?? "GET").toUpperCase();
-        const body = String(d.body ?? "");
-        if (method === "GET") {
-          load(tab, abs + (abs.includes("?") ? "&" : "?") + body, { push: true });
-        } else {
-          load(tab, abs, { push: true, method: "POST", body });
-        }
       }
     };
     window.addEventListener("message", handler);
@@ -346,24 +316,6 @@ export default function BrowserView(props: Props) {
       const id = active.id;
       setDtState((prev) => {
         const base = prev[id] ?? emptyDt();
-        if (!base.open && settings.proxyEngine === "scramjet") {
-          return {
-            ...prev,
-            [id]: {
-              ...base,
-              open: true,
-              console: [
-                ...base.console,
-                {
-                  id: nextEntryId(),
-                  kind: "info",
-                  text: "Scramjet engine: the page frame is cross-origin, so in-page console/network capture is unavailable here. Switch the proxy engine to Document fetch for full DevTools. META entries show server-side fetches for tab info.",
-                  ts: Date.now(),
-                },
-              ],
-            },
-          };
-        }
         return { ...prev, [id]: { ...base, open: !base.open } };
       });
     };
@@ -394,7 +346,6 @@ export default function BrowserView(props: Props) {
     const q = value.trim();
     if (!q) return;
     load(active, q.startsWith("http://") || q.startsWith("https://") ? q : "https://" + q, { push: true });
-    setDrafts((prev) => ({ ...prev, [active.id]: "" }));
   };
 
   const back = () => {
@@ -420,7 +371,7 @@ export default function BrowserView(props: Props) {
         rootRef.current = el as HTMLElement | null;
       }}
     >
-      {/* Tab strip */}
+      {/* Frosted floating tab strip: sits over the page content */}
       <div className="lb-tabstrip" role="tablist" aria-label="Proxy tabs">
         {tabs.map((t) => (
           <div
@@ -452,24 +403,17 @@ export default function BrowserView(props: Props) {
         </m3e-icon-button>
       </div>
 
-      {/* Content area: one iframe per tab, inactive ones stay mounted */}
+      {/* Content area: one same-origin engine iframe per tab, inactive ones stay mounted */}
       <div className="lb-pages">
         {tabs.map((t) => (
           <div key={t.id} className={"lb-page" + (t.id === active.id ? " active" : "")}>
-            {/* sandbox only in document mode (the same-origin blob needs it).
-                Scramjet frames must NOT be sandboxed: their service worker
-                and crossOriginIsolated (COEP) setup break under sandbox. */}
             <iframe
               title={"Proxy tab " + t.id}
               ref={(el) => {
                 if (el) frames.current.set(t.id, el);
                 else frames.current.delete(t.id);
               }}
-              sandbox={
-                settings.proxyEngine === "document"
-                  ? "allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
-                  : undefined
-              }
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
             />
           </div>
         ))}
@@ -491,35 +435,6 @@ export default function BrowserView(props: Props) {
           <div className="lb-empty-tab">
             <m3e-icon name="travel_explore" aria-hidden={true} />
             <p>Type a URL in the toolbar below, or search from Home.</p>
-          </div>
-        )}
-
-        {st.error && (
-          <div className="lb-error-page" role="alert">
-            <m3e-card variant="filled">
-              <span slot="header">
-                <m3e-icon name="error" aria-hidden={true} /> LobsterBrowse couldn't load this page
-              </span>
-              <div slot="content" className="lb-error-detail">
-                <div><b>URL:</b> {st.error.url}</div>
-                <div><b>Engine:</b> document-fetch proxy</div>
-                <div><b>Status:</b> {st.error.status === 0 ? "connection failed" : st.error.status}</div>
-                <div><b>Error:</b> {st.error.detail}</div>
-                <div><b>Time:</b> {new Date(st.error.ts).toLocaleString()}</div>
-                <div className="lb-muted">Tab #{active.id}</div>
-              </div>
-              <div slot="actions" className="lb-error-actions">
-                <m3e-button variant="filled" onClick={() => load(active, st.error!.url, { push: false })}>
-                  <m3e-icon name="refresh" aria-hidden={true} /> Retry
-                </m3e-button>
-                <m3e-button onClick={() => setDt(active.id, { open: true })}>
-                  <m3e-icon name="bug_report" aria-hidden={true} /> Open Dev Tools
-                </m3e-button>
-                <m3e-button onClick={props.onOpenLogs}>
-                  <m3e-icon name="history" aria-hidden={true} /> View logs
-                </m3e-button>
-              </div>
-            </m3e-card>
           </div>
         )}
 
@@ -586,6 +501,7 @@ export default function BrowserView(props: Props) {
             aria-label="URL or search"
             placeholder="Search or URL"
             value={draft}
+            spellCheck={false}
             onChange={(e) => setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }))}
             onKeyDown={(e) => {
               if (e.key === "Enter") go(draft);
