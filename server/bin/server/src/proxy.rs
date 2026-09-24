@@ -23,6 +23,8 @@ const MAX_UDP_REMOTE: usize = 32;
 /// Shared server configuration for all connections.
 pub struct ProxyState {
     pub policy: DestinationPolicy,
+    /// Reserved for the MOTD extension (0x04); wired in the sessions milestone.
+    #[allow(dead_code)]
     pub motd: Option<String>,
     pub password_auth: Option<PasswordAuth>,
     /// Compiled adblock rule set; CONNECTs to matching hostnames are

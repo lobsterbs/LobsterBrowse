@@ -21,13 +21,7 @@ jobs:
       - name: Build
         run: cargo build --locked 2>/dev/null || cargo build
       - name: Tests
-        run: |
-          set -o pipefail
-          cargo test 2>&1 | tee /tmp/test_output.log
-          exit ${PIPESTATUS[0]}
-      - name: Publish test output to summary
-        if: always()
-        run: cat /tmp/test_output.log >> "$GITHUB_STEP_SUMMARY" || true
+        run: cargo test
       - name: Clippy
         run: cargo clippy -- -D warnings
 
