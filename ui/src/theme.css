@@ -162,6 +162,12 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
 }
 .lb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ac-hint {
+  padding: 8px 18px;
+  font-size: 11px;
+  opacity: 0.55;
+  border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
+}
 
 /* ---- Proxy browser ---- */
 .lb-browser {
@@ -173,32 +179,57 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 }
 .lb-browser:fullscreen { height: 100vh; padding: 0; }
 
+/* Frosted floating tab strip: overlays the page so the tabs adapt to
+   whatever is rendered beneath them (blur + translucent surface). */
 .lb-tabstrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
   display: flex;
   align-items: center;
   gap: 4px;
   overflow-x: auto;
-  padding: 4px 8px;
-  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border-radius: 0 0 14px 14px;
+  transition: opacity 300ms ease;
 }
+/* In fullscreen the strip mostly fades out; hover brings it back. */
+.lb-browser:fullscreen .lb-tabstrip { opacity: 0.35; }
+.lb-browser:fullscreen .lb-tabstrip:hover { opacity: 1; }
 .lb-tab {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 14px 14px 0 0;
+  border-radius: 999px;
   cursor: pointer;
   opacity: 0.7;
   white-space: nowrap;
   max-width: 220px;
 }
-.lb-tab.active { opacity: 1; background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
+.lb-tab.active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+}
 .lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; font-size: 13px; }
 .lb-tab-favicon { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; object-fit: contain; }
 .lb-tab-close { border-radius: 50%; font-size: 16px; }
 .lb-tab-close:hover { background: rgba(128, 128, 128, 0.25); }
 
-.lb-pages { position: relative; flex: 1; min-height: 0; border-radius: 16px; overflow: hidden; background: var(--md-sys-color-surface); }
+/* Pages fill the whole browser area; the frosted tab strip floats
+   above the rendered site. */
+.lb-pages {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--md-sys-color-surface);
+}
 .lb-page { position: absolute; inset: 0; visibility: hidden; }
 .lb-page.active { visibility: visible; }
 .lb-page iframe { width: 100%; height: 100%; border: none; background: #fff; }
@@ -210,21 +241,15 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   align-items: center; justify-content: center; gap: 8px; opacity: 0.6;
 }
 
-.lb-error-page {
-  position: absolute; inset: 0; display: flex; align-items: center;
-  justify-content: center; padding: 24px; z-index: 6;
-}
-.lb-error-detail { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.lb-error-detail b { font-variation-settings: "wght" 600; }
-.lb-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.lb-error-text { color: var(--md-sys-color-error); font-size: 13px; }
-
 /* Bottom dock toolbar: fully visible on first load, then smoothly
    shrinks and tucks mostly out of view (scale + fade + slide — not a
-   plain translate). Hover or focus expands it again. */
+   plain translate). Hover or focus expands it again. Frosted pill so it
+   reads as part of the UI instead of a foreign bar. */
 .lb-dock {
-  position: sticky;
+  position: absolute;
   bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
   z-index: 10;
@@ -239,6 +264,12 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   min-width: min(780px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
   flex-wrap: wrap;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28) !important;
 }
 .lb-dock.settled .lb-toolbar {
   transform: translateY(64%) scale(0.94);
@@ -308,6 +339,34 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
 .lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
 .lb-script-list { margin: 4px 0; padding-left: 20px; font-size: 12px; word-break: break-all; max-height: 40%; overflow: auto; }
+
+/* Bookmarks panel */
+.lb-bookmark-panel {
+  position: absolute;
+  top: 0; right: 0;
+  width: min(360px, 100%);
+  height: 100%;
+  background: var(--md-sys-color-surface);
+  border-left: 1px solid var(--md-sys-color-outline);
+  z-index: 8;
+  padding: 8px;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+  overflow: auto;
+}
+.lb-bookmark-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; }
+.lb-bookmark-link {
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
 
 /* Logs */
 .lb-logs-toolbar { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
