@@ -1,105 +1,134 @@
-import { useEffect, useState } from 'react';
-import { searchUrl, type Settings } from '../settings';
+import { useEffect, useRef, useState } from "react";
+import { ENGINES, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
+import { buildSuggestions, type Bookmark } from "../store";
 
-type Props = { settings: Settings };
+type Props = {
+  settings: Settings;
+  bookmarks: Bookmark[];
+  history: string[];
+  onNavigate: (target: string) => void;
+  onOpenLogs: () => void;
+};
 
-/* Heuristic: a URL has a scheme, or looks like a bare domain/host
-   (contains a dot, no spaces). Everything else is a search query. */
-function looksLikeUrl(s: string): boolean {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return true;
-  if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/|$)/i.test(s)) return true;
-  return /^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(" ");
-}
-
-export default function HomePage({ settings }: Props) {
+export default function HomePage({ settings, bookmarks, history, onNavigate, onOpenLogs }: Props) {
   const [url, setUrl] = useState("");
-  const [health, setHealth] = useState<string>("checking…");
+  const [health, setHealth] = useState("checking…");
+  const acRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
+  /* Health check: one probe with a hard timeout, a single retry, then a
+     definite OK or error — never an endless "checking…". */
   useEffect(() => {
-    // Simple curl-style probe: GET /healthz, print the HTTP status.
     let cancelled = false;
-    let attempt = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const check = () => {
-      fetch("/healthz?_=" + Date.now(), { cache: "reload" })
-        .then((r) => { if (!cancelled) setHealth(r.ok ? "200 ok — server online" : r.status + " err"); })
-        .catch(() => { if (!cancelled) setHealth("connection failed — retrying"); })
-        .then(() => {
-          if (cancelled) return;
-          attempt++;
-          timer = setTimeout(check, attempt < 2 ? 2000 : attempt < 4 ? 5000 : 15000);
+    let ok = false;
+    const probe = () =>
+      fetch("/healthz?_=" + Date.now(), { cache: "reload", signal: AbortSignal.timeout(4000) })
+        .then((r) => {
+          ok = r.ok;
+          if (!cancelled) setHealth(r.ok ? "ok" : r.status + " error");
+        })
+        .catch(() => {
+          ok = false;
+          if (!cancelled) setHealth("connection failed");
         });
+    probe().then(() => {
+      if (!cancelled && !ok) setTimeout(probe, 2000);
+    });
+    return () => {
+      cancelled = true;
     };
-    check();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, []);
 
-  /* Open a target — either proxied through this server (/p?url=) or direct. */
-  const open = (target: string, newTab: boolean) => {
-    const href = settings.proxySearch
-      ? "/p?url=" + encodeURIComponent(target)
-      : target;
-    if (newTab) {
-      window.open(href, "_blank", "noopener,noreferrer");
-    } else {
-      window.location.href = href;
-    }
-  };
+  /* Grab the autocomplete element once it is mounted. */
+  useEffect(() => {
+    acRef.current = document.querySelector<HTMLElement>("m3e-autocomplete[for='lb-search-input']");
+  }, []);
 
-  const go = () => {
-    const q = url.trim();
+  /* Populate the autocomplete with suggestions imperatively — the M3E
+     component owns its slotted options, so React must not re-render them. */
+  useEffect(() => {
+    const ac = acRef.current;
+    if (!ac) return;
+    const suggestions = buildSuggestions(url, {
+      history,
+      bookmarks,
+      engineName: ENGINES[settings.engine].name,
+    });
+    while (ac.firstChild) ac.removeChild(ac.firstChild);
+    for (const s of suggestions) {
+      const opt = document.createElement("m3e-option");
+      opt.textContent = s;
+      ac.appendChild(opt);
+    }
+    (ac as unknown as { hideNoData: boolean }).hideNoData = suggestions.length === 0;
+  }, [url, history, bookmarks, settings.engine]);
+
+  /* When an option is selected, commit it as the search target. */
+  useEffect(() => {
+    const ac = acRef.current;
+    if (!ac) return;
+    const onChange = () => {
+      const v = inputRef.current?.value ?? "";
+      if (v) go(v);
+    };
+    ac.addEventListener("change", onChange);
+    return () => ac.removeEventListener("change", onChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
+  const go = (q0: string) => {
+    const q = q0.trim();
     if (!q) return;
-    if (looksLikeUrl(q)) {
-      open(require$normalize(q), settings.urlNewTab);
-    } else {
-      open(searchUrl(settings, q), settings.openSearchNewTab);
-    }
+    onNavigate(looksLikeUrl(q) ? normalizeUrl(q) : searchUrl(settings, q));
+    setUrl("");
   };
-
-  // inline to avoid extra import above
-  function require$normalize(s: string): string {
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
-    return "https://" + s;
-  }
 
   return (
-    <section style={{ textAlign: "center", marginTop: 16 }}>
+    <section className="lb-view-content lb-home">
       <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
-      <p style={{ opacity: 0.7, marginTop: 8 }}>Private proxy with ad blocking.</p>
+      <p className="lb-muted" style={{ marginTop: 8 }}>Private proxy with ad blocking.</p>
 
-      <div style={{ margin: "32px 0 8px" }}>
+      <div style={{ margin: "32px 0 8px", maxWidth: 640 }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
           <input
             slot="input"
-            id="url"
-            aria-label="URL or search query"
+            id="lb-search-input"
+            ref={inputRef}
+            aria-label="Search or URL"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") go(); }}
-            placeholder={settings.proxySearch ? "Proxied search or URL" : "Search or enter a URL"}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") go(url);
+            }}
+            placeholder="Search or URL"
           />
-          <m3e-button slot="trailing" variant="filled" onClick={go}>Go</m3e-button>
         </m3e-search-bar>
+        <m3e-autocomplete
+          for="lb-search-input"
+          filter="none"
+          hide-no-data={true}
+          aria-label="Search suggestions"
+        />
       </div>
 
-      <p style={{ fontSize: 12, opacity: 0.5, marginBottom: 24 }}>
+      <p className="lb-muted" style={{ fontSize: 12, marginBottom: 24 }}>
         {settings.proxySearch
-          ? "Fetched through this server — your IP is hidden from the site"
+          ? "Loaded through this server inside the proxy browser."
           : "Opens directly in your browser"}
       </p>
 
-      <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, opacity: 0.6, marginBottom: 40 }}>
+      <p className="lb-curl" aria-live="polite">
         $ curl /healthz → {health}
+        {health !== "ok" && (
+          <>
+            {" "}
+            <m3e-button size="small" onClick={onOpenLogs}>
+              <m3e-icon name="history" aria-hidden={true} /> View logs
+            </m3e-button>
+          </>
+        )}
       </p>
-
-      {settings.showFeatureChips && (
-        <m3e-chip-set aria-label="Features">
-          <m3e-chip><m3e-icon slot="icon" name="visibility_off" aria-hidden={true} />No logs</m3e-chip>
-          <m3e-chip><m3e-icon slot="icon" name="shield" aria-hidden={true} />Ad blocking</m3e-chip>
-          <m3e-chip><m3e-icon slot="icon" name="lan" aria-hidden={true} />TCP + UDP</m3e-chip>
-        </m3e-chip-set>
-      )}
     </section>
   );
 }

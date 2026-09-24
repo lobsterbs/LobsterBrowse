@@ -1,6 +1,9 @@
 /* LobsterBrowse theme. Token prefix per M3E docs: --md-sys-color-*.
    The <m3e-theme color="#hex"> element generates the full palette from a
-   seed at runtime (dynamic color); these are only the baseline fallbacks. */
+   seed at runtime (dynamic color); these are only the baseline fallbacks.
+   Typography is fully self-hosted: Roboto Flex (variable, all weights)
+   and Material Symbols ship from the app's own origin — no Google CDN
+   requests, so page loads never leak the user's IP to Google. */
 :root {
   --md-sys-color-primary: #b3261e;
   --md-sys-color-on-primary: #ffffff;
@@ -29,21 +32,260 @@ body {
   margin: 0;
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
-  font-family: Roboto, system-ui, sans-serif;
+  font-family: "Roboto Flex Variable", Roboto, system-ui, sans-serif;
+  font-variation-settings: "wght" 400;
 }
+
+h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
 /* Smooth nav rail expansion: the rail's width and the content reflow
    animate together so labels/icons glide instead of snapping. */
-m3e-nav-rail {
-  transition: width 250ms cubic-bezier(0.2, 0, 0, 1);
-}
-
+m3e-nav-rail { transition: width 250ms cubic-bezier(0.2, 0, 0, 1); }
 m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
-m3e-nav-rail m3e-icon-button {
-  transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
-}
+m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1); }
+
+.lb-shell { display: flex; min-height: 100vh; }
+.lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
 
 .app-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   transition: padding 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* View transition: subtle fade + slide, fast enough to never distract. */
+@keyframes lb-view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lb-view { animation: lb-view-in 150ms ease-out; width: 100%; }
+.lb-view-content { max-width: 720px; margin: 24px auto 0; width: 100%; }
+.lb-home { text-align: center; }
+
+/* Settings */
+.lb-panel-header { cursor: pointer; }
+.lb-panel-body { padding: 4px 8px 12px; }
+.lb-setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+.lb-setting-label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0 6px;
+  font-variation-settings: "wght" 500;
+}
+.lb-setting-group { padding: 8px 16px 4px; }
+.lb-seed-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lb-color-input { width: 40px; height: 32px; border: none; background: none; cursor: pointer; }
+.lb-text-input { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.lb-rule-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.lb-rule-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+
+/* Shared inputs */
+.lb-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 14px;
+}
+.lb-select {
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+.lb-muted { opacity: 0.65; font-size: 13px; }
+.lb-curl { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.75; }
+
+/* ---- Proxy browser ---- */
+.lb-browser { position: relative; display: flex; flex-direction: column; height: calc(100vh - 88px); min-height: 420px; }
+
+.lb-tabstrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 8px;
+  flex: 0 0 auto;
+}
+.lb-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 14px 14px 0 0;
+  cursor: pointer;
+  opacity: 0.7;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.lb-tab.active { opacity: 1; background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
+.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; font-size: 13px; }
+.lb-tab-close { border-radius: 50%; font-size: 16px; }
+.lb-tab-close:hover { background: rgba(128, 128, 128, 0.25); }
+
+.lb-pages { position: relative; flex: 1; min-height: 0; border-radius: 16px; overflow: hidden; background: var(--md-sys-color-surface); }
+.lb-page { position: absolute; inset: 0; visibility: hidden; }
+.lb-page.active { visibility: visible; }
+.lb-page iframe { width: 100%; height: 100%; border: none; background: #fff; }
+
+.lb-loading { position: absolute; inset: 0; padding: 24px; background: var(--md-sys-color-surface); z-index: 5; }
+.lb-skel { display: flex; flex-direction: column; gap: 12px; }
+.lb-empty-tab {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; opacity: 0.6;
+}
+
+.lb-error-page {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; padding: 24px; z-index: 6;
+}
+.lb-error-detail { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.lb-error-detail b { font-variation-settings: "wght" 600; }
+.lb-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.lb-error-text { color: var(--md-sys-color-error); font-size: 13px; }
+
+/* Watermark: bottom-left edge of the proxy area. */
+.lb-watermark {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: 4;
+  font-variation-settings: "wght" 500;
+}
+
+/* Bottom dock toolbar: a small peek stays visible; hover expands smoothly. */
+.lb-dock {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 10;
+  height: 0;
+}
+.lb-toolbar {
+  transform: translateY(calc(100% - 16px));
+  transition: transform 250ms cubic-bezier(0.2, 0, 0, 1);
+  max-width: 100%;
+  width: min(920px, calc(100vw - 16px));
+  flex-wrap: wrap;
+}
+.lb-dock:hover .lb-toolbar,
+.lb-dock:focus-within .lb-toolbar,
+.lb-dock.pinned .lb-toolbar { transform: translateY(0); }
+.lb-url-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  margin: 0 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+}
+@media (prefers-color-scheme: dark) {
+  .lb-url-input { background: rgba(255, 255, 255, 0.12); }
+}
+
+/* DevTools panel */
+.lb-devtools {
+  position: absolute;
+  top: 0; right: 0;
+  width: min(480px, 100%);
+  height: 100%;
+  background: var(--md-sys-color-surface);
+  border-left: 1px solid var(--md-sys-color-outline);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+}
+.lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
+.lb-devtools-title { display: flex; gap: 8px; align-items: center; font-variation-settings: "wght" 500; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-dt-tabs { margin: 0 8px; overflow-x: auto; }
+.lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 8px; }
+.lb-dt-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+
+.lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+.lb-console-line { display: flex; gap: 8px; padding: 2px 6px; align-items: baseline; }
+.lb-console-ts { opacity: 0.5; flex-shrink: 0; }
+.lb-console-arrow { opacity: 0.6; flex-shrink: 0; }
+.lb-console-text { white-space: pre-wrap; word-break: break-word; }
+.lb-log .lb-console-text { opacity: 0.9; }
+.lb-info .lb-console-text { color: #1a73e8; }
+.lb-warn { background: rgba(234, 179, 8, 0.12); }
+.lb-error { background: rgba(186, 26, 26, 0.12); color: var(--md-sys-color-error); }
+.lb-console-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
+.lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
+
+.lb-net { flex: 1; overflow: auto; font-size: 12px; }
+.lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
+.lb-net-summary { display: flex; gap: 8px; cursor: pointer; padding: 4px 6px; align-items: baseline; }
+.lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
+.lb-net-status.lb-ok { opacity: 0.7; }
+.lb-net-status.lb-bad { color: var(--md-sys-color-error); }
+.lb-net-method { flex-shrink: 0; opacity: 0.6; }
+.lb-net-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-net-dur { margin-left: auto; opacity: 0.5; flex-shrink: 0; }
+.lb-net-detail { padding: 8px 12px; opacity: 0.85; word-break: break-all; }
+.lb-script-item { display: flex; gap: 8px; align-items: center; padding: 6px; flex-wrap: wrap; }
+.lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.lb-check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+.lb-script-list { margin: 4px 0; padding-left: 20px; font-size: 12px; word-break: break-all; max-height: 40%; overflow: auto; }
+
+/* Logs */
+.lb-logs-toolbar { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.lb-log-section { margin-bottom: 20px; }
+.lb-log-list {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 12px;
+  padding: 8px;
+}
+.lb-log-line { padding: 2px 0; word-break: break-word; }
+.lb-log-line b { font-variation-settings: "wght" 600; }
+
+/* Cloak */
+.lb-cloak { position: fixed; inset: 0; z-index: 1000; background: var(--md-sys-color-surface); }
+.lb-cloak iframe { width: 100%; height: 100%; border: none; }
+.lb-cloak-return { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); opacity: 0.15; }
+.lb-cloak-return:hover { opacity: 1; }
+
+/* ---- Small screens ---- */
+@media (max-width: 600px) {
+  .app-content { padding: 12px 12px 40px; }
+  .lb-toolbar { width: calc(100vw - 8px); }
+  .lb-devtools { width: 100%; }
+  .lb-tab { max-width: 150px; }
+  .lb-tab-title { max-width: 80px; }
+  .lb-setting-row { gap: 8px; }
 }

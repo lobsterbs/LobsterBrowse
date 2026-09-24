@@ -1,67 +1,120 @@
-/* Persisted settings. Stored on-device in localStorage (a small
-   browser-local file) — nothing is ever sent to the server. */
+/* Persisted settings. Stored on-device in localStorage — nothing is ever
+   sent to the server except the proxy query parameters the user's
+   settings genuinely control. */
 
 export type EngineId = "duckduckgo" | "brave" | "startpage" | "google" | "bing" | "mojeek";
 
-export const ENGINES: Record<EngineId, { name: string; url: string; safe: string }> = {
-  duckduckgo: { name: "DuckDuckGo", url: "https://duckduckgo.com/?q={q}", safe: "&kp=1" },
-  brave: { name: "Brave", url: "https://search.brave.com/search?q={q}", safe: "&safety=strict" },
-  startpage: { name: "Startpage", url: "https://www.startpage.com/sp/search?query={q}", safe: "" },
-  google: { name: "Google", url: "https://www.google.com/search?q={q}", safe: "&safe=active" },
-  bing: { name: "Bing", url: "https://www.bing.com/search?q={q}", safe: "&adlt=strict" },
-  mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}", safe: "&safe=1" },
+export const ENGINES: Record<EngineId, { name: string; url: string }> = {
+  duckduckgo: { name: "DuckDuckGo", url: "https://duckduckgo.com/?q={q}" },
+  brave: { name: "Brave", url: "https://search.brave.com/search?q={q}" },
+  startpage: { name: "Startpage", url: "https://www.startpage.com/sp/search?query={q}" },
+  google: { name: "Google", url: "https://www.google.com/search?q={q}" },
+  bing: { name: "Bing", url: "https://www.bing.com/search?q={q}" },
+  mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}" },
+};
+
+/* User-Agent presets. The chosen UA string is sent to /p as the `ua`
+   query parameter and applied by the server for every proxied request. */
+export type UaPresetId =
+  | "server-default"
+  | "chrome-win"
+  | "firefox-linux"
+  | "safari-mac"
+  | "edge-win"
+  | "chrome-android"
+  | "safari-ios"
+  | "custom";
+
+export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; ua: string }> = {
+  "server-default": { name: "Server default", ua: "" },
+  "chrome-win": {
+    name: "Chrome (Windows)",
+    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  },
+  "firefox-linux": {
+    name: "Firefox (Linux)",
+    ua: "Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0",
+  },
+  "safari-mac": {
+    name: "Safari (macOS)",
+    ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+  },
+  "edge-win": {
+    name: "Edge (Windows)",
+    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+  },
+  "chrome-android": {
+    name: "Chrome (Android)",
+    ua: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  },
+  "safari-ios": {
+    name: "Safari (iPhone)",
+    ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  },
+};
+
+/* Per-site rules. A rule only overrides the global setting for the
+   fields it explicitly configures; the UI passes the effective values
+   to /p on every navigation, so these genuinely change proxy behavior. */
+export type SiteRule = {
+  domain: string;
+  uaPreset?: UaPresetId;
+  adblock?: boolean;
+  trackers?: boolean;
 };
 
 export type Settings = {
   seed: string;
-  adblock: boolean;
-  trackers: boolean;
-  spoofUa: boolean;
-  stripReferrer: boolean;
-  udp: boolean;
-  httpsOnly: boolean;
-  webrtc: "direct" | "relay" | "disabled";
   engine: EngineId;
-  openSearchNewTab: boolean;
-  /* Route searches/URLs through the server-side fetch proxy (/p). */
+  /* Route searches/URLs through the server-side document proxy (/p). */
   proxySearch: boolean;
-  /* Open entered URLs (not searches) in a new tab. */
-  urlNewTab: boolean;
-  /* Request the engine's safe-search mode. */
-  safeSearch: boolean;
-  /* Show the feature chips on the home page. */
-  showFeatureChips: boolean;
+  /* Strip known ad hosts from proxied documents (server-side). */
+  adblock: boolean;
+  /* Strip known tracker hosts from proxied documents (server-side). */
+  trackers: boolean;
+  /* Reject plain-http targets (server-side). */
+  httpsOnly: boolean;
+  uaPreset: UaPresetId;
+  uaCustom: string;
+  /* Panic button: shortcut + destination. */
+  panicEnabled: boolean;
+  panicKeys: string;
+  panicUrl: string;
+  /* Auto cloak: swap the visible page when the tab is hidden. */
+  cloakEnabled: boolean;
+  cloakUrl: string;
+  cloakTitle: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
+  engine: "duckduckgo",
+  proxySearch: true,
   adblock: true,
   trackers: true,
-  spoofUa: true,
-  stripReferrer: true,
-  udp: false,
   httpsOnly: true,
-  webrtc: "relay",
-  engine: "duckduckgo",
-  openSearchNewTab: true,
-  proxySearch: true,
-  urlNewTab: true,
-  safeSearch: false,
-  showFeatureChips: true,
+  uaPreset: "chrome-win",
+  uaCustom: "",
+  panicEnabled: false,
+  panicKeys: "Ctrl+Shift+X",
+  panicUrl: "https://www.wikipedia.org/",
+  cloakEnabled: false,
+  cloakUrl: "https://www.wikipedia.org/",
+  cloakTitle: "Wikipedia",
 };
 
 const KEY = "lobsterbrowse-settings";
+const RULES_KEY = "lobsterbrowse-site-rules";
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      seed: parsed.seed || DEFAULT_SETTINGS.seed,
-      engine: ENGINES[parsed.engine as EngineId] ? parsed.engine as EngineId : DEFAULT_SETTINGS.engine,
+      engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -76,12 +129,66 @@ export function saveSettings(s: Settings) {
   }
 }
 
-/* Build the engine search URL for a query, honoring the safe-search setting. */
+export function loadSiteRules(): SiteRule[] {
+  try {
+    const raw = localStorage.getItem(RULES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SiteRule[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSiteRules(rules: SiteRule[]) {
+  try {
+    localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+  } catch {
+    /* ignore */
+  }
+}
+
+/* Effective UA string for a domain (honoring per-site rules), or null
+   when the server default should be used. */
+export function resolveUa(s: Settings, rules: SiteRule[], domain: string): string | null {
+  const rule = rules.find((r) => r.domain === domain);
+  const preset = rule?.uaPreset ?? s.uaPreset;
+  if (preset === "custom") {
+    const custom = s.uaCustom.trim();
+    return custom || null;
+  }
+  const ua = UA_PRESETS[preset as Exclude<UaPresetId, "custom">]?.ua ?? "";
+  return ua || null;
+}
+
+/* Build the /p query string for a target URL, applying global settings
+   and per-site rules. */
+export function proxyParams(s: Settings, rules: SiteRule[], target: string): string {
+  let domain = "";
+  try {
+    domain = new URL(target).hostname;
+  } catch {
+    domain = "";
+  }
+  const rule = rules.find((r) => r.domain === domain);
+  const parts: string[] = [];
+  if (s.adblock && rule?.adblock !== false) parts.push("ab=1");
+  if (s.trackers && rule?.trackers !== false) parts.push("trk=1");
+  if (s.httpsOnly) parts.push("https=1");
+  const ua = resolveUa(s, rules, domain);
+  if (ua) parts.push("ua=" + encodeURIComponent(ua));
+  return parts.join("&");
+}
+
+export function proxyUrl(s: Settings, rules: SiteRule[], target: string): string {
+  const params = proxyParams(s, rules, target);
+  return "/p?url=" + encodeURIComponent(target) + (params ? "&" + params : "");
+}
+
+/* Build the engine search URL for a query. */
 export function searchUrl(s: Settings, query: string): string {
   const engine = ENGINES[s.engine];
-  let url = engine.url.replace("{q}", encodeURIComponent(query));
-  if (s.safeSearch && engine.safe) url += engine.safe;
-  return url;
+  return engine.url.replace("{q}", encodeURIComponent(query));
 }
 
 /* Normalize a bare domain into a full URL. */
@@ -89,4 +196,12 @@ export function normalizeUrl(input: string): string {
   const s = input.trim();
   if (input.includes("://")) return s;
   return "https://" + s;
+}
+
+/* Heuristic: a URL has a scheme, or looks like a bare domain/host
+   (contains a dot, no spaces). Everything else is a search query. */
+export function looksLikeUrl(s: string): boolean {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return true;
+  if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/|$)/i.test(s)) return true;
+  return /^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(" ");
 }

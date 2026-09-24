@@ -10,7 +10,7 @@ RUN cargo build --release -p lobster-server
 FROM node:22-slim AS ui-builder
 WORKDIR /ui
 COPY ui/package.json ui/package-lock.json ./
-RUN npm ci
+RUN npm install --no-audit --no-fund
 COPY ui/ ./
 RUN npm run build
 
