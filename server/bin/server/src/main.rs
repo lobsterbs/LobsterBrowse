@@ -147,6 +147,21 @@ const ENGINE_JS: &str = r#"(function(){
 })();
 "#;
 
+/// Compatibility layer for proxied pages running inside a sandboxed
+/// same-origin frame: service workers, install prompts and push
+/// notifications either hang or misfire there, so stub them out.
+const COMPAT_JS: &str = r#"(function(){
+  if (window.__lbCompat) return; window.__lbCompat = true;
+  var sw = { register: function(){ return Promise.reject(new Error("service workers unavailable")); },
+             getRegistration: function(){ return Promise.resolve(undefined); },
+             getRegistrations: function(){ return Promise.resolve([]); },
+             addEventListener: function(){}, removeEventListener: function(){},
+             ready: new Promise(function(){}) };
+  try { Object.defineProperty(Navigator.prototype, "serviceWorker", { get: function(){ return sw; }, configurable: true }); } catch (e) {}
+  try { if (window.Notification) { Notification.permission = "denied"; Notification.requestPermission = function(){ return Promise.resolve("denied"); }; } } catch (e) {}
+  window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); });
+})();"#;
+
 /// Built-in network-filter rules applied when ad blocking is enabled.
 /// Hostnames are matched with the adblock crate (same engine the Wisp
 /// CONNECT path uses). An optional ADBLOCK_EXTRA file in the working
@@ -773,10 +788,11 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str) -> String {
 
 fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
     let pre = format!(
-        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>{}</script>",
+        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>{}</script><script>{}</script>",
         json_escape(page_url),
         json_escape(suffix),
-        ENGINE_JS
+        ENGINE_JS,
+        COMPAT_JS
     );
     let lower = html.to_ascii_lowercase();
     let head_end = match lower.find("<head>") {
@@ -846,10 +862,14 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 }
 
 fn engine_error_page(url: &str, detail: &str) -> Response {
+    // Scramjet compatibility layer: when the rewriter cannot handle a
+    // site, offer the deployed headless-browser service as fallback.
+    let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
     let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p>",
+        "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}a.btn{{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:999px;background:#1a73e8;color:#fff;text-decoration:none;font-size:14px}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p><p><a class=\"btn\" href=\"{}\">Try in Scramjet (headless browser)</a></p>",
         json_escape(url),
-        json_escape(detail)
+        json_escape(detail),
+        scramjet
     );
     (
         StatusCode::BAD_GATEWAY,
@@ -1009,13 +1029,9 @@ async fn main() {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(6001);
-    // Endpoint path is configurable so deployments are not trivially discoverable
-    // at the default /wisp/ location.
     let wisp_path = std::env::var("WISP_PATH").unwrap_or_else(|_| "/wisp/".into());
     let auth_password = std::env::var("WISP_PASSWORD").ok();
 
-    // Shared fetch client: cookie jar enabled so session/challenge-gated
-    // sites keep working across engine navigations.
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(25))
@@ -1036,12 +1052,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        // Native same-origin rewriting engine: /r/<base64url target>.
         .route("/r/:target", any(engine_proxy))
-        // Server-side engine log ring buffer.
         .route("/logs", get(logs_endpoint))
-        // Single-site: serve the built UI (ui/) from this same origin.
-        // Unknown paths fall back to index.html so the SPA always loads.
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)

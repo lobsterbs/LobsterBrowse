@@ -55,6 +55,11 @@ export default function App() {
     store.saveSessionTabs(tabs);
   }, [tabs]);
 
+  /* Closing the last tab returns to Home. */
+  useEffect(() => {
+    if (view === "browser" && tabs.length === 0) setView("home");
+  }, [view, tabs.length]);
+
   const newTab = useCallback((url?: string) => {
     const tab = freshTab(url ?? "");
     setTabs((prev) => [...prev, tab]);
@@ -246,9 +251,12 @@ export default function App() {
         </m3e-nav-rail>
 
         <div className="lb-main">
-          <m3e-app-bar>
-            <span slot="title">LobsterBrowse</span>
-          </m3e-app-bar>
+          {/* The browser view gets every pixel: no app bar there. */}
+          {view !== "browser" && (
+            <m3e-app-bar>
+              <span slot="title">LobsterBrowse</span>
+            </m3e-app-bar>
+          )}
 
           <div className="app-content">
             <div key={view} className="lb-view">
@@ -258,7 +266,6 @@ export default function App() {
                   bookmarks={bookmarks}
                   history={history}
                   onNavigate={navigateTo}
-                  onOpenLogs={() => setView("logs")}
                 />
               )}
               {view === "browser" && (

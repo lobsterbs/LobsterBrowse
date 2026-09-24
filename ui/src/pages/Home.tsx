@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ENGINES, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import type { Bookmark } from "../store";
 
@@ -7,7 +7,6 @@ type Props = {
   bookmarks: Bookmark[];
   history: string[];
   onNavigate: (target: string) => void;
-  onOpenLogs: () => void;
 };
 
 type Suggestion = { icon: string; text: string; url: string };
@@ -44,35 +43,11 @@ function buildSuggests(
   return out;
 }
 
-export default function HomePage({ settings, bookmarks, history, onNavigate, onOpenLogs }: Props) {
+export default function HomePage({ settings, bookmarks, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
-  const [health, setHealth] = useState("checking…");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  /* Health check: one probe with a hard timeout, a single retry, then a
-     definite OK or error — never an endless "checking…". */
-  useEffect(() => {
-    let cancelled = false;
-    let ok = false;
-    const probe = () =>
-      fetch("/healthz?_=" + Date.now(), { cache: "reload", signal: AbortSignal.timeout(4000) })
-        .then((r) => {
-          ok = r.ok;
-          if (!cancelled) setHealth(r.ok ? "ok" : r.status + " error");
-        })
-        .catch(() => {
-          ok = false;
-          if (!cancelled) setHealth("connection failed");
-        });
-    probe().then(() => {
-      if (!cancelled && !ok) setTimeout(probe, 2000);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const suggestions = buildSuggests(url, {
     history,
@@ -168,17 +143,6 @@ export default function HomePage({ settings, bookmarks, history, onNavigate, onO
           : "Opens directly in your browser"}
       </p>
 
-      <p className="lb-curl" aria-live="polite">
-        $ curl /healthz → {health}
-        {health !== "ok" && (
-          <>
-            {" "}
-            <m3e-button size="small" onClick={onOpenLogs}>
-              <m3e-icon name="history" aria-hidden={true} /> View logs
-            </m3e-button>
-          </>
-        )}
-      </p>
     </section>
   );
 }
