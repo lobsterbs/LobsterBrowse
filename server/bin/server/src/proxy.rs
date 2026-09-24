@@ -204,14 +204,14 @@ async fn handle_connection(
                 match pkt {
                     Packet::Connect { stream_id, kind, port, hostname } => {
                         // Guard: rate limit, stream cap, flood detection.
-                        {
+                        let denied = {
                             let mut rl = limiter.lock().unwrap();
                             let now = std::time::Instant::now();
-                            let denied = rl
-                                .connect_attempt(conn_id, now)
+                            rl.connect_attempt(conn_id, now)
                                 .is_err()
-                                || rl.can_open_stream(streams.len()).is_err();
-                            if denied {
+                                || rl.can_open_stream(streams.len()).is_err()
+                        };
+                        if denied {
                                 let _ = send_packet(
                                     &mut socket,
                                     &Packet::Close { stream_id, reason: CloseReason::Throttled },
