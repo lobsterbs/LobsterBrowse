@@ -9,6 +9,11 @@
 use crate::extension::ExtensionId;
 use crate::packet::{CloseReason, Packet, StreamKind};
 
+#[cfg(test)]
+use crate::frame::{encode_packet, Frame};
+#[cfg(test)]
+use crate::packet::PacketType;
+
 /// Initial per-stream send-buffer window advertised by the server.
 pub const INITIAL_BUFFER_SIZE: u32 = 128;
 
