@@ -59,15 +59,17 @@ form.addEventListener("submit", async (event) => {
 	}
 	const frame = scramjet.createFrame();
 	frame.frame.id = "sj-frame";
+
 	document.body.appendChild(frame.frame);
 	frame.go(url);
 });
 
 /* ---- LobsterBrowse embedding patch ----
    Upstream file above is from MercuryWorkshop/Scramjet-App (AGPL).
-   This addition lets the client be embedded in an iframe: loading the
-   page with a ?url= parameter hides the demo form and auto-navigates
-   to the target inside a Scramjet frame. ---- */
+   Loading the client with a ?url= parameter embeds it headlessly: the
+   demo UI stays hidden (the inline head script in index.html hides the
+   body immediately, before first paint) and the target loads inside a
+   full-viewport Scramjet frame, so the tab shows only the target site. */
 (async () => {
 	const params = new URLSearchParams(location.search);
 	const target = params.get("url");
@@ -96,8 +98,9 @@ form.addEventListener("submit", async (event) => {
 
 	const frame = scramjet.createFrame();
 	frame.frame.id = "sj-frame";
+	frame.frame.className = "sj-embed";
 	frame.frame.style.cssText =
-		"position:fixed;inset:0;width:100%;height:100%;border:0;z-index:1;";
+		"position:fixed;inset:0;width:100%;height:100%;border:0;z-index:1;background:transparent;";
 	document.body.appendChild(frame.frame);
 	frame.go(target);
 })();

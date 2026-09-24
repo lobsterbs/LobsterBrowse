@@ -3,12 +3,12 @@
 
    Two proxy engines (settings.proxyEngine):
    - "scramjet": the tab renders the Scramjet client (full rewriting
-     proxy, separate origin). Real sites work; DevTools is not available
-     because the frame is cross-origin.
+     proxy, separate origin). Real sites work. Cross-origin frames
+     cannot expose their console to DevTools, so per-tab meta info
+     (title, favicon) and a META network entry are fetched via /p.
    - "document": navigation goes through the server-side document proxy
-     (/p). The fetched HTML renders in a same-origin blob iframe, the
-     server injects a devtools hook, and DevTools reaches the real page
-     context. No URL rewriting — JS-heavy sites break.
+     (/p). Same-origin blob iframe with an injected devtools hook, so
+     full in-page DevTools work. No URL rewriting — JS-heavy sites break.
 
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
@@ -43,6 +43,17 @@ type Props = {
   onOpenLogs: () => void;
 };
 
+/* Short label for a tab: its real title, or the bare hostname. */
+function tabLabel(t: Tab): string {
+  if (t.title) return t.title;
+  if (!t.url) return "New tab";
+  try {
+    return new URL(t.url).hostname.replace(/^www\./, "");
+  } catch {
+    return t.url;
+  }
+}
+
 export default function BrowserView(props: Props) {
   const { settings, rules, tabs, activeId, bookmarks } = props;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
@@ -54,9 +65,31 @@ export default function BrowserView(props: Props) {
   const lastNav = useRef<Map<number, string>>(new Map());
   const [status, setStatus] = useState<Record<number, { loading: boolean; error?: LoadError }>>({});
   const [dt, setDtState] = useState<Record<number, DtState>>({});
-  const [pinned, setPinned] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  /* Real favicon per tab (blob URL, fetched through /p). */
+  const [icons, setIcons] = useState<Record<number, string>>({});
+
+  /* Dock: fully visible at first load, then smoothly shrinks and tucks
+     mostly out of view; hover or focus brings it back. */
+  const [dockSettled, setDockSettled] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setDockSettled(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  /* Fullscreen for the browser area. */
+  const rootRef = useRef<HTMLElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const h = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", h);
+    return () => document.removeEventListener("fullscreenchange", h);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else rootRef.current?.requestFullscreen?.().catch(() => {});
+  };
 
   const setDt = (id: number, patch: Partial<DtState>) => {
     setDtState((prev) => {
@@ -65,6 +98,56 @@ export default function BrowserView(props: Props) {
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
+  const addNet = (id: number, entry: { url: string; method: string; status: number; ok?: boolean; dur?: number; error?: string }) => {
+    setDtState((prev) => {
+      const base = prev[id] ?? emptyDt();
+      return { ...prev, [id]: { ...base, net: [...base.net, { id: nextEntryId(), ts: Date.now(), ...entry }] } };
+    });
+  };
+
+  /* ---- Tab meta: real title + favicon, fetched server-side via /p so
+     the user's IP is never exposed. Works in both engines. ---- */
+  const fetchMeta = (tabId: number, url: string) => {
+    if (!settings.proxySearch) return;
+    const started = Date.now();
+    fetch(proxyUrl(settings, rules, url))
+      .then(async (res) => {
+        addNet(tabId, { url, method: "META", status: res.status, ok: res.ok, dur: Date.now() - started });
+        const ct = res.headers.get("content-type") ?? "";
+        if (!res.ok || !ct.includes("html")) return;
+        const html = await res.text();
+        const tm = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = tm ? tm[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
+        if (title) props.updateTab(tabId, { title });
+        let iconHref = "";
+        for (const l of html.match(/<link[^>]+>/gi) ?? []) {
+          if (/rel=["'][^"']*icon/i.test(l)) {
+            const h = l.match(/href=["']([^"']+)["']/i);
+            if (h) {
+              iconHref = h[1];
+              break;
+            }
+          }
+        }
+        let abs = "";
+        try {
+          abs = new URL(iconHref || "/favicon.ico", url).href;
+        } catch {
+          return;
+        }
+        const r2 = await fetch(proxyUrl(settings, rules, abs)).catch(() => null);
+        if (!r2 || !r2.ok) return;
+        const blob = await r2.blob();
+        if (blob.size === 0 || blob.size > 400000) return;
+        if (!blob.type.startsWith("image/") && !blob.type.includes("octet-stream")) return;
+        setIcons((prev) => {
+          const old = prev[tabId];
+          if (old) URL.revokeObjectURL(old);
+          return { ...prev, [tabId]: URL.createObjectURL(blob) };
+        });
+      })
+      .catch(() => {});
+  };
 
   /* ---- Navigation ---- */
   const load = (tab: Tab, url: string, opts?: { push?: boolean; method?: string; body?: string }) => {
@@ -82,6 +165,8 @@ export default function BrowserView(props: Props) {
       pushLog("warn", "proxy disabled — opened " + url + " directly (user IP exposed)");
       return;
     }
+
+    fetchMeta(tab.id, url);
 
     if (settings.proxyEngine === "scramjet") {
       /* Full rewriting proxy: point the tab's iframe at the Scramjet
@@ -146,8 +231,7 @@ export default function BrowserView(props: Props) {
 
   /* ---- Auto-load: a tab whose URL was set without a navigation
      (Home search, restored session, newTab(url)) starts loading as
-     soon as it becomes the active tab. Previously nothing ever
-     triggered this first load, so those tabs stayed blank. ---- */
+     soon as it becomes the active tab. ---- */
   useEffect(() => {
     const t = active;
     if (!t || !t.url) return;
@@ -258,7 +342,30 @@ export default function BrowserView(props: Props) {
       if (active) load(active, active.url || "", { push: false });
     };
     const toggleDt = () => {
-      if (active) setDt(active.id, { open: !dtOf(active.id).open });
+      if (!active) return;
+      const id = active.id;
+      setDtState((prev) => {
+        const base = prev[id] ?? emptyDt();
+        if (!base.open && settings.proxyEngine === "scramjet") {
+          return {
+            ...prev,
+            [id]: {
+              ...base,
+              open: true,
+              console: [
+                ...base.console,
+                {
+                  id: nextEntryId(),
+                  kind: "info",
+                  text: "Scramjet engine: the page frame is cross-origin, so in-page console/network capture is unavailable here. Switch the proxy engine to Document fetch for full DevTools. META entries show server-side fetches for tab info.",
+                  ts: Date.now(),
+                },
+              ],
+            },
+          };
+        }
+        return { ...prev, [id]: { ...base, open: !base.open } };
+      });
     };
     window.addEventListener("lb-reload", reload);
     window.addEventListener("lb-devtools", toggleDt);
@@ -307,7 +414,12 @@ export default function BrowserView(props: Props) {
   const bookmarked = bookmarks.some((b) => b.url === active.url);
 
   return (
-    <section className="lb-browser">
+    <section
+      className="lb-browser"
+      ref={(el) => {
+        rootRef.current = el as HTMLElement | null;
+      }}
+    >
       {/* Tab strip */}
       <div className="lb-tabstrip" role="tablist" aria-label="Proxy tabs">
         {tabs.map((t) => (
@@ -318,8 +430,12 @@ export default function BrowserView(props: Props) {
             className={"lb-tab" + (t.id === active.id ? " active" : "")}
             onClick={() => props.setActiveId(t.id)}
           >
-            <m3e-icon name="public" aria-hidden={true} />
-            <span className="lb-tab-title">{t.title || t.url || "New tab"}</span>
+            {icons[t.id] ? (
+              <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
+            ) : (
+              <m3e-icon name="public" aria-hidden={true} />
+            )}
+            <span className="lb-tab-title">{tabLabel(t)}</span>
             <m3e-icon
               name="close"
               aria-hidden={true}
@@ -444,12 +560,11 @@ export default function BrowserView(props: Props) {
             ))}
           </div>
         )}
-
-        <div className="lb-watermark">LobsterBrowse</div>
       </div>
 
-      {/* Bottom toolbar: mostly hidden, expands on hover, pinned stays open */}
-      <div className={"lb-dock" + (pinned ? " pinned" : "")}>
+      {/* Bottom dock: fully visible on first load, then smoothly shrinks
+          and tucks mostly out of view. Hover or focus expands it. */}
+      <div className={"lb-dock" + (dockSettled ? " settled" : "")}>
         <m3e-toolbar variant="vibrant" shape="rounded" elevated className="lb-toolbar">
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
@@ -493,23 +608,12 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="star" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-icon-button
-            aria-label="View bookmarks"
+            aria-label={fullscreen ? "Exit full screen" : "Full screen"}
             toggle
-            selected={showBookmarks ? "" : undefined}
-            onClick={() => setShowBookmarks(!showBookmarks)}
+            selected={fullscreen ? "" : undefined}
+            onClick={toggleFullscreen}
           >
-            <m3e-icon name="bookmarks" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button
-            aria-label="Pin toolbar"
-            toggle
-            selected={pinned ? "" : undefined}
-            onClick={() => setPinned(!pinned)}
-          >
-            <m3e-icon name="push_pin" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
-            <m3e-icon name="tab" aria-hidden={true} />
+            <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
         </m3e-toolbar>
       </div>

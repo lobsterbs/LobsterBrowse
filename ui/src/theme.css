@@ -1,9 +1,8 @@
 /* LobsterBrowse theme. Token prefix per M3E docs: --md-sys-color-*.
    The <m3e-theme color="#hex"> element generates the full palette from a
    seed at runtime (dynamic color); these are only the baseline fallbacks.
-   Typography is fully self-hosted: Roboto Flex (variable, all weights)
-   and Material Symbols ship from the app's own origin — no Google CDN
-   requests, so page loads never leak the user's IP to Google. */
+   Typography: Google Sans Flex via the Google Fonts CDN; Material Symbols
+   self-hosted from the app's own origin. */
 :root {
   --md-sys-color-primary: #b3261e;
   --md-sys-color-on-primary: #ffffff;
@@ -38,6 +37,13 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
+/* App-bar title follows the theme palette (not the UA default color). */
+m3e-app-bar [slot="title"] {
+  color: var(--md-sys-color-on-surface);
+  font-variation-settings: "wght" 500;
+  letter-spacing: 0.01em;
+}
+
 /* Smooth nav rail expansion: the rail's width and the content reflow
    animate together so labels/icons glide instead of snapping. */
 m3e-nav-rail { transition: width 250ms cubic-bezier(0.2, 0, 0, 1); }
@@ -59,6 +65,10 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   justify-content: center;
   transition: padding 250ms cubic-bezier(0.2, 0, 0, 1);
 }
+
+/* The proxy browser wants every pixel it can get. */
+.app-content:has(.lb-browser) { padding-top: 12px; padding-bottom: 10px; }
+.app-content:has(.lb-browser) .lb-view { max-width: none; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
@@ -87,6 +97,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   font-variation-settings: "wght" 500;
 }
 .lb-setting-group { padding: 8px 16px 4px; }
+.lb-setting-sub { margin-top: 4px; }
 .lb-seed-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .lb-color-input { width: 40px; height: 32px; border: none; background: none; cursor: pointer; }
 .lb-text-input { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
@@ -116,8 +127,51 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-muted { opacity: 0.65; font-size: 13px; }
 .lb-curl { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.75; }
 
+/* ---- Search autocomplete (custom, matches the theme) ---- */
+.lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
+.lb-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  text-align: left;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.lb-ac-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 18px;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lb-ac-item:hover,
+.lb-ac-item.active {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+}
+.lb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---- Proxy browser ---- */
-.lb-browser { position: relative; display: flex; flex-direction: column; height: calc(100vh - 88px); min-height: 420px; }
+.lb-browser {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  min-height: 420px;
+}
+.lb-browser:fullscreen { height: 100vh; padding: 0; }
 
 .lb-tabstrip {
   display: flex;
@@ -140,6 +194,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 }
 .lb-tab.active { opacity: 1; background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
 .lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; font-size: 13px; }
+.lb-tab-favicon { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; object-fit: contain; }
 .lb-tab-close { border-radius: 50%; font-size: 16px; }
 .lb-tab-close:hover { background: rgba(128, 128, 128, 0.25); }
 
@@ -164,20 +219,9 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .lb-error-text { color: var(--md-sys-color-error); font-size: 13px; }
 
-/* Watermark: bottom-left edge of the proxy area. */
-.lb-watermark {
-  position: absolute;
-  left: 10px;
-  bottom: 8px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  opacity: 0.28;
-  pointer-events: none;
-  z-index: 4;
-  font-variation-settings: "wght" 500;
-}
-
-/* Bottom dock toolbar: a small peek stays visible; hover expands smoothly. */
+/* Bottom dock toolbar: fully visible on first load, then smoothly
+   shrinks and tucks mostly out of view (scale + fade + slide — not a
+   plain translate). Hover or focus expands it again. */
 .lb-dock {
   position: sticky;
   bottom: 0;
@@ -187,24 +231,30 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   height: 0;
 }
 .lb-toolbar {
-  transform: translateY(calc(100% - 16px));
-  transition: transform 250ms cubic-bezier(0.2, 0, 0, 1);
-  max-width: 100%;
-  width: min(920px, calc(100vw - 16px));
+  transform: none;
+  opacity: 1;
+  transform-origin: bottom center;
+  transition: transform 500ms cubic-bezier(0.2, 0, 0, 1), opacity 500ms ease;
+  width: fit-content;
+  min-width: min(780px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   flex-wrap: wrap;
 }
+.lb-dock.settled .lb-toolbar {
+  transform: translateY(64%) scale(0.94);
+  opacity: 0.4;
+}
 .lb-dock:hover .lb-toolbar,
-.lb-dock:focus-within .lb-toolbar,
-.lb-dock.pinned .lb-toolbar { transform: translateY(0); }
+.lb-dock:focus-within .lb-toolbar { transform: none; opacity: 1; }
 .lb-url-input {
-  flex: 1 1 140px;
-  min-width: 120px;
+  flex: 1 1 160px;
+  min-width: 140px;
   margin: 0 6px;
   padding: 6px 14px;
   border-radius: 999px;
   border: none;
   background: rgba(0, 0, 0, 0.08);
-  color: inherit;
+  color: var(--md-sys-color-on-surface);
   font-family: inherit;
   font-size: 13px;
 }
@@ -283,7 +333,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 /* ---- Small screens ---- */
 @media (max-width: 600px) {
   .app-content { padding: 12px 12px 40px; }
-  .lb-toolbar { width: calc(100vw - 8px); }
+  .lb-toolbar { min-width: calc(100vw - 8px); }
   .lb-devtools { width: 100%; }
   .lb-tab { max-width: 150px; }
   .lb-tab-title { max-width: 80px; }
