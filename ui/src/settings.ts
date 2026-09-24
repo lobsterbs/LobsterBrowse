@@ -3,13 +3,13 @@
 
 export type EngineId = "duckduckgo" | "brave" | "startpage" | "google" | "bing" | "mojeek";
 
-export const ENGINES: Record<EngineId, { name: string; url: string }> = {
-  duckduckgo: { name: "DuckDuckGo", url: "https://duckduckgo.com/?q={q}" },
-  brave: { name: "Brave", url: "https://search.brave.com/search?q={q}" },
-  startpage: { name: "Startpage", url: "https://www.startpage.com/sp/search?query={q}" },
-  google: { name: "Google", url: "https://www.google.com/search?q={q}" },
-  bing: { name: "Bing", url: "https://www.bing.com/search?q={q}" },
-  mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}" },
+export const ENGINES: Record<EngineId, { name: string; url: string; safe: string }> = {
+  duckduckgo: { name: "DuckDuckGo", url: "https://duckduckgo.com/?q={q}", safe: "&kp=1" },
+  brave: { name: "Brave", url: "https://search.brave.com/search?q={q}", safe: "&safety=strict" },
+  startpage: { name: "Startpage", url: "https://www.startpage.com/sp/search?query={q}", safe: "" },
+  google: { name: "Google", url: "https://www.google.com/search?q={q}", safe: "&safe=active" },
+  bing: { name: "Bing", url: "https://www.bing.com/search?q={q}", safe: "&adlt=strict" },
+  mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}", safe: "&safe=1" },
 };
 
 export type Settings = {
@@ -23,6 +23,14 @@ export type Settings = {
   webrtc: "direct" | "relay" | "disabled";
   engine: EngineId;
   openSearchNewTab: boolean;
+  /* Route searches/URLs through the server-side fetch proxy (/p). */
+  proxySearch: boolean;
+  /* Open entered URLs (not searches) in a new tab. */
+  urlNewTab: boolean;
+  /* Request the engine's safe-search mode. */
+  safeSearch: boolean;
+  /* Show the feature chips on the home page. */
+  showFeatureChips: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +44,10 @@ export const DEFAULT_SETTINGS: Settings = {
   webrtc: "relay",
   engine: "duckduckgo",
   openSearchNewTab: true,
+  proxySearch: true,
+  urlNewTab: true,
+  safeSearch: false,
+  showFeatureChips: true,
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -62,4 +74,19 @@ export function saveSettings(s: Settings) {
   } catch {
     /* storage unavailable (private mode) — settings stay for this session only */
   }
+}
+
+/* Build the engine search URL for a query, honoring the safe-search setting. */
+export function searchUrl(s: Settings, query: string): string {
+  const engine = ENGINES[s.engine];
+  let url = engine.url.replace("{q}", encodeURIComponent(query));
+  if (s.safeSearch && engine.safe) url += engine.safe;
+  return url;
+}
+
+/* Normalize a bare domain into a full URL. */
+export function normalizeUrl(input: string): string {
+  const s = input.trim();
+  if (/^[a-z][a-z0-9+.-]*:///i.test(s)) return s;
+  return "https://" + s;
 }

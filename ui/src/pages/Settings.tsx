@@ -40,10 +40,10 @@ export default function SettingsPanel({ settings, onChange }: Props) {
         open={searchOpen ? "" : undefined}
         onClick={() => setSearchOpen(!searchOpen)}
       >
-        <span slot="header"><m3e-icon name="search" aria-hidden={true} /> Search</span>
+        <span slot="header"><m3e-icon name="search" aria-hidden={true} /> Search &amp; browse</span>
         <div style={{ padding: "12px 16px" }}>
-          <div style={{ marginBottom: 8 }}>Default engine</div>
-          <m3e-segmented-button aria-label="Default search engine">
+          <div style={{ marginBottom: 8 }}>Search engine</div>
+          <m3e-segmented-button aria-label="Search engine">
             {(Object.keys(ENGINES) as EngineId[]).map((id) => (
               <m3e-button-segment
                 key={id}
@@ -55,7 +55,10 @@ export default function SettingsPanel({ settings, onChange }: Props) {
             ))}
           </m3e-segmented-button>
           <div style={{ marginTop: 8 }}>
-            {row("Open results in new tab", "open_in_new", settings.openSearchNewTab, () => onChange({ openSearchNewTab: !settings.openSearchNewTab }))}
+            {row("Proxy through server", "vpn_lock", settings.proxySearch, () => onChange({ proxySearch: !settings.proxySearch }))}
+            {row("SafeSearch", "family_restroom", settings.safeSearch, () => onChange({ safeSearch: !settings.safeSearch }))}
+            {row("Open searches in new tab", "open_in_new", settings.openSearchNewTab, () => onChange({ openSearchNewTab: !settings.openSearchNewTab }))}
+            {row("Open URLs in new tab", "tab", settings.urlNewTab, () => onChange({ urlNewTab: !settings.urlNewTab }))}
           </div>
         </div>
       </m3e-expansion-panel>
@@ -119,6 +122,9 @@ export default function SettingsPanel({ settings, onChange }: Props) {
               </m3e-chip>
             ))}
           </m3e-chip-set>
+        </div>
+        <div style={{ padding: "0 16px 12px" }}>
+          {row("Show feature chips", "chip", settings.showFeatureChips, () => onChange({ showFeatureChips: !settings.showFeatureChips }))}
         </div>
       </m3e-expansion-panel>
     </section>
