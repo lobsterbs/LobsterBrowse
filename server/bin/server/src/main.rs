@@ -1,25 +1,21 @@
-//! LobsterBrowse Wisp server entrypoint.
+//! LobsterBrowse native engine + wisp server entrypoint.
 //!
 //! Routes HTTP traffic normally and upgrades /wisp/ (configurable path)
-//! to the Wisp protocol: v2 INFO handshake when a Sec-WebSocket-Protocol
-//! header is present, v1 fallback otherwise. All CONNECTs pass through
-//! the guard layer (destination policy + rate limits) and the adblock
-//! filter set before sockets open.
-//!
-//! The /p endpoint is the document fetch proxy used by the in-app browser.
-//! It keeps a shared cookie jar so session/PoW-gated sites work across
-//! requests, applies an optional User-Agent override, optionally strips
-//! known ad/tracker script hosts from HTML, injects a devtools hook into
-//! proxied documents, and records every request in a ring buffer served
-//! at /logs.
+//! to the Wisp protocol. The /r/* route is the native rewriting engine:
+//! a target URL is base64url-encoded into the path, fetched server-side
+//! with a shared cookie jar, and every URL-bearing attribute and CSS
+//! url() reference is rewritten to another /r route so the page keeps
+//! working same-origin. An injected shim patches fetch/XHR and element
+//! setters at runtime, and the devtools hook reports console and
+//! network activity to the UI.
 
 mod proxy;
 
-use axum::body::Bytes;
-use axum::extract::{Query, State};
-use axum::http::{header, Method, StatusCode};
+use axum::body::{Body, Bytes};
+use axum::extract::{Path, RawQuery, State};
+use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{any, get};
 use axum::Router;
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
@@ -29,12 +25,15 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
-/// Devtools hook injected at the top of every proxied HTML document.
-/// Captures console output, errors, fetch/XHR/WebSocket traffic and
-/// link/form navigation, forwarding everything to the parent window
-/// (the LobsterBrowse UI, same origin) via postMessage.
-const HOOK: &str = r#"(function(){
+/// Engine shim + devtools hook injected right after <head> of every
+/// rewritten HTML document. The shim routes runtime fetch/XHR, element
+/// src/href assignments and history changes through /r routes; the hook
+/// reports console output, errors, network traffic and page loads to
+/// the parent UI window (same origin) via postMessage.
+const ENGINE_JS: &str = r#"(function(){
   if (window.__lbHook) return; window.__lbHook = true;
+  var PAGE = window.__lbPageUrl;
+  var PARAMS = window.__lbParams || "";
   var send = function(type, data){ try { parent.postMessage({ lb: type, data: data }, "*"); } catch (e) {} };
   var fmt = function(a){ if (typeof a === "string") return a;
     try { return JSON.stringify(a, null, 1); } catch (e) { return String(a); } };
@@ -51,21 +50,58 @@ const HOOK: &str = r#"(function(){
   window.addEventListener("unhandledrejection", function(e){
     var r = e.reason;
     send("console", { level: "error", text: "Unhandled rejection: " + ((r && r.message) ? r.message : String(r)), ts: Date.now() }); });
+  var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  function b64u(s) {
+    var bytes;
+    try { bytes = new TextEncoder().encode(s); }
+    catch (e) { bytes = []; for (var k = 0; k < s.length; k++) { var cc = s.charCodeAt(k); bytes.push(cc < 128 ? cc : 63); } }
+    var out = "";
+    for (var i = 0; i < bytes.length; i += 3) {
+      var b0 = bytes[i], b1 = i + 1 < bytes.length ? bytes[i + 1] : 0, b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      var n = (b0 << 16) | (b1 << 8) | b2;
+      out += B64.charAt((n >> 18) & 63) + B64.charAt((n >> 12) & 63);
+      if (i + 1 < bytes.length) out += B64.charAt((n >> 6) & 63);
+      if (i + 2 < bytes.length) out += B64.charAt(n & 63);
+    }
+    return out;
+  }
+  function route(u) {
+    if (u === null || u === undefined) return u;
+    var s = String(u);
+    if (!s) return s;
+    if (s.indexOf("/r/") === 0) return s;
+    if (s.indexOf(location.origin + "/r/") === 0) return s;
+    if (/^(data|blob|javascript|mailto|tel|about):/i.test(s)) return s;
+    var abs;
+    try { abs = new URL(s, PAGE).href; } catch (e) { return s; }
+    if (abs.indexOf(location.origin) === 0) return s;
+    if (!/^https?:/i.test(abs)) return s;
+    return "/r/" + b64u(abs) + PARAMS;
+  }
+  window.__lbRoute = route;
   var of = window.fetch;
   if (of) { window.fetch = function(input, init){
-    var url = (typeof input === "string") ? input : ((input && input.url) || "");
+    var url0 = (typeof input === "string") ? input : ((input && input.url) || "");
     var method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
     var t0 = Date.now();
-    return of.apply(this, arguments).then(function(resp){
-      send("net", { url: String(url), method: method, status: resp.status, ok: resp.ok, dur: Date.now() - t0, ts: Date.now() });
+    var routed = input;
+    try {
+      if (typeof input === "string") routed = route(input);
+      else if (input && input.url) routed = new Request(route(input.url), input);
+    } catch (e) {}
+    return of.call(window, routed, init).then(function(resp){
+      send("net", { url: String(url0), method: method, status: resp.status, ok: resp.ok, dur: Date.now() - t0, ts: Date.now() });
       return resp; }, function(err){
-      send("net", { url: String(url), method: method, status: 0, error: String(err), dur: Date.now() - t0, ts: Date.now() });
+      send("net", { url: String(url0), method: method, status: 0, error: String(err), dur: Date.now() - t0, ts: Date.now() });
       throw err; }); }; }
   if (window.XMLHttpRequest && XMLHttpRequest.prototype.open) {
     var ox = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(m, u){ this.__lb = { method: String(m).toUpperCase(), url: String(u), t0: Date.now() };
-      this.addEventListener("loadend", function(){ var i = this.__lb;
-        if (i) send("net", { url: i.url, method: i.method, status: this.status, dur: Date.now() - i.t0, ts: Date.now() }); });
+    XMLHttpRequest.prototype.open = function(m, u) {
+      try { arguments[1] = route(u); } catch (e) {}
+      this.__lb = { method: String(m).toUpperCase(), url: String(u), t0: Date.now() };
+      var self = this;
+      this.addEventListener("loadend", function(){ var i2 = self.__lb;
+        if (i2) send("net", { url: i2.url, method: i2.method, status: self.status, dur: Date.now() - i2.t0, ts: Date.now() }); });
       return ox.apply(this, arguments); }; }
   var OWS = window.WebSocket;
   if (OWS) { var WS = function(u, p){ send("net", { url: String(u), method: "WS", status: 101, ts: Date.now() });
@@ -73,30 +109,46 @@ const HOOK: &str = r#"(function(){
       ws.addEventListener("close", function(){ send("net", { url: String(u), method: "WS", status: 1006, ts: Date.now() }); });
       return ws; };
     WS.prototype = OWS.prototype; window.WebSocket = WS; }
-  document.addEventListener("click", function(e){
-    var t = e.target; while (t && t.nodeType === 1 && t.tagName !== "A") t = t.parentNode;
-    if (!t || !t.getAttribute) return;
-    var href = t.getAttribute("href");
-    if (!href || href.indexOf("javascript:") === 0) return;
-    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.defaultPrevented) return;
-    e.preventDefault();
-    send("navigate", { href: href, newTab: t.getAttribute("target") === "_blank" });
-  }, true);
-  document.addEventListener("submit", function(e){
-    var f = e.target; if (!f || !f.tagName || f.tagName !== "FORM") return;
-    e.preventDefault();
-    try { var fd = new FormData(f); var parts = [];
-      fd.forEach(function(v, k){ if (typeof v === "string") parts.push(encodeURIComponent(k) + "=" + encodeURIComponent(v)); });
-      send("submit", { action: f.getAttribute("action") || location.href,
-        method: (f.getAttribute("method") || "get").toUpperCase(), body: parts.join("&") });
-    } catch (err) { send("console", { level: "error", text: "form capture failed: " + String(err), ts: Date.now() }); }
-  }, true);
+  function prop(clazz, name) {
+    try {
+      var proto = window[clazz] && window[clazz].prototype;
+      if (!proto) return;
+      var d = Object.getOwnPropertyDescriptor(proto, name);
+      if (!d || !d.set || !d.get) return;
+      Object.defineProperty(proto, name, {
+        get: d.get,
+        set: function(v) { try { d.set.call(this, route(String(v))); } catch (e) { d.set.call(this, v); } },
+        configurable: true });
+    } catch (e) {}
+  }
+  prop("HTMLImageElement", "src");
+  prop("HTMLScriptElement", "src");
+  prop("HTMLIFrameElement", "src");
+  prop("HTMLMediaElement", "src");
+  prop("HTMLMediaElement", "poster");
+  prop("HTMLSourceElement", "src");
+  prop("HTMLLinkElement", "href");
+  var sa = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(n, v) {
+    try {
+      var ln = String(n).toLowerCase();
+      if ((ln === "href" || ln === "src" || ln === "action" || ln === "poster") && typeof v === "string" && v) v = route(v);
+    } catch (e) {}
+    return sa.call(this, n, v);
+  };
+  window.open = function(u) {
+    try { if (u) { send("navigate", { href: new URL(String(u), PAGE).href, newTab: true }); return null; } } catch (e) {}
+    return null;
+  };
+  var ops = history.pushState, ors = history.replaceState;
+  history.pushState = function(st, t, u) { try { if (u) arguments[2] = route(u); } catch (e) {} return ops.apply(history, arguments); };
+  history.replaceState = function(st, t, u) { try { if (u) arguments[2] = route(u); } catch (e) {} return ors.apply(history, arguments); };
   window.addEventListener("load", function(){ send("ready", { title: document.title }); });
-})();"#;
+})();
 
 /// Built-in network-filter rules applied when ad blocking is enabled.
 /// Hostnames are matched with the adblock crate (same engine the Wisp
-/// CONNECT path uses). An optional `ADBLOCK_EXTRA` file in the working
+/// CONNECT path uses). An optional ADBLOCK_EXTRA file in the working
 /// directory extends this list at startup.
 const AD_HOSTS: &str = "\
 ! LobsterBrowse built-in ad hosts\n\
@@ -255,7 +307,7 @@ fn extract_src_host(tag: &str) -> Option<String> {
 }
 
 /// Remove <meta http-equiv="content-security-policy"> tags; the page CSP
-/// would block the injected devtools hook and break same-origin framing.
+/// would block the injected engine shim and break same-origin framing.
 fn strip_csp_meta(html: &str) -> String {
     let lower = html.to_lowercase();
     let mut out = String::with_capacity(html.len());
@@ -278,11 +330,454 @@ fn strip_csp_meta(html: &str) -> String {
     out
 }
 
-/// Inject base tag + devtools hook right after <head> (or at document start).
-fn inject_head(html: String, url: &str) -> String {
-    let base = format!("<base href=\"{}\">", json_escape(url));
-    let head = format!("<script>{}</script>", HOOK);
-    let lower = html.to_lowercase();
+/// Drop <base> tags: every relative URL is resolved and rewritten
+/// server-side against the real page URL anyway.
+fn strip_base_tags(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0usize;
+    while let Some(rel) = lower[i..].find("<base") {
+        let start = i + rel;
+        let nextc = lower[start + 5..].chars().next();
+        let ok = matches!(nextc, Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('>') | Some('/'));
+        if !ok {
+            out.push_str(&html[i..start + 5]);
+            i = start + 5;
+            continue;
+        }
+        let Some(endrel) = lower[start..].find('>') else {
+            break;
+        };
+        out.push_str(&html[i..start]);
+        i = start + endrel + 1;
+    }
+    out.push_str(&html[i.min(html.len())..]);
+    out
+}
+
+/// Drop integrity="..." attributes: rewritten resources legitimately
+/// differ from upstream bytes, so SRI would reject every one of them.
+fn strip_integrity(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0usize;
+    while let Some(rel) = lower[i..].find("integrity=") {
+        let start = i + rel;
+        let prev_ok = start == 0 || {
+            let b = lower.as_bytes()[start - 1];
+            b == b' ' || b == b'\t' || b == b'\n' || b == b'\r'
+        };
+        if !prev_ok {
+            out.push_str(&html[i..start + 10]);
+            i = start + 10;
+            continue;
+        }
+        let after = &html[start + 10..];
+        let Some(fc) = after.chars().next() else {
+            break;
+        };
+        let skip = if fc == '"' || fc == '\'' {
+            after[1..].find(fc).map(|e| e + 2).unwrap_or(after.len())
+        } else {
+            after.find([' ', '>']).unwrap_or(after.len())
+        };
+        out.push_str(&html[i..start]);
+        i = start + 10 + skip;
+    }
+    out.push_str(&html[i.min(html.len())..]);
+    out
+}
+
+const B64URL_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+fn b64url_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(B64URL_CHARS[(n >> 18 & 63) as usize] as char);
+        out.push(B64URL_CHARS[(n >> 12 & 63) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(B64URL_CHARS[(n >> 6 & 63) as usize] as char);
+        }
+        if chunk.len() > 2 {
+            out.push(B64URL_CHARS[(n & 63) as usize] as char);
+        }
+    }
+    out
+}
+
+fn b64url_decode(s: &str) -> Option<Vec<u8>> {
+    let mut vals: Vec<u8> = Vec::with_capacity(s.len());
+    for ch in s.bytes() {
+        let v = match ch {
+            b'A'..=b'Z' => ch - b'A',
+            b'a'..=b'z' => ch - b'a' + 26,
+            b'0'..=b'9' => ch - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            _ => return None,
+        };
+        vals.push(v);
+    }
+    let mut out = Vec::with_capacity(vals.len() * 3 / 4);
+    for chunk in vals.chunks(4) {
+        let n = ((chunk[0] as u32) << 18)
+            | (chunk.get(1).map_or(0, |&v| (v as u32) << 12))
+            | (chunk.get(2).map_or(0, |&v| (v as u32) << 6))
+            | chunk.get(3).map_or(0, |&v| v as u32);
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+/// Minimal RFC-3986 percent-encoding for query values we re-emit.
+fn pct_enc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' || b == b'~' {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
+}
+
+/// Percent-decode a query value ('+' treated as space).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+            i += 1;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Resolve a possibly-relative reference against a base URL.
+/// Returns None for schemes the engine does not touch.
+fn resolve_url(base: &str, href: &str) -> Option<String> {
+    let h = href.trim();
+    if h.is_empty() {
+        return Some(base.split('#').next().unwrap_or(base).to_string());
+    }
+    if let Some(rest) = h.strip_prefix("//") {
+        return Some(format!("https://{}", rest));
+    }
+    if let Some(i) = h.find("://") {
+        let scheme = h[..i].to_ascii_lowercase();
+        if scheme == "http" || scheme == "https" {
+            return Some(h.to_string());
+        }
+        return None;
+    }
+    let hl = h.to_ascii_lowercase();
+    if hl.starts_with('#')
+        || hl.starts_with("data:")
+        || hl.starts_with("blob:")
+        || hl.starts_with("javascript:")
+        || hl.starts_with("mailto:")
+        || hl.starts_with("tel:")
+        || hl.starts_with("about:")
+    {
+        return None;
+    }
+    let bi = base.find("://")?;
+    let after = &base[bi + 3..];
+    let slash = after.find('/').unwrap_or(after.len());
+    let origin = &base[..bi + 3 + slash];
+    let path = &after[slash..];
+    if h.starts_with('?') {
+        let stripped = path.split(['?', '#']).next().unwrap_or(path);
+        return Some(format!("{}{}{}", origin, stripped, h));
+    }
+    if h.starts_with('/') {
+        return Some(format!("{}{}", origin, h));
+    }
+    let path_base = path.split(['?', '#']).next().unwrap_or(path);
+    let dir = match path_base.rfind('/') {
+        Some(p) => &path_base[..p + 1],
+        None => "/",
+    };
+    let combined = format!("{}{}", dir, h);
+    let mut segs: Vec<&str> = Vec::new();
+    for seg in combined.split('/') {
+        match seg {
+            "." => {}
+            ".." => {
+                segs.pop();
+            }
+            s => segs.push(s),
+        }
+    }
+    let joined = segs.join("/");
+    let pathout = if joined.starts_with('/') { joined } else { format!("/{}", joined) };
+    Some(format!("{}{}", origin, pathout))
+}
+
+/// Values the engine leaves untouched (fragments, inline schemes).
+fn is_rewritable_url(v: &str) -> bool {
+    let t = v.trim();
+    if t.is_empty() || t.starts_with('#') {
+        return false;
+    }
+    let tl = t.to_ascii_lowercase();
+    !(tl.starts_with("data:")
+        || tl.starts_with("blob:")
+        || tl.starts_with("javascript:")
+        || tl.starts_with("mailto:")
+        || tl.starts_with("tel:")
+        || tl.starts_with("about:"))
+}
+
+fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str) -> String {
+    match resolve_url(page_url, value) {
+        Some(abs) => format!("/r/{}{}", b64url_encode(abs.as_bytes()), suffix),
+        None => value.to_string(),
+    }
+}
+
+/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
+fn rewrite_srcset(value: &str, page_url: &str, suffix: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for item in value.split(',') {
+        let it = item.trim();
+        if it.is_empty() {
+            continue;
+        }
+        let mut split = it.splitn(2, char::is_whitespace);
+        let u = split.next().unwrap_or("");
+        let desc = split.next().map(|d| d.trim()).unwrap_or("");
+        let desc_s = if desc.is_empty() { String::new() } else { format!(" {}", desc) };
+        if is_rewritable_url(u) {
+            parts.push(format!("{}{}", rewrite_url_attr(u, page_url, suffix), desc_s));
+        } else {
+            parts.push(it.to_string());
+        }
+    }
+    parts.join(", ")
+}
+
+/// Rewrite url(...) references in CSS against the stylesheet's own URL.
+fn rewrite_css(css: &str, base: &str, suffix: &str) -> String {
+    let lower = css.to_ascii_lowercase();
+    let mut out = String::with_capacity(css.len());
+    let mut i = 0usize;
+    while let Some(rel) = lower[i..].find("url(") {
+        let start = i + rel;
+        out.push_str(&css[i..start + 4]);
+        let after = &css[start + 4..];
+        let mut value = String::new();
+        let mut q: Option<char> = None;
+        let mut end_off: Option<usize> = None;
+        for (idx, ch) in after.char_indices() {
+            if q.is_none() && (ch == '"' || ch == '\'') {
+                q = Some(ch);
+                value = String::new();
+                continue;
+            }
+            if let Some(qc) = q {
+                if ch == qc {
+                    end_off = Some(idx + ch.len_utf8());
+                    break;
+                }
+                value.push(ch);
+            } else if ch == ')' {
+                end_off = Some(idx);
+                break;
+            } else {
+                value.push(ch);
+            }
+        }
+        match end_off {
+            Some(off) => {
+                let v = value.trim().to_string();
+                if is_rewritable_url(&v) {
+                    out.push_str(&rewrite_url_attr(&v, base, suffix));
+                } else {
+                    out.push_str(&v);
+                }
+                i = start + 4 + off;
+            }
+            None => {
+                out.push_str(after);
+                i = css.len();
+            }
+        }
+    }
+    out.push_str(&css[i.min(css.len())..]);
+    out
+}
+
+/// Rewrite URL-bearing attributes inside a single tag.
+/// kind: 0 = plain URL attr, 1 = srcset, 2 = inline style CSS.
+fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str) -> String {
+    let attrs: [(&str, u8); 6] = [
+        ("href=", 0),
+        ("src=", 0),
+        ("action=", 0),
+        ("poster=", 0),
+        ("srcset=", 1),
+        ("style=", 2),
+    ];
+    let mut out = String::with_capacity(tag.len() + 64);
+    let mut i = 0usize;
+    loop {
+        let mut best: Option<(usize, usize, u8)> = None;
+        for (name, kind) in attrs {
+            if let Some(p) = tag_lower[i..].find(name) {
+                let abs = i + p;
+                let prev_ok = abs == 0 || {
+                    let b = tag_lower.as_bytes()[abs - 1];
+                    b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' || b == b'/'
+                };
+                if prev_ok && (best.is_none() || abs < best.unwrap().0) {
+                    best = Some((abs, name.len(), kind));
+                }
+            }
+        }
+        let Some((pos, nlen, kind)) = best else {
+            out.push_str(&tag[i..]);
+            break;
+        };
+        out.push_str(&tag[i..pos]);
+        let after = &tag[pos + nlen..];
+        let Some(fc) = after.chars().next() else {
+            out.push_str(&tag[pos..]);
+            break;
+        };
+        let (value, consumed) = if fc == '"' || fc == '\'' {
+            match after[1..].find(fc) {
+                Some(e) => (after[1..1 + e].to_string(), e + 2),
+                None => (after[1..].to_string(), after.len()),
+            }
+        } else {
+            match after.find([' ', '\t', '\n', '\r']) {
+                Some(e) => (after[..e].to_string(), e),
+                None => (after.to_string(), after.len()),
+            }
+        };
+        let new_value = match kind {
+            1 => rewrite_srcset(&value, page_url, suffix),
+            2 => rewrite_css(&value, page_url, suffix),
+            _ => {
+                if is_rewritable_url(&value) {
+                    rewrite_url_attr(&value, page_url, suffix)
+                } else {
+                    value.clone()
+                }
+            }
+        };
+        out.push_str(&tag[pos..pos + nlen]);
+        out.push_str(&new_value);
+        i = pos + nlen + consumed;
+        if i >= tag.len() {
+            break;
+        }
+    }
+    out
+}
+
+/// Walk every tag in the document and rewrite URL-bearing attributes.
+/// Script bodies are copied verbatim (runtime fetch/XHR are patched by
+/// the injected shim); style blocks get CSS url() rewriting.
+fn rewrite_html(html: &str, page_url: &str, suffix: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len() + 1024);
+    let mut i = 0usize;
+    while i < html.len() {
+        let Some(rel) = lower[i..].find('<') else {
+            out.push_str(&html[i..]);
+            break;
+        };
+        let start = i + rel;
+        let Some(endrel) = lower[start..].find('>') else {
+            out.push_str(&html[start..]);
+            break;
+        };
+        let end = start + endrel;
+        let tag = &html[start..=end];
+        let tag_lower = &lower[start..=end];
+        if tag_lower.starts_with("<!--") {
+            match lower[start..].find("-->") {
+                Some(c) => {
+                    out.push_str(&html[start..start + c + 3]);
+                    i = start + c + 3;
+                }
+                None => {
+                    out.push_str(&html[start..]);
+                    break;
+                }
+            }
+            continue;
+        }
+        if tag_lower.starts_with("<script") {
+            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+            match lower[end + 1..].find("</script") {
+                Some(c) => {
+                    let cs = end + 1 + c;
+                    let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
+                    out.push_str(&html[end + 1..after_close]);
+                    i = after_close;
+                }
+                None => {
+                    out.push_str(&html[end + 1..]);
+                    break;
+                }
+            }
+            continue;
+        }
+        if tag_lower.starts_with("<style") {
+            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+            match lower[end + 1..].find("</style") {
+                Some(c) => {
+                    let cs = end + 1 + c;
+                    let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
+                    out.push_str(&rewrite_css(&html[end + 1..cs], page_url, suffix));
+                    out.push_str(&html[cs..after_close]);
+                    i = after_close;
+                }
+                None => {
+                    out.push_str(&rewrite_css(&html[end + 1..], page_url, suffix));
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+        i = end + 1;
+    }
+    out
+}
+
+fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
+    let pre = format!(
+        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>{}</script>",
+        json_escape(page_url),
+        json_escape(suffix),
+        ENGINE_JS
+    );
+    let lower = html.to_ascii_lowercase();
     let head_end = match lower.find("<head>") {
         Some(i) => Some(i + "<head>".len()),
         None => lower
@@ -292,66 +787,131 @@ fn inject_head(html: String, url: &str) -> String {
     match head_end {
         Some(pos) => {
             let mut owned = html;
-            owned.insert_str(pos, &head);
-            owned.insert_str(pos, &base);
+            owned.insert_str(pos, &pre);
             owned
         }
-        None => format!("{}{}{}", base, head, html),
+        None => format!("{}{}", pre, html),
     }
 }
 
-fn proxy_error(status: StatusCode, url: &str, detail: &str, state: &AppState) -> Response {
-    push_log(state, "error", &format!("fetch failed for {url}: {detail}"));
+/// Full HTML pipeline: ad/tracker stripping, CSP/base/SRI cleanup,
+/// URL rewriting and shim injection.
+fn rewrite_html_doc(
+    html: &str,
+    page_url: &str,
+    params: &HashMap<String, String>,
+    suffix: &str,
+    state: &AppState,
+) -> String {
+    let mut filters: Vec<&adblock::FilterSet> = Vec::new();
+    if params.get("ab").map(|v| v == "1").unwrap_or(false) {
+        filters.push(&state.ads);
+    }
+    if params.get("trk").map(|v| v == "1").unwrap_or(false) {
+        filters.push(&state.trackers);
+    }
+    let cleaned = if filters.is_empty() {
+        html.to_string()
+    } else {
+        strip_blocked(html, &filters)
+    };
+    let cleaned = strip_csp_meta(&cleaned);
+    let cleaned = strip_base_tags(&cleaned);
+    let cleaned = strip_integrity(&cleaned);
+    let rewritten = rewrite_html(&cleaned, page_url, suffix);
+    inject_shim(rewritten, page_url, suffix)
+}
+
+/// Engine option query string carried on to every rewritten URL.
+fn params_suffix(params: &HashMap<String, String>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for k in ["ab", "trk", "https"] {
+        if let Some(v) = params.get(k) {
+            if v == "1" {
+                parts.push(format!("{}=1", k));
+            }
+        }
+    }
+    if let Some(ua) = params.get("ua") {
+        if !ua.is_empty() {
+            parts.push(format!("ua={}", pct_enc(ua)));
+        }
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
+    }
+}
+
+fn engine_error_page(url: &str, detail: &str) -> Response {
     let body = format!(
-        "{{\"error\":\"proxy_fetch_failed\",\"engine\":\"document-fetch\",\"url\":\"{}\",\"detail\":\"{}\",\"ts\":{}}}",
+        "<!doctype html><meta charset=\"utf-8\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p>",
         json_escape(url),
-        json_escape(detail),
-        now_secs()
+        json_escape(detail)
     );
     (
-        status,
-        [(header::CONTENT_TYPE, "application/json")],
+        StatusCode::BAD_GATEWAY,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
         body,
     )
         .into_response()
 }
 
-/// Server-side document fetch proxy: GET/POST /p?url=<http(s) target>.
+/// Native rewriting engine: /r/<base64url target>[?opts][&page-query].
 ///
-/// Query params:
-/// - url (required): absolute http(s) target
-/// - ua (optional): User-Agent override, max 512 printable chars
-/// - ab (optional): "1" strips known ad script/iframe tags from HTML
-/// - trk (optional): "1" strips known tracker script tags from HTML
-/// - https (optional): "1" rejects plain-http targets
-///
-/// The shared client keeps a cookie jar, so sites that set session or
-/// challenge cookies keep working across navigations.
-async fn proxy_fetch(
+/// Known query keys (ab, trk, https, ua) are engine options; every other
+/// query key belongs to the target page, so GET forms submitting
+/// straight to a /r route keep working. HTML and CSS responses are
+/// rewritten; everything else streams through untouched.
+async fn engine_proxy(
     State(state): State<Arc<AppState>>,
     method: Method,
-    Query(params): Query<HashMap<String, String>>,
+    Path(target): Path<String>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
     body: Option<Bytes>,
 ) -> Response {
     let started = Instant::now();
-    let Some(url) = params.get("url").cloned() else {
-        return (StatusCode::BAD_REQUEST, "missing url parameter").into_response();
+    let Some(decoded) = b64url_decode(&target) else {
+        return (StatusCode::BAD_REQUEST, "bad route").into_response();
+    };
+    let Ok(url) = String::from_utf8(decoded) else {
+        return (StatusCode::BAD_REQUEST, "bad route encoding").into_response();
     };
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return (StatusCode::BAD_REQUEST, "url must be http(s)").into_response();
-    }
-    if params.get("https").map(|v| v == "1").unwrap_or(false) && url.starts_with("http://") {
-        return proxy_error(StatusCode::BAD_REQUEST, &url, "HTTPS-only mode: plain-http target rejected", &state);
+        return (StatusCode::BAD_REQUEST, "target must be http(s)").into_response();
     }
 
-    let is_post = method == Method::POST;
-    push_log(
-        &state,
-        "info",
-        &format!("proxy {} {}{}", method, url, if is_post { " (body)" } else { "" }),
-    );
+    let mut params: HashMap<String, String> = HashMap::new();
+    let mut page_query: Vec<&str> = Vec::new();
+    if let Some(rq) = raw.as_deref() {
+        for part in rq.split('&') {
+            if part.is_empty() {
+                continue;
+            }
+            let (k, v) = match part.find('=') {
+                Some(p) => (&part[..p], &part[p + 1..]),
+                None => (part, ""),
+            };
+            params.insert(k.to_string(), percent_decode(v));
+            if k != "ab" && k != "trk" && k != "https" && k != "ua" {
+                page_query.push(part);
+            }
+        }
+    }
+    let fetch_url = if page_query.is_empty() {
+        url.clone()
+    } else {
+        let sep = if url.contains('?') { '&' } else { '?' };
+        format!("{}{}{}", url, sep, page_query.join("&"))
+    };
+    if params.get("https").map(|v| v == "1").unwrap_or(false) && fetch_url.starts_with("http://") {
+        return (StatusCode::BAD_REQUEST, "HTTPS-only mode: plain-http target rejected").into_response();
+    }
+    push_log(&state, "info", &format!("engine {} {}", method, fetch_url));
 
-    let mut req = state.client.request(method.clone(), &url);
+    let mut req = state.client.request(method.clone(), &fetch_url);
     if let Some(ua) = params.get("ua") {
         let cleaned: String = ua
             .chars()
@@ -362,6 +922,11 @@ async fn proxy_fetch(
             req = req.header(reqwest::header::USER_AGENT, cleaned);
         }
     }
+    for name in ["accept", "accept-language", "range", "content-type"] {
+        if let Some(v) = headers.get(name).and_then(|v| v.to_str().ok()) {
+            req = req.header(name, v);
+        }
+    }
     if let Some(b) = body {
         req = req.body(b);
     }
@@ -369,43 +934,48 @@ async fn proxy_fetch(
     match req.send().await {
         Ok(resp) => {
             let status = resp.status();
+            let final_url = resp.url().to_string();
             let ct = resp
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
-                .unwrap_or("text/html; charset=utf-8")
+                .unwrap_or("application/octet-stream")
                 .to_string();
-            let is_html = ct.contains("html");
+            let cache_control = resp
+                .headers()
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
             let bytes = resp.bytes().await.unwrap_or_default();
-
-            let body: Vec<u8> = if is_html {
+            let suffix = params_suffix(&params);
+            let out: Vec<u8> = if ct.contains("html") {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                let mut filters: Vec<&adblock::FilterSet> = Vec::new();
-                if params.get("ab").map(|v| v == "1").unwrap_or(false) {
-                    filters.push(&state.ads);
-                }
-                if params.get("trk").map(|v| v == "1").unwrap_or(false) {
-                    filters.push(&state.trackers);
-                }
-                let stripped = if filters.is_empty() {
-                    text
-                } else {
-                    strip_blocked(&text, &filters)
-                };
-                inject_head(strip_csp_meta(&stripped), &url).into_bytes()
+                rewrite_html_doc(&text, &final_url, &params, &suffix, &state).into_bytes()
+            } else if ct.contains("css") {
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                rewrite_css(&text, &final_url, &suffix).into_bytes()
             } else {
                 bytes.to_vec()
             };
-
             push_log(
                 &state,
                 "info",
-                &format!("proxy done {} {} -> {} ({} ms)", method, url, status, started.elapsed().as_millis()),
+                &format!("engine done {} -> {} ({} ms)", fetch_url, status, started.elapsed().as_millis()),
             );
-            let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            (axum_status, [(header::CONTENT_TYPE, ct)], body).into_response()
+            let mut builder = Response::builder()
+                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+                .header(header::CONTENT_TYPE, ct);
+            if let Some(cc) = cache_control {
+                builder = builder.header(header::CACHE_CONTROL, cc);
+            }
+            builder
+                .body(Body::from(out))
+                .unwrap_or_else(|_| (StatusCode::BAD_GATEWAY, "body error").into_response())
         }
-        Err(e) => proxy_error(StatusCode::BAD_GATEWAY, &url, &e.to_string(), &state),
+        Err(e) => {
+            push_log(&state, "error", &format!("engine fetch failed for {}: {}", fetch_url, e));
+            engine_error_page(&fetch_url, &e.to_string())
+        }
     }
 }
 
@@ -444,7 +1014,7 @@ async fn main() {
     let auth_password = std::env::var("WISP_PASSWORD").ok();
 
     // Shared fetch client: cookie jar enabled so session/challenge-gated
-    // sites work across /p navigations.
+    // sites work across engine navigations.
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(25))
@@ -458,15 +1028,15 @@ async fn main() {
         ads: load_filters("adblock-extra.txt", AD_HOSTS),
         trackers: load_filters("tracker-extra.txt", TRACKER_HOSTS),
     });
-    push_log(&state, "info", "proxy log buffer initialised");
+    push_log(&state, "info", "engine log buffer initialised");
 
     let wisp_state = Arc::new(proxy::ProxyState::new(auth_password));
     let limiter = Arc::new(Mutex::new(guard::RateLimiter::default()));
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        // Document fetch proxy used by the in-app browser.
-        .route("/p", get(proxy_fetch).post(proxy_fetch))
+        // Native rewriting engine: /r/<base64url target>[?opts].
+        .route("/r/*target", any(engine_proxy))
         // Server-side proxy log ring buffer.
         .route("/logs", get(logs_endpoint))
         // Single-site: serve the built UI (ui/dist) from this same origin.
@@ -488,7 +1058,7 @@ async fn main() {
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    info!("LobsterBrowse wisp server listening on {} at {}", addr, wisp_path);
+    info!("LobsterBrowse engine server listening on {} at {}", addr, wisp_path);
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
 }
