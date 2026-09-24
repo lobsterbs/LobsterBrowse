@@ -392,7 +392,7 @@ async fn proxy_fetch(
                 } else {
                     strip_blocked(&text, &filters)
                 };
-                inject_head(strip_csp_meta(stripped), &url).into_bytes()
+                inject_head(strip_csp_meta(&stripped), &url).into_bytes()
             } else {
                 bytes.to_vec()
             };
