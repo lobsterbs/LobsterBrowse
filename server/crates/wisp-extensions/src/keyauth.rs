@@ -99,6 +99,7 @@ pub fn decode_client(payload: &[u8]) -> Option<(String, u8, &[u8], &[u8])> {
 mod tests {
     use super::*;
     use ed25519_dalek::{Signature, Signer, SigningKey};
+    use sha2::Digest;
 
     #[test]
     fn full_ed25519_flow() {
@@ -117,7 +118,7 @@ mod tests {
         payload.extend_from_slice(user);
         payload.push(ED25519_MASK);
         payload.extend_from_slice(&hash);
-        payload.extend_from_slice(sig.to_bytes());
+        payload.extend_from_slice(&sig.to_bytes());
 
         assert!(auth.verify_payload(&payload));
 
