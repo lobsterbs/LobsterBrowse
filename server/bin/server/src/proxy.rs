@@ -219,7 +219,6 @@ async fn handle_connection(
                                 .await;
                                 continue;
                             }
-                        }
                         // Guard: SSRF / private-range destination policy.
                         if state.policy.check_hostname(&hostname) == Verdict::Block {
                             let _ = send_packet(
