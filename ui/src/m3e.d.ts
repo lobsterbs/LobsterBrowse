@@ -21,10 +21,15 @@ declare module "react" {
     interface IntrinsicElements {
       "m3e-theme": M3eBase & { color?: string; "strong-focus"?: boolean };
       "m3e-content-pane": M3eBase;
+      "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
+      "m3e-avatar": M3eBase;
+      "m3e-search-bar": M3eBase & { clearable?: boolean | string };
       "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
+      "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
+      "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
       "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string };
-      "m3e-icon": M3eBase & { name?: string };
+      "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean };
       "m3e-radio-group": M3eBase;
@@ -39,6 +44,22 @@ declare module "react" {
       "m3e-nav-rail": M3eBase & { mode?: string };
       "m3e-nav-item": M3eBase & { selected?: boolean | string; disabled?: boolean; href?: string };
       "m3e-nav-rail-toggle": M3eBase & { for?: string };
+      "m3e-expansion-panel": M3eBase & {
+        open?: boolean | string;
+        "hide-toggle"?: boolean | string;
+        "toggle-position"?: string;
+        "toggle-direction"?: string;
+      };
+      "m3e-accordion": M3eBase & { multi?: boolean | string };
+      "m3e-tooltip": M3eBase & {
+        for?: string;
+        position?: string;
+        "show-delay"?: string | number;
+        "hide-delay"?: string | number;
+        disabled?: boolean;
+      };
+      "m3e-badge": M3eBase & { for?: string; size?: string; position?: string };
+      "m3e-loading-indicator": M3eBase & { variant?: string };
       "m3e-tabs": M3eBase;
       "m3e-tab": M3eBase & { for?: string; selected?: boolean };
       "m3e-tab-panel": M3eBase & { id?: string };

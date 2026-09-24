@@ -5,62 +5,79 @@ export default function HomePage() {
   const [status, setStatus] = useState<"checking" | "online" | "offline">("checking");
 
   useEffect(() => {
-    // Same origin now: the server serves this UI, so it is awake whenever
-    // the page is open. /healthz just confirms it. The check retries every
-    // 10s so a transient failure (e.g. deploy rolling over) self-heals.
+    // Same origin: the server serves this UI, so it is awake whenever the
+    // page is open. /healthz confirms it. Aggressive early retries so a
+    // transient failure (deploy rolling over) never sticks on "Reconnecting".
     let cancelled = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout>;
     const check = () => {
-      fetch("/healthz")
+      fetch("/healthz", { cache: "no-store" })
         .then((r) => { if (!cancelled) setStatus(r.ok ? "online" : "offline"); })
-        .catch(() => { if (!cancelled) setStatus("offline"); });
+        .catch(() => { if (!cancelled) setStatus("offline"); })
+        .finally(() => {
+          if (cancelled) return;
+          attempt++;
+          // 2s, 3s, 5s, then every 10s
+          const delay = attempt < 3 ? 2000 : attempt < 5 ? 3000 : 10000;
+          timer = setTimeout(() => { if (!cancelled) setStatus("checking"), check(); }, delay);
+        });
     };
     check();
-    const timer = setInterval(check, 10000);
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
-  const dot =
-    status === "online" ? "var(--md-sys-color-primary)" :
-    status === "checking" ? "var(--md-sys-color-outline)" :
-    "var(--md-sys-color-error)";
   const statusText =
     status === "checking" ? "Connecting…" :
     status === "online" ? "Server online" : "Reconnecting…";
 
   const go = () => {
     (globalThis as any).M3eSnackbar?.open(
-      "Browsing arrives with the Wisp client — the relay server is live."
+      "Browsing arrives with the Wisp client — the relay server is live.",
+      true
     );
   };
 
   return (
-    <section style={{ textAlign: "center", marginTop: 32 }}>
+    <section style={{ textAlign: "center", marginTop: 16 }}>
       <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
       <p style={{ opacity: 0.7, marginTop: 8 }}>Private proxy with ad blocking.</p>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "32px 0 8px" }}>
-        <m3e-form-field variant="outlined" style={{ flex: 1 }}>
-          <label slot="label" htmlFor="url">URL</label>
+      <div style={{ margin: "32px 0 16px" }}>
+        <m3e-search-bar clearable>
+          <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
           <input
+            slot="input"
             id="url"
+            aria-label="URL to browse"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") go(); }}
             placeholder="example.com"
           />
-        </m3e-form-field>
-        <m3e-button variant="filled" onClick={go}>Go</m3e-button>
+          <m3e-button slot="trailing" variant="filled" onClick={go}>Go</m3e-button>
+        </m3e-search-bar>
       </div>
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center", fontSize: 13, opacity: 0.8, marginBottom: 40 }}>
-        <span aria-hidden={true} style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block" }} />
-        {statusText}
+      <div id="srv-status" style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", fontSize: 13, opacity: 0.8, marginBottom: 40, minHeight: 20 }}>
+        {status === "checking"
+          ? <m3e-loading-indicator aria-label="Checking server status" />
+          : (
+            <>
+              <span aria-hidden={true} style={{
+                width: 8, height: 8, borderRadius: "50%", display: "inline-block",
+                background: status === "online" ? "var(--md-sys-color-primary)" : "var(--md-sys-color-error)"
+              }} />
+              {statusText}
+            </>
+          )}
       </div>
+      <m3e-tooltip for="srv-status">Live /healthz check against this same server</m3e-tooltip>
 
-      <m3e-chip-set>
-        <m3e-chip>No logs</m3e-chip>
-        <m3e-chip>Ad blocking</m3e-chip>
-        <m3e-chip>TCP + UDP</m3e-chip>
+      <m3e-chip-set aria-label="Features">
+        <m3e-chip><m3e-icon slot="icon" name="visibility_off" aria-hidden={true} />No logs</m3e-chip>
+        <m3e-chip><m3e-icon slot="icon" name="shield" aria-hidden={true} />Ad blocking</m3e-chip>
+        <m3e-chip><m3e-icon slot="icon" name="lan" aria-hidden={true} />TCP + UDP</m3e-chip>
       </m3e-chip-set>
     </section>
   );
