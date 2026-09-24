@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import HomePage from './pages/Home';
 import SettingsPanel from './pages/Settings';
-import { loadSettings, saveSettings, type Settings } from './settings';
+import { loadSettings, saveSettings, type Settings, type EngineId } from './settings';
 
 type View = "home" | "settings";
 
@@ -53,7 +53,7 @@ export default function App() {
 
           <div style={{ maxWidth: 640, margin: "0 auto", padding: "24px 24px 48px", width: "100%" }}>
             {view === "home"
-              ? <HomePage settings={settings} />
+              ? <HomePage settings={settings} onEngineChange={(e: EngineId) => update({ engine: e })} />
               : <SettingsPanel settings={settings} onChange={update} />}
           </div>
         </div>
