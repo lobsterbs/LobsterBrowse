@@ -12,7 +12,7 @@
    restored sessions) auto-load when they become active. */
 
 import { useEffect, useRef, useState } from "react";
-import { decodeRoute, routeUrl, type Settings, type SiteRule } from "../settings";
+import { decodeRoute, looksLikeUrl, normalizeUrl, routeUrl, searchUrl, type Settings, type SiteRule } from "../settings";
 import { pushLog, type Bookmark, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
 
@@ -345,7 +345,7 @@ export default function BrowserView(props: Props) {
   const go = (value: string) => {
     const q = value.trim();
     if (!q) return;
-    load(active, q.startsWith("http://") || q.startsWith("https://") ? q : "https://" + q, { push: true });
+    load(active, looksLikeUrl(q) ? normalizeUrl(q) : searchUrl(settings, q), { push: true });
   };
 
   const back = () => {

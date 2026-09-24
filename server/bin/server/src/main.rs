@@ -943,6 +943,13 @@ async fn engine_proxy(
     match req.send().await {
         Ok(resp) => {
             let status = resp.status();
+            // Follows redirects: resolve relative URLs against the FINAL
+            // URL, not the one the user typed, or redirected pages
+            // rewrite every link against the wrong origin.
+            let base_url = resp.url().to_string();
+            if base_url != url {
+                push_log(&state, "info", &format!("engine redirect {} -> {}", url, base_url));
+            }
             let ct = resp
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
@@ -954,10 +961,10 @@ async fn engine_proxy(
             let is_css = !is_html && ct.contains("css");
             let out: Vec<u8> = if is_html {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                rewrite_html_doc(&text, &url, &params, &suffix, &state).into_bytes()
+                rewrite_html_doc(&text, &base_url, &params, &suffix, &state).into_bytes()
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                rewrite_css(&text, &url, &suffix).into_bytes()
+                rewrite_css(&text, &base_url, &suffix).into_bytes()
             } else {
                 bytes.to_vec()
             };
