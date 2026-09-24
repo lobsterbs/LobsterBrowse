@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@m3e/web": "^2.8.2",
-    "@fontsource-variable/roboto-flex": "^5.3.0",
     "material-symbols": "^0.47.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
