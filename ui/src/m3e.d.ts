@@ -22,7 +22,7 @@ declare module "react" {
       "m3e-content-pane": M3eBase;
       "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
-      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string };
       "m3e-icon": M3eBase & { name?: string };
       "m3e-card": M3eBase & { variant?: string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean };
@@ -35,6 +35,9 @@ declare module "react" {
       "m3e-list-item": M3eBase;
       "m3e-nav-menu": M3eBase;
       "m3e-nav-menu-item": M3eBase & { open?: boolean };
+      "m3e-nav-rail": M3eBase & { mode?: string };
+      "m3e-nav-item": M3eBase & { selected?: boolean | string; disabled?: boolean; href?: string };
+      "m3e-nav-rail-toggle": M3eBase & { for?: string };
       "m3e-tabs": M3eBase;
       "m3e-tab": M3eBase & { for?: string; selected?: boolean };
       "m3e-tab-panel": M3eBase & { id?: string };
