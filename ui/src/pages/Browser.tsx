@@ -66,7 +66,7 @@ export default function BrowserView(props: Props) {
      mostly out of view; hover or focus brings it back. */
   const [dockSettled, setDockSettled] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setDockSettled(true), 1500);
+    const t = setTimeout(() => setDockSettled(true), 4000);
     return () => clearTimeout(t);
   }, []);
 
@@ -329,14 +329,8 @@ export default function BrowserView(props: Props) {
   }, [tabs, activeId, settings, rules, dt]);
 
   if (!active) {
-    return (
-      <section className="lb-view-content" style={{ textAlign: "center" }}>
-        <m3e-heading variant="title" size="medium" level={2}>No tabs open</m3e-heading>
-        <m3e-button variant="filled" onClick={() => props.newTab()}>
-          <m3e-icon name="add" aria-hidden={true} /> New tab
-        </m3e-button>
-      </section>
-    );
+    /* App sends us back to Home when the last tab closes. */
+    return null;
   }
 
   const st = status[active.id] ?? { loading: false };
@@ -432,9 +426,29 @@ export default function BrowserView(props: Props) {
         )}
 
         {!active.url && !st.loading && (
-          <div className="lb-empty-tab">
-            <m3e-icon name="travel_explore" aria-hidden={true} />
-            <p>Type a URL in the toolbar below, or search from Home.</p>
+          <div className="lb-newtab">
+            <m3e-heading variant="title" size="medium" level={2}>New tab</m3e-heading>
+            <m3e-search-bar clearable className="lb-newtab-search">
+              <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
+              <input
+                slot="input"
+                aria-label="Search or URL"
+                placeholder="Search or URL"
+                autoComplete="off"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") go((e.target as HTMLInputElement).value);
+                }}
+              />
+            </m3e-search-bar>
+            {bookmarks.length > 0 && (
+              <div className="lb-newtab-links">
+                {bookmarks.slice(0, 6).map((b) => (
+                  <m3e-button key={b.url} variant="tonal" size="small" onClick={() => load(active, b.url, { push: true })}>
+                    <m3e-icon name="star" aria-hidden={true} /> {b.title || b.url}
+                  </m3e-button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -480,7 +494,7 @@ export default function BrowserView(props: Props) {
       {/* Bottom dock: fully visible on first load, then smoothly shrinks
           and tucks mostly out of view. Hover or focus expands it. */}
       <div className={"lb-dock" + (dockSettled ? " settled" : "")}>
-        <m3e-toolbar variant="vibrant" shape="rounded" elevated className="lb-toolbar">
+        <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
