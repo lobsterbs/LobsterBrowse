@@ -172,7 +172,7 @@ export default function BrowserView(props: Props) {
           for (const s of dtBase().scripts) {
             if (s.autorun) {
               try {
-                w.eval(s.code);
+                (w as unknown as { eval: (c: string) => unknown }).eval(s.code);
               } catch (err) {
                 pushLog("error", "autorun script failed: " + (err instanceof Error ? err.message : String(err)));
               }
