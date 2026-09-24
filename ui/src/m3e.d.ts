@@ -24,11 +24,12 @@ declare module "react" {
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
+      "m3e-search-view": M3eBase & { mode?: string; contained?: boolean | string; "hide-search-icon"?: boolean | string };
       "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
-      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean };
@@ -38,8 +39,7 @@ declare module "react" {
       "m3e-chip-set": M3eBase & { vertical?: boolean };
       "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
       "m3e-list": M3eBase;
-      "m3e-list-item": M3e
-Base;
+      "m3e-list-item": M3eBase;
       "m3e-nav-menu": M3eBase;
       "m3e-nav-menu-item": M3eBase & { open?: boolean };
       "m3e-nav-rail": M3eBase & { mode?: string };
@@ -61,12 +61,46 @@ Base;
       };
       "m3e-badge": M3eBase & { for?: string; size?: string; position?: string };
       "m3e-loading-indicator": M3eBase & { variant?: string };
-      "m3e-tabs": M3eBase;
-      "m3e-tab": M3eBase & { for?: string; selected?: boolean };
+      "m3e-tabs": M3eBase & { variant?: string; stretch?: boolean | string; "header-position"?: string; "disable-pagination"?: boolean | string };
+      "m3e-tab": M3eBase & { for?: string; selected?: boolean | string; disabled?: boolean };
       "m3e-tab-panel": M3eBase & { id?: string };
       "m3e-slider": M3eBase & { min?: string | number; max?: string | number; step?: string | number };
       "m3e-slider-thumb": M3eBase & { value?: string | number };
       "m3e-divider": M3eBase;
+      "m3e-toolbar": M3eBase & {
+        variant?: string;
+        shape?: string;
+        elevated?: boolean | string;
+        vertical?: boolean | string;
+      };
+      "m3e-autocomplete": M3eBase & {
+        for?: string;
+        filter?: string;
+        "case-sensitive"?: boolean | string;
+        "no-data-label"?: string;
+        "hide-no-data"?: boolean | string;
+        loading?: boolean | string;
+        "loading-label"?: string;
+        "hide-loading"?: boolean | string;
+        required?: boolean | string;
+        "auto-activate"?: boolean | string;
+      };
+      "m3e-option": M3eBase & { value?: string; selected?: boolean | string; disabled?: boolean };
+      "m3e-skeleton": M3eBase & {
+        loaded?: boolean | string;
+        shape?: string;
+        animation?: string;
+      };
+      "m3e-dialog": M3eBase & {
+        dismissible?: boolean | string;
+        "close-label"?: string;
+        "disable-close"?: boolean | string;
+        "no-focus-trap"?: boolean | string;
+        alert?: boolean | string;
+      };
+      "m3e-dialog-trigger": M3eBase & { for?: string };
+      "m3e-dialog-action": M3eBase & { "return-value"?: string };
+      "m3e-fab": M3eBase & { size?: string; variant?: string };
     }
   }
 }
