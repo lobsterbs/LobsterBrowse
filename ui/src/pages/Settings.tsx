@@ -42,20 +42,18 @@ export default function SettingsPanel({ settings, onChange }: Props) {
       >
         <span slot="header"><m3e-icon name="search" aria-hidden={true} /> Search</span>
         <div style={{ padding: "12px 16px" }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <m3e-icon name="travel_explore" aria-hidden={true} /> Search engine
-          </div>
-          <m3e-chip-set aria-label="Search engine">
+          <div style={{ marginBottom: 8 }}>Default engine</div>
+          <m3e-segmented-button aria-label="Default search engine">
             {(Object.keys(ENGINES) as EngineId[]).map((id) => (
-              <m3e-chip
+              <m3e-button-segment
                 key={id}
-                selected={settings.engine === id ? "" : undefined}
+                checked={settings.engine === id ? "" : undefined}
                 onClick={() => onChange({ engine: id })}
               >
                 {ENGINES[id].name}
-              </m3e-chip>
+              </m3e-button-segment>
             ))}
-          </m3e-chip-set>
+          </m3e-segmented-button>
           <div style={{ marginTop: 8 }}>
             {row("Open results in new tab", "open_in_new", settings.openSearchNewTab, () => onChange({ openSearchNewTab: !settings.openSearchNewTab }))}
           </div>
