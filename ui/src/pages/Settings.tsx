@@ -87,7 +87,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
       <p className="lb-muted" style={{ marginTop: 4 }}>
-        Saved on this device only. Toggles marked server-side change how /p fetches pages.
+        Saved on this device only. Toggles marked server-side change how the engine fetches pages.
       </p>
 
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
@@ -100,27 +100,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               </m3e-button-segment>
             ))}
           </m3e-segmented-button>
-        </div>
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Proxy engine</div>
-          <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              Scramjet (full rewrite)
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine === "document" ? "" : undefined} onClick={() => onChange({ proxyEngine: "document" })}>
-              Document fetch
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          {settings.proxyEngine === "scramjet" && (
-            <div className="lb-setting-sub">
-              <TextInput
-                label="Scramjet instance URL"
-                value={settings.scramjetUrl}
-                placeholder="https://lobsterbrowse-scramjet.onrender.com"
-                onChange={(x) => onChange({ scramjetUrl: x })}
-              />
-            </div>
-          )}
         </div>
         <m3e-list>
           <Row label="Proxy through server (server-side)" icon="vpn_lock" on={settings.proxySearch} toggle={() => onChange({ proxySearch: !settings.proxySearch })} />
