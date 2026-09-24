@@ -6,10 +6,17 @@ export default function HomePage() {
 
   useEffect(() => {
     // Same origin now: the server serves this UI, so it is awake whenever
-    // the page is open. /healthz just confirms it.
-    fetch("/healthz")
-      .then((r) => setStatus(r.ok ? "online" : "offline"))
-      .catch(() => setStatus("offline"));
+    // the page is open. /healthz just confirms it. The check retries every
+    // 10s so a transient failure (e.g. deploy rolling over) self-heals.
+    let cancelled = false;
+    const check = () => {
+      fetch("/healthz")
+        .then((r) => { if (!cancelled) setStatus(r.ok ? "online" : "offline"); })
+        .catch(() => { if (!cancelled) setStatus("offline"); });
+    };
+    check();
+    const timer = setInterval(check, 10000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   const dot =
@@ -27,7 +34,7 @@ export default function HomePage() {
   };
 
   return (
-    <section style={{ textAlign: "center" }}>
+    <section style={{ textAlign: "center", marginTop: 32 }}>
       <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
       <p style={{ opacity: 0.7, marginTop: 8 }}>Private proxy with ad blocking.</p>
 
