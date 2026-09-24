@@ -36,9 +36,10 @@ declare module "react" {
       "m3e-radio": M3eBase & { value?: string; checked?: boolean | string; disabled?: boolean };
       "m3e-form-field": M3eBase & { variant?: string; "float-label"?: string };
       "m3e-chip-set": M3eBase & { vertical?: boolean };
-      "m3e-chip": M3eBase & { variant?: string };
+      "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
       "m3e-list": M3eBase;
-      "m3e-list-item": M3eBase;
+      "m3e-list-item": M3e
+Base;
       "m3e-nav-menu": M3eBase;
       "m3e-nav-menu-item": M3eBase & { open?: boolean };
       "m3e-nav-rail": M3eBase & { mode?: string };
