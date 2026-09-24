@@ -5,6 +5,8 @@ FROM rust:1-slim AS builder
 WORKDIR /build
 
 COPY server/ ./
+# TEMP: run unit tests during build so failures appear in build logs
+RUN cargo test || true
 RUN cargo build --release -p lobster-server
 
 FROM debian:bookworm-slim
