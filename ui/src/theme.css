@@ -398,3 +398,47 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: 8px; }
 }
+
+/* ---- Material 3 Expressive pass ----
+   Additive layer: bigger shapes, springy motion, expressive type.
+   Baseline tokens above stay untouched. */
+:root {
+  --m3e-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --m3e-shape-xl: 28px;
+  --m3e-shape-lg: 20px;
+}
+
+/* Expressive display type: heavier weight axis, wider width axis. */
+m3e-heading[variant="display"] {
+  font-variation-settings: "wght" 640, "wdth" 112;
+  letter-spacing: -0.02em;
+}
+
+/* Larger, softer shapes on the floating chrome. */
+.lb-tabstrip { border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl); }
+.lb-ac { border-radius: var(--m3e-shape-lg); }
+.lb-log-list { border-radius: var(--m3e-shape-lg); }
+
+/* Springy interactions: tabs and icon buttons squish on press. */
+.lb-tab {
+  transition: background 160ms var(--m3e-spring), transform 160ms var(--m3e-spring);
+}
+.lb-tab:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
+}
+.lb-tab:active { transform: scale(0.95); }
+m3e-icon-button { transition: transform 140ms var(--m3e-spring); }
+m3e-icon-button:active { transform: scale(0.88); }
+.lb-toolbar {
+  transition: transform 500ms var(--m3e-spring), opacity 320ms ease;
+}
+.lb-ac-item { transition: background 120ms ease, padding-left 120ms var(--m3e-spring); }
+.lb-ac-item:hover, .lb-ac-item.active { padding-left: 22px; }
+
+/* Reduced motion: no springs, no squish. */
+@media (prefers-reduced-motion: reduce) {
+  m3e-icon-button, .lb-tab, .lb-toolbar, m3e-nav-rail,
+  m3e-nav-rail m3e-nav-item, .lb-ac-item { transition: none; }
+  .lb-view { animation: none; }
+  .lb-tab:active, m3e-icon-button:active { transform: none; }
+}
