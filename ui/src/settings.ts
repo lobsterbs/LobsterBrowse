@@ -49,7 +49,7 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       seed: parsed.seed || DEFAULT_SETTINGS.seed,
-      engine: parsed.engine && ENGINES[parsed.engine] ? parsed.engine : DEFAULT_SETTINGS.engine,
+      engine: ENGINES[parsed.engine as EngineId] ? parsed.engine as EngineId : DEFAULT_SETTINGS.engine,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
