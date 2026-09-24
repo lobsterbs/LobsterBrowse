@@ -1,34 +1,27 @@
 import { useState } from 'react';
 import HomePage from './pages/Home';
-import SettingsPage from './pages/Settings';
+import SettingsPanel from './pages/Settings';
 
-type Page = "home" | "settings";
-
-const SEED = "#E8552F"; // lobster orange — dynamic color seed for <m3e-theme>
+const SEED = "#E8552F"; // lobster orange
 
 export default function App() {
-  const [page, setPage] = useState<Page>("home");
   const [seed, setSeed] = useState(SEED);
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <m3e-theme color={seed} strong-focus={true}>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        <aside style={{ width: 260, padding: 16, borderRight: "1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.1))" }}>
-          <m3e-heading variant="headline" size="medium" level={1}>🦞 LobsterBrowse</m3e-heading>
-          <m3e-nav-menu>
-            <m3e-nav-menu-item onClick={() => setPage("home")}>
-              <m3e-icon slot="icon" name="home" aria-hidden={true} />
-              <span slot="label">Home</span>
-            </m3e-nav-menu-item>
-            <m3e-nav-menu-item onClick={() => setPage("settings")}>
-              <m3e-icon slot="icon" name="settings" aria-hidden={true} />
-              <span slot="label">Settings</span>
-            </m3e-nav-menu-item>
-          </m3e-nav-menu>
-        </aside>
-        <main style={{ flex: 1, maxWidth: 880, margin: "0 auto", padding: 24 }}>
-          {page === "home" ? <HomePage /> : <SettingsPage seed={seed} onSeedChange={setSeed} />}
-        </main>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 24px 48px" }}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 48 }}>
+          <m3e-heading variant="title" size="large" level={1}>🦞 LobsterBrowse</m3e-heading>
+          <m3e-icon-button aria-label="Settings" onClick={() => setShowSettings(!showSettings)}>
+            <m3e-icon name="settings" aria-hidden={true} />
+          </m3e-icon-button>
+        </header>
+        <HomePage />
+        {showSettings && <SettingsPanel seed={seed} onSeedChange={setSeed} />}
+        <footer style={{ marginTop: 48, opacity: 0.5, fontSize: 13, textAlign: "center" }}>
+          Free · Private · No logs
+        </footer>
       </div>
     </m3e-theme>
   );

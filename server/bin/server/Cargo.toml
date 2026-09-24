@@ -16,7 +16,7 @@ guard = { path = "../../crates/guard" }
 adblock = { path = "../../crates/adblock" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { version = "0.5", features = ["cors", "fs"] }
 futures-util = "0.3"
 bytes = "1"
 tracing = "0.1"

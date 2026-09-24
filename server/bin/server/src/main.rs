@@ -9,6 +9,7 @@
 mod proxy;
 
 use axum::{routing::get, Router};
+use tower_http::services::{ServeDir, ServeFile};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::CorsLayer;
@@ -39,6 +40,13 @@ async fn main() {
         .route(
             "/healthz",
             get(|| async { "ok" }),
+        )
+        // Single-site: serve the built UI (ui/dist) from this same origin.
+        // Unknown paths fall back to index.html so the SPA always loads.
+        .fallback_service(
+            ServeDir::new("ui")
+                .append_index_html_on_directories(true)
+                .not_found_service(ServeFile::new("ui/index.html")),
         )
         .route(
             &wisp_path,

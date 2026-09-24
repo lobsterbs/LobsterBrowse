@@ -1,58 +1,60 @@
 import { useEffect, useState } from 'react';
 
-const SERVER_URL = "https://lobsterbrowse-server.onrender.com";
-
 export default function HomePage() {
   const [url, setUrl] = useState("");
   const [status, setStatus] = useState<"checking" | "online" | "offline">("checking");
 
   useEffect(() => {
-    fetch(SERVER_URL + "/healthz", { mode: "cors" })
+    // Same origin now: the server serves this UI, so it is awake whenever
+    // the page is open. /healthz just confirms it.
+    fetch("/healthz")
       .then((r) => setStatus(r.ok ? "online" : "offline"))
       .catch(() => setStatus("offline"));
   }, []);
 
-  const statusChip =
-    status === "online" ? "elevated" : "outlined";
+  const dot =
+    status === "online" ? "var(--md-sys-color-primary)" :
+    status === "checking" ? "var(--md-sys-color-outline)" :
+    "var(--md-sys-color-error)";
   const statusText =
-    status === "checking" ? "Checking server..." :
-    status === "online" ? "Proxy server online" : "Server asleep (free tier wakes on first request)";
+    status === "checking" ? "Connecting…" :
+    status === "online" ? "Server online" : "Reconnecting…";
+
+  const go = () => {
+    (globalThis as any).M3eSnackbar?.open(
+      "Browsing arrives with the Wisp client — the relay server is live."
+    );
+  };
 
   return (
-    <m3e-content-pane>
-      <m3e-heading variant="display" size="large" level={1}>Browse freely</m3e-heading>
-      <p style={{ fontSize: 18 }}>Free, private, fast web proxy with built-in ad blocking.</p>
+    <section style={{ textAlign: "center" }}>
+      <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
+      <p style={{ opacity: 0.7, marginTop: 8 }}>Private proxy with ad blocking.</p>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "32px 0 8px" }}>
+        <m3e-form-field variant="outlined" style={{ flex: 1 }}>
+          <label slot="label" htmlFor="url">URL</label>
+          <input
+            id="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") go(); }}
+            placeholder="example.com"
+          />
+        </m3e-form-field>
+        <m3e-button variant="filled" onClick={go}>Go</m3e-button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center", fontSize: 13, opacity: 0.8, marginBottom: 40 }}>
+        <span aria-hidden={true} style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block" }} />
+        {statusText}
+      </div>
 
       <m3e-chip-set>
-        <m3e-chip variant={statusChip} onClick={() => setStatus("checking")}>{statusText}</m3e-chip>
+        <m3e-chip>No logs</m3e-chip>
+        <m3e-chip>Ad blocking</m3e-chip>
+        <m3e-chip>TCP + UDP</m3e-chip>
       </m3e-chip-set>
-
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", margin: "16px 0" }}>
-        <m3e-form-field variant="outlined" style={{ flex: 1 }}>
-          <label slot="label" htmlFor="url">Enter a URL</label>
-          <input id="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" />
-        </m3e-form-field>
-        <m3e-button variant="filled" size="large" onClick={() => { (globalThis as any).M3eSnackbar?.open("Wisp transport wiring lands with the Scramjet fork — server is live at " + SERVER_URL); }}>Go</m3e-button>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 24 }}>
-        <m3e-card variant="outlined">
-          <m3e-heading slot="header" variant="title" size="large">Zero logging</m3e-heading>
-          <p slot="content">No analytics, no request logs, no cookies of our own.</p>
-        </m3e-card>
-        <m3e-card variant="outlined">
-          <m3e-heading slot="header" variant="title" size="large">Ad blocking</m3e-heading>
-          <p slot="content">uBlock Origin lists enforced server-side at CONNECT time.</p>
-        </m3e-card>
-        <m3e-card variant="outlined">
-          <m3e-heading slot="header" variant="title" size="large">TCP + UDP relay</m3e-heading>
-          <p slot="content">Clean-room Wisp v2.1 server with SSRF guard, rate limits, and UDP datagram relay.</p>
-        </m3e-card>
-        <m3e-card variant="outlined">
-          <m3e-heading slot="header" variant="title" size="large">Session restore</m3e-heading>
-          <p slot="content">Continue exactly where you left off, still logged in.</p>
-        </m3e-card>
-      </div>
-    </m3e-content-pane>
+    </section>
   );
 }
