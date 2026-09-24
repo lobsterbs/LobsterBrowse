@@ -5,6 +5,8 @@ FROM rust:1-slim AS builder
 WORKDIR /build
 
 COPY server/ ./
+# TEMP: capture clippy warnings in build logs
+RUN rustup component add clippy 2>/dev/null || true; cargo clippy --all-targets 2>&1 | tee /dev/stderr | grep -E "^(warning|error)" || true
 RUN cargo build --release -p lobster-server
 
 FROM debian:bookworm-slim
