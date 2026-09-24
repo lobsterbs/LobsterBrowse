@@ -8,5 +8,5 @@
 pub mod destination;
 pub mod rate_limit;
 
-pub use destination::DestinationPolicy;
+pub use destination::{DestinationPolicy, Verdict};
 pub use rate_limit::RateLimiter;

@@ -82,7 +82,7 @@ impl Window {
         loop {
             // Register interest *before* checking, so a refill racing
             // with this loop cannot be lost.
-            let notified = self.notify.notified();
+            let mut notified = std::pin::pin!(self.notify.notified());
             {
                 let mut b = self.budget.lock().unwrap();
                 if *b >= need as i32 {
@@ -90,7 +90,7 @@ impl Window {
                     return;
                 }
             }
-            notified.enable();
+            notified.as_mut().enable();
             notified.await;
         }
     }
@@ -196,7 +196,7 @@ async fn handle_connection(
             }
             msg = socket.recv() => {
                 let Some(Ok(msg)) = msg else { break };
-                let Ok(Message::Binary(data)) = msg else { continue };
+                let Message::Binary(data) = msg else { continue };
                 let mut buf = BytesMut::from(&data[..]);
                 let Ok(Some(frame)) = Frame::decode(&mut buf) else { continue };
                 let Ok(pkt) = frame.parse_packet() else { continue };
