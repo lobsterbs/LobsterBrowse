@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Settings } from '../settings';
+import { ENGINES, type EngineId, type Settings } from '../settings';
 
 type Props = {
   settings: Settings;
@@ -15,6 +15,7 @@ const SEEDS: Array<[string, string]> = [
 
 export default function SettingsPanel({ settings, onChange }: Props) {
   const [privacyOpen, setPrivacyOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(true);
 
   const row = (label: string, icon: string, on: boolean, toggle: () => void) => (
     <m3e-list-item>
@@ -34,6 +35,32 @@ export default function SettingsPanel({ settings, onChange }: Props) {
       <p style={{ opacity: 0.6, fontSize: 13, marginTop: 4 }}>
         Saved on this device only — never sent to the server.
       </p>
+
+      <m3e-expansion-panel
+        open={searchOpen ? "" : undefined}
+        onClick={() => setSearchOpen(!searchOpen)}
+      >
+        <span slot="header"><m3e-icon name="search" aria-hidden={true} /> Search</span>
+        <div style={{ padding: "12px 16px" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <m3e-icon name="travel_explore" aria-hidden={true} /> Search engine
+          </div>
+          <m3e-chip-set aria-label="Search engine">
+            {(Object.keys(ENGINES) as EngineId[]).map((id) => (
+              <m3e-chip
+                key={id}
+                selected={settings.engine === id ? "" : undefined}
+                onClick={() => onChange({ engine: id })}
+              >
+                {ENGINES[id].name}
+              </m3e-chip>
+            ))}
+          </m3e-chip-set>
+          <div style={{ marginTop: 8 }}>
+            {row("Open results in new tab", "open_in_new", settings.openSearchNewTab, () => onChange({ openSearchNewTab: !settings.openSearchNewTab }))}
+          </div>
+        </div>
+      </m3e-expansion-panel>
 
       <m3e-expansion-panel
         open={privacyOpen ? "" : undefined}

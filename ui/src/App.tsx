@@ -53,7 +53,7 @@ export default function App() {
 
           <div style={{ maxWidth: 640, margin: "0 auto", padding: "24px 24px 48px", width: "100%" }}>
             {view === "home"
-              ? <HomePage />
+              ? <HomePage settings={settings} />
               : <SettingsPanel settings={settings} onChange={update} />}
           </div>
         </div>
