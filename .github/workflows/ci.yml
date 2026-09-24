@@ -19,14 +19,7 @@ jobs:
         with:
           workspaces: server
       - name: Build
-        run: |
-          set -o pipefail
-          if ! cargo build 2>&1 | tee build.log; then
-            grep -A3 '^error' build.log | head -60 | while IFS= read -r line; do
-              echo "::error::$(printf '%s' "$line" | cut -c1-220)"
-            done
-            exit 1
-          fi
+        run: cargo build --locked 2>/dev/null || cargo build
       - name: Tests
         run: cargo test
       - name: Clippy
@@ -46,14 +39,7 @@ jobs:
         with:
           workspaces: server
       - name: Build server
-        run: |
-          set -o pipefail
-          if ! cargo build --release -p lobster-server 2>&1 | tee build.log; then
-            grep -A3 '^error' build.log | head -60 | while IFS= read -r line; do
-              echo "::error::$(printf '%s' "$line" | cut -c1-220)"
-            done
-            exit 1
-          fi
+        run: cargo build --release -p lobster-server
       - name: Start server
         run: |
           PORT=6001 WISP_PATH=/wisp/ ./target/release/lobster-server &
