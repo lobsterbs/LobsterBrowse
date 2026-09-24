@@ -56,7 +56,8 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.pars
+e(raw);
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
@@ -87,6 +88,6 @@ export function searchUrl(s: Settings, query: string): string {
 /* Normalize a bare domain into a full URL. */
 export function normalizeUrl(input: string): string {
   const s = input.trim();
-  if (/^[a-z][a-z0-9+.-]*:///i.test(s)) return s;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
   return "https://" + s;
 }
