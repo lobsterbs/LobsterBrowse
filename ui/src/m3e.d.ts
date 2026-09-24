@@ -7,6 +7,7 @@ import type * as React from "react";
 type M3eBase = {
   style?: React.CSSProperties;
   className?: string;
+  id?: string;
   slot?: string;
   key?: React.Key;
   children?: React.ReactNode;
