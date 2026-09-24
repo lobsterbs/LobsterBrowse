@@ -14,7 +14,6 @@ use subtle::ConstantTimeEq;
 /// simple scheme matching the protocol-level use case (gatekeeping a proxy
 /// endpoint, not protecting crown jewels); deployments wanting stronger KDFs
 /// can implement their own checks on top of `verify_hashed`.
-
 pub struct PasswordAuth {
     required: bool,
     /// username -> salted hash
@@ -41,7 +40,7 @@ impl PasswordAuth {
     fn hash(username: &str, password: &str) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update(username.as_bytes());
-        h.update(&[0]);
+        h.update([0]);
         h.update(password.as_bytes());
         let out = h.finalize();
         let mut arr = [0u8; 32];

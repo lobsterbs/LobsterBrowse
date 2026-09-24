@@ -37,10 +37,8 @@ impl FilterSet {
     pub fn from_list_text(text: &str) -> Self {
         let mut set = Self::default();
         for line in text.lines() {
-            if let Ok(rule) = parse_line(line) {
-                if let Some(rule) = rule {
-                    set.add(rule);
-                }
+            if let Ok(Some(rule)) = parse_line(line) {
+                set.add(rule);
             }
         }
         set
