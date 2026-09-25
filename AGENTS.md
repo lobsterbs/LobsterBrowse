@@ -30,15 +30,18 @@ The server also sends `Sec-GPC: 1` and `DNT: 1` on every upstream request, decod
 
 ### LobsterJet (service worker)
 
-`ui/public/lobsterjet.js`. Intercepts GET requests to same-origin `/lj/` paths only:
+`ui/public/lobsterjet.js` (cache `lobsterjet-v2`). Intercepts GET requests to same-origin `/lj/` paths only:
 
-- cache-first, 10-minute freshness (stored Responses carry an `lb-cached-at` header),
-- stale entries are revalidated from the network,
-- network failure falls back to the stale copy, then a 504.
+- fresh hit (< 10 min; stored Responses carry an `lb-cached-at` header): served straight from the cache;
+- stale hit: served immediately AND revalidated in the background (stale-while-revalidate);
+- miss: fetched from the server, cached when the content type is html/css/js/image;
+- network failure: 504 (no stale copy available).
 
-App registers it in `ui/src/App.tsx`. `routeUrl()` in `ui/src/settings.ts` builds `/lj/` routes when `settings.proxyEngine === "lobsterjet"` (the default); the shim inside proxied pages derives its own route prefix from `location.pathname`. Without the worker installed, everything still works — the server answers `/lj/` identically.
+Cache cap: 60 entries; oldest-by-timestamp evicted on every write. Known gap: the cap is entry-count based, not byte based.
 
-Known gaps (good next tasks): no cache size cap / LRU eviction, no link prefetching, no stale-while-revalidate mode.
+Link prefetch: the React app (not the shim — the app has same-origin access to the proxied frame documents) attaches pointerover/focusin listeners to each frame document and fetches hovered links' routes through the worker, warming the cache before the click. Wiring lives in the same-origin poll effect in `ui/src/pages/Browser.tsx`, guarded by a WeakSet of wired documents. It skips `target="_blank"` and download links.
+
+The app registers the worker in `ui/src/App.tsx`. `routeUrl()` in `ui/src/settings.ts` builds `/lj/` routes when `settings.proxyEngine === "lobsterjet"` (the default); the shim inside proxied pages derives its own route prefix from `location.pathname`. Without the worker installed, everything still works — the server answers `/lj/` identically.
 
 ### Search suggestions
 
@@ -50,7 +53,7 @@ Known gaps (good next tasks): no cache size cap / LRU eviction, no link prefetch
 
 Brave, Startpage and Mojeek have no open suggestion API; they fall back to DuckDuckGo. Do not claim otherwise.
 
-The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced 160ms, in both the Home search field and the toolbar URL field.
+The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced 160ms, in both the Home search field and the toolbar URL pill.
 
 ### UI notes that have bitten us before
 
@@ -60,6 +63,7 @@ The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced
 - Hooks must not appear after early returns in components (conditional hook = crash).
 - The tab strip is `overflow-x: hidden` on purpose: tabs shrink (compact tier at >=6 tabs, tight/favicon-only at >=10) instead of scrolling. Do not reintroduce `overflow-x: auto`.
 - The bottom dock and tab strip share the `dockTucked` idle-tuck state; transforms must be applied to plain wrapper divs (`.lb-dock-pill`), not the m3e-toolbar host — Lit host display makes transforms silently do nothing.
+- The toolbar's center pill (`.lb-tb-pill`) shows lock + favicon + tab name when collapsed and expands in place into the editable URL when pressed (`tbExpanded` state, `.lb-tb-name` button in `ui/src/pages/Browser.tsx`). The pill owns the chrome (background/border/shape); the `.lb-url-input` inside it is bare text. Do not reintroduce the old separate `.lb-tb-page` + `.lb-tb-urlwrap` structure.
 - URL field text color is explicitly pinned (color, -webkit-text-fill-color, caret-color, placeholder) because of past reports of invisible text. Keep the hardcoded fallbacks.
 
 ## Deployment

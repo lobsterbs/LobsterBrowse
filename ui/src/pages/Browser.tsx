@@ -76,9 +76,15 @@ export default function BrowserView(props: Props) {
   const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
   const [tbSuggOpen, setTbSuggOpen] = useState(false);
   const [tbSuggIdx, setTbSuggIdx] = useState(-1);
+  /* Center pill: collapsed shows the tab name; pressed, it expands in
+     place into the editable URL (the name hides). */
+  const [tbExpanded, setTbExpanded] = useState(false);
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
+  /* Frame documents that already have LobsterJet prefetch listeners. */
+  const wiredDocs = useRef<WeakSet<Document>>(new WeakSet());
 
   /* Dock: tucks out of view when the app is idle; reappears on any
      pointer/keyboard activity in the app, on hovering the visible
@@ -271,6 +277,23 @@ export default function BrowserView(props: Props) {
         return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
       });
       loadFavicon(t.id, real, doc);
+      /* LobsterJet prefetch: hovering (or keyboard-focusing) a link in
+         the proxied page warms the worker cache before the click. */
+      if (!wiredDocs.current.has(doc)) {
+        wiredDocs.current.add(doc);
+        const prefix = settings.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";
+        const prefetch = (el: EventTarget | null) => {
+          const target = el as Element | null;
+          const a = target && target.closest ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
+          if (!a) return;
+          const href = a.getAttribute("href") || "";
+          if (!href.startsWith(prefix)) return;
+          if (a.getAttribute("target") === "_blank" || a.hasAttribute("download")) return;
+          fetch(href).catch(() => {});
+        };
+        doc.addEventListener("pointerover", (e) => prefetch(e.target), { passive: true });
+        doc.addEventListener("focusin", (e) => prefetch(e.target), true);
+      }
     }, 1200);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,6 +395,11 @@ export default function BrowserView(props: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, settings.engine]);
+
+  /* Expanding the center pill focuses (and selects) the URL text. */
+  useEffect(() => {
+    if (tbExpanded) urlInputRef.current?.select();
+  }, [tbExpanded]);
 
   if (!active) {
     /* App sends us back to Home when the last tab closes. */
@@ -607,26 +635,9 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
-          {/* Current page identity in the toolbar: real favicon (fetched
-              through the engine, same blob cache as the tabs) + page
-              title, next to the URL field. */}
-          {active.url && (
-            <span className="lb-tb-page">
-              <span
-                className="lb-tb-lock"
-                role="img"
-                aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
-                dangerouslySetInnerHTML={{ __html: active.url.startsWith("https://") ? lockSvg : noEncSvg }}
-              />
-              {icons[active.id] ? (
-                <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
-              ) : (
-                <m3e-icon name="public" aria-hidden={true} />
-              )}
-              <span className="lb-tb-title">{tabLabel(active)}</span>
-            </span>
-          )}
-          <span className="lb-tb-urlwrap">
+          {/* Center pill: lock + favicon + tab name. Pressed, it expands
+              in place into the editable URL (the name hides). */}
+          <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
             {tbSuggOpen && (
               <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
@@ -639,6 +650,7 @@ export default function BrowserView(props: Props) {
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setTbSuggOpen(false);
+                      setTbExpanded(false);
                       setDrafts((prev) => ({ ...prev, [active.id]: "" }));
                       go(it.url);
                     }}
@@ -649,34 +661,66 @@ export default function BrowserView(props: Props) {
                 ))}
               </div>
             )}
-            <input
-              className="lb-url-input"
-              aria-label="URL or search"
-              placeholder="Search or URL"
-              value={draft}
-              spellCheck={false}
-              onChange={(e) => {
-                setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }));
-                setTbSuggIdx(-1);
-              }}
-              onFocus={() => setTbSuggOpen(tbSugg.length > 0)}
-              onBlur={() => setTbSuggOpen(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const pick = tbSuggOpen && tbSuggIdx >= 0 ? tbSugg[tbSuggIdx]?.url : draft;
+            {active.url && (
+              <>
+                <span
+                  className="lb-tb-lock"
+                  role="img"
+                  aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
+                  dangerouslySetInnerHTML={{ __html: active.url.startsWith("https://") ? lockSvg : noEncSvg }}
+                />
+                {icons[active.id] ? (
+                  <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
+                ) : (
+                  <m3e-icon name="public" aria-hidden={true} />
+                )}
+              </>
+            )}
+            {tbExpanded || !active.url ? (
+              <input
+                ref={urlInputRef}
+                className="lb-url-input"
+                aria-label="URL or search"
+                placeholder="Search or URL"
+                value={draft}
+                spellCheck={false}
+                onChange={(e) => {
+                  setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }));
+                  setTbSuggIdx(-1);
+                }}
+                onFocus={() => setTbSuggOpen(tbSugg.length > 0)}
+                onBlur={() => {
                   setTbSuggOpen(false);
-                  if (pick) go(pick);
-                } else if (e.key === "ArrowDown" && tbSuggOpen) {
-                  e.preventDefault();
-                  setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
-                } else if (e.key === "ArrowUp" && tbSuggOpen) {
-                  e.preventDefault();
-                  setTbSuggIdx((p) => Math.max(p - 1, -1));
-                } else if (e.key === "Escape") {
-                  setTbSuggOpen(false);
-                }
-              }}
-            />
+                  setTbExpanded(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const pick = tbSuggOpen && tbSuggIdx >= 0 ? tbSugg[tbSuggIdx]?.url : draft;
+                    setTbSuggOpen(false);
+                    setTbExpanded(false);
+                    if (pick) go(pick);
+                  } else if (e.key === "ArrowDown" && tbSuggOpen) {
+                    e.preventDefault();
+                    setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
+                  } else if (e.key === "ArrowUp" && tbSuggOpen) {
+                    e.preventDefault();
+                    setTbSuggIdx((p) => Math.max(p - 1, -1));
+                  } else if (e.key === "Escape") {
+                    setTbSuggOpen(false);
+                    setTbExpanded(false);
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="lb-tb-name"
+                aria-label={"Show URL of " + tabLabel(active)}
+                onClick={() => setTbExpanded(true)}
+              >
+                {tabLabel(active)}
+              </button>
+            )}
           </span>
           <m3e-icon-button
             aria-label="Developer tools"
