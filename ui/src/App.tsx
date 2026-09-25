@@ -13,6 +13,9 @@ import {
 } from "./settings";
 import * as store from "./store";
 import type { Tab } from "./store";
+/* Rail spacing lives in its own sheet so it cleanly overrides the
+   base theme rules (loaded earlier, same specificity, later wins). */
+import "./rail.css";
 
 type View = "home" | "browser" | "settings" | "logs";
 
@@ -25,20 +28,6 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
   const [view, setView] = useState<View>("home");
-  /* Proxy sessions collapse the rail to its hamburger; leaving the
-     browser view shows the full rail again. */
-  const [railHidden, setRailHidden] = useState(false);
-  /* React does not map className to the class attribute on custom
-     elements, so the rail's class is managed imperatively via a ref. */
-  const railRef = useRef<any>(null);
-  useEffect(() => {
-    railRef.current?.classList.toggle("lb-rail-hidden", railHidden);
-  }, [railHidden]);
-  useEffect(() => {
-    /* Entering the browse view slides the rail off-screen with the rest
-       of the chrome, a sliver stays; clicking the rail brings it back. */
-    setRailHidden(view === "browser");
-  }, [view]);
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
@@ -242,20 +231,12 @@ export default function App() {
   return (
     <m3e-theme color={settings.seed} strong-focus={true}>
       <div className="lb-shell">
-        {/* No hamburger anywhere. In the browse view the rail slides
-           off-screen like the rest of the chrome, leaving a sliver
-           visible; clicking the rail (sliver or whole) toggles it. */}
+        {/* The rail is always fully visible in every view: no hiding,
+           no sliver, no click-to-toggle. */}
         <m3e-nav-rail
           id="nav-rail"
           mode="compact"
           aria-label="LobsterBrowse"
-          {...{ ref: railRef }}
-          onClick={(e) => {
-            /* Only the rail chrome itself toggles; clicks on nav items
-               bubble up here and must not slide the rail away. */
-            if ((e.target as HTMLElement).closest("m3e-nav-item")) return;
-            if (view === "browser") setRailHidden(!railHidden);
-          }}
         >
           <m3e-nav-item
             id="nav-home"

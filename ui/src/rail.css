@@ -1,0 +1,6 @@
+/* Rail: always fully visible. A little extra length so the items
+   never feel cramped; the width stays the component's own business.
+   Overrides the theme's tighter spacing (same specificity, loaded
+   later, so the cascade resolves in favour of these rules). */
+m3e-nav-rail { padding: 16px 0; }
+m3e-nav-rail m3e-nav-item { margin: 7px 0; }
