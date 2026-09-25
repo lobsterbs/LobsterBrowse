@@ -43,9 +43,8 @@ jobs:
           wasm-pack build crates/wisp-wasm --target web --release --out-name wisp_wasm
           mkdir -p app/src/wisp_wasm
           cp crates/wisp-wasm/pkg/wisp_wasm* app/src/wisp_wasm/
-      - name: Measure wasm bundles (record; budget enforcement Phase 1 gate)
-        run: |
-          du -b app/src/rewriter_wasm/rewriter_wasm_bg.wasm app/src/wisp_wasm/wisp_wasm_bg.wasm
+      - name: Measure wasm bundles (record; budget enforcement is the Phase 1 gate)
+        run: du -b app/src/rewriter_wasm/rewriter_wasm_bg.wasm app/src/wisp_wasm/wisp_wasm_bg.wasm
       - uses: actions/upload-artifact@v4
         with:
           name: lj-wasm
@@ -63,20 +62,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Vendor libcurl transport
-        run: |
-          # Placeholder seam: CI vendors the libcurl.wasm build (same
-          # proven transport Scramjet uses) as src/libcurl-transport-vendored.
-          # Until vendoring is wired, emit the documented stub so the
-          # build succeeds and the suite reports transport-missing.
-          cat > app/src/libcurl-transport-vendored.ts <<'EOF'
-          export async function init(_cfg: { websocket: string }) {
-            throw new Error("libcurl transport not vendored yet (CI seam)");
-          }
-          export async function fetch(_url: string) {
-            throw new Error("libcurl transport not vendored yet (CI seam)");
-          }
-          EOF
+      # app/src/libcurl-transport-vendored.ts ships as a committed stub;
+      # the real libcurl.wasm build replaces it in the vendoring step.
+      - name: Transport stub notice
+        run: echo "vendored transport stub in place; suite reports transport-missing until vendored"
       - run: cd app && npm install && npx tsc --noEmit && npm run build
       - name: Bootstrap size budget (must stay under 5 KB minified)
         run: |
@@ -89,8 +78,8 @@ jobs:
           path: lobsterjet/app/dist/
 
   compat:
-    # Nightly (and manual) only: needs a deployed engine. Phase 1 gate:
-    # YouTube + Reddit pass with ttfb ratio <= 2x.
+    # Nightly only: needs a built engine. Phase 1 gate: YouTube + Reddit
+    # pass with first-paint ratio <= 2x.
     if: github.event_name == "schedule"
     runs-on: ubuntu-latest
     needs: [rust, app]
@@ -101,7 +90,6 @@ jobs:
           node-version: 22
       - name: Build server + app, run probes locally
         run: |
-          sudo apt-get update && sudo apt-get install -y musl-tools
           cargo build -p lj-server --release
           cd app && npm install && npm run build && cd ..
           ./target/release/lj-server --port 6002 &

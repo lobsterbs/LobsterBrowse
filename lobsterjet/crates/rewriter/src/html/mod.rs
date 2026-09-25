@@ -4,24 +4,32 @@
 //! much as it can and returns rewritten output; incomplete tokens (a tag
 //! cut mid-attribute, a <script> without its close tag yet, a comment
 //! without its terminator) are retained in `buf` until more input or
-//! `finish()` arrives. Text passes through as raw slices; only rewritten
-//! values allocate.
+//! `finish()` arrives.
+//!
+//! Text is emitted immediately: a chunk with no '<' is pure text and
+//! flushes in full. Only an open '<' (or an in-progress raw block) is
+//! ever retained across chunk boundaries.
 
 pub mod css;
 pub mod url_attrs;
 
 use crate::config::RewriteConfig;
-use crate::encode::{b64u_decode, resolve};
+use crate::encode::resolve;
 
 /// Tokenizer state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum St {
     Text,
-    Tag,        // inside <tag ...>, after tag name
-    Raw,        // inside <script>/<style> raw text until matching close tag
+    /// Inside <tag ...>, until the closing '>'.
+    Tag,
+    /// Inside <script>/<style> raw text until the matching close tag.
+    /// The whole raw block is held until its close tag arrives: the JS
+    /// and CSS passes are single-shot over a complete block, and a
+    /// split literal would rewrite incorrectly. Scripts execute only
+    /// after their block closes, so this does not delay first paint.
+    Raw,
     Comment,
     Doctype,
-    AfterHead,  // waiting to inject bootstrap right after </head> opens
 }
 
 pub struct Rewriter {
@@ -60,67 +68,73 @@ impl Rewriter {
         loop {
             match self.st {
                 St::Text => {
-                    let Some(lt) = self.buf.find('<') else { break };
-                    // Emit up to '<', keep everything from it.
-                    out.push_str(&self.buf[..lt]);
-                    let rest = self.buf[lt..].to_string();
-                    self.buf = rest;
-                    if let Some(next) = classify_open(&self.buf) {
-                        self.st = next.0;
-                        if next.0 == St::Tag {
-                            self.cur_tag = next.1.clone();
+                    match self.buf.find('<') {
+                        None => {
+                            // Pure text: emit everything now (streaming).
+                            out.push_str(&self.buf);
+                            self.buf.clear();
+                            break;
                         }
-                    } else if self.buf.len() < 10 {
-                        break; // '<' near the end: wait for more input
-                    } else {
-                        // A literal '<' that starts no markup (rare).
-                        out.push('<');
-                        self.buf.remove(0);
+                        Some(lt) => {
+                            out.push_str(&self.buf[..lt]);
+                            self.buf.drain(..lt);
+                            match classify_open(&self.buf) {
+                                Some((st, name)) => {
+                                    self.st = st;
+                                    if st == St::Tag {
+                                        self.cur_tag = name;
+                                    }
+                                }
+                                None => {
+                                    if self.buf.len() < 10 {
+                                        break; // '<' near the end: wait for more input
+                                    }
+                                    // A literal '<' that starts no markup (rare).
+                                    out.push('<');
+                                    self.buf.remove(0);
+                                }
+                            }
+                        }
                     }
                 }
                 St::Comment => {
-                    if !eat_if(&mut self.buf, &mut out, "-->", true) {
+                    if !eat_marker(&mut self.buf, &mut out, "-->") {
                         break;
                     }
                     self.st = St::Text;
                 }
                 St::Doctype => {
-                    if !eat_if(&mut self.buf, &mut out, ">", true) {
+                    if !eat_marker(&mut self.buf, &mut out, ">") {
                         break;
                     }
                     self.st = St::Text;
                 }
                 St::Tag => {
                     // Need the full tag before rewriting attributes.
-                    if let Some((tag_end, rewritten)) = self.try_rewrite_tag(&self.buf) {
-                        out.push_str(&rewritten);
-                        self.buf.drain(..tag_end);
-                        if is_raw_tag(&self.cur_tag) {
-                            self.st = St::Raw;
-                        } else {
-                            self.st = St::Text;
-                            if self.cur_tag == "head" {
-                                self.st = St::Tag; // head handled below at close
+                    match self.try_rewrite_tag(&self.buf) {
+                        Some((end, rewritten)) => {
+                            out.push_str(&rewritten);
+                            self.buf.drain(..end);
+                            let raw = is_raw_tag(&self.cur_tag);
+                            // Inject the bootstrap right after the opening
+                            // <head> (fallback: <html>) so it precedes all
+                            // page scripts.
+                            if !self.injected && self.cfg.inject_bootstrap
+                                && (self.cur_tag == "head" || self.cur_tag == "html")
+                            {
+                                out.push_str(&format!(
+                                    "<script src=\"{}\"></script>",
+                                    self.cfg.bootstrap_path
+                                ));
+                                self.injected = true;
                             }
+                            self.st = if raw { St::Raw } else { St::Text };
+                            self.cur_tag.clear();
                         }
-                        // Inject the bootstrap right after the opening
-                        // <head> tag (or failing that, after <html>).
-                        if !self.injected && self.cfg.inject_bootstrap
-                            && (self.cur_tag == "head" || self.cur_tag == "html")
-                        {
-                            out.push_str(&format!(
-                                "<script src=\"{}\"></script>",
-                                self.cfg.bootstrap_path
-                            ));
-                            self.injected = true;
-                        }
-                        self.cur_tag.clear();
-                    } else {
-                        break; // incomplete tag: wait for more input
+                        None => break, // incomplete tag: wait for more input
                     }
                 }
                 St::Raw => {
-                    // script/style: rewrite until the matching close tag.
                     let close = format!("</{}", self.cur_tag);
                     let Some(ci) = find_ci(&self.buf, &close) else { break };
                     let raw = self.buf[..ci].to_string();
@@ -194,14 +208,12 @@ impl Rewriter {
             return None; // no closing '>' yet
         }
         let end = i + 1; // include '>'
-        let raw = &buf[..end];
-        let rewritten = self.rewrite_single_tag(raw);
+        let rewritten = self.rewrite_single_tag(&buf[..end]);
         Some((end, rewritten))
     }
 
     /// Rewrite one complete, well-formed tag string.
     fn rewrite_single_tag(&self, raw: &str) -> String {
-        // Parse: name, then attribute list.
         let name_end = raw[1..]
             .find(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/')
             .map(|i| i + 1)
@@ -214,28 +226,25 @@ impl Rewriter {
         while let Some(attr) = next_attr(rest) {
             let (consumed, attr_name, attr_value, quoted) = attr;
             let lower = attr_name.to_ascii_lowercase();
-            let mut wrote = String::new();
-            let val: Option<&str> = attr_value;
-            match val {
+            match attr_value {
                 Some(v) => {
-                    let newv = if lower == "srcset" || (lower == "imagesrcset" && name == "source") {
-                        Some(url_attrs::rewrite_srcset(v, &|u| self.enc(u)))
+                    let newv = if lower == "srcset" || lower == "imagesrcset" {
+                        Some(url_attrs::rewrite_srcset(&v, |u| self.enc(u)))
                     } else if lower == "style" && self.cfg.rewrite_css {
-                        Some(css::rewrite_stylesheet(v, |u| self.enc(u)))
+                        Some(css::rewrite_stylesheet(&v, |u| self.enc(u)))
                     } else if url_attrs::is_url_attr(&name, &lower) {
-                        Some(self.enc(v))
-                    } else if name != "" && is_event_attr(&lower) && self.cfg.rewrite_js_literals {
-                        Some(crate::js::rewrite_inline(v, |u| self.enc(u)))
+                        Some(self.enc(&v))
+                    } else if is_event_attr(&lower) && self.cfg.rewrite_js_literals {
+                        Some(crate::js::rewrite_inline(&v, |u| self.enc(u)))
                     } else {
                         None
                     };
-                    wrote = format_attr(&attr_name, newv.as_deref().unwrap_or(v), quoted);
+                    out.push_str(&format_attr(&attr_name, newv.as_deref().unwrap_or(&v), quoted));
                 }
                 None => {
-                    wrote = attr_name.trim_end().to_string();
+                    out.push_str(attr_name.trim_end());
                 }
             }
-            out.push_str(&wrote);
             rest = &rest[consumed..];
         }
         out.push_str(rest);
@@ -287,15 +296,15 @@ fn find_ci(hay: &str, needle: &str) -> Option<usize> {
     (0..=h.len() - n.len()).find(|&i| h[i..i + n.len()].eq_ignore_ascii_case(n))
 }
 
-/// If buf starts with marker: move marker+prefix to out and return true.
-/// Otherwise, if there is no possible future match, move everything to out.
-fn eat_if(buf: &mut String, out: &mut String, marker: &str, _verbatim: bool) -> bool {
+/// If buf contains marker: emit up to and including it, return true.
+/// Otherwise emit everything except a tail that could still become the
+/// marker, return false.
+fn eat_marker(buf: &mut String, out: &mut String, marker: &str) -> bool {
     if let Some(i) = buf.find(marker) {
         out.push_str(&buf[..i + marker.len()]);
         buf.drain(..i + marker.len());
         true
     } else {
-        // Keep a tail that could still become the marker.
         let keep = marker.len().saturating_sub(1);
         let cut = buf.len().saturating_sub(keep);
         out.push_str(&buf[..cut]);
@@ -305,8 +314,8 @@ fn eat_if(buf: &mut String, out: &mut String, marker: &str, _verbatim: bool) -> 
 }
 
 /// Pull one attribute (name, optional =value) off the front of s.
-/// Returns (bytes consumed, name, Some(value), was_quoted) or
-/// (bytes, trailing junk, None, false).
+/// Returns (bytes consumed, name, Some(value), was_quoted); None when
+/// the remaining text is not an attribute (tag end).
 fn next_attr(s: &str) -> Option<(usize, String, Option<String>, bool)> {
     let trimmed = s.trim_start();
     let lead = s.len() - trimmed.len();
@@ -318,7 +327,6 @@ fn next_attr(s: &str) -> Option<(usize, String, Option<String>, bool)> {
         .find(|c: char| c == '=' || c.is_ascii_whitespace() || c == '>')
         .unwrap_or(trimmed.len());
     let name = trimmed[..name_end].to_string();
-    let mut pos = name_end;
     let rest = &trimmed[name_end..];
     let after_ws = rest.trim_start();
     if after_ws.starts_with('=') {
@@ -383,6 +391,17 @@ mod tests {
     }
 
     #[test]
+    fn text_flushes_without_lt() {
+        // A chunk with no '<' must not be retained: streaming first paint.
+        let mut r = Rewriter::new(cfg());
+        r.set_base("https://example.com/");
+        let a = r.process("plain text, no markup here at all");
+        assert_eq!(a, "plain text, no markup here at all");
+        let b = r.process(" and more text");
+        assert_eq!(b, " and more text");
+    }
+
+    #[test]
     fn injects_bootstrap_once() {
         let c = RewriteConfig::default();
         let mut r = Rewriter::new(c.clone());
@@ -418,5 +437,16 @@ mod tests {
         out.push_str(&r.process(">ok</p>"));
         out.push_str(&r.finish());
         assert!(out.contains("hello world, 1 < 2 and <p>ok</p>"), "got: {}", out);
+    }
+
+    #[test]
+    fn partial_tag_retained() {
+        let mut r = Rewriter::new(cfg());
+        r.set_base("https://example.com/");
+        let a = r.process("before <div");
+        assert_eq!(a, "before ");
+        let b = r.process(" class='x'>after");
+        assert!(b.starts_with("<div class='x'>"), "got: {}", b);
+        assert!(b.ends_with("after"));
     }
 }
