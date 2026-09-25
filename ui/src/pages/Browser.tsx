@@ -970,7 +970,7 @@ export default function BrowserView(props: Props) {
             )}
             {/* Site info: a real M3E menu anchored to the lock glyph.
                 Facts are disabled items (not commands), actions are
-                standard items. */
+                standard items. */}
             <m3e-menu id="lb-site-menu" aria-label="Site information">
               <m3e-menu-item disabled>
                 <m3e-icon slot="icon" name="public" aria-hidden={true} />
