@@ -92,6 +92,28 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
         <div className="lb-setting-group">
+          <div className="lb-setting-label">Proxy engine</div>
+          <m3e-segmented-button aria-label="Proxy engine">
+            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+              Scramjet (built-in)
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
+              LobsterJet
+            </m3e-button-segment>
+          </m3e-segmented-button>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            Scramjet rewrites pages on the server. LobsterJet registers a service worker and streams through the browser; it needs its own deployed engine origin.
+          </p>
+          {settings.proxyEngine === "lobsterjet" && (
+            <TextInput
+              label="LobsterJet engine URL"
+              value={settings.lobsterjetUrl}
+              placeholder="https://engine.example"
+              onChange={(v) => onChange({ lobsterjetUrl: v })}
+            />
+          )}
+        </div>
+        <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
           <m3e-segmented-button aria-label="Search engine">
             {(Object.keys(ENGINES) as EngineId[]).map((id) => (
