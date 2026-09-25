@@ -230,15 +230,21 @@ export function b64urlDecode(s: string): string {
    provides a LobsterJet engine this is where its route shape plugs
    in. Until then the built-in rewriter serves every navigation. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string): string {
-  void s.proxyEngine;
   const params = proxyParams(s, rules, target);
-  return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
+  /* LobsterJet routes hit the service worker's client-side cache first;
+     the server answers them identically when no worker is installed. */
+  const base = s.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";
+  return base + b64urlEncode(target) + (params ? "?" + params : "");
 }
 
 /* Recover the real URL from a /r/<b64> pathname ("" when invalid). */
 export function decodeRoute(pathname: string): string {
-  if (!pathname.startsWith("/r/")) return "";
-  const seg = pathname.slice(3).split("?")[0].split("#")[0];
+  /* Accepts both engine prefixes: /r/ (ScramJet) and /lj/ (LobsterJet). */
+  let seg = "";
+  if (pathname.startsWith("/r/")) seg = pathname.slice(3);
+  else if (pathname.startsWith("/lj/")) seg = pathname.slice(4);
+  else return "";
+  seg = seg.split("?")[0].split("#")[0];
   try {
     return b64urlDecode(seg);
   } catch {
@@ -265,4 +271,21 @@ export function looksLikeUrl(s: string): boolean {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return true;
   if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/|$)/i.test(s)) return true;
   return /^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(" ");
+}
+
+/* Engine-queried search suggestions, fetched through the server's
+   /suggest endpoint (server-side to avoid CORS). Never throws. */
+export async function fetchSuggestions(engine: EngineId, q: string): Promise<string[]> {
+  const query = q.trim();
+  if (!query) return [];
+  try {
+    const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query));
+    if (!r.ok) return [];
+    const data = (await r.json()) as { suggestions?: unknown };
+    return Array.isArray(data.suggestions)
+      ? data.suggestions.filter((x): x is string => typeof x === "string").slice(0, 8)
+      : [];
+  } catch {
+    return [];
+  }
 }

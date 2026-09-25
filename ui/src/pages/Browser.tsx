@@ -12,7 +12,18 @@
    restored sessions) auto-load when they become active. */
 
 import { useEffect, useRef, useState } from "react";
-import { decodeRoute, looksLikeUrl, normalizeUrl, routeUrl, searchUrl, type Settings, type SiteRule } from "../settings";
+import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
+import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
+import {
+  decodeRoute,
+  fetchSuggestions,
+  looksLikeUrl,
+  normalizeUrl,
+  routeUrl,
+  searchUrl,
+  type Settings,
+  type SiteRule,
+} from "../settings";
 import { pushLog, type Bookmark, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
 
@@ -61,6 +72,10 @@ export default function BrowserView(props: Props) {
   const [showBookmarks, setShowBookmarks] = useState(false);
   /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  /* Toolbar autocomplete: engine-queried suggestions, debounced. */
+  const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
+  const [tbSuggOpen, setTbSuggOpen] = useState(false);
+  const [tbSuggIdx, setTbSuggIdx] = useState(-1);
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
@@ -130,7 +145,7 @@ export default function BrowserView(props: Props) {
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
     if (attr) {
-      if (attr.startsWith("/r/")) {
+      if (attr.startsWith("/r/") || attr.startsWith("/lj/")) {
         href = attr;
       } else {
         try {
@@ -240,7 +255,7 @@ export default function BrowserView(props: Props) {
         pushLog("error", "load failed: " + (errMeta.content || "unknown error"));
         return;
       }
-      if (!path.startsWith("/r/")) return;
+      if (!path.startsWith("/r/") && !path.startsWith("/lj/")) return;
       const real = decodeRoute(path);
       if (!real) return;
       if (real !== t.url) {
@@ -329,6 +344,35 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs, activeId, settings, rules, dt]);
 
+  const draft = active ? (drafts[active.id] ?? active.url) : "";
+  /* Query the search engine for completions of the current draft.
+     Debounced 160ms; must run before the empty-tab early return so the
+     hook order never changes between renders. */
+  useEffect(() => {
+    const q = draft.trim();
+    if (!q) {
+      setTbSugg([]);
+      setTbSuggOpen(false);
+      setTbSuggIdx(-1);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchSuggestions(settings.engine, draft).then((list) => {
+        if (cancelled) return;
+        const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
+        setTbSugg(items);
+        setTbSuggOpen(items.length > 0);
+        setTbSuggIdx(-1);
+      });
+    }, 160);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, settings.engine]);
+
   if (!active) {
     /* App sends us back to Home when the last tab closes. */
     return null;
@@ -336,7 +380,7 @@ export default function BrowserView(props: Props) {
 
   const st = status[active.id] ?? { loading: false };
   const activeDt = dtOf(active.id);
-  const draft = drafts[active.id] ?? active.url;
+
   const go = (value: string) => {
     const q = value.trim();
     if (!q) return;
@@ -568,11 +612,11 @@ export default function BrowserView(props: Props) {
               title, next to the URL field. */}
           {active.url && (
             <span className="lb-tb-page">
-              <m3e-icon
-                name={active.url.startsWith("https://") ? "lock" : "no_encryption"}
-                aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
+              <span
                 className="lb-tb-lock"
-                aria-hidden={true}
+                role="img"
+                aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
+                dangerouslySetInnerHTML={{ __html: active.url.startsWith("https://") ? lockSvg : noEncSvg }}
               />
               {icons[active.id] ? (
                 <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
@@ -582,17 +626,58 @@ export default function BrowserView(props: Props) {
               <span className="lb-tb-title">{tabLabel(active)}</span>
             </span>
           )}
-          <input
-            className="lb-url-input"
-            aria-label="URL or search"
-            placeholder="Search or URL"
-            value={draft}
-            spellCheck={false}
-            onChange={(e) => setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") go(draft);
-            }}
-          />
+          <span className="lb-tb-urlwrap">
+            {tbSuggOpen && (
+              <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+                {tbSugg.map((it, i) => (
+                  <button
+                    key={it.url}
+                    type="button"
+                    role="option"
+                    aria-selected={i === tbSuggIdx}
+                    className={"lb-tb-ac-item" + (i === tbSuggIdx ? " active" : "")}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setTbSuggOpen(false);
+                      setDrafts((prev) => ({ ...prev, [active.id]: "" }));
+                      go(it.url);
+                    }}
+                  >
+                    <m3e-icon name="search" aria-hidden={true} />
+                    <span className="lb-tb-ac-text">{it.text}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <input
+              className="lb-url-input"
+              aria-label="URL or search"
+              placeholder="Search or URL"
+              value={draft}
+              spellCheck={false}
+              onChange={(e) => {
+                setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }));
+                setTbSuggIdx(-1);
+              }}
+              onFocus={() => setTbSuggOpen(tbSugg.length > 0)}
+              onBlur={() => setTbSuggOpen(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const pick = tbSuggOpen && tbSuggIdx >= 0 ? tbSugg[tbSuggIdx]?.url : draft;
+                  setTbSuggOpen(false);
+                  if (pick) go(pick);
+                } else if (e.key === "ArrowDown" && tbSuggOpen) {
+                  e.preventDefault();
+                  setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
+                } else if (e.key === "ArrowUp" && tbSuggOpen) {
+                  e.preventDefault();
+                  setTbSuggIdx((p) => Math.max(p - 1, -1));
+                } else if (e.key === "Escape") {
+                  setTbSuggOpen(false);
+                }
+              }}
+            />
+          </span>
           <m3e-icon-button
             aria-label="Developer tools"
             toggle

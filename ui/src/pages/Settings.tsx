@@ -101,11 +101,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-button-segment>
           </m3e-segmented-button>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            LobsterJet is the service-worker streaming engine and the project default. It is still
-            pre-release: no server deployment provides it yet, so until it ships, every navigation is
-            served by the ScramJet server-side rewriter on this server regardless of this choice.
-            ScramJet does adblock/tracker stripping, HTTPS-only enforcement, privacy signals
-            (Sec-GPC / DNT), image compression and AMP de-amping on every upstream request.
+            LobsterJet is the project default: a service worker that caches proxied pages on your
+            device (cache-first, 10-minute freshness, network fallback), so repeat visits load
+            without touching the server. When the worker is not installed the same /lj/ routes are
+            served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
+            HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
+            de-amping on every upstream request.
           </p>
         </div>
         <div className="lb-setting-group">

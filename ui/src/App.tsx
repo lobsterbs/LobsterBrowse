@@ -134,6 +134,15 @@ export default function App() {
   /* ---- Keyboard shortcuts removed by request: no global key
      handling remains in the app. ---- */
 
+  /* ---- LobsterJet service worker: caches /lj/ routes client-side
+     (cache-first, 10-minute freshness, network fallback). Without a
+     worker the same routes are served by the server rewriter. ---- */
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/lobsterjet.js").catch(() => {});
+    }
+  }, []);
+
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {

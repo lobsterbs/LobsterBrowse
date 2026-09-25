@@ -185,9 +185,12 @@ m3e-nav-rail { overflow: hidden; }
   right: 0;
   z-index: 6;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
-  overflow-x: auto;
+  /* Never scrollable: tabs shrink (compact/tight tiers) to fit. */
+  overflow-x: hidden;
+  overflow-y: hidden;
   padding: 6px 10px;
   background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
@@ -231,6 +234,9 @@ m3e-nav-rail { overflow: hidden; }
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
+  /* Shrinkable so the strip never needs to scroll. */
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 230px;
   font-size: 13px;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
@@ -250,7 +256,7 @@ m3e-nav-rail { overflow: hidden; }
   background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
   font-variation-settings: "wght" 560;
 }
-.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; min-width: 0; }
 .lb-tab-favicon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; object-fit: contain; }
 .lb-tab .lb-tab-close {
   border-radius: 50%;
@@ -386,8 +392,10 @@ m3e-nav-rail { overflow: hidden; }
   margin: 0 2px;
 }
 .lb-tb-favicon { width: 18px; height: 18px; border-radius: 6px; object-fit: contain; flex-shrink: 0; }
-/* Security indicator: sits before the favicon with breathing room. */
-.lb-tb-lock { font-size: 16px; flex-shrink: 0; color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface)); }
+/* Security indicator: sits before the favicon with breathing room.
+   Inline SVG (self-hosted Material Symbols), inherits the text color. */
+.lb-tb-lock { font-size: 0; flex-shrink: 0; line-height: 0; display: inline-flex; color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface)); }
+.lb-tb-lock svg { width: 16px; height: 16px; display: block; fill: currentColor; }
 .lb-tb-lock + .lb-tb-favicon { margin-left: 4px; }
 .lb-tb-title {
   overflow: hidden;
@@ -397,6 +405,10 @@ m3e-nav-rail { overflow: hidden; }
   font-variation-settings: "wght" 500;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
 }
+/* URL field: explicit colors everywhere. Reports of invisible text
+   showed the component's inherited color resolving to transparent in
+   some palettes, so the color, the webkit fill and the caret are all
+   pinned to the live on-surface token with a hardcoded fallback. */
 .lb-url-input {
   flex: 1 1 160px;
   min-width: 140px;
@@ -405,13 +417,62 @@ m3e-nav-rail { overflow: hidden; }
   border-radius: 999px;
   border: none;
   background: rgba(0, 0, 0, 0.08);
-  color: var(--md-sys-color-on-surface);
+  color: var(--md-sys-color-on-surface, #1d1b20) !important;
+  -webkit-text-fill-color: var(--md-sys-color-on-surface, #1d1b20);
+  caret-color: var(--md-sys-color-primary, #6750a4);
   font-family: inherit;
   font-size: 13px;
+  outline: none;
+}
+.lb-url-input::placeholder {
+  color: var(--md-sys-color-on-surface-variant, #49454f);
+  -webkit-text-fill-color: var(--md-sys-color-on-surface-variant, #49454f);
+  opacity: 0.7;
+}
+.lb-url-input:focus {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, rgba(0, 0, 0, 0.08));
 }
 @media (prefers-color-scheme: dark) {
-  .lb-url-input { background: rgba(255, 255, 255, 0.12); }
+  .lb-url-input { background: rgba(255, 255, 255, 0.12); color: var(--md-sys-color-on-surface, #ece6f0) !important; -webkit-text-fill-color: var(--md-sys-color-on-surface, #ece6f0); }
 }
+
+/* Toolbar URL wrapper + engine autocomplete dropdown. The dropdown
+   opens upward (the dock is at the bottom of the screen). */
+.lb-tb-urlwrap { position: relative; flex: 1 1 160px; min-width: 140px; margin: 0 6px; display: flex; }
+.lb-tb-urlwrap .lb-url-input { flex: 1 1 auto; min-width: 0; margin: 0; }
+.lb-tb-ac {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--md-sys-color-surface, #fef7ff);
+  border: 1px solid var(--md-sys-color-outline, #79747e);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  text-align: left;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.lb-tb-ac-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface, #1d1b20);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lb-tb-ac-item:hover,
+.lb-tb-ac-item.active {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+}
+.lb-tb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* DevTools panel */
 .lb-devtools {

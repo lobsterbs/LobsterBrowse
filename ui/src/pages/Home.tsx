@@ -1,5 +1,5 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ENGINES, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import type { Bookmark } from "../store";
 
 type Props = {
@@ -17,7 +17,7 @@ type Suggestion = { icon: string; text: string; url: string };
    styling reliably). */
 function buildSuggests(
   input: string,
-  opts: { history: string[]; bookmarks: Bookmark[]; engineName: string; search: string }
+  opts: { history: string[]; bookmarks: Bookmark[]; engineName: string; search: string; remote?: string[]; searchFor: (q: string) => string }
 ): Suggestion[] {
   const q = input.trim();
   if (!q) return [];
@@ -39,6 +39,9 @@ function buildSuggests(
     if (h.toLowerCase().includes(ql)) push("history", h, h);
   }
   if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
+  for (const s of opts.remote ?? []) {
+    push("search", s, opts.searchFor(s));
+  }
   push("search", q + " · " + opts.engineName + " search", opts.search);
   return out;
 }
@@ -48,12 +51,35 @@ export default function HomePage({ settings, bookmarks, history, onNavigate }: P
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /* Engine-queried completions, fetched through the server's /suggest
+     endpoint and merged below the local matches. */
+  const [remote, setRemote] = useState<string[]>([]);
+
+  useEffect(() => {
+    const q = url.trim();
+    if (!q || looksLikeUrl(q)) {
+      setRemote([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchSuggestions(settings.engine, q).then((list) => {
+        if (!cancelled) setRemote(list);
+      });
+    }, 160);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [url, settings.engine]);
 
   const suggestions = buildSuggests(url, {
     history,
     bookmarks,
     engineName: ENGINES[settings.engine].name,
     search: searchUrl(settings, url),
+    remote,
+    searchFor: (q: string) => searchUrl(settings, q),
   });
 
   const commit = (target: string) => {
