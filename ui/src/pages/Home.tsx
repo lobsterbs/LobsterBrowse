@@ -109,7 +109,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
       <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
       <p className="lb-muted" style={{ marginTop: 8 }}>Private proxy with ad blocking.</p>
 
-      <div className="lb-ac-wrap" style={{ margin: "32px 0 8px", maxWidth: 640 }}>
+      <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
           <input
