@@ -3,8 +3,8 @@
 
    Budget: under 5 KB minified (CI enforces). It only patches behavior:
    storage scoping, history, Worker constructors, WebSocket routing.
-   URL-level fetch/XHR need no patch: pages navigate within /j/ paths
-   that the service worker intercepts natively.
+   URL-level fetch/XHR need no patch: pages navigate within engine-local
+   paths that the service worker intercepts natively.
 
    Page-global contract (set by the rewriter at injection time):
      window.__LJ = { dest: "https://real.site/page" }
@@ -22,7 +22,9 @@ const LJ = (window.__LJ ?? { dest: document.baseURI }) as { dest: string };
 /* ---- per-site storage scoping ------------------------------------- */
 /* Everything is prefixed by a short stable hash of the site origin:
    engine-origin storage is never touched by a proxied site, and two
-   proxied sites never see each other's data. */
+   proxied sites never see each other's data. The prefix doubles as the
+   session-export filter: everything under "lj:<site>:" travels in the
+   blob, everything else stays put. */
 
 function siteKey(): string {
   try {
@@ -41,7 +43,7 @@ function fnv1a(s: string): string {
   return h.toString(36);
 }
 
-const SITE = fnv1a(siteKey());
+const SITE = "lj:" + fnv1a(siteKey());
 const KEY = (k: string) => SITE + ":" + k;
 
 {
@@ -85,9 +87,9 @@ const KEY = (k: string) => SITE + ":" + k;
 }
 
 /* ---- history ------------------------------------------------------- */
-/* Same-origin /j/ paths mean pushState works natively; this patch only
-   normalizes URL arguments so the address bar never leaks a raw
-   destination string outside /j/. */
+/* Same-origin engine paths mean pushState works natively; this patch
+   only normalizes URL arguments so the address bar never leaks a raw
+   destination string outside the engine path scheme. */
 
 {
   const push = History.prototype.pushState;
@@ -101,7 +103,7 @@ const KEY = (k: string) => SITE + ":" + k;
 }
 
 /* ---- Worker constructor ------------------------------------------- */
-/* Workers load same-origin /j/ paths (intercepted by the SW); blob
+/* Workers load same-origin engine paths (intercepted by the SW); blob
    workers pass through untouched since their fetches go through the
    SW anyway. */
 

@@ -1,31 +1,39 @@
 /* LobsterJet service worker: interception + header surgery + streaming
    rewriter + wisp transport.
 
-   URL shape: <origin>/j/<base64url of destination>. Requests that are
-   engine assets or the wisp endpoint pass through untouched. Everything
-   under /j/ is proxied and (for HTML/CSS) stream-rewritten.
+   URL shape: engine-local routes under a configurable prefix (default
+   /j/, rotatable at runtime via an lj:config message). Requests that
+   are engine assets or the wisp endpoint pass through untouched.
+
+   Phase 2 control plane (postMessage from the engine adapter):
+     { type: "lj:config", prefix, scheme }   rotate the URL shape
+     { type: "lj:siteRoute", site, enabled } per-site interception toggle
+     { type: "lj:teardown" }                 unregister + drop caches
+   Replies are posted back on the given MessageChannel port, so the
+   adapter gets real acknowledgements, not fire-and-forget.
 
    The rewriter wasm (wasm-bindgen output of crates/rewriter) is emitted
-   by the build pipeline to src/rewriter_wasm/ (see .github workflow:
+   by the build pipeline to src/rewriter_wasm/ (see workflow:
    wasm-pack build --target web -> copy into app/src/rewriter_wasm). */
 
 /// <reference lib="webworker" />
-import { decodePath } from "./codec";
+import { decodePath, setScheme } from "./codec";
 import { LJ_WISP_URL } from "./config";
 
 declare const self: ServiceWorkerGlobalScope;
 
 /* ---- HTTP over wisp ----------------------------------------------- */
 /* Phase 1: libcurl wasm transport (BareMux-compatible), the same proven
-   TLS-termination path Scramjet uses. Vendored by CI into
-   src/libcurl-transport (see README: "HTTP over Wisp"). */
+   TLS-termination path Scramjet uses. Vendored build replaces
+   src/libcurl-transport-vendored.ts; until then calls throw and the
+   suite records transport-missing. */
 
 let curlReady: Promise<void> | null = null;
 async function ensureCurl(): Promise<void> {
   if (!curlReady) {
     curlReady = (async () => {
-      const mod = await import("./libcurl-transport");
-      await mod.setTransport({ websocket: LJ_WISP_URL });
+      const mod = await import("./libcurl-transport-vendored");
+      await mod.init({ websocket: LJ_WISP_URL });
     })();
   }
   return curlReady;
@@ -33,8 +41,8 @@ async function ensureCurl(): Promise<void> {
 
 async function wispFetch(dest: string, init?: RequestInit): Promise<Response> {
   await ensureCurl();
-  const mod = await import("./libcurl-transport");
-  return mod.curlFetch(dest, init);
+  const mod = await import("./libcurl-transport-vendored");
+  return mod.fetch(dest, init);
 }
 
 /* ---- Header surgery ------------------------------------------------ */
@@ -88,13 +96,12 @@ function rewriteStream(body: ReadableStream<Uint8Array>, base: string): Readable
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const modP = rewriter();
-  let rw: JsRewriter | null = null;
   const ljInit = `<script>window.__LJ=${JSON.stringify({ dest: base })};</script>`;
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(encoder.encode(ljInit));
       const mod = await modP;
-      if (!rw) rw = new mod.JsRewriter(self.location.origin, base, "/j/");
+      const rw = new mod.JsRewriter(self.location.origin, base, "/j/");
       const reader = body.getReader();
       try {
         for (;;) {
@@ -115,6 +122,25 @@ function rewriteStream(body: ReadableStream<Uint8Array>, base: string): Readable
   });
 }
 
+/* ---- Per-site route table ------------------------------------------ */
+
+/** Sites the user disabled for this engine. Keyed by registrable-ish
+    host suffix (match on hostname or any parent domain). */
+const disabledSites = new Set<string>();
+
+function siteDisabled(target: string): boolean {
+  let host: string;
+  try {
+    host = new URL(target).hostname;
+  } catch {
+    return false;
+  }
+  for (const site of disabledSites) {
+    if (host === site || host.endsWith("." + site)) return true;
+  }
+  return false;
+}
+
 /* ---- Fetch interception -------------------------------------------- */
 
 self.addEventListener("install", () => {
@@ -129,7 +155,7 @@ self.addEventListener("fetch", (e: FetchEvent) => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // not ours: browser handles it
   if (url.pathname.startsWith("/wisp/")) return; // transport endpoint: passthrough
-  if (!url.pathname.startsWith("/j/")) return; // engine asset: passthrough
+  if (!url.pathname.startsWith("/j/") && !url.pathname.startsWith("/m/")) return; // engine asset: passthrough
 
   const dest = decodePath(url.pathname);
   if (!dest) {
@@ -138,6 +164,16 @@ self.addEventListener("fetch", (e: FetchEvent) => {
   }
   // Query string travels outside the encoded destination.
   const target = url.search ? dest + url.search : dest;
+
+  if (siteDisabled(target)) {
+    e.respondWith(
+      new Response("lobsterjet: site disabled for this engine", {
+        status: 403,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    return;
+  }
 
   e.respondWith(
     (async () => {
@@ -187,3 +223,54 @@ function forwardedHeaders(req: Request): Headers {
   if (!out.has("accept-language")) out.set("accept-language", "en-US,en;q=0.9");
   return out;
 }
+
+/* ---- Control plane (Phase 2) --------------------------------------- */
+
+interface ControlMessage {
+  type: "lj:config" | "lj:siteRoute" | "lj:teardown" | "lj:ping";
+  prefix?: string;
+  scheme?: "b64u" | "mirror";
+  site?: string;
+  enabled?: boolean;
+}
+
+self.addEventListener("message", (e: ExtendableMessageEvent) => {
+  const msg = e.data as ControlMessage;
+  const port = e.ports[0];
+  const reply = (payload: unknown) => port?.postMessage(payload);
+
+  switch (msg?.type) {
+    case "lj:ping":
+      reply({ ok: true });
+      break;
+    case "lj:config":
+      // Rotate the URL shape at runtime.
+      setScheme(msg.prefix ?? "/j/", msg.scheme ?? "b64u");
+      reply({ ok: true });
+      break;
+    case "lj:siteRoute":
+      if (!msg.site) {
+        reply({ ok: false, error: "missing site" });
+        break;
+      }
+      if (msg.enabled === false) disabledSites.add(msg.site);
+      else disabledSites.delete(msg.site);
+      reply({ ok: true });
+      break;
+    case "lj:teardown":
+      e.waitUntil(
+        (async () => {
+          // Drop every cache this SW owns, then unregister. Existing
+          // pages lose their controller on next navigation; the adapter
+          // also reloads them.
+          const names = await caches.keys();
+          await Promise.all(names.map((n) => caches.delete(n)));
+          reply({ ok: true });
+          await self.registration.unregister();
+        })(),
+      );
+      break;
+    default:
+      reply({ ok: false, error: "unknown message" });
+  }
+});
