@@ -12,7 +12,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import type { Bookmark, Tab } from "./store";
+import type { Tab } from "./store";
 
 type View = "home" | "browser" | "settings" | "logs";
 
@@ -25,8 +25,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
   const [view, setView] = useState<View>("home");
-  /* Proxy sessions hide the nav rail for full-page content; a floating
-     hamburger brings it back. Leaving the browser view resets it. */
+  /* Proxy sessions collapse the rail to its hamburger; leaving the
+     browser view shows the full rail again. */
   const [railHidden, setRailHidden] = useState(false);
   useEffect(() => {
     setRailHidden(view === "browser");
@@ -37,7 +37,6 @@ export default function App() {
     return restored;
   });
   const [activeId, setActiveId] = useState<number>(0);
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => store.loadBookmarks());
   const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
@@ -136,11 +135,6 @@ export default function App() {
     [tabs]
   );
 
-  const toggleBookmark = useCallback((url: string, title: string) => {
-    if (!url) return;
-    setBookmarks((prev) => store.toggleBookmark(prev, url, title));
-  }, []);
-
   const addHistory = useCallback((url: string) => {
     if (incognito) return;
     setHistory(store.addHistory(url));
@@ -175,6 +169,21 @@ export default function App() {
       navigator.serviceWorker.register("/lobsterjet.js").catch(() => {});
     }
   }, []);
+
+  /* ---- Decentraleyes toggle: tell the worker the current state.
+     Re-posted when a controller (re)appears, since a fresh worker
+     starts with the pass enabled by default. ---- */
+  useEffect(() => {
+    const post = () => {
+      navigator.serviceWorker?.controller?.postMessage({
+        lb: "decentraleyes",
+        enabled: settings.decentraleyes,
+      });
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.decentraleyes]);
 
   /* ---- Auto cloak ---- */
   useEffect(() => {
@@ -218,11 +227,17 @@ export default function App() {
     <m3e-theme color={settings.seed} strong-focus={true}>
       <div className="lb-shell">
         <m3e-nav-rail id="nav-rail" mode="compact" aria-label="LobsterBrowse" className={railHidden ? "lb-rail-hidden" : ""}>
-          <m3e-icon-button toggle aria-label="Toggle navigation rail">
-            <m3e-icon name="menu" aria-hidden={true} />
-            <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
-            <m3e-nav-rail-toggle for="nav-rail" />
-          </m3e-icon-button>
+          {railHidden ? (
+            <m3e-icon-button aria-label="Show navigation rail" onClick={() => setRailHidden(false)}>
+              <m3e-icon name="menu" aria-hidden={true} />
+            </m3e-icon-button>
+          ) : (
+            <m3e-icon-button toggle aria-label="Toggle navigation rail">
+              <m3e-icon name="menu" aria-hidden={true} />
+              <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
+              <m3e-nav-rail-toggle for="nav-rail" />
+            </m3e-icon-button>
+          )}
           <m3e-nav-item
             id="nav-home"
             selected={view === "home" ? "" : undefined}
@@ -252,18 +267,6 @@ export default function App() {
           <m3e-tooltip for="nav-settings" position="after">Preferences — saved on this device</m3e-tooltip>
         </m3e-nav-rail>
 
-        {/* Floating hamburger: restores the nav rail during a proxy
-            session (the rail itself is display:none while hidden). */}
-        {view === "browser" && railHidden && (
-          <button
-            type="button"
-            className="lb-rail-fab"
-            aria-label="Show navigation rail"
-            onClick={() => setRailHidden(false)}
-          >
-            <m3e-icon name="menu" aria-hidden={true} />
-          </button>
-        )}
 
         <div className="lb-main">
           {/* The browser view gets every pixel: no header there. */}
@@ -277,9 +280,6 @@ export default function App() {
             <div key={view} className="lb-view">
               {view === "home" && (
                 <HomePage
-                  settings={settings}
-                  bookmarks={bookmarks}
-                  history={history}
                   onNavigate={navigateTo}
                 />
               )}
@@ -293,8 +293,6 @@ export default function App() {
                   updateTab={updateTab}
                   newTab={newTab}
                   closeTab={closeTab}
-                  bookmarks={bookmarks}
-                  onToggleBookmark={toggleBookmark}
                   onHistory={addHistory}
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}

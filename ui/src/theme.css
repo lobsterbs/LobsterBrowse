@@ -19,15 +19,15 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* Top bar is the real m3e-app-bar. The component's default container
-   token does not always resolve against the dynamic palette, which
-   left the bar visually detached from the rest of the chrome. Pin both
-   the container and title to the live M3 tokens so the bar always
-   matches the active seed. */
+/* Top bar is the real m3e-app-bar. Its internal .base paints the
+   container token over the host, which left a solid detached bar.
+   Make the container transparent (no elevation, no background) so
+   the bar blends into the page like the rest of the chrome. */
 m3e-app-bar {
-  --m3e-app-bar-container-color: var(--md-sys-color-surface);
+  --m3e-app-bar-container-color: transparent;
+  --m3e-app-bar-container-elevation: none;
   --m3e-app-bar-title-text-color: var(--md-sys-color-primary);
-  background: var(--md-sys-color-surface) !important;
+  background: transparent !important;
   color: var(--md-sys-color-on-surface);
 }
 /* The title is light DOM, so coloring the span directly always wins
@@ -363,11 +363,11 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Fixed-basis between equal spacers = truly centered. */
+  /* Auto margins center the pill in the toolbar. */
   flex: 0 1 320px;
   min-width: 160px;
   max-width: 460px;
-  margin: 0 6px;
+  margin: 0 auto;
   padding: 5px 12px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.08);
@@ -545,34 +545,6 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
 .lb-script-list { margin: 4px 0; padding-left: 20px; font-size: 12px; word-break: break-all; max-height: 40%; overflow: auto; }
 
-/* Bookmarks panel */
-.lb-bookmark-panel {
-  position: absolute;
-  top: 0; right: 0;
-  width: min(360px, 100%);
-  height: 100%;
-  background: var(--md-sys-color-surface);
-  border-left: 1px solid var(--md-sys-color-outline);
-  z-index: 8;
-  padding: 8px;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
-  overflow: auto;
-}
-.lb-bookmark-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; }
-.lb-bookmark-link {
-  background: none;
-  border: none;
-  color: inherit;
-  font-family: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
 /* Logs */
 .lb-logs-toolbar { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .lb-log-section { margin-bottom: 20px; }
@@ -681,13 +653,6 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-newtab-search:focus-within input,
 .lb-newtab-search.filled::part(input),
 .lb-newtab-search.filled input { text-align: left; }
-.lb-newtab-links {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-  max-width: 720px;
-}
 /* New tab autocomplete: same look as the Home dropdown, but opens
    downward from the expanding search wrapper. */
 .lb-nt-ac {
@@ -729,48 +694,53 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* ---- Feature batch: rail compaction/hiding, lock popup, tab preview,
    smooth tab close/switch, error page, segment wrapping, small screens. ---- */
 
-/* Rail item spacing only: the width is the component's own business. */
+/* Rail geometry, via the component's own tokens (never width/overflow
+   overrides): tighter compact width, thin inline padding, and the
+   hamburger centered in the rail with no wasted space on the left. */
+m3e-nav-rail {
+  --m3e-nav-rail-compact-width: 4.5rem;
+  --m3e-nav-rail-inline-padding: 0.5rem;
+  --m3e-nav-rail-icon-button-inset: calc((100% - 3rem) / 2);
+}
 m3e-nav-rail m3e-nav-item { margin: 2px 0; }
-/* Hidden rail during proxy sessions; the shell flexes, content fills. */
-m3e-nav-rail.lb-rail-hidden { display: none !important; }
-/* Floating hamburger that brings the hidden rail back. Sits below the
-   tab strip so it never covers a tab. */
-.lb-rail-fab {
-  position: fixed;
-  top: 54px;
-  left: 10px;
-  z-index: 60;
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  color: var(--md-sys-color-on-surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-}
-.lb-rail-fab:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, var(--md-sys-color-surface));
-}
+/* During proxy sessions the rail keeps its hamburger but hides the
+   items; the shell flexes, content fills. */
+m3e-nav-rail.lb-rail-hidden m3e-nav-item,
+m3e-nav-rail.lb-rail-hidden m3e-tooltip { display: none; }
 
-/* Toolbar centering spacers: equal growth both sides of the pill. */
-.lb-tb-spacer { flex: 1 1 0; min-width: 0; }
+/* Toolbar centering: the pill centers itself with auto margins. */
 
 /* Lock colors: green closed (https), red broken (http). */
 .lb-tb-lock.secure { color: #1e8e3e; }
 .lb-tb-lock.insecure { color: #d93025; }
 
-/* Site info is a real m3e-menu anchored to the lock glyph; only the
-   trigger wrapper and the long in-menu texts need our own styles. */
+/* Site info: a real m3e-card popup anchored above the lock glyph. The
+   card supplies the container; positioning and long texts are ours. */
 .lb-tb-lock-wrap { display: inline-flex; align-items: center; cursor: pointer; padding: 2px; border-radius: 999px; }
 .lb-tb-lock-wrap:focus-visible { outline: 2px solid var(--md-sys-color-primary); }
+.lb-site-card {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  z-index: 45;
+}
+.lb-site-head { display: flex; align-items: center; gap: 8px; width: 100%; }
+.lb-site-ctitle { font-variation-settings: "wght" 500; font-size: 13px; }
+.lb-site-body { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.lb-site-row { font-size: 13px; word-break: break-all; }
+.lb-site-cookies {
+  max-height: 130px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 40%, transparent);
+  border-radius: 10px;
+  padding: 4px 8px;
+}
 .lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; white-space: normal; }
-.lb-site-note { font-size: 11px; opacity: 0.65; white-space: normal; }
+.lb-site-note { font-size: 11px; opacity: 0.65; white-space: normal; margin: 0; }
+.lb-site-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
 
 /* Incognito icon button. */
 .lb-incognito-ic { width: 18px; height: 18px; display: inline-flex; }
@@ -872,7 +842,7 @@ m3e-nav-rail.lb-rail-hidden { display: none !important; }
 @media (max-width: 600px) {
   .lb-tab-preview { display: none; }
   .lb-tb-pill { flex-basis: 180px; max-width: 240px; min-width: 120px; }
-  .lb-tb-spacer { flex: 0.4 1 0; }
+  .lb-site-card { left: auto; right: 0; transform: none; }
   .lb-error { padding: 16px; }
   .lb-error-logs { max-height: 120px; }
   .lb-tab { max-width: 110px; }

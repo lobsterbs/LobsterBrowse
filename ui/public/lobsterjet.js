@@ -57,6 +57,15 @@ const LIBS = [
   },
 ];
 
+/* Decentraleyes can be disabled from Settings; the page posts the
+   current state to the worker (default on). */
+let decentraleyesEnabled = true;
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.lb === "decentraleyes") {
+    decentraleyesEnabled = Boolean(event.data.enabled);
+  }
+});
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -172,12 +181,14 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       /* Decentraleyes: the /lj/ target decodes to a known library. */
-      try {
-        const target = b64urlDecode(url.pathname.slice(4).split("?")[0]);
-        const lib = await localLibrary(target);
-        if (lib) return lib;
-      } catch {
-        /* not decodable or not a lib: normal flow */
+      if (decentraleyesEnabled) {
+        try {
+          const target = b64urlDecode(url.pathname.slice(4).split("?")[0]);
+          const lib = await localLibrary(target);
+          if (lib) return lib;
+        } catch {
+          /* not decodable or not a lib: normal flow */
+        }
       }
 
       const cache = await caches.open(CACHE);

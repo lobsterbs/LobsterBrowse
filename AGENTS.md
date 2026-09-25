@@ -4,7 +4,7 @@ Guidance for AI agents (and humans) working on this repository. Read this before
 
 ## What this is
 
-LobsterBrowse is a web proxy browser. A Rust axum server fetches and rewrites upstream pages (URL-bearing attributes, CSS url(), srcset, inline styles) so every navigation and subresource flows through same-origin routes, then re-injects a JS shim that routes runtime fetch/XHR and element assignments. A React + TypeScript + M3E (Material 3 Expressive) web component UI manages tabs, bookmarks, DevTools capture, and settings.
+LobsterBrowse is a web proxy browser. A Rust axum server fetches and rewrites upstream pages (URL-bearing attributes, CSS url(), srcset, inline styles) so every navigation and subresource flows through same-origin routes, then re-injects a JS shim that routes runtime fetch/XHR and element assignments. A React + TypeScript + M3E (Material 3 Expressive) web component UI manages tabs, DevTools capture, and settings.
 
 - Server: `server/bin/server/src/main.rs` (single large file, ~57KB), Cargo workspace at `server/`.
 - UI: `ui/src/` (React 18 + TS + Vite). Build runs `tsc -b && vite build` and typechecks are strict.
@@ -24,7 +24,7 @@ Engine option keys (all `lb_`-prefixed; legacy bare keys are still accepted for 
 - `lb_https=1` — reject plain-http targets
 - `lb_img=1` — re-encode JPEGs at lower quality
 - `lb_ua=<urlencoded UA>` — user-agent override
-- `lb_hdrs=<base64url of "Name: value" lines>` — custom outbound headers
+- `lb_hdrs=<base64url of "Name: value" lines>` — custom outbound headers (still honored server-side, but the UI option was removed by request and nothing sends it)
 
 The server also sends `Sec-GPC: 1` and `DNT: 1` on every upstream request, decodes the engine route in the `Referer` back to the real page URL, follows redirects and rewrites against the final URL, de-AMPs AMP pages to their canonical URL, and skips shim injection on challenge/CAPTCHA hosts (integrity-sensitive widgets break otherwise). Non-rewritable content types stream through without buffering.
 
@@ -39,7 +39,7 @@ The server also sends `Sec-GPC: 1` and `DNT: 1` on every upstream request, decod
 
 Cache cap: 60 entries; oldest-by-timestamp evicted on every write. Known gap: the cap is entry-count based, not byte based.
 
-Decentraleyes pass: the worker base64url-decodes the `/lj/` target; if it matches a known CDN library regex (jquery from code.jquery.com / ajax.googleapis.com / cdnjs, lodash, moment, d3 from cdnjs) it answers from the dedicated library cache, primed on first use from pinned jsDelivr URLs (7-day freshness). Version mapping is approximate (pinned major line); the goal is removing the third-party CDN request, not byte-identical files. If jsDelivr is unreachable the normal /lj/ flow takes over. Adding a library means adding a regex + asset pair in `LIBS`.
+Decentraleyes pass: the worker base64url-decodes the `/lj/` target; if it matches a known CDN library regex (jquery from code.jquery.com / ajax.googleapis.com / cdnjs, lodash, moment, d3 from cdnjs) it answers from the dedicated library cache, primed on first use from pinned jsDelivr URLs (7-day freshness). Version mapping is approximate (pinned major line); the goal is removing the third-party CDN request, not byte-identical files. If jsDelivr is unreachable the normal /lj/ flow takes over. Adding a library means adding a regex + asset pair in `LIBS`. The pass can be turned off from Settings: `settings.decentraleyes` (default true) is posted to the worker controller as `{lb:"decentraleyes", enabled}` by App.tsx on change and on `controllerchange`; the worker keeps it in `decentraleyesEnabled` and skips the localLibrary call when off.
 
 Link prefetch: the React app (not the shim — the app has same-origin access to the proxied frame documents) attaches pointerover/focusin listeners to each frame document and fetches hovered links' routes through the worker, warming the cache before the click. Wiring lives in the same-origin poll effect in `ui/src/pages/Browser.tsx`, guarded by a WeakSet of wired documents. It skips `target="_blank"` and download links.
 
@@ -51,9 +51,10 @@ The app registers the worker in `ui/src/App.tsx`. `routeUrl()` in `ui/src/settin
 
 - google -> `suggestqueries.google.com/complete/search?client=firefox&q=`
 - bing -> `api.bing.com/osjson.aspx?q=`
-- everything else (duckduckgo, brave, startpage, mojeek) -> `ac.duckduckgo.com/ac/?type=list&q=`
+- brave -> `search.brave.com/api/suggest?q=`
+- everything else (duckduckgo, startpage, mojeek) -> `ac.duckduckgo.com/ac/?type=list&q=`
 
-Brave, Startpage and Mojeek have no open suggestion API; they fall back to DuckDuckGo. Do not claim otherwise.
+Startpage and Mojeek have no open suggestion API; they fall back to DuckDuckGo. Do not claim otherwise.
 
 The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced 160ms, in the Home search field, the toolbar URL pill, and the proxy New Tab search.
 
@@ -66,11 +67,12 @@ The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced
 - The tab strip is `overflow-x: hidden` on purpose: tabs shrink (compact tier at >=6 tabs, tight/favicon-only at >=10) instead of scrolling. Do not reintroduce `overflow-x: auto`. When the strip tucks idle it slides up leaving a sliver; the real tabs keep their shape (no fake single-tab collapse).
 - Tab close is animated client-side: the tab gets `.closing` for 240ms before the real `closeTab` prop call lands (`closeTabSmooth` in Browser.tsx). Tab switching fades via the `.lb-page` opacity transition.
 - Tab hover preview: a fixed panel under the strip renders a live but scriptless iframe (`sandbox="allow-same-origin"`, no allow-scripts — the page's JS never runs twice and audio can never double) plus a mute toggle. Muting records the tab in `mutedTabs`; the same-origin poll tick re-asserts `muted = true` on every audio/video in that tab's frame because pages keep creating new media elements.
-- The nav rail hides automatically while the browser view is active (state in App.tsx); a floating hamburger (`.lb-rail-fab`) restores it. The fab must stay OUTSIDE the `m3e-nav-rail` element — the rail is `display:none` while hidden and would hide the fab with it.
+- While the browser view is active the rail collapses to its hamburger (`railHidden` state in App.tsx adds `.lb-rail-hidden`, which hides the nav items but keeps the rail and its hamburger); clicking the hamburger shows the items again. The hamburger is always visible on every page. Rail geometry is trimmed via the `--m3e-nav-rail-*` tokens (4.5rem compact width, 0.5rem inline padding, centered icon button), never via width/overflow overrides.
 - The nav rail badge (tab count) was removed by request. Do not re-add it.
+- Bookmarks were removed entirely by request (store functions, Home suggestion source, toolbar button, new-tab links, panel). Do not re-add them.
 - Do not override m3e-nav-rail width or overflow in CSS. A previous width:60px + overflow:hidden combo collapsed the rail to an invisible sliver on every page; the component owns its own width.
-- The toolbar lock is a clickable inline SVG: green closed lock (https), red broken lock (http). Clicking opens a real m3e-menu (an m3e-menu-trigger inside the .lb-tb-lock-wrap span, for="lb-site-menu"): connection facts as disabled items, the cookies the page can read, clear-site-cookies (expires them on the host and every parent domain) and CSV export as standard items. HttpOnly cookies live server-side in the proxy and are honestly documented as invisible in that menu. Certificate status was explicitly dropped from scope. New m3e elements must be added to ui/src/m3e.d.ts or tsc fails the build.
-- Settings `suggestQueries`, `prefetchLinks`, `autoHideChrome` (all default true, migration-safe in `loadSettings`) gate the suggestion fetches, the link prefetch wiring, and the idle tuck of the toolbar/tab strip respectively.
+- The toolbar lock is a clickable inline SVG: green closed lock (https), red broken lock (http). Clicking toggles a real M3E card (`m3e-card` variant="elevated", `.lb-site-card`, absolutely positioned above the pill): header with lock + status + close button, content with scheme/host/port and the cookies the page can read in a scrollable box (capped at 12 shown), and actions with clear-site-cookies (expires them on the host and every parent domain) and CSV export buttons. HttpOnly cookies live server-side in the proxy and are honestly documented as invisible in that card. Certificate status was explicitly dropped from scope. New m3e elements must be added to ui/src/m3e.d.ts or tsc fails the build.
+- Settings `suggestQueries`, `prefetchLinks`, `autoHideChrome`, `decentraleyes` (all default true, migration-safe in `loadSettings`) gate the suggestion fetches, the link prefetch wiring, the idle tuck of the toolbar/tab strip, and the worker's Decentraleyes pass respectively. `adblock` drives both `lb_ab` and `lb_trk`; JPEG compression (`lb_img=1`) is always on; the proxy-off option and custom outbound headers were removed by request — do not re-add them.
 - The server's error page (meta `lb-load-error`) is surfaced client-side as a full-area overlay (URL, message, technical log from the DevTools capture, single Try Again). No server changes are needed for it.
 - The bottom dock and tab strip share the `dockTucked` idle-tuck state; transforms must be applied to plain wrapper divs (`.lb-dock-pill`), not the m3e-toolbar host — Lit host display makes transforms silently do nothing.
 - The toolbar's center pill (`.lb-tb-pill`) shows lock + favicon + tab name when collapsed and expands in place into the editable URL when pressed (`tbExpanded` state, `.lb-tb-name` button in `ui/src/pages/Browser.tsx`). The pill owns the chrome (background/border/shape); the `.lb-url-input` inside it is bare text. Do not reintroduce the old separate `.lb-tb-page` + `.lb-tb-urlwrap` structure.
