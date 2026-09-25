@@ -700,7 +700,16 @@ m3e-icon-button:active { transform: scale(0.88); }
 m3e-nav-rail {
   --m3e-nav-rail-compact-width: 4.5rem;
   --m3e-nav-rail-inline-padding: 0.5rem;
-  --m3e-nav-rail-icon-button-inset: calc((100% - 3rem) / 2);
+  --m3e-nav-rail-icon-button-inset: 0;
+}
+/* The rail positions a slotted hamburger with margin-inline-start only
+   (the inset token), tuned for the default 96px rail; on a narrower
+   rail that lands off-center (the default icon button is 40px, not 48).
+   Auto inline margins center the button on the rail axis exactly like
+   the nav item icons, whatever the button width. The id selector
+   outspecifies the component own global rule. */
+#nav-rail > m3e-icon-button {
+  margin-inline: auto;
 }
 m3e-nav-rail m3e-nav-item { margin: 2px 0; }
 /* During proxy sessions the rail keeps its hamburger but hides the
