@@ -19,23 +19,12 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* Plain header instead of m3e-app-bar: the component restyles its
-   slotted title from inside shadow DOM, which kept diverging from the
-   site typography. This uses the exact body font and color tokens. */
-.lb-appbar {
-  display: flex;
-  align-items: center;
-  min-height: 64px;
-  padding: 0 24px;
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 16%, transparent);
-}
-.lb-appbar m3e-heading { display: flex; align-items: center; }
-/* m3e-heading inherits color from ancestors, and the chain resolves to
-   the static near-black fallback token, not the dynamic theme color.
-   Set the color here, inside m3e-theme's scope, so it picks up the
-   live palette. Primary matches the site's accents in both schemes. */
-.lb-appbar m3e-heading { color: var(--md-sys-color-primary); }
+/* Top bar is the real m3e-app-bar: container color, height, padding
+   and title typography all come from the component's own tokens, which
+   resolve from the dynamic m3e-theme palette, so the bar matches the
+   rest of the M3E chrome by construction. Title uses primary so the
+   brand accent follows the seed color set in Settings. */
+m3e-app-bar { --m3e-app-bar-title-text-color: var(--md-sys-color-primary); }
 
 /* Smooth nav rail expansion: the rail's width and the content reflow
    animate together so labels/icons glide instead of snapping. */
