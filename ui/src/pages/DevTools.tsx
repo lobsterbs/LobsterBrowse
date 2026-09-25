@@ -491,7 +491,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
                 rows={3}
                 placeholder="e.g. color: red; font-size: 24px;"
                 value={styleDraft}
-                onChange={(e) => styleApply(e.target.value)}
+                onChange={(e) => applyStyle(e.target.value)}
               />
               <p className="lb-muted">Edits apply live to the proxied page. They vanish on the next navigation.</p>
             </div>

@@ -409,7 +409,6 @@ export default function BrowserView(props: Props) {
         </m3e-icon-button>
         <m3e-icon-button
           aria-label={props.incognito ? "Leave incognito mode" : "Enter incognito mode"}
-          title={props.incognito ? "Incognito on" : "Incognito"}
           toggle
           selected={props.incognito ? "" : undefined}
           onClick={() => props.onIncognitoChange(!props.incognito)}
