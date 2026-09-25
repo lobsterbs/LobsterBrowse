@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/rewriter", "crates/wisp-wasm", "crates/lj-server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+wisp-core = { path = "../server/crates/wisp-core" }
+wisp-extensions = { path = "../server/crates/wisp-extensions" }
+wasm-bindgen = "0.2"
+bytes = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
