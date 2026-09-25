@@ -1347,6 +1347,12 @@ async fn suggest_endpoint(
     let body: Result<String, String> = match state
         .client
         .get(&provider)
+        // Brave (and some others) reject requests without a browser UA.
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0",
+        )
+        .header("Accept", "*/*")
         .header("Sec-GPC", "1")
         .header("DNT", "1")
         .send()
