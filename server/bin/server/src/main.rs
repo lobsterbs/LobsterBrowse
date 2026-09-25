@@ -1335,16 +1335,20 @@ async fn suggest_endpoint(
         _ => format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc),
     };
     push_log(&state, "info", &format!("suggest {}", q));
-    let body = state
+    let body: Result<String, String> = match state
         .client
         .get(&provider)
         .header("Sec-GPC", "1")
         .header("DNT", "1")
         .send()
         .await
-        .and_then(|r| r.error_for_status())
-        .and_then(|r| r.text())
-        .map_err(|e| e.to_string());
+    {
+        Ok(r) => match r.error_for_status() {
+            Ok(r) => r.text().await.map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) => Err(e.to_string()),
+    };
     let out = match body {
         Ok(text) => {
             let mut list: Vec<String> = Vec::new();
