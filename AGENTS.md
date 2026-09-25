@@ -55,7 +55,7 @@ The app registers the worker in `ui/src/App.tsx`. `routeUrl()` in `ui/src/settin
 
 Brave, Startpage and Mojeek have no open suggestion API; they fall back to DuckDuckGo. Do not claim otherwise.
 
-The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced 160ms, in both the Home search field and the toolbar URL pill.
+The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced 160ms, in the Home search field, the toolbar URL pill, and the proxy New Tab search.
 
 ### UI notes that have bitten us before
 
@@ -68,7 +68,8 @@ The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced
 - Tab hover preview: a fixed panel under the strip renders a live but scriptless iframe (`sandbox="allow-same-origin"`, no allow-scripts — the page's JS never runs twice and audio can never double) plus a mute toggle. Muting records the tab in `mutedTabs`; the same-origin poll tick re-asserts `muted = true` on every audio/video in that tab's frame because pages keep creating new media elements.
 - The nav rail hides automatically while the browser view is active (state in App.tsx); a floating hamburger (`.lb-rail-fab`) restores it. The fab must stay OUTSIDE the `m3e-nav-rail` element — the rail is `display:none` while hidden and would hide the fab with it.
 - The nav rail badge (tab count) was removed by request. Do not re-add it.
-- The toolbar lock is a clickable inline SVG: green closed lock (https), red broken lock (http). Clicking opens the site-info popup (scheme/host/port, the cookies the page can read, clear-site-cookies which expires them on the host and every parent domain, CSV export). HttpOnly cookies live server-side in the proxy and are honestly documented as invisible in that popup. Certificate status was explicitly dropped from scope.
+- Do not override m3e-nav-rail width or overflow in CSS. A previous width:60px + overflow:hidden combo collapsed the rail to an invisible sliver on every page; the component owns its own width.
+- The toolbar lock is a clickable inline SVG: green closed lock (https), red broken lock (http). Clicking opens a real m3e-menu (an m3e-menu-trigger inside the .lb-tb-lock-wrap span, for="lb-site-menu"): connection facts as disabled items, the cookies the page can read, clear-site-cookies (expires them on the host and every parent domain) and CSV export as standard items. HttpOnly cookies live server-side in the proxy and are honestly documented as invisible in that menu. Certificate status was explicitly dropped from scope. New m3e elements must be added to ui/src/m3e.d.ts or tsc fails the build.
 - Settings `suggestQueries`, `prefetchLinks`, `autoHideChrome` (all default true, migration-safe in `loadSettings`) gate the suggestion fetches, the link prefetch wiring, and the idle tuck of the toolbar/tab strip respectively.
 - The server's error page (meta `lb-load-error`) is surfaced client-side as a full-area overlay (URL, message, technical log from the DevTools capture, single Try Again). No server changes are needed for it.
 - The bottom dock and tab strip share the `dockTucked` idle-tuck state; transforms must be applied to plain wrapper divs (`.lb-dock-pill`), not the m3e-toolbar host — Lit host display makes transforms silently do nothing.
@@ -91,4 +92,4 @@ Push to `main`, trigger a deploy, poll until `live` (or `build_failed`), and if 
 
 ## Roadmap: independence (planned, NOT yet)
 
-The goal is that LobsterJet eventually fetches upstream pages on its own (client-side, e.g. via a WISP-style engine in the service worker or an edge function we control) instead of depending on the ScramJet server-side rewriter for every byte. Both engines stay; nothing gets renamed. Until that lands, every LobsterJet route still transits the axum server — do not claim client-side fetching, and keep the Settings description honest about the server seeing proxied traffic.
+The goal is that LobsterJet eventually fetches upstream pages on its own (client-side, e.g. via a WISP-style engine in the service worker or an edge function we control) instead of depending on the ScramJet server-side rewriter for every byte. Both engines stay; nothing gets renamed. The service worker (with its Decentraleyes and prefetch passes) is planned to move to its own repository (lobsterbs/LobsterJet) so the engine can evolve independently; until that split actually happens the code lives in this repo and nothing above changes. Until that lands, every LobsterJet route still transits the axum server — do not claim client-side fetching, and keep the Settings description honest about the server seeing proxied traffic.

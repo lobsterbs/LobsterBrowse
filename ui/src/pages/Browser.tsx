@@ -77,6 +77,12 @@ export default function BrowserView(props: Props) {
   const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
   const [tbSuggOpen, setTbSuggOpen] = useState(false);
   const [tbSuggIdx, setTbSuggIdx] = useState(-1);
+  /* New tab search autocomplete: same engine-queried suggestions
+     as the toolbar pill, plus its own keyboard navigation. */
+  const [ntSugg, setNtSugg] = useState<{ text: string; url: string }[]>([]);
+  const [ntSuggOpen, setNtSuggOpen] = useState(false);
+  const [ntSuggIdx, setNtSuggIdx] = useState(-1);
+  const [ntDraft, setNtDraft] = useState("");
   /* Center pill: collapsed shows the tab name; pressed, it expands in
      place into the editable URL (the name hides). */
   const [tbExpanded, setTbExpanded] = useState(false);
@@ -93,8 +99,7 @@ export default function BrowserView(props: Props) {
   const [mutedTabs, setMutedTabs] = useState<Set<number>>(new Set());
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
-  /* Lock popup: connection info + cookies visible to the page. */
-  const [lockOpen, setLockOpen] = useState(false);
+  /* Site info menu data: the cookies the active page can read. */
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
@@ -449,6 +454,33 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, settings.engine]);
 
+  /* New tab search: engine-queried completions of the draft,
+     debounced like the toolbar ones, before the early return. */
+  useEffect(() => {
+    const q = ntDraft.trim();
+    if (!q || !settings.suggestQueries) {
+      setNtSugg([]);
+      setNtSuggOpen(false);
+      setNtSuggIdx(-1);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchSuggestions(settings.engine, ntDraft).then((list) => {
+        if (cancelled) return;
+        const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
+        setNtSugg(items);
+        setNtSuggOpen(items.length > 0);
+        setNtSuggIdx(-1);
+      });
+    }, 160);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ntDraft, settings.engine]);
+
   /* Expanding the center pill focuses (and selects) the URL text. */
   useEffect(() => {
     if (tbExpanded) urlInputRef.current?.select();
@@ -518,7 +550,7 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
-  const openLock = () => {
+  const loadSiteCookies = () => {
     const f = frames.current.get(active.id);
     let jar: string[] = [];
     try {
@@ -528,7 +560,6 @@ export default function BrowserView(props: Props) {
       jar = [];
     }
     setSiteCookies(jar);
-    setLockOpen((v) => !v);
   };
   /* Expire every cookie the page can see, on the host and every
      parent domain, so nothing survives. */
@@ -779,15 +810,55 @@ export default function BrowserView(props: Props) {
                   aria-label="Search or URL"
                   placeholder="Search or URL"
                   autoComplete="off"
+                  value={ntDraft}
+                  spellCheck={false}
+                  onBlur={() => setNtSuggOpen(false)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") go((e.target as HTMLInputElement).value);
+                    if (e.key === "Enter") {
+                      const pick =
+                        ntSuggOpen && ntSuggIdx >= 0
+                          ? ntSugg[ntSuggIdx]?.url
+                          : (e.target as HTMLInputElement).value;
+                      setNtSuggOpen(false);
+                      if (pick) go(pick);
+                    } else if (e.key === "ArrowDown" && ntSuggOpen) {
+                      e.preventDefault();
+                      setNtSuggIdx((p) => Math.min(p + 1, ntSugg.length - 1));
+                    } else if (e.key === "ArrowUp" && ntSuggOpen) {
+                      e.preventDefault();
+                      setNtSuggIdx((p) => Math.max(p - 1, -1));
+                    } else if (e.key === "Escape") {
+                      setNtSuggOpen(false);
+                    }
                   }}
                   onChange={(e) => {
                     /* Smooth expansion tracks typed content, not just focus. */
                     setNtTyped(!!(e.target as HTMLInputElement).value);
+                    setNtDraft((e.target as HTMLInputElement).value);
                   }}
                 />
               </m3e-search-bar>
+              {ntSuggOpen && (
+                <div className="lb-nt-ac" role="listbox" aria-label="Suggestions">
+                  {ntSugg.map((it, i) => (
+                    <button
+                      key={it.url}
+                      type="button"
+                      role="option"
+                      aria-selected={i === ntSuggIdx}
+                      className={"lb-nt-ac-item" + (i === ntSuggIdx ? " active" : "")}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setNtSuggOpen(false);
+                        go(it.url);
+                      }}
+                    >
+                      <m3e-icon name="search" aria-hidden={true} />
+                      <span className="lb-nt-ac-text">{it.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {bookmarks.length > 0 && (
               <div className="lb-newtab-links">
@@ -897,49 +968,53 @@ export default function BrowserView(props: Props) {
                 ))}
               </div>
             )}
-            {lockOpen && (
-              <div className="lb-lockpanel" role="dialog" aria-label="Site information">
-                <div className="lb-lockpanel-head">
-                  <span className={"lb-tb-lock " + (secure ? "secure" : "insecure")} aria-hidden={true} dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }} />
-                  <span>{secure ? "Https connection" : "Http connection, not secure"}</span>
-                  <button type="button" className="lb-lockpanel-close" aria-label="Close site information" onClick={() => setLockOpen(false)}>
-                    <m3e-icon name="close" aria-hidden={true} />
-                  </button>
-                </div>
-                <div className="lb-lockpanel-row"><span>Scheme</span><code>{uParts.scheme}</code></div>
-                <div className="lb-lockpanel-row"><span>Host</span><code>{uParts.host}</code></div>
-                <div className="lb-lockpanel-row"><span>Port</span><code>{uParts.port}</code></div>
-                <p className="lb-muted lb-lockpanel-note">
-                  Cookies listed here are the ones the page itself can read. HttpOnly cookies live on
-                  the proxy server side and are not visible to the page.
-                </p>
-                <div className="lb-lockpanel-cookies">
-                  <div className="lb-lockpanel-ctitle">Site cookies ({siteCookies.length})</div>
-                  {siteCookies.length === 0 && <div className="lb-muted">No readable cookies.</div>}
-                  {siteCookies.slice(0, 12).map((c) => (
-                    <div key={c} className="lb-lockpanel-cookie">{c}</div>
-                  ))}
-                </div>
-                <div className="lb-lockpanel-actions">
-                  <m3e-button onClick={clearSiteCookies}>
-                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
-                  </m3e-button>
-                  <m3e-button onClick={exportCookies}>
-                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
-                  </m3e-button>
-                </div>
-              </div>
-            )}
+            {/* Site info: a real M3E menu anchored to the lock glyph.
+                Facts are disabled items (not commands), actions are
+                standard items. */
+            <m3e-menu id="lb-site-menu" aria-label="Site information">
+              <m3e-menu-item disabled>
+                <m3e-icon slot="icon" name="public" aria-hidden={true} />
+                {secure ? "Https connection" : "Http connection, not secure"}
+              </m3e-menu-item>
+              <m3e-menu-item disabled>
+                {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
+              </m3e-menu-item>
+              <m3e-divider />
+              <m3e-menu-item disabled>Site cookies ({siteCookies.length})</m3e-menu-item>
+              {siteCookies.slice(0, 8).map((c) => (
+                <m3e-menu-item key={c} disabled>
+                  <span className="lb-site-cookie">{c}</span>
+                </m3e-menu-item>
+              ))}
+              <m3e-menu-item onClick={clearSiteCookies}>
+                <m3e-icon slot="icon" name="delete" aria-hidden={true} />
+                Clear site cookies
+              </m3e-menu-item>
+              <m3e-menu-item onClick={exportCookies}>
+                <m3e-icon slot="icon" name="download" aria-hidden={true} />
+                Export CSV
+              </m3e-menu-item>
+              <m3e-divider />
+              <m3e-menu-item disabled>
+                <span className="lb-site-note">Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.</span>
+              </m3e-menu-item>
+            </m3e-menu>
             {active.url && (
               <>
                 <span
-                  className={"lb-tb-lock " + (active.url.startsWith("https://") ? "secure" : "insecure")}
+                  className="lb-tb-lock-wrap"
                   role="button"
                   tabIndex={0}
-                  aria-label={active.url.startsWith("https://") ? "Https connection, site details" : "Not secure, site details"}
-                  onClick={openLock}
-                  dangerouslySetInnerHTML={{ __html: active.url.startsWith("https://") ? lockSvg : noEncSvg }}
-                />
+                  aria-label={secure ? "Https connection, site details" : "Not secure, site details"}
+                  onClick={loadSiteCookies}
+                >
+                  <span
+                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
+                    aria-hidden={true}
+                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
+                  />
+                  <m3e-menu-trigger for="lb-site-menu" />
+                </span>
                 {icons[active.id] ? (
                   <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
                 ) : (
