@@ -49,7 +49,7 @@ export function addHistory(url: string): string[] {
   return trimmed;
 }
 
- (restore on reload) ---- */
+/* ---- Session tabs (persisted so the browser view can restore on reload) ---- */
 
 export function loadSessionTabs(): Tab[] {
   const tabs = readJson<Tab[]>(TABS_KEY, []);
