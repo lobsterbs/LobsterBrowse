@@ -6,7 +6,7 @@
 //! subprotocol, the server sends INFO(stream 0). The client replies with
 //! its own INFO(stream 0), then opens streams with CONNECT packets.
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use wasm_bindgen::prelude::*;
 use wisp_core::{encode_packet, CloseReason, Frame, Packet, PacketType, StreamKind};
 
