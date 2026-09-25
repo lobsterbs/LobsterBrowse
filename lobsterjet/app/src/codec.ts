@@ -1,12 +1,25 @@
 /* URL codec (TS side mirrors crates/rewriter/src/encode.rs).
-   Destination encoded as base64url under the /j/ prefix. The scheme is
-   swappable so the URL shape can rotate (Phase 2: per-deployment scheme
-   + prefix communicated to the SW via a config endpoint). */
+   Destination encoded as base64url under a configurable prefix. The
+   scheme is swappable so the URL shape can rotate (Phase 2): the SW
+   accepts an lj:config message to change prefix/scheme at runtime, so a
+   deployment can rotate its path shape without a client rebuild. */
 
 const B64URL =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-export const PATH_PREFIX = "/j/";
+/* Runtime-configurable scheme state. Defaults must match
+   crates/rewriter/src/config.rs (RewriteConfig::default). */
+let prefix = "/j/";
+let scheme: "b64u" | "mirror" = "b64u";
+
+export function setScheme(p: string, s: "b64u" | "mirror" = "b64u"): void {
+  prefix = p.endsWith("/") || p === "" ? p : p + "/";
+  scheme = s;
+}
+
+export function currentPrefix(): string {
+  return prefix;
+}
 
 export function b64uEncode(bytes: Uint8Array): string {
   let out = "";
@@ -28,9 +41,8 @@ export function b64uDecode(s: string): Uint8Array | null {
   let buf = 0;
   let bits = 0;
   for (const c of s) {
-    let v = B64URL.indexOf(c);
+    const v = B64URL.indexOf(c);
     if (v < 0) return null;
-    v = v as number;
     buf = (buf << 6) | v;
     bits += 6;
     if (bits >= 8) {
@@ -44,16 +56,21 @@ export function b64uDecode(s: string): Uint8Array | null {
 const ENC = new TextEncoder();
 const DEC = new TextDecoder();
 
-/** Absolute destination URL -> engine-local path (/j/<b64url>). */
+/** Absolute destination URL -> engine-local path. */
 export function encodeDest(dest: string): string {
-  return PATH_PREFIX + b64uEncode(ENC.encode(dest));
+  if (scheme === "mirror") return "/m/" + dest;
+  return prefix + b64uEncode(ENC.encode(dest));
 }
 
 /** Engine-local path -> destination URL, or null if not ours. */
 export function decodePath(path: string): string | null {
-  const i = path.indexOf(PATH_PREFIX);
+  if (scheme === "mirror") {
+    const rest = path.startsWith("/m/") ? path.slice(3) : null;
+    return rest && rest.length > 0 ? rest : null;
+  }
+  const i = path.indexOf(prefix);
   if (i < 0) return null;
-  const b64 = path.slice(i + PATH_PREFIX.length).split(/[?#]/)[0];
+  const b64 = path.slice(i + prefix.length).split(/[?#]/)[0];
   const bytes = b64uDecode(b64);
   if (!bytes) return null;
   return DEC.decode(bytes);

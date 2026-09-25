@@ -1,8 +1,10 @@
 /* Embed client: the Scramjet-compatible entry point.
    LobsterBrowse loads <engine-origin>/?url=<target> in a tab iframe; the
-   page registers the service worker, then navigates the frame to the
-   encoded route so all subresource fetches are intercepted. */
+   page brings up the engine via the adapter (engine.ts), rehydrates any
+   persisted per-site toggles, then navigates the frame to the encoded
+   route so all subresource fetches are intercepted. */
 
+import { LobsterJetEngine } from "./engine";
 import { encodeDest } from "./codec";
 
 const status = document.getElementById("lj-status")!;
@@ -15,24 +17,26 @@ if (!target) {
 } else {
   void (async () => {
     status.textContent = "Starting engine...";
+    const engine = new LobsterJetEngine();
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      await navigator.serviceWorker.ready;
-      // Take control of this page too, so the embed document itself is
-      // managed (not strictly needed for proxied content, but it makes
-      // devtools and lifecycle observable).
-      if (reg.active && !navigator.serviceWorker.controller) {
-        // First load after registration: reload once to become
-        // controlled, keeping ?url intact.
-        location.reload();
-        return;
-      }
+      await engine.init();
     } catch (err) {
       status.textContent = "Service worker registration failed: " + String(err);
       return;
     }
+    if (!navigator.serviceWorker.controller) {
+      // First-ever load on this origin: reload once so the SW controls
+      // the page, keeping ?url intact.
+      location.reload();
+      return;
+    }
+    // Rehydrate persisted per-site toggles into the fresh SW.
+    try {
+      const disabled = JSON.parse(localStorage.getItem("lj:disabled-sites") ?? "[]") as string[];
+      for (const site of disabled) await engine.setSiteRoute(site, false);
+    } catch { /* nothing persisted */ }
     status.style.display = "none";
     frame.style.display = "block";
-    frame.src = encodeDest(target);
+    frame.src = engine.navigate(target);
   })();
 }

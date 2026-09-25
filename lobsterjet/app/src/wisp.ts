@@ -5,7 +5,12 @@
    Wire layout (wisp-core): frame = [type u8][stream_id u32 LE][payload].
    The wasm-bindgen ES module (src/wisp_wasm/wisp_wasm.js) exposes:
    handshake_info, connectTcp, dataPacket, continuePacket, closePacket,
-   parseFrame. */
+   parseFrame.
+
+   Phase 2: keepalive heartbeat (stream-0 CONTINUE every 15 s) so idle
+   sessions are not reclaimed by intermediaries, and automatic
+   reconnect: if the socket drops while streams are open, the next
+   operation transparently reopens the connection. */
 
 interface WispWasm {
   handshake_info(): Uint8Array;
@@ -41,11 +46,15 @@ interface Stream {
   onClose?: (reason: number) => void;
 }
 
+/** Heartbeat interval; stream-0 CONTINUE is valid control traffic. */
+const KEEPALIVE_MS = 15_000;
+
 export class WispClient {
   private ws: WebSocket | null = null;
   private streams = new Map<number, Stream>();
   private nextId = 1;
   private connecting: Promise<void> | null = null;
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   constructor(private wispUrl: string) {}
 
@@ -62,10 +71,12 @@ export class WispClient {
       };
       ws.onclose = () => {
         this.ws = null;
+        this.stopHeartbeat();
         const streams = [...this.streams.values()];
         this.streams.clear();
         for (const s of streams) s.onClose?.(1);
         this.connecting = null;
+        // Reconnect happens lazily on the next openStream/write.
       };
       ws.onmessage = (ev) => void this.onMessage(ev);
       this.ws = ws;
@@ -73,6 +84,7 @@ export class WispClient {
         try {
           const m = await wispApi();
           ws.send(m.handshake_info());
+          this.startHeartbeat();
           resolve();
         } catch (e) {
           reject(e);
@@ -80,6 +92,27 @@ export class WispClient {
       };
     });
     return this.connecting;
+  }
+
+  /** Keepalive: stream-0 CONTINUE at a fixed cadence. */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeat = setInterval(async () => {
+      if (!this.ws || this.ws.readyState > WebSocket.OPEN) return;
+      const m = await wispApi();
+      try {
+        this.ws.send(m.continuePacket(0, 128));
+      } catch {
+        this.stopHeartbeat();
+      }
+    }, KEEPALIVE_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeat !== null) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
   }
 
   private async onMessage(ev: MessageEvent) {
@@ -116,6 +149,7 @@ export class WispClient {
   }
 
   async write(id: number, bytes: Uint8Array): Promise<void> {
+    await this.connect();
     const m = await wispApi();
     this.ws!.send(m.dataPacket(id, bytes));
   }
@@ -124,5 +158,13 @@ export class WispClient {
     const m = await wispApi();
     this.ws?.send(m.closePacket(id, reason));
     this.streams.delete(id);
+  }
+
+  /** End the whole connection (teardown). */
+  dispose(): void {
+    this.stopHeartbeat();
+    this.ws?.close();
+    this.ws = null;
+    this.streams.clear();
   }
 }
