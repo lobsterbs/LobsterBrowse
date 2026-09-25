@@ -883,6 +883,229 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
             }
         }
     }
-    if let Some(ua) 
+    if let Some(ua) = params.get("ua") {
+        if !ua.is_empty() {
+            parts.push(format!("ua={}", pct_enc(ua)));
+        }
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
+    }
+}
 
-... [Content truncated]
+fn engine_error_page(url: &str, detail: &str) -> Response {
+    // Scramjet compatibility layer: when the rewriter cannot handle a
+    // site, offer the deployed headless-browser service as fallback.
+    let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
+    let body = format!(
+        "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}a.btn{{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:999px;background:#1a73e8;color:#fff;text-decoration:none;font-size:14px}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p><p><a class=\"btn\" href=\"{}\">Try in Scramjet (headless browser)</a></p>",
+        json_escape(url),
+        json_escape(detail),
+        scramjet
+    );
+    (
+        StatusCode::BAD_GATEWAY,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
+        .into_response()
+}
+
+/// Native rewriting engine: /r/<base64url target>[?opts][&page-query].
+///
+/// Known query keys (ab, trk, https, ua) are engine options; every other
+/// query key belongs to the target page, so GET forms submitting
+/// straight to a /r route keep working. HTML and CSS responses are
+/// rewritten; everything else streams through untouched.
+async fn engine_proxy(
+    State(state): State<Arc<AppState>>,
+    method: Method,
+    Path(target): Path<String>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+    body: Option<Bytes>,
+) -> Response {
+    let started = Instant::now();
+    let Some(decoded) = b64url_decode(&target) else {
+        return (StatusCode::BAD_REQUEST, "bad route").into_response();
+    };
+    let Ok(url) = String::from_utf8(decoded) else {
+        return (StatusCode::BAD_REQUEST, "bad route encoding").into_response();
+    };
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return (StatusCode::BAD_REQUEST, "target must be http(s)").into_response();
+    }
+
+    let mut params: HashMap<String, String> = HashMap::new();
+    let mut page_query: Vec<&str> = Vec::new();
+    if let Some(rq) = raw.as_deref() {
+        for part in rq.split('&') {
+            if part.is_empty() {
+                continue;
+            }
+            let (k, v) = match part.find('=') {
+                Some(p) => (&part[..p], &part[p + 1..]),
+                None => (part, ""),
+            };
+            params.insert(k.to_string(), percent_decode(v));
+            if k != "ab" && k != "trk" && k != "https" && k != "ua" {
+                page_query.push(part);
+            }
+        }
+    }
+    let fetch_url = if page_query.is_empty() {
+        url.clone()
+    } else {
+        let sep = if url.contains('?') { '&' } else { '?' };
+        format!("{}{}{}", url, sep, page_query.join("&"))
+    };
+    if params.get("https").map(|v| v == "1").unwrap_or(false) && fetch_url.starts_with("http://") {
+        return engine_error_page(&url, "HTTPS-only mode: plain-http target rejected");
+    }
+
+    let suffix = params_suffix(&params);
+    push_log(&state, "info", &format!("engine {} {}", method, url));
+
+    let mut req = state.client.request(method.clone(), &fetch_url);
+    if let Some(ua) = params.get("ua") {
+        let cleaned: String = ua
+            .chars()
+            .filter(|c| c.is_ascii_graphic() || *c == ' ')
+            .take(512)
+            .collect();
+        if !cleaned.is_empty() {
+            req = req.header(reqwest::header::USER_AGENT, cleaned);
+        }
+    }
+    // Forward a couple of harmless request headers from the browser frame.
+    // (HeaderMap::get consumes its key, so use Copy &str keys here.)
+    for h in ["accept", "accept-language"] {
+        if let Some(v) = headers.get(h) {
+            if let Ok(vs) = v.to_str() {
+                if !vs.is_empty() {
+                    req = req.header(h, vs);
+                }
+            }
+        }
+    }
+    if let Some(b) = body {
+        req = req.body(b);
+    }
+
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            // Follows redirects: resolve relative URLs against the FINAL
+            // URL, not the one the user typed, or redirected pages
+            // rewrite every link against the wrong origin.
+            let base_url = resp.url().to_string();
+            if base_url != url {
+                push_log(&state, "info", &format!("engine redirect {} -> {}", url, base_url));
+            }
+            let ct = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let bytes = resp.bytes().await.unwrap_or_default();
+            let is_html = ct.contains("html");
+            let is_css = !is_html && ct.contains("css");
+            let out: Vec<u8> = if is_html {
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                rewrite_html_doc(&text, &base_url, &params, &suffix, &state).into_bytes()
+            } else if is_css {
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                rewrite_css(&text, &base_url, &suffix).into_bytes()
+            } else {
+                bytes.to_vec()
+            };
+            push_log(
+                &state,
+                "info",
+                &format!("engine done {} {} -> {} ({} ms)", method, url, status, started.elapsed().as_millis()),
+            );
+            let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response()
+        }
+        Err(e) => engine_error_page(&url, &e.to_string()),
+    }
+}
+
+/// Recent server-side engine log entries, newest last. JSON array.
+async fn logs_endpoint(State(state): State<Arc<AppState>>) -> Response {
+    let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
+    let body = format!("[{}]", logs.iter().cloned().collect::<Vec<String>>().join(","));
+    ([(header::CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
+    let mut text = builtin.to_string();
+    if let Ok(extra) = std::fs::read_to_string(extra_path) {
+        text.push('\n');
+        text.push_str(&extra);
+    }
+    adblock::compile(&text)
+}
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "lobster_server=info,tower_http=info".into()),
+        )
+        .init();
+
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(6001);
+    let wisp_path = std::env::var("WISP_PATH").unwrap_or_else(|_| "/wisp/".into());
+    let auth_password = std::env::var("WISP_PASSWORD").ok();
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(25))
+        .cookie_store(true)
+        .build()
+        .expect("reqwest client");
+
+    let state = Arc::new(AppState {
+        client,
+        logs: Mutex::new(VecDeque::new()),
+        ads: load_filters("adblock-extra.txt", AD_HOSTS),
+        trackers: load_filters("tracker-extra.txt", TRACKER_HOSTS),
+    });
+    push_log(&state, "info", "native engine log buffer initialised");
+
+    let wisp_state = Arc::new(proxy::ProxyState::new(auth_password));
+    let limiter = Arc::new(Mutex::new(guard::RateLimiter::default()));
+
+    let app = Router::new()
+        .route("/healthz", get(|| async { "ok" }))
+        .route("/r/:target", any(engine_proxy))
+        .route("/logs", get(logs_endpoint))
+        .fallback_service(
+            ServeDir::new("ui")
+                .append_index_html_on_directories(true)
+                .not_found_service(ServeFile::new("ui/index.html")),
+        )
+        .route(
+            &wisp_path,
+            get({
+                let state = wisp_state.clone();
+                let limiter = limiter.clone();
+                move |ws, headers| proxy::handle_upgrade(ws, headers, state, limiter)
+            }),
+        )
+        .layer(CorsLayer::permissive())
+        .with_state(state);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
+    axum::serve(listener, app).await.expect("server error");
+}
