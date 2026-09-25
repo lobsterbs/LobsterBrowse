@@ -49,6 +49,11 @@ h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
   border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 16%, transparent);
 }
 .lb-appbar m3e-heading { display: flex; align-items: center; }
+/* m3e-heading inherits color from ancestors, and the chain resolves to
+   the static near-black fallback token, not the dynamic theme color.
+   Set the color here, inside m3e-theme's scope, so it picks up the
+   live palette. Primary matches the site's accents in both schemes. */
+.lb-appbar m3e-heading { color: var(--md-sys-color-primary); }
 
 /* Smooth nav rail expansion: the rail's width and the content reflow
    animate together so labels/icons glide instead of snapping. */
