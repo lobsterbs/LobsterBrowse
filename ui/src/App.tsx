@@ -28,6 +28,12 @@ export default function App() {
   /* Proxy sessions collapse the rail to its hamburger; leaving the
      browser view shows the full rail again. */
   const [railHidden, setRailHidden] = useState(false);
+  /* React does not map className to the class attribute on custom
+     elements, so the rail's class is managed imperatively via a ref. */
+  const railRef = useRef<any>(null);
+  useEffect(() => {
+    railRef.current?.classList.toggle("lb-rail-hidden", railHidden);
+  }, [railHidden]);
   useEffect(() => {
     /* Entering the browse view slides the rail off-screen with the rest
        of the chrome, a sliver stays; clicking the rail brings it back. */
@@ -218,7 +224,13 @@ export default function App() {
     return (
       <div className="lb-cloak">
         <iframe title="Cloak" src={settings.cloakUrl} />
-        <m3e-button className="lb-cloak-return" variant="filled" onClick={uncloak}>
+        <m3e-button
+          ref={(el: any) => {
+            if (el) el.classList.add("lb-cloak-return");
+          }}
+          variant="filled"
+          onClick={uncloak}
+        >
           Return
         </m3e-button>
       </div>
@@ -235,7 +247,7 @@ export default function App() {
           id="nav-rail"
           mode="compact"
           aria-label="LobsterBrowse"
-          className={railHidden ? "lb-rail-hidden" : ""}
+          ref={railRef}
           onClick={(e) => {
             /* Only the rail chrome itself toggles; clicks on nav items
                bubble up here and must not slide the rail away. */
