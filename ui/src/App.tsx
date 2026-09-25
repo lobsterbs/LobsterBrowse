@@ -251,11 +251,11 @@ export default function App() {
         </m3e-nav-rail>
 
         <div className="lb-main">
-          {/* The browser view gets every pixel: no app bar there. */}
+          {/* The browser view gets every pixel: no header there. */}
           {view !== "browser" && (
-            <m3e-app-bar>
-              <span slot="title">LobsterBrowse</span>
-            </m3e-app-bar>
+            <header className="lb-appbar">
+              <span className="lb-appbar-title">LobsterBrowse</span>
+            </header>
           )}
 
           <div className="app-content">
