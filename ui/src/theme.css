@@ -37,13 +37,23 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* App-bar title follows the theme palette (not the UA default color). */
-m3e-app-bar [slot="title"] {
-  color: var(--md-sys-color-on-surface) !important;
+/* Plain header instead of m3e-app-bar: the component restyles its
+   slotted title from inside shadow DOM, which kept diverging from the
+   site typography. This uses the exact body font and color tokens. */
+.lb-appbar {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 0 24px;
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 16%, transparent);
+}
+.lb-appbar-title {
   font-family: "Google Sans Flex", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
-  font-size: 20px;
-  font-variation-settings: "wght" 560;
-  letter-spacing: 0;
+  font-size: 22px;
+  font-variation-settings: "wght" 620;
+  letter-spacing: -0.01em;
+  color: var(--md-sys-color-on-surface);
 }
 
 /* Smooth nav rail expansion: the rail's width and the content reflow
@@ -256,10 +266,26 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   right: 0;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
   z-index: 10;
   height: 0;
+  pointer-events: none;
+}
+/* Invisible full-width strip along the bottom edge. This is the hover
+   target when the toolbar is tucked away, so the reveal does not depend
+   on hitting the pill's rounded 8px sliver. */
+.lb-dock::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  pointer-events: auto;
 }
 .lb-toolbar {
+  pointer-events: auto;
+  min-height: 56px;
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
   --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
@@ -283,11 +309,14 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
    leaving only a 12px sliver of its top border visible. Hover or
    keyboard focus on that sliver pops it back out. */
 .lb-dock.settled .lb-toolbar {
-  transform: translateY(calc(100% - 12px));
+  transform: translateY(calc(100% - 8px));
   opacity: 1;
 }
 .lb-dock:hover .lb-toolbar,
 .lb-dock:focus-within .lb-toolbar { transform: none; opacity: 1; }
+/* Once revealed, keep the toolbar itself hoverable so the pointer can
+   travel from the strip onto the toolbar without it snapping away. */
+.lb-dock .lb-toolbar { pointer-events: auto; }
 .lb-url-input {
   flex: 1 1 160px;
   min-width: 140px;
