@@ -62,11 +62,12 @@ export default function BrowserView(props: Props) {
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
 
-  /* Dock: tucks out of view after idle seconds; reappears when the
-     pointer nears the bottom edge, hovers the visible sliver, or
-     focuses the URL field. The tucked state leaves a 12px sliver of
-     the pill itself and the dock wrapper is pointer-events:none, so
-     no invisible strip intercepts page clicks (the original bug). */
+  /* Dock: tucks out of view when the app is idle; reappears on any
+     pointer/keyboard activity in the app, on hovering the visible
+     sliver, or on focusing the URL field. The transform lives on a
+     plain wrapper div (.lb-dock-pill): applying it to the m3e-toolbar
+     host did nothing (custom element host display), which left the
+     bar frozen in place covering page content. */
   const [dockTucked, setDockTucked] = useState(false);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
@@ -75,29 +76,19 @@ export default function BrowserView(props: Props) {
     hideTimer.current = window.setTimeout(() => {
       if (!dockHoverRef.current) setDockTucked(true);
       else hideSoon();
-    }, 3000);
+    }, 3500);
   };
   useEffect(() => {
-    const near = (y: number) => y > window.innerHeight - 96;
-    const onMove = (e: PointerEvent) => {
-      if (near(e.clientY)) {
-        setDockTucked(false);
-        hideSoon();
-      }
+    const onActivity = () => {
+      setDockTucked(false);
+      hideSoon();
     };
-    const onTouch = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (t && near(t.clientY)) {
-        setDockTucked(false);
-        hideSoon();
-      }
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("pointermove", onActivity);
+    window.addEventListener("keydown", onActivity);
     hideSoon();
     return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("pointermove", onActivity);
+      window.removeEventListener("keydown", onActivity);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
     };
   }, []);
@@ -488,6 +479,11 @@ export default function BrowserView(props: Props) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") go((e.target as HTMLInputElement).value);
                 }}
+                onChange={(e) => {
+                  /* Smooth expansion tracks typed content, not just focus. */
+                  const bar = (e.target as HTMLElement).closest(".lb-newtab-search");
+                  bar?.classList.toggle("filled", !!(e.target as HTMLInputElement).value);
+                }}
               />
             </m3e-search-bar>
             {bookmarks.length > 0 && (
@@ -541,19 +537,19 @@ export default function BrowserView(props: Props) {
         )}
       </div>
 
-      {/* Bottom dock: tucks out of view when idle; the pointer near the
-          bottom edge, hover, or focus brings it back. */}
-      <div className={"lb-dock" + (dockTucked ? " tucked" : "")}>
-        <m3e-toolbar
-          variant="standard"
-          shape="rounded"
-          className="lb-toolbar"
-          onMouseEnter={() => (dockHoverRef.current = true)}
-          onMouseLeave={() => {
-            dockHoverRef.current = false;
-            hideSoon();
-          }}
-        >
+      {/* Bottom dock: tucks out of view when idle; hover the visible
+          sliver, focus the URL field, or move the pointer / type to
+          bring it back. */}
+      <div
+        className={"lb-dock" + (dockTucked ? " tucked" : "")}
+        onMouseEnter={() => (dockHoverRef.current = true)}
+        onMouseLeave={() => {
+          dockHoverRef.current = false;
+          hideSoon();
+        }}
+      >
+        <div className="lb-dock-pill">
+          <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
@@ -605,6 +601,7 @@ export default function BrowserView(props: Props) {
             <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
         </m3e-toolbar>
+        </div>
       </div>
     </section>
   );
