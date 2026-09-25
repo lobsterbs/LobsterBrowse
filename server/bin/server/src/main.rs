@@ -12,7 +12,7 @@
 mod proxy;
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, RawQuery, State};
+use axum::extract::{OriginalUri, Path, RawQuery, State};
 use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
@@ -626,15 +626,15 @@ fn is_rewritable_url(v: &str) -> bool {
         || tl.starts_with("about:"))
 }
 
-fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str) -> String {
+fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     match resolve_url(page_url, value) {
-        Some(abs) => format!("/r/{}{}", b64url_encode(abs.as_bytes()), suffix),
+        Some(abs) => format!("{}{}{}", prefix, b64url_encode(abs.as_bytes()), suffix),
         None => value.to_string(),
     }
 }
 
 /// srcset="url 2x, url2 1x" — rewrite each candidate URL.
-fn rewrite_srcset(value: &str, page_url: &str, suffix: &str) -> String {
+fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
         let it = item.trim();
@@ -646,7 +646,7 @@ fn rewrite_srcset(value: &str, page_url: &str, suffix: &str) -> String {
         let desc = split.next().map(|d| d.trim()).unwrap_or("");
         let desc_s = if desc.is_empty() { String::new() } else { format!(" {}", desc) };
         if is_rewritable_url(u) {
-            parts.push(format!("{}{}", rewrite_url_attr(u, page_url, suffix), desc_s));
+            parts.push(format!("{}{}", rewrite_url_attr(u, page_url, suffix, prefix), desc_s));
         } else {
             parts.push(it.to_string());
         }
@@ -655,7 +655,7 @@ fn rewrite_srcset(value: &str, page_url: &str, suffix: &str) -> String {
 }
 
 /// Rewrite url(...) references in CSS against the stylesheet's own URL.
-fn rewrite_css(css: &str, base: &str, suffix: &str) -> String {
+fn rewrite_css(css: &str, base: &str, suffix: &str, prefix: &str) -> String {
     let lower = css.to_ascii_lowercase();
     let mut out = String::with_capacity(css.len());
     let mut i = 0usize;
@@ -689,7 +689,7 @@ fn rewrite_css(css: &str, base: &str, suffix: &str) -> String {
             Some(off) => {
                 let v = value.trim().to_string();
                 if is_rewritable_url(&v) {
-                    out.push_str(&rewrite_url_attr(&v, base, suffix));
+                    out.push_str(&rewrite_url_attr(&v, base, suffix, prefix));
                 } else {
                     out.push_str(&v);
                 }
@@ -707,7 +707,7 @@ fn rewrite_css(css: &str, base: &str, suffix: &str) -> String {
 
 /// Rewrite URL-bearing attributes inside a single tag.
 /// kind: 0 = plain URL attr, 1 = srcset, 2 = inline style CSS.
-fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str) -> String {
+fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let attrs: [(&str, u8); 6] = [
         ("href=", 0),
         ("src=", 0),
@@ -754,11 +754,11 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str) -> Stri
             }
         };
         let new_value = match kind {
-            1 => rewrite_srcset(&value, page_url, suffix),
-            2 => rewrite_css(&value, page_url, suffix),
+            1 => rewrite_srcset(&value, page_url, suffix, prefix),
+            2 => rewrite_css(&value, page_url, suffix, prefix),
             _ => {
                 if is_rewritable_url(&value) {
-                    rewrite_url_attr(&value, page_url, suffix)
+                    rewrite_url_attr(&value, page_url, suffix, prefix)
                 } else {
                     value.clone()
                 }
@@ -777,7 +777,7 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str) -> Stri
 /// Walk every tag in the document and rewrite URL-bearing attributes.
 /// Script bodies are copied verbatim (runtime fetch/XHR are patched by
 /// the injected shim); style blocks get CSS url() rewriting.
-fn rewrite_html(html: &str, page_url: &str, suffix: &str) -> String {
+fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let lower = html.to_ascii_lowercase();
     let mut out = String::with_capacity(html.len() + 1024);
     let mut i = 0usize;
@@ -808,7 +808,7 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str) -> String {
             continue;
         }
         if tag_lower.starts_with("<script") {
-            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix, prefix));
             match lower[end + 1..].find("</script") {
                 Some(c) => {
                     let cs = end + 1 + c;
@@ -824,23 +824,23 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str) -> String {
             continue;
         }
         if tag_lower.starts_with("<style") {
-            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+            out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix, prefix));
             match lower[end + 1..].find("</style") {
                 Some(c) => {
                     let cs = end + 1 + c;
                     let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
-                    out.push_str(&rewrite_css(&html[end + 1..cs], page_url, suffix));
+                    out.push_str(&rewrite_css(&html[end + 1..cs], page_url, suffix, prefix));
                     out.push_str(&html[cs..after_close]);
                     i = after_close;
                 }
                 None => {
-                    out.push_str(&rewrite_css(&html[end + 1..], page_url, suffix));
+                    out.push_str(&rewrite_css(&html[end + 1..], page_url, suffix, prefix));
                     break;
                 }
             }
             continue;
         }
-        out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix));
+        out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix, prefix));
         i = end + 1;
     }
     out
@@ -878,6 +878,7 @@ fn rewrite_html_doc(
     page_url: &str,
     params: &HashMap<String, String>,
     suffix: &str,
+    prefix: &str,
     state: &AppState,
 ) -> String {
     let mut filters: Vec<&adblock::FilterSet> = Vec::new();
@@ -895,7 +896,7 @@ fn rewrite_html_doc(
     let cleaned = strip_csp_meta(&cleaned);
     let cleaned = strip_base_tags(&cleaned);
     let cleaned = strip_integrity(&cleaned);
-    let rewritten = rewrite_html(&cleaned, page_url, suffix);
+    let rewritten = rewrite_html(&cleaned, page_url, suffix, prefix);
     // Challenge/CAPTCHA widget documents are integrity-sensitive: the
     // injected shim (console hooks, fetch patches, page globals) trips
     // anti-bot checks and the widget refuses to run. URL rewriting is
@@ -1089,6 +1090,7 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
 async fn engine_proxy(
     State(state): State<Arc<AppState>>,
     method: Method,
+    OriginalUri(uri): OriginalUri,
     Path(target): Path<String>,
     RawQuery(raw): RawQuery,
     headers: HeaderMap,
@@ -1142,6 +1144,11 @@ async fn engine_proxy(
     }
 
     let suffix = params_suffix(&params);
+    /* Rewritten links keep the entry route: pages loaded through
+       LobsterJet (/lj/) rewrite subresources and links to /lj/ so the
+       service worker's cache intercepts them; ScramJet entries stay
+       on /r/. */
+    let prefix = if uri.path().starts_with("/lj/") { "/lj/" } else { "/r/" };
     push_log(&state, "info", &format!("engine {} {}", method, url));
 
     let mut req = state.client.request(method.clone(), &fetch_url);
@@ -1211,7 +1218,8 @@ async fn engine_proxy(
             }
         }
         let mut decoded_target: Option<String> = None;
-        if let Some(rest) = path.strip_prefix("/r/") {
+        let stripped = path.strip_prefix("/r/").or_else(|| path.strip_prefix("/lj/"));
+        if let Some(rest) = stripped {
             let seg = rest.split(['?', '#']).next().unwrap_or("");
             if let Some(bytes) = b64url_decode(seg) {
                 if let Ok(real) = String::from_utf8(bytes) {
@@ -1275,14 +1283,14 @@ async fn engine_proxy(
                 if let Some(canon) = amp_canonical(&text, &base_url) {
                     if canon != base_url {
                         push_log(&state, "info", &format!("de-amp {} -> {}", base_url, canon));
-                        let route = format!("/r/{}{}", b64url_encode(canon.as_bytes()), suffix);
+                        let route = format!("{}{}{}", prefix, b64url_encode(canon.as_bytes()), suffix);
                         return de_amp_redirect(&route);
                     }
                 }
-                rewrite_html_doc(&text, &base_url, &params, &suffix, &state).into_bytes()
+                rewrite_html_doc(&text, &base_url, &params, &suffix, prefix, &state).into_bytes()
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                rewrite_css(&text, &base_url, &suffix).into_bytes()
+                rewrite_css(&text, &base_url, &suffix, prefix).into_bytes()
             } else if compress_img {
                 compress_jpeg(&bytes).unwrap_or_else(|| bytes.to_vec())
             } else {
