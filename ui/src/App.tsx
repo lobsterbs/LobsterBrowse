@@ -36,6 +36,23 @@ export default function App() {
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
+  /* Announce incognito flips with a real M3E snackbar, so the mode is
+     obvious even if the tab strip is tucked away. */
+  const firstIncognitoRun = useRef(true);
+  useEffect(() => {
+    if (firstIncognitoRun.current) {
+      firstIncognitoRun.current = false;
+      return;
+    }
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(
+        incognito
+          ? "Incognito on — history and session are not recorded"
+          : "Incognito off — history and session resume",
+        { duration: 4000 }
+      );
+    }
+  }, [incognito]);
   const closedTabs = useRef<Tab[]>([]);
   const prevTitle = useRef(document.title);
 
@@ -183,6 +200,8 @@ export default function App() {
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
           </m3e-nav-item>
           <m3e-tooltip for="nav-browse" position="after">Proxy browser</m3e-tooltip>
+          {/* Live tab count on the Browse item, real M3E badge. */}
+          {tabs.length > 0 && <m3e-badge for="nav-browse">{tabs.length}</m3e-badge>}
           <m3e-nav-item
             id="nav-settings"
             selected={view === "settings" ? "" : undefined}

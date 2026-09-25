@@ -361,7 +361,7 @@ export default function BrowserView(props: Props) {
 
   return (
     <section
-      className="lb-browser"
+      className={"lb-browser" + (props.incognito ? " incognito" : "")}
       ref={(el) => {
         rootRef.current = el as HTMLElement | null;
       }}
@@ -407,14 +407,24 @@ export default function BrowserView(props: Props) {
         <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
           <m3e-icon name="add" aria-hidden={true} />
         </m3e-icon-button>
-        <m3e-icon-button
-          aria-label={props.incognito ? "Leave incognito mode" : "Enter incognito mode"}
-          toggle
-          selected={props.incognito ? "" : undefined}
+        {/* Incognito mode indicator, pinned to the far right corner.
+            A labeled pill, not an icon: the "incognito" glyph does not
+            exist in the self-hosted Material Symbols build, so any icon
+            here would render as raw ligature text. Text is unambiguous. */}
+        <button
+          type="button"
+          id="lb-incognito-pill"
+          className={"lb-incognito" + (props.incognito ? " on" : "")}
+          aria-pressed={props.incognito}
           onClick={() => props.onIncognitoChange(!props.incognito)}
         >
-          <m3e-icon name="incognito" aria-hidden={true} />
-        </m3e-icon-button>
+          {props.incognito ? "Incognito on" : "Incognito"}
+        </button>
+        <m3e-tooltip for="lb-incognito-pill" position="below">
+          {props.incognito
+            ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
+            : "Turn on incognito: stops history and session recording."}
+        </m3e-tooltip>
       </div>
 
       {/* Content area: one same-origin engine iframe per tab, inactive ones stay mounted */}
