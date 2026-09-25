@@ -139,7 +139,7 @@ const ENGINE_JS: &str = r#"(function(){
   function unroute(s) {
     if (s.indexOf(location.origin + "/r/") === 0) s = s.slice(location.origin.length);
     if (s.indexOf("/r/") !== 0) return s;
-    var seg = s.slice(3).split("?")[0].split("#")[0];
+    var seg = s.slice(3).split('?')[0].split('#')[0];
     var B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     var bytes = [];
     for (var i = 0; i < seg.length; i += 4) {
@@ -165,7 +165,7 @@ const ENGINE_JS: &str = r#"(function(){
     if (tgt !== "_blank" && tgt !== "blank" && !e.ctrlKey && !e.metaKey && !e.shiftKey) return;
     if (e.altKey) return;
     var href = t.getAttribute("href") || "";
-    if (!href || href.indexOf("javascript:") === 0 || href.charAt(0) === "#") return;
+    if (!href || href.indexOf('javascript:') === 0 || href.charAt(0) === '#') return;
     e.preventDefault();
     var real = unroute(new URL(href, PAGE).href);
     send("navigate", { href: real, newTab: true });
@@ -883,42 +883,6 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
             }
         }
     }
-    if let Some(ua) = params.get("ua") {
-        if !ua.is_empty() {
-            parts.push(format!("ua={}", pct_enc(ua)));
-        }
-    }
-    if parts.is_empty() {
-        String::new()
-    } else {
-        format!("?{}", parts.join("&"))
-    }
-}
-
-fn engine_error_page(url: &str, detail: &str) -> Response {
-    // Scramjet compatibility layer: when the rewriter cannot handle a
-    // site, offer the deployed headless-browser service as fallback.
-    let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
-    let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}a.btn{{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:999px;background:#1a73e8;color:#fff;text-decoration:none;font-size:14px}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p><p><a class=\"btn\" href=\"{}\">Try in Scramjet (headless browser)</a></p>",
-        json_escape(url),
-        json_escape(detail),
-        scramjet
-    );
-    (
-        StatusCode::BAD_GATEWAY,
-        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        body,
-    )
-        .into_response()
-}
-
-/// Native rewriting engine: /r/<base64url target>[?opts][&page-query].
-///
-/// Known query keys (ab, trk, https, ua) are engine options; every other
-/// query key belongs to the target page, so GET forms submitting
-/// straight to a /r route keep working. HTML and CSS responses are
-/// rewritten; everything else streams through untouched.
-as
+    if let Some(ua) 
 
 ... [Content truncated]
