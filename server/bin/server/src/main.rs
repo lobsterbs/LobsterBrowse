@@ -279,6 +279,24 @@ fn host_of(url: &str) -> String {
     rest[..end].to_string()
 }
 
+/// Hosts that must never be stripped by ad/tracker filters: they serve
+/// CAPTCHA / anti-bot widgets (Cloudflare Turnstile and the challenge
+/// interstitial). A filter-list false positive here silently kills
+/// every captcha on the web.
+const CHALLENGE_HOSTS: &[&str] = &[
+    "challenges.cloudflare.com",
+    "cloudflare.com",
+    "js.stripe.com",
+    "hcaptcha.com",
+    "www.google.com", // reCAPTCHA
+    "recaptcha.net",
+];
+
+fn is_challenge_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    CHALLENGE_HOSTS.iter().any(|c| h == *c || h.ends_with(&format!(".{c}")))
+}
+
 /// Strip <script> / <iframe> tags whose src host is blocked.
 /// Naive scanner: adequate for ad/tracker delivery tags which are
 /// simple, single-line includes.
@@ -307,7 +325,9 @@ fn strip_blocked(html: &str, filters: &[&adblock::FilterSet]) -> String {
         };
         let tag = &html[i..i + g + 1];
         let host = extract_src_host(tag).unwrap_or_default();
-        let blocked = !host.is_empty() && filters.iter().any(|f| f.is_blocked_hostname(&host));
+        let blocked = !host.is_empty()
+            && !is_challenge_host(&host)
+            && filters.iter().any(|f| f.is_blocked_hostname(&host));
         if blocked {
             out.push_str(&html[copy_from..i]);
             if is_script {
@@ -870,6 +890,14 @@ fn rewrite_html_doc(
     let cleaned = strip_base_tags(&cleaned);
     let cleaned = strip_integrity(&cleaned);
     let rewritten = rewrite_html(&cleaned, page_url, suffix);
+    // Challenge/CAPTCHA widget documents are integrity-sensitive: the
+    // injected shim (console hooks, fetch patches, page globals) trips
+    // anti-bot checks and the widget refuses to run. URL rewriting is
+    // kept so their subresources still route through the engine; only
+    // the script injection is skipped.
+    if is_challenge_host(&host_of(page_url)) {
+        return rewritten;
+    }
     inject_shim(rewritten, page_url, suffix)
 }
 
@@ -899,11 +927,67 @@ fn engine_error_page(url: &str, detail: &str) -> Response {
     // Scramjet compatibility layer: when the rewriter cannot handle a
     // site, offer the deployed headless-browser service as fallback.
     let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
+    let direct = pct_enc(url);
+    let detail = json_escape(detail);
+    let url_js = json_escape(url);
+    // Standalone page inside the proxied iframe: matches the app's
+    // dynamic-color look as closely as a plain page can (prefers the
+    // M3 tokens when the parent app set them, falls back to a palette
+    // that follows light/dark mode), reports the failure to the UI's
+    // DevTools capture, and offers real actions.
     let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Load failed</title><style>body{{font-family:system-ui,sans-serif;padding:48px;color:#333;background:#fff}}h1{{font-size:20px}}p{{color:#777;font-size:14px;word-break:break-all}}a.btn{{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:999px;background:#1a73e8;color:#fff;text-decoration:none;font-size:14px}}</style><h1>LobsterBrowse could not load this page</h1><p>{}</p><p>{}</p><p><a class=\"btn\" href=\"{}\">Try in Scramjet (headless browser)</a></p>",
-        json_escape(url),
-        json_escape(detail),
-        scramjet
+        r#"<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="lb-load-error" content="{detail}">
+<title>Load failed</title>
+<style>
+:root {{ color-scheme: light dark; }}
+* {{ box-sizing: border-box; }}
+body {{ margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+  font-family: "Google Sans Flex", Roboto, system-ui, sans-serif;
+  background: #f7f5ff; color: #1b1b1f; }}
+@media (prefers-color-scheme: dark) {{ body {{ background:#141218; color:#e6e1e9; }} }}
+.card {{ max-width: 560px; width:calc(100% - 48px); padding:36px 36px 28px; border-radius:28px;
+  background:rgba(127,127,140,.12); border:1px solid rgba(127,127,140,.25); }}
+h1 {{ font-size:22px; margin:0 0 4px; }}
+.muted {{ opacity:.65; font-size:13px; }}
+.url {{ font-family:ui-monospace,monospace; font-size:12px; word-break:break-all;
+  background:rgba(127,127,140,.18); padding:10px 12px; border-radius:12px; margin:14px 0; }}
+.detail {{ font-size:13px; opacity:.8; word-break:break-word; margin:0 0 18px; }}
+.row {{ display:flex; gap:10px; flex-wrap:wrap; }}
+a.btn, button {{ appearance:none; border:none; cursor:pointer; text-decoration:none;
+  display:inline-flex; align-items:center; gap:6px; padding:10px 18px; border-radius:999px;
+  font:500 14px "Google Sans Flex", Roboto, system-ui, sans-serif; }}
+.primary {{ background:#6750a4; color:#fff; }}
+.dark .primary, :root.dark .primary {{ background:#cfbcff; color:#381e72; }}
+.plain {{ background:rgba(127,127,140,.2); color:inherit; }}
+.hint {{ margin-top:20px; font-size:12px; opacity:.55; }}
+</style></head><body>
+<div class="card" role="alert">
+  <h1>This page could not load</h1>
+  <p class="muted">The proxy engine failed to fetch the destination.</p>
+  <div class="url">{url_js}</div>
+  <p class="detail">{detail}</p>
+  <div class="row">
+    <button class="primary" onclick="location.reload()">Retry</button>
+    <a class="plain btn" href="{direct}" target="_blank" rel="noreferrer">Open directly (exposes your IP)</a>
+    <a class="plain btn" href="{scramjet}">Try Scramjet (headless browser)</a>
+  </div>
+  <p class="hint">Retry re-runs the request. "Open directly" bypasses the proxy: the site sees
+  your real IP. If this is a CAPTCHA-protected site, solving it directly may unblock the proxied
+  version afterwards (shared cookie jar does not apply).</p>
+</div>
+<script>
+try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", status:0,
+  error:{detail_json}, dur:0, ts:Date.now() }} }}, "*"); }} catch (e) {{}}
+</script>
+</body></html>"#,
+        detail = detail,
+        url_js = url_js,
+        direct = direct,
+        scramjet = scramjet,
+        url_json = format!("\"{}\"", url_js),
+        detail_json = format!("\"{}\"", detail),
     );
     (
         StatusCode::BAD_GATEWAY,
@@ -988,6 +1072,33 @@ async fn engine_proxy(
                     req = req.header(h, vs);
                 }
             }
+        }
+    }
+    // Referer recovery: the browser sends the engine-local route as the
+    // Referer of subresource requests. Decoding it back to the real page
+    // URL means upstream sites (and CAPTCHA providers like Cloudflare
+    // Turnstile, which validate the embedding page) see a sane Referer
+    // instead of an opaque /r/<base64> path.
+    if let Some(ref_hdr) = headers.get("referer").and_then(|v| v.to_str().ok()) {
+        let mut path = ref_hdr;
+        if let Some(idx) = ref_hdr.find("://") {
+            if let Some(start) = ref_hdr[idx + 3..].find('/') {
+                path = &ref_hdr[idx + 3 + start..];
+            }
+        }
+        let mut decoded_target: Option<String> = None;
+        if let Some(rest) = path.strip_prefix("/r/") {
+            let seg = rest.split(['?', '#']).next().unwrap_or("");
+            if let Some(bytes) = b64url_decode(seg) {
+                if let Ok(real) = String::from_utf8(bytes) {
+                    if real.starts_with("http://") || real.starts_with("https://") {
+                        decoded_target = Some(real);
+                    }
+                }
+            }
+        }
+        if let Some(real) = decoded_target {
+            req = req.header(reqwest::header::REFERER, real);
         }
     }
     if let Some(b) = body {

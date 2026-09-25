@@ -19,12 +19,17 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* Top bar is the real m3e-app-bar: container color, height, padding
-   and title typography all come from the component's own tokens, which
-   resolve from the dynamic m3e-theme palette, so the bar matches the
-   rest of the M3E chrome by construction. Title uses primary so the
-   brand accent follows the seed color set in Settings. */
-m3e-app-bar { --m3e-app-bar-title-text-color: var(--md-sys-color-primary); }
+/* Top bar is the real m3e-app-bar. The component's default container
+   token does not always resolve against the dynamic palette, which
+   left the bar visually detached from the rest of the chrome. Pin both
+   the container and title to the live M3 tokens so the bar always
+   matches the active seed. */
+m3e-app-bar {
+  --m3e-app-bar-container-color: var(--md-sys-color-surface);
+  --m3e-app-bar-title-text-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface) !important;
+  color: var(--md-sys-color-on-surface);
+}
 
 /* Smooth nav rail expansion: the rail's width and the content reflow
    animate together so labels/icons glide instead of snapping. */
@@ -235,40 +240,30 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-page.active { visibility: visible; }
 .lb-page iframe { width: 100%; height: 100%; border: none; background: #fff; }
 
-.lb-loading { position: absolute; inset: 0; padding: 24px; background: var(--md-sys-color-surface); z-index: 5; }
-.lb-skel { display: flex; flex-direction: column; gap: 12px; }
+.lb-loading { position: absolute; inset: 0; padding: 24px; background: var(--md-sys-color-surface); z-index: 5; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.lb-loading .lb-spinner { margin-top: 4vh; }
+.lb-skel { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px; opacity: 0.6;
 }
 
-/* Bottom dock toolbar: fully visible on first load, then smoothly
-   shrinks and tucks mostly out of view (scale + fade + slide — not a
-   plain translate). Hover or focus expands it again. Frosted pill so it
-   reads as part of the UI instead of a foreign bar. */
+/* Bottom dock toolbar: persistent, always visible, always clickable.
+   The previous hover-to-reveal design tucked the bar under the edge
+   with an invisible 22px hover strip covering the bottom of every
+   proxied page: on touch devices it never revealed, and the strip
+   swallowed clicks meant for the page. No transforms, no hover
+   dependency, no pointer-event tricks. */
 .lb-dock {
   position: absolute;
-  bottom: 0;
+  bottom: 10px;
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
   align-items: flex-end;
   z-index: 10;
-  height: 0;
-  pointer-events: none;
-}
-/* Invisible full-width strip along the bottom edge. This is the hover
-   target when the toolbar is tucked away, so the reveal does not depend
-   on hitting the pill's rounded 8px sliver. */
-.lb-dock::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 22px;
-  pointer-events: auto;
+  padding: 0 8px;
 }
 .lb-toolbar {
   pointer-events: auto;
@@ -279,8 +274,6 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
   transform: none;
   opacity: 1;
-  transform-origin: bottom center;
-  transition: transform 500ms cubic-bezier(0.2, 0, 0, 1), opacity 500ms ease;
   width: fit-content;
   min-width: min(780px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
@@ -292,20 +285,6 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   border-radius: 999px !important;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28) !important;
 }
-/* After the intro period the toolbar tucks fully below the edge,
-   leaving only a 12px sliver of its top border visible. Hover or
-   keyboard focus on that sliver pops it back out. */
-.lb-dock.settled .lb-toolbar {
-  /* !important: the m3e-toolbar component ships host styles that were
-     winning over this rule, leaving the toolbar permanently visible. */
-  transform: translateY(calc(100% - 4px)) !important;
-  opacity: 1;
-}
-.lb-dock:hover .lb-toolbar,
-.lb-dock:focus-within .lb-toolbar { transform: none !important; opacity: 1; }
-/* Once revealed, keep the toolbar itself hoverable so the pointer can
-   travel from the strip onto the toolbar without it snapping away. */
-.lb-dock .lb-toolbar { pointer-events: auto; }
 .lb-url-input {
   flex: 1 1 160px;
   min-width: 140px;
@@ -328,7 +307,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   top: 0; right: 0;
   width: min(480px, 100%);
   height: 100%;
-  background: var(--md-sys-color-surface);
+  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
   border-left: 1px solid var(--md-sys-color-outline);
   z-index: 8;
   display: flex;
@@ -347,13 +326,32 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-console-arrow { opacity: 0.6; flex-shrink: 0; }
 .lb-console-text { white-space: pre-wrap; word-break: break-word; }
 .lb-log .lb-console-text { opacity: 0.9; }
-.lb-info .lb-console-text { color: #1a73e8; }
-.lb-warn { background: rgba(234, 179, 8, 0.12); }
-.lb-error { background: rgba(186, 26, 26, 0.12); color: var(--md-sys-color-error); }
+.lb-info .lb-console-text { color: var(--md-sys-color-primary); }
+.lb-warn {
+  background: color-mix(in srgb, var(--md-sys-color-tertiary) 14%, transparent);
+}
+.lb-warn .lb-console-text { color: var(--md-sys-color-on-tertiary-container, var(--md-sys-color-tertiary)); }
+.lb-error {
+  background: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
+  color: var(--md-sys-color-error);
+}
+.lb-error .lb-console-text { color: var(--md-sys-color-error); }
 .lb-console-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
 .lb-net { flex: 1; overflow: auto; font-size: 12px; }
+
+/* Circular loading spinner, theme-aware. */
+.lb-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--md-sys-color-primary) 25%, transparent);
+  border-top-color: var(--md-sys-color-primary);
+  animation: lb-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes lb-spin { to { transform: rotate(360deg); } }
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: 8px; cursor: pointer; padding: 4px 6px; align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
@@ -485,7 +483,21 @@ m3e-icon-button:active { transform: scale(0.88); }
   background: var(--md-sys-color-surface);
   z-index: 5;
 }
-.lb-newtab-search { width: min(560px, 100%); }
+/* Search expands smoothly when focused or filled. */
+.lb-newtab-search {
+  width: min(420px, 100%);
+  transition: width 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+.lb-newtab-search:focus-within { width: min(640px, 100%); }
+/* m3e text field slotted input */
+.lb-newtab-search::part(input),
+.lb-newtab-search input {
+  width: 100%;
+  text-align: center;
+  transition: text-align 200ms ease;
+}
+.lb-newtab-search:focus-within::part(input),
+.lb-newtab-search:focus-within input { text-align: left; }
 .lb-newtab-links {
   display: flex;
   gap: 8px;
