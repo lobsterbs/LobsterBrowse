@@ -326,7 +326,13 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
   );
 
   return (
-    <m3e-card variant="elevated" className="lb-devtools" aria-label="Developer tools">
+    <m3e-card
+      variant="elevated"
+      ref={(el: any) => {
+        if (el) el.classList.add("lb-devtools");
+      }}
+      aria-label="Developer tools"
+    >
       <div className="lb-devtools-head">
         <span className="lb-devtools-title">
           <m3e-icon name="bug_report" aria-hidden={true} /> DevTools — {tab.title || "tab"}
@@ -342,7 +348,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
       </div>
 
       {/* Real M3E segmented button for the section switch. */}
-      <m3e-segmented-button className="lb-dt-seg" aria-label="Developer tools sections">
+      <m3e-segmented-button
+          ref={(el: any) => {
+            if (el) el.classList.add("lb-dt-seg");
+          }}
+          aria-label="Developer tools sections"
+        >
         {PAGES.map(([page, label, icon]) => (
           <m3e-button-segment
             key={page}
