@@ -122,9 +122,13 @@ const KEY = (k: string) => SITE + ":" + k;
 /* The SW cannot intercept WebSocket upgrades, so ws(s):// URLs are
    routed by the bootstrap over a wisp TCP stream: the HTTP Upgrade
    handshake, RFC 6455 client framing, and server frame unwrapping all
-   happen here. One wisp stream per WebSocket instance. Phase 1 covers
-   text frames end-to-end; binary frames land with the first suite
-   failure that needs them. */
+   happen here. One wisp stream per WebSocket instance.
+
+   Bug-scout fix: the first wisp DATA chunk usually carries the 101
+   handshake response AND (sometimes) websocket frames in the same
+   bytes. The handshake is now buffered separately until CRLFCRLF, the
+   status line is verified to be 101 (non-101 dispatches error + close),
+   and only the remainder is fed to the frame parser. */
 
 {
   const OWS = w.WebSocket as
@@ -156,14 +160,30 @@ const KEY = (k: string) => SITE + ":" + k;
       let streamId: number | null = null;
       const sendQ: Uint8Array[] = [];
 
+      // Handshake bytes accumulate until CRLFCRLF; after 101 the parser
+      // owns a separate rolling buffer for RFC 6455 frames.
+      let hsBuf = new Uint8Array(0);
+      let wsOpen = false;
+
+      function findCRLFCRLF(b: Uint8Array): number {
+        for (let i = 0; i + 3 < b.length; i++) {
+          if (b[i] === 13 && b[i + 1] === 10 && b[i + 2] === 13 && b[i + 3] === 10) return i;
+        }
+        return -1;
+      }
+      function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
+        const m = new Uint8Array(a.length + b.length);
+        m.set(a);
+        m.set(b, a.length);
+        return m;
+      }
+
       // Server frames can split across wisp DATA chunks: keep a
       // rolling buffer and unwrap only complete frames.
       let rxBuf = new Uint8Array(0);
 
       function unwrapServerFrames(bytes: Uint8Array): (string | ArrayBuffer)[] {
-        const merged = new Uint8Array(rxBuf.length + bytes.length);
-        merged.set(rxBuf);
-        merged.set(bytes, rxBuf.length);
+        const merged = concat(rxBuf, bytes);
         const msgs: (string | ArrayBuffer)[] = [];
         let i = 0;
         const dv = new DataView(merged.buffer);
@@ -210,37 +230,51 @@ const KEY = (k: string) => SITE + ":" + k;
         return msgs;
       }
 
+      function dispatchFrames(bytes: Uint8Array, client: WispC): void {
+        for (const m of unwrapServerFrames(bytes)) {
+          es.dispatchEvent(new MessageEvent("message", { data: m, origin: u.origin }));
+        }
+      }
+
+      function failHandshake(client: WispC, code: number): void {
+        wsState = WebSocket.CLOSED;
+        es.dispatchEvent(new Event("error"));
+        es.dispatchEvent(new CloseEvent("close", { code }));
+        if (streamId !== null) void client.close(streamId, 0x02);
+      }
+
       void (async () => {
         const { WispClient } = await import("./wisp");
         const client: WispC = new WispClient(wispUrl);
         const enc = new TextEncoder();
-        let wsOpen = false;
 
         streamId = await client.openStream(port, u.hostname, {
           onData: (chunk) => {
-            for (const m of unwrapServerFrames(chunk)) {
-              if (!wsOpen && typeof m === "string") {
-                // Handshake response must arrive first.
-                if (m.includes("\r\n\r\n")) {
-                  wsOpen = true;
-                  wsState = WebSocket.OPEN;
-                  es.dispatchEvent(new Event("open"));
-                  for (const q of sendQ) void client.write(streamId!, q);
-                  sendQ.length = 0;
-                }
-                continue;
+            if (!wsOpen) {
+              hsBuf = concat(hsBuf, chunk);
+              const sep = findCRLFCRLF(hsBuf);
+              if (sep < 0) return; // handshake still in flight
+              const head = new TextDecoder().decode(hsBuf.subarray(0, sep));
+              const rest = hsBuf.subarray(sep + 4);
+              hsBuf = new Uint8Array(0);
+              // Status line must be "HTTP/1.1 101 ..." (or HTTP/1.0).
+              if (!/^HTTP\/1\.[01] 101/.test(head)) {
+                failHandshake(client, 1002);
+                return;
               }
-              es.dispatchEvent(
-                new MessageEvent("message", {
-                  data: m,
-                  origin: u.origin,
-                }),
-              );
+              wsOpen = true;
+              wsState = WebSocket.OPEN;
+              es.dispatchEvent(new Event("open"));
+              for (const q of sendQ) void client.write(streamId!, q);
+              sendQ.length = 0;
+              if (rest.length) dispatchFrames(rest, client);
+              return;
             }
+            dispatchFrames(chunk, client);
           },
           onClose: () => {
             wsState = WebSocket.CLOSED;
-            es.dispatchEvent(new CloseEvent("close", { code: 1006 }));
+            es.dispatchEvent(new CloseEvent("close", { code: wsOpen ? 1006 : 1002 }));
           },
         });
 

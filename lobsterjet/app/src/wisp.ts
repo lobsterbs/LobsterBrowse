@@ -7,10 +7,13 @@
    handshake_info, connectTcp, dataPacket, continuePacket, closePacket,
    parseFrame.
 
-   Phase 2: keepalive heartbeat (stream-0 CONTINUE every 15 s) so idle
-   sessions are not reclaimed by intermediaries, and automatic
-   reconnect: if the socket drops while streams are open, the next
-   operation transparently reopens the connection. */
+   Phase 2: keepalive heartbeat + automatic reconnect. Bug-scout note:
+   stream-0 CONTINUE is NOT a legal heartbeat against our wisp-core
+   server: after the v2 handshake completes, ServerHandshake::handle()
+   re-matches it and silently flips the negotiated version to V1. The
+   heartbeat therefore uses a short-lived dummy stream: a CONNECT to a
+   loopback port followed by an immediate CLOSE. The traffic itself
+   keeps intermediaries from reclaiming the socket. */
 
 interface WispWasm {
   handshake_info(): Uint8Array;
@@ -46,8 +49,12 @@ interface Stream {
   onClose?: (reason: number) => void;
 }
 
-/** Heartbeat interval; stream-0 CONTINUE is valid control traffic. */
+/** Heartbeat interval. */
 const KEEPALIVE_MS = 15_000;
+/** Dummy heartbeat destination: loopback, almost certainly refused, so
+    the server answers with a CLOSE immediately after the CONNECT. */
+const HB_HOST = "127.0.0.1";
+const HB_PORT = 9;
 
 export class WispClient {
   private ws: WebSocket | null = null;
@@ -94,17 +101,25 @@ export class WispClient {
     return this.connecting;
   }
 
-  /** Keepalive: stream-0 CONTINUE at a fixed cadence. */
+  /** Keepalive: open-and-close a dummy stream at a fixed cadence. The
+      CONNECT/CLOSE exchange is ordinary wisp traffic on a nonzero
+      stream id, so it never re-enters the handshake state machine. */
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeat = setInterval(async () => {
-      if (!this.ws || this.ws.readyState > WebSocket.OPEN) return;
-      const m = await wispApi();
-      try {
-        this.ws.send(m.continuePacket(0, 128));
-      } catch {
-        this.stopHeartbeat();
-      }
+    this.heartbeat = setInterval(() => {
+      void (async () => {
+        if (!this.ws || this.ws.readyState > WebSocket.OPEN) return;
+        try {
+          await this.connect();
+          const m = await wispApi();
+          const id = this.nextId++;
+          // No handlers registered: the server's CLOSE is ignored.
+          this.ws!.send(m.connectTcp(id, HB_PORT, HB_HOST));
+          this.ws!.send(m.closePacket(id, 0x01));
+        } catch {
+          this.stopHeartbeat();
+        }
+      })();
     }, KEEPALIVE_MS);
   }
 

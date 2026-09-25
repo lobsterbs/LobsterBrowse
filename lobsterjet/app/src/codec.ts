@@ -2,7 +2,12 @@
    Destination encoded as base64url under a configurable prefix. The
    scheme is swappable so the URL shape can rotate (Phase 2): the SW
    accepts an lj:config message to change prefix/scheme at runtime, so a
-   deployment can rotate its path shape without a client rebuild. */
+   deployment can rotate its path shape without a client rebuild.
+
+   Bug-scout note: the SW previously hard-coded "/j/" in its route
+   check, the JsRewriter ctor and rewriteCss calls while decoding used
+   the rotated prefix: encoding and decoding disagreed after an
+   lj:config rotation. Everything now goes through the helpers below. */
 
 const B64URL =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -19,6 +24,18 @@ export function setScheme(p: string, s: "b64u" | "mirror" = "b64u"): void {
 
 export function currentPrefix(): string {
   return prefix;
+}
+
+export function currentScheme(): "b64u" | "mirror" {
+  return scheme;
+}
+
+/** True when a same-origin request path belongs to the engine (as
+    opposed to engine assets like /sw.js, /bootstrap.js, /devtools.html).
+    Must stay in lockstep with decodePath. */
+export function isEnginePath(path: string): boolean {
+  if (scheme === "mirror") return path === "/m/" || path.startsWith("/m/");
+  return path === prefix || path.startsWith(prefix);
 }
 
 export function b64uEncode(bytes: Uint8Array): string {
