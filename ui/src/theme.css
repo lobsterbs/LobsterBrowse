@@ -13,7 +13,7 @@ body {
   margin: 0;
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
-  font-family: "Google Sans Flex", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
+  font-family: "Google Sans Flex Variable", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
   font-variation-settings: "wght" 400;
 }
 
