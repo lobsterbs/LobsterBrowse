@@ -709,7 +709,7 @@ m3e-nav-rail {
    the nav item icons, whatever the button width. The id selector
    outspecifies the component own global rule. */
 #nav-rail > m3e-icon-button {
-  margin-inline: auto;
+  margin-inline: auto !important;
 }
 m3e-nav-rail m3e-nav-item { margin: 2px 0; }
 /* During proxy sessions the rail keeps its hamburger but hides the

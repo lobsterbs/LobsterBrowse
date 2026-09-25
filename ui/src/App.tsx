@@ -227,15 +227,11 @@ export default function App() {
     <m3e-theme color={settings.seed} strong-focus={true}>
       <div className="lb-shell">
         <m3e-nav-rail id="nav-rail" mode="compact" aria-label="LobsterBrowse" className={railHidden ? "lb-rail-hidden" : ""}>
-          {railHidden ? (
+          {/* Compact-only rail: the hamburger exists solely to bring the
+             rail back after the browse view collapsed it. */}
+          {railHidden && (
             <m3e-icon-button aria-label="Show navigation rail" onClick={() => setRailHidden(false)}>
               <m3e-icon name="menu" aria-hidden={true} />
-            </m3e-icon-button>
-          ) : (
-            <m3e-icon-button toggle aria-label="Toggle navigation rail">
-              <m3e-icon name="menu" aria-hidden={true} />
-              <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
-              <m3e-nav-rail-toggle for="nav-rail" />
             </m3e-icon-button>
           )}
           <m3e-nav-item
