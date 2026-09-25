@@ -37,14 +37,12 @@ m3e-app-bar {
   font-variation-settings: "wght" 600;
 }
 
-/* Smooth nav rail expansion: the rail's width and the content reflow
-   animate together so labels/icons glide instead of snapping. */
-m3e-nav-rail { transition: width 250ms cubic-bezier(0.2, 0, 0, 1); }
+/* Smooth nav rail: items glide on state changes. The host width is
+   owned by the component itself - overriding it (or clipping with
+   overflow) once collapsed the rail to an invisible sliver. */
 m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
 m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1); }
-/* The rail holds three items and a toggle: it must never scroll. */
-m3e-nav-rail { overflow: hidden; }
 
 .lb-shell { display: flex; min-height: 100vh; }
 .lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
@@ -525,6 +523,8 @@ m3e-nav-rail { overflow: hidden; }
   color: var(--md-sys-color-error);
 }
 .lb-error .lb-console-text { color: var(--md-sys-color-error); }
+/* Shared error-colored inline text (used by Logs, error overlays). */
+.lb-error-text { color: var(--md-sys-color-error); }
 .lb-console-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
@@ -643,7 +643,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
-  m3e-nav-rail m3e-nav-item, .lb-ac-item { transition: none; }
+  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item { transition: none; }
   .lb-view { animation: none; }
   .lb-tab:active, m3e-icon-button:active { transform: none; }
 }
@@ -664,6 +664,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* Search expands smoothly as the user types (state-driven .filled on
    a plain wrapper div; the m3e host fills it at 100%). */
 .lb-nt-search {
+  position: relative;
   width: min(420px, 100%);
   transition: width 320ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -687,12 +688,48 @@ m3e-icon-button:active { transform: scale(0.88); }
   justify-content: center;
   max-width: 720px;
 }
+/* New tab autocomplete: same look as the Home dropdown, but opens
+   downward from the expanding search wrapper. */
+.lb-nt-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  text-align: left;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.lb-nt-ac-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 18px;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 120ms ease, padding-left 120ms var(--m3e-spring);
+}
+.lb-nt-ac-item:hover,
+.lb-nt-ac-item.active {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+  padding-left: 22px;
+}
+.lb-nt-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Feature batch: rail compaction/hiding, lock popup, tab preview,
    smooth tab close/switch, error page, segment wrapping, small screens. ---- */
 
-/* Compact nav rail: narrower track, tighter items; contents stay. */
-m3e-nav-rail { width: 60px !important; }
+/* Rail item spacing only: the width is the component's own business. */
 m3e-nav-rail m3e-nav-item { margin: 2px 0; }
 /* Hidden rail during proxy sessions; the shell flexes, content fills. */
 m3e-nav-rail.lb-rail-hidden { display: none !important; }
@@ -724,50 +761,16 @@ m3e-nav-rail.lb-rail-hidden { display: none !important; }
 /* Toolbar centering spacers: equal growth both sides of the pill. */
 .lb-tb-spacer { flex: 1 1 0; min-width: 0; }
 
-/* Lock colors: green closed (https), red broken (http). Clickable. */
-.lb-tb-lock { cursor: pointer; }
+/* Lock colors: green closed (https), red broken (http). */
 .lb-tb-lock.secure { color: #1e8e3e; }
 .lb-tb-lock.insecure { color: #d93025; }
 
-/* Lock popup: opens upward from the pill like the autocomplete. */
-.lb-lockpanel {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  width: 320px;
-  max-width: calc(100vw - 32px);
-  z-index: 45;
-  background: var(--md-sys-color-surface, #fef7ff);
-  border: 1px solid var(--md-sys-color-outline, #79747e);
-  border-radius: 16px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  text-align: left;
-}
-.lb-lockpanel-head { display: flex; align-items: center; gap: 8px; font-variation-settings: "wght" 500; }
-.lb-lockpanel-head > span:last-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-lockpanel-close {
-  background: none; border: none; color: inherit; cursor: pointer;
-  display: flex; align-items: center; padding: 2px; border-radius: 999px;
-}
-.lb-lockpanel-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
-.lb-lockpanel-row span { opacity: 0.65; }
-.lb-lockpanel-row code { font-family: ui-monospace, monospace; word-break: break-all; }
-.lb-lockpanel-note { font-size: 11px; margin: 0; }
-.lb-lockpanel-cookies {
-  max-height: 130px;
-  overflow: auto;
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
-  border-radius: 12px;
-  padding: 6px 10px;
-  font-size: 12px;
-}
-.lb-lockpanel-ctitle { font-variation-settings: "wght" 500; margin-bottom: 4px; }
-.lb-lockpanel-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; padding: 2px 0; opacity: 0.85; }
-.lb-lockpanel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Site info is a real m3e-menu anchored to the lock glyph; only the
+   trigger wrapper and the long in-menu texts need our own styles. */
+.lb-tb-lock-wrap { display: inline-flex; align-items: center; cursor: pointer; padding: 2px; border-radius: 999px; }
+.lb-tb-lock-wrap:focus-visible { outline: 2px solid var(--md-sys-color-primary); }
+.lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; white-space: normal; }
+.lb-site-note { font-size: 11px; opacity: 0.65; white-space: normal; }
 
 /* Incognito icon button. */
 .lb-incognito-ic { width: 18px; height: 18px; display: inline-flex; }
@@ -870,13 +873,11 @@ m3e-nav-rail.lb-rail-hidden { display: none !important; }
   .lb-tab-preview { display: none; }
   .lb-tb-pill { flex-basis: 180px; max-width: 240px; min-width: 120px; }
   .lb-tb-spacer { flex: 0.4 1 0; }
-  .lb-lockpanel { left: auto; right: 0; width: 280px; }
   .lb-error { padding: 16px; }
   .lb-error-logs { max-height: 120px; }
   .lb-tab { max-width: 110px; }
   .lb-tab-title { max-width: 60px; }
   .lb-setting-group { padding: 8px 8px 4px; }
   .lb-view-content { padding: 0 4px; }
-  m3e-nav-rail { width: 52px !important; }
 }
 
