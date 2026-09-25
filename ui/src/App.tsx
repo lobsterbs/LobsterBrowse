@@ -29,6 +29,8 @@ export default function App() {
      browser view shows the full rail again. */
   const [railHidden, setRailHidden] = useState(false);
   useEffect(() => {
+    /* Entering the browse view slides the rail off-screen; the floating
+       hamburger stays and brings it back (and slides it away again). */
     setRailHidden(view === "browser");
   }, [view]);
   const [tabs, setTabs] = useState<Tab[]>(() => {
@@ -226,14 +228,20 @@ export default function App() {
   return (
     <m3e-theme color={settings.seed} strong-focus={true}>
       <div className="lb-shell">
+        {/* Browse view only: a floating hamburger toggles the rail.
+           It lives outside the rail so it stays put while the rail
+           itself slides off-screen; it sits on the rail axis (the
+           button is 40px in a 72px rail, so left 16px centers it). */}
+        {view === "browser" && (
+          <m3e-icon-button
+            className="lb-rail-menu"
+            aria-label={railHidden ? "Show navigation rail" : "Hide navigation rail"}
+            onClick={() => setRailHidden(!railHidden)}
+          >
+            <m3e-icon name={railHidden ? "menu" : "menu_open"} aria-hidden={true} />
+          </m3e-icon-button>
+        )}
         <m3e-nav-rail id="nav-rail" mode="compact" aria-label="LobsterBrowse" className={railHidden ? "lb-rail-hidden" : ""}>
-          {/* Compact-only rail: the hamburger exists solely to bring the
-             rail back after the browse view collapsed it. */}
-          {railHidden && (
-            <m3e-icon-button aria-label="Show navigation rail" onClick={() => setRailHidden(false)}>
-              <m3e-icon name="menu" aria-hidden={true} />
-            </m3e-icon-button>
-          )}
           <m3e-nav-item
             id="nav-home"
             selected={view === "home" ? "" : undefined}
