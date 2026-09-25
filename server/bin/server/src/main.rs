@@ -65,18 +65,21 @@ const ENGINE_JS: &str = r#"(function(){
     }
     return out;
   }
+  /* Route prefix follows the engine that served this page: /lj/ when
+     the navigation came through LobsterJet, /r/ for ScramJet. */
+  var PREFIX = location.pathname.indexOf("/lj/") === 0 ? "/lj/" : "/r/";
   function route(u) {
     if (u === null || u === undefined) return u;
     var s = String(u);
     if (!s) return s;
-    if (s.indexOf("/r/") === 0) return s;
-    if (s.indexOf(location.origin + "/r/") === 0) return s;
+    if (s.indexOf("/r/") === 0 || s.indexOf("/lj/") === 0) return s;
+    if (s.indexOf(location.origin + "/r/") === 0 || s.indexOf(location.origin + "/lj/") === 0) return s;
     if (/^(data|blob|javascript|mailto|tel|about):/i.test(s)) return s;
     var abs;
     try { abs = new URL(s, PAGE).href; } catch (e) { return s; }
     if (abs.indexOf(location.origin) === 0) return s;
     if (!/^https?:/i.test(abs)) return s;
-    return "/r/" + b64u(abs) + PARAMS;
+    return PREFIX + b64u(abs) + PARAMS;
   }
   window.__lbRoute = route;
   var of = window.fetch;
@@ -138,8 +141,11 @@ const ENGINE_JS: &str = r#"(function(){
   };
   function unroute(s) {
     if (s.indexOf(location.origin + "/r/") === 0) s = s.slice(location.origin.length);
-    if (s.indexOf("/r/") !== 0) return s;
-    var seg = s.slice(3).split('?')[0].split('#')[0];
+    if (s.indexOf(location.origin + "/lj/") === 0) s = s.slice(location.origin.length);
+    var seg = null;
+    if (s.indexOf("/r/") === 0) seg = s.slice(3).split('?')[0].split('#')[0];
+    else if (s.indexOf("/lj/") === 0) seg = s.slice(4).split('?')[0].split('#')[0];
+    if (seg === null) return s;
     var B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     var bytes = [];
     for (var i = 0; i < seg.length; i += 4) {
@@ -1294,6 +1300,77 @@ async fn engine_proxy(
     }
 }
 
+/// Search-engine suggestions, proxied server-side to dodge CORS.
+/// Every provider returns the same osjson shape: ["query", ["s1", ...]].
+async fn suggest_endpoint(
+    State(state): State<Arc<AppState>>,
+    RawQuery(raw): RawQuery,
+) -> Response {
+    let mut q = String::new();
+    let mut engine = String::new();
+    if let Some(rq) = raw.as_deref() {
+        for part in rq.split('&') {
+            let (k, v) = match part.find('=') {
+                Some(p) => (&part[..p], &part[p + 1..]),
+                None => (part, ""),
+            };
+            let v = percent_decode(v);
+            if k == "q" {
+                q = v;
+            } else if k == "engine" {
+                engine = v;
+            }
+        }
+    }
+    if q.trim().is_empty() {
+        return ([("content-type", "application/json")], r#"{"suggestions":[]}"#).into_response();
+    }
+    let q_enc = pct_enc(&q);
+    // Honest mapping: only providers with a working open suggestion API.
+    // Brave, Startpage and Mojeek have none, so they fall back to
+    // DuckDuckGo's endpoint.
+    let provider = match engine.as_str() {
+        "google" => format!("https://suggestqueries.google.com/complete/search?client=firefox&q={}", q_enc),
+        "bing" => format!("https://api.bing.com/osjson.aspx?q={}", q_enc),
+        _ => format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc),
+    };
+    push_log(&state, "info", &format!("suggest {}", q));
+    let body = state
+        .client
+        .get(&provider)
+        .header("Sec-GPC", "1")
+        .header("DNT", "1")
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .and_then(|r| r.text())
+        .map_err(|e| e.to_string());
+    let out = match body {
+        Ok(text) => {
+            let mut list: Vec<String> = Vec::new();
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(arr) = v.as_array() {
+                    if let Some(suggs) = arr.get(1).and_then(|x| x.as_array()) {
+                        for item in suggs.iter().take(8) {
+                            if let Some(t) = item.as_str() {
+                                if !t.is_empty() {
+                                    list.push(json_escape(t));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            format!("{{\"suggestions\":[{}]}}", list.join(","))
+        }
+        Err(e) => {
+            push_log(&state, "warn", &format!("suggest failed: {}", e));
+            r#"{"suggestions":[]}"#.to_string()
+        }
+    };
+    ([("content-type", "application/json")], out).into_response()
+}
+
 /// Recent server-side engine log entries, newest last. JSON array.
 async fn logs_endpoint(State(state): State<Arc<AppState>>) -> Response {
     let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
@@ -1347,7 +1424,12 @@ async fn main() {
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/r/:target", any(engine_proxy))
-        .route("/logs", get(logs_endpoint))
+        // LobsterJet entry: same engine handler, so pages work even when
+        // the service worker is not installed/ready yet. The worker layers
+        // its client-side cache on top of this route.
+        .route("/lj/:target", any(engine_proxy))
+                .route("/suggest", get(suggest_endpoint))
+.route("/logs", get(logs_endpoint))
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
