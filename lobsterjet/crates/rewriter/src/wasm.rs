@@ -46,7 +46,8 @@ impl JsRewriter {
 
     /// Phase 3 ad/tracker blocking: hosts whose subresource tags are
     /// dropped at rewrite time.
-    #[wasm_bindgen(js_name = "setBlockedHosts")]
+    // js_name matches the add_injection style (snake_case) on the JS side.
+    #[wasm_bindgen(js_name = "set_blocked_hosts")]
     pub fn set_blocked_hosts(&mut self, hosts: Vec<String>) {
         self.inner.set_blocked_hosts(hosts);
     }
