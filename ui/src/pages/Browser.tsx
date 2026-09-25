@@ -38,6 +38,7 @@ type Props = {
   setActiveId: (id: number) => void;
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
+  closeTab: (id: number) => void;
   onHistory: (url: string) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
