@@ -205,7 +205,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">LobsterJet cache</div>        <div className="lb-setting-group">
           <div className="lb-setting-label">LobsterJet cache</div>
           <p className="lb-muted">
             Cached proxied pages and local libraries live on this device in the service worker
