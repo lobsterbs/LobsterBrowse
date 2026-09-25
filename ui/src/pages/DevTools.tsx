@@ -268,18 +268,19 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
           <m3e-icon name="close" aria-hidden={true} />
         </m3e-icon-button>
       </div>
-      <m3e-segmented-button className="lb-dt-tabs" aria-label="Developer tools sections">
+      <m3e-divider />
+      <m3e-tabs variant="secondary" className="lb-dt-tabs" aria-label="Developer tools sections">
         {PAGES.map(([page, label, icon]) => (
-          <m3e-button-segment
+          <m3e-tab
             key={page}
-            checked={dt.page === page ? "" : undefined}
+            selected={dt.page === page ? "" : undefined}
             onClick={() => setDt({ page: page })}
           >
             <m3e-icon slot="icon" name={icon} aria-hidden={true} />
             {label}
-          </m3e-button-segment>
+          </m3e-tab>
         ))}
-      </m3e-segmented-button>
+      </m3e-tabs>
 
       {dt.page === "console" && (
         <div className="lb-dt-body">
@@ -487,18 +488,18 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               {dt.scripts.map((s) => (
                 <div key={s.id} className="lb-net-row lb-script-item">
                   <code className="lb-script-code">{s.code}</code>
-                  <label className="lb-check">
-                    <input
-                      type="checkbox"
-                      checked={s.autorun}
-                      onChange={(e) =>
+                  <span className="lb-dt-script-run">
+                    Run on page load
+                    <m3e-switch
+                      checked={s.autorun ? "" : undefined}
+                      aria-label="Run on page load"
+                      onClick={() =>
                         setDt({
-                          scripts: dt.scripts.map((x) => (x.id === s.id ? { ...x, autorun: e.target.checked } : x)),
+                          scripts: dt.scripts.map((x) => (x.id === s.id ? { ...x, autorun: !x.autorun } : x)),
                         })
                       }
-                    />{" "}
-                    Run on page load
-                  </label>
+                    />
+                  </span>
                   <m3e-icon-button aria-label="Run script" onClick={() => runCode(s.code)}>
                     <m3e-icon name="play_arrow" aria-hidden={true} />
                   </m3e-icon-button>

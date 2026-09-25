@@ -62,12 +62,44 @@ export default function BrowserView(props: Props) {
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
 
-  /* Dock: fully visible at first load, then smoothly shrinks and tucks
-     mostly out of view; hover or focus brings it back. */
-  const [dockSettled, setDockSettled] = useState(false);
+  /* Dock: tucks out of view after idle seconds; reappears when the
+     pointer nears the bottom edge, hovers the visible sliver, or
+     focuses the URL field. The tucked state leaves a 12px sliver of
+     the pill itself and the dock wrapper is pointer-events:none, so
+     no invisible strip intercepts page clicks (the original bug). */
+  const [dockTucked, setDockTucked] = useState(false);
+  const dockHoverRef = useRef(false);
+  const hideTimer = useRef<number | null>(null);
+  const hideSoon = () => {
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => {
+      if (!dockHoverRef.current) setDockTucked(true);
+      else hideSoon();
+    }, 3000);
+  };
   useEffect(() => {
-    const t = setTimeout(() => setDockSettled(true), 4000);
-    return () => clearTimeout(t);
+    const near = (y: number) => y > window.innerHeight - 96;
+    const onMove = (e: PointerEvent) => {
+      if (near(e.clientY)) {
+        setDockTucked(false);
+        hideSoon();
+      }
+    };
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t && near(t.clientY)) {
+        setDockTucked(false);
+        hideSoon();
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("touchstart", onTouch, { passive: true });
+    hideSoon();
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("touchstart", onTouch);
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    };
   }, []);
 
   /* Fullscreen for the browser area. */
@@ -431,7 +463,7 @@ export default function BrowserView(props: Props) {
 
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
-            <div className="lb-spinner" aria-hidden="true" />
+            <m3e-loading-indicator variant="contained" aria-label="Loading page" />
             <m3e-skeleton animation="wave" shape="rounded" className="lb-skel">
               <div style={{ width: "45%", height: 28 }} />
               <div style={{ width: "92%", height: 14 }} />
@@ -509,10 +541,19 @@ export default function BrowserView(props: Props) {
         )}
       </div>
 
-      {/* Bottom dock: fully visible on first load, then smoothly shrinks
-          and tucks mostly out of view. Hover or focus expands it. */}
-      <div className={"lb-dock" + (dockSettled ? " settled" : "")}>
-        <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
+      {/* Bottom dock: tucks out of view when idle; the pointer near the
+          bottom edge, hover, or focus brings it back. */}
+      <div className={"lb-dock" + (dockTucked ? " tucked" : "")}>
+        <m3e-toolbar
+          variant="standard"
+          shape="rounded"
+          className="lb-toolbar"
+          onMouseEnter={() => (dockHoverRef.current = true)}
+          onMouseLeave={() => {
+            dockHoverRef.current = false;
+            hideSoon();
+          }}
+        >
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
