@@ -62,11 +62,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # app/src/libcurl-transport-vendored.ts ships as a committed stub;
-      # the real libcurl.wasm build replaces it in the vendoring step.
-      - name: Transport stub notice
-        run: echo "vendored transport stub in place; suite reports transport-missing until vendored"
+      # Vendor the libcurl transport (TLS terminates client-side in
+      # libcurl.js; the SW cannot do TLS). The package is AGPL-3.0-only
+      # with a ~2.1 MB bundled dist, so it is never committed: CI pulls a
+      # pinned version and copies it into app/public/libcurl, where the
+      # committed adapter (src/libcurl-transport-vendored.ts) loads it
+      # at runtime. Deployments serving the built engine inherit AGPL
+      # obligations for that bundle and its combined work.
+      - name: Vendor libcurl transport
+        run: |
+          npm install --prefix .vendor @mercuryworkshop/libcurl-transport@2.0.5
+          mkdir -p app/public/libcurl
+          cp -r .vendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. app/public/libcurl/
+          # libcurl.js wasm binary, loaded by the transport at runtime.
+          cp -r .vendor/node_modules/libcurl.js/dist app/public/libcurl/libcurl.js
+          ls -la app/public/libcurl
       - run: cd app && npm install && npx tsc --noEmit && npm run build
+      - name: Verify vendored transport made it into the build
+        run: test -f app/dist/libcurl/index.mjs
       - name: Bootstrap size budget (must stay under 5 KB minified)
         run: |
           SIZE=$(wc -c < app/dist/bootstrap.js)
