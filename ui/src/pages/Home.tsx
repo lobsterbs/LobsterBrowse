@@ -1,23 +1,21 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
-import type { Bookmark } from "../store";
 
 type Props = {
   settings: Settings;
-  bookmarks: Bookmark[];
   history: string[];
   onNavigate: (target: string) => void;
 };
 
 type Suggestion = { icon: string; text: string; url: string };
 
-/* Suggestions: matching bookmarks, history entries, a direct URL when
-   the input looks like one, and the search fallback. Rendered by the
-   custom themed autocomplete (the m3e one never matched input or
-   styling reliably). */
+/* Suggestions: matching history entries, a direct URL when the input
+   looks like one, and the search fallback. Rendered by the custom
+   themed autocomplete (the m3e one never matched input or styling
+   reliably). */
 function buildSuggests(
   input: string,
-  opts: { history: string[]; bookmarks: Bookmark[]; engineName: string; search: string; remote?: string[]; searchFor: (q: string) => string }
+  opts: { history: string[]; engineName: string; search: string; remote?: string[]; searchFor: (q: string) => string }
 ): Suggestion[] {
   const q = input.trim();
   if (!q) return [];
@@ -30,11 +28,6 @@ function buildSuggests(
     }
   };
   const ql = q.toLowerCase();
-  for (const b of opts.bookmarks) {
-    if ((b.title || "").toLowerCase().includes(ql) || b.url.toLowerCase().includes(ql)) {
-      push("star", b.title || b.url, b.url);
-    }
-  }
   for (const h of opts.history) {
     if (h.toLowerCase().includes(ql)) push("history", h, h);
   }
@@ -46,7 +39,7 @@ function buildSuggests(
   return out;
 }
 
-export default function HomePage({ settings, bookmarks, history, onNavigate }: Props) {
+export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
@@ -75,7 +68,6 @@ export default function HomePage({ settings, bookmarks, history, onNavigate }: P
 
   const suggestions = buildSuggests(url, {
     history,
-    bookmarks,
     engineName: ENGINES[settings.engine].name,
     search: searchUrl(settings, url),
     remote,
@@ -164,9 +156,7 @@ export default function HomePage({ settings, bookmarks, history, onNavigate }: P
       </div>
 
       <p className="lb-muted" style={{ fontSize: 12, marginBottom: 24 }}>
-        {settings.proxySearch
-          ? "Loaded through this server inside the proxy browser."
-          : "Opens directly in your browser"}
+        Loaded through this server inside the proxy browser.
       </p>
 
     </section>

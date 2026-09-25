@@ -1,8 +1,6 @@
-/* On-device stores: browsing history, bookmarks, session tabs and a
-   client-side technical log ring buffer. All persisted in localStorage
-   under lobsterbrowse-* keys so "Delete all data" can wipe them. */
-
-export type Bookmark = { url: string; title: string; ts: number };
+/* On-device stores: browsing history, session tabs and a client-side
+   technical log ring buffer. All persisted in localStorage under
+   lobsterbrowse-* keys so "Delete all data" can wipe them. */
 
 export type Tab = {
   id: number;
@@ -16,7 +14,6 @@ export type Tab = {
 export type LogEntry = { ts: number; level: "info" | "warn" | "error"; msg: string };
 
 const HISTORY_KEY = "lobsterbrowse-history";
-const BOOKMARKS_KEY = "lobsterbrowse-bookmarks";
 const TABS_KEY = "lobsterbrowse-tabs";
 
 function readJson<T>(key: string, fallback: T): T {
@@ -52,28 +49,7 @@ export function addHistory(url: string): string[] {
   return trimmed;
 }
 
-/* ---- Bookmarks ---- */
-
-export function loadBookmarks(): Bookmark[] {
-  return readJson<Bookmark[]>(BOOKMARKS_KEY, []);
-}
-
-export function saveBookmarks(list: Bookmark[]) {
-  writeJson(BOOKMARKS_KEY, list);
-}
-
-export function toggleBookmark(list: Bookmark[], url: string, title: string): Bookmark[] {
-  if (list.some((b) => b.url === url)) {
-    const next = list.filter((b) => b.url !== url);
-    saveBookmarks(next);
-    return next;
-  }
-  const next = [{ url, title, ts: Date.now() }, ...list];
-  saveBookmarks(next);
-  return next;
-}
-
-/* ---- Session tabs (restore on reload) ---- */
+ (restore on reload) ---- */
 
 export function loadSessionTabs(): Tab[] {
   const tabs = readJson<Tab[]>(TABS_KEY, []);
@@ -124,29 +100,4 @@ export function clearAllData() {
   } catch {
     /* ignore */
   }
-}
-
-/* ---- Suggestions for the URL/search field ---- */
-
-export function buildSuggestions(input: string, opts: { history: string[]; bookmarks: Bookmark[]; engineName: string }): string[] {
-  const q = input.trim();
-  if (!q) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const push = (s: string) => {
-    if (!seen.has(s) && out.length < 8) {
-      seen.add(s);
-      out.push(s);
-    }
-  };
-  for (const b of opts.bookmarks) {
-    if (b.title.toLowerCase().includes(q.toLowerCase()) || b.url.toLowerCase().includes(q.toLowerCase())) {
-      push(b.url);
-    }
-  }
-  for (const h of opts.history) {
-    if (h.toLowerCase().includes(q.toLowerCase())) push(h);
-  }
-  push(q);
-  return out;
 }

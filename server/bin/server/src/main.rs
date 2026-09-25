@@ -1334,12 +1334,13 @@ async fn suggest_endpoint(
         return ([("content-type", "application/json")], r#"{"suggestions":[]}"#).into_response();
     }
     let q_enc = pct_enc(&q);
-    // Honest mapping: only providers with a working open suggestion API.
-    // Brave, Startpage and Mojeek have none, so they fall back to
-    // DuckDuckGo's endpoint.
+    // Honest mapping: providers with a working open suggestion API get
+    // their native endpoint; Startpage and Mojeek have none, so they
+    // fall back to DuckDuckGo's endpoint.
     let provider = match engine.as_str() {
         "google" => format!("https://suggestqueries.google.com/complete/search?client=firefox&q={}", q_enc),
         "bing" => format!("https://api.bing.com/osjson.aspx?q={}", q_enc),
+        "brave" => format!("https://search.brave.com/api/suggest?q={}", q_enc),
         _ => format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc),
     };
     push_log(&state, "info", &format!("suggest {}", q));

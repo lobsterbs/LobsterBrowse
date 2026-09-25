@@ -124,7 +124,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-list>
-          <Row label="Proxy through server (server-side)" icon="vpn_lock" on={settings.proxySearch} toggle={() => onChange({ proxySearch: !settings.proxySearch })} />
           <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
           <Row label="Prefetch links on hover (LobsterJet)" icon="bolt" on={settings.prefetchLinks} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
@@ -162,14 +161,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Tracker blocking (server-side)" icon="track_changes" on={settings.trackers} toggle={() => onChange({ trackers: !settings.trackers })} />
-          <Row
-            label="Compress JPEG images (server-side)"
-            icon="compress"
-            on={settings.compressImages}
-            toggle={() => onChange({ compressImages: !settings.compressImages })}
-          />
+          <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
       </Panel>
 
@@ -212,24 +205,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Custom outbound headers (server-side)</div>
-          <p className="lb-muted">
-            One header per line, "Name: value". Applied to every upstream request, so a profile can
-            override the engine defaults. Host, Content-Length, Connection, Transfer-Encoding and
-            Cookie are blocked.
-          </p>
-          <textarea
-            className="lb-input lb-console-area"
-            rows={3}
-            aria-label="Custom outbound headers"
-            placeholder={"Accept-Language: nb-NO,nb;q=0.9\nX-Custom-Header: anything"}
-            value={settings.customHeaders}
-            spellCheck={false}
-            onChange={(e) => onChange({ customHeaders: e.target.value })}
-          />
-        </div>
-        <m3e-divider />
-        <div className="lb-setting-group">
+          <div className="lb-setting-label">LobsterJet cache</div>        <div className="lb-setting-group">
           <div className="lb-setting-label">LobsterJet cache</div>
           <p className="lb-muted">
             Cached proxied pages and local libraries live on this device in the service worker
@@ -314,7 +290,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Data</div>
           {confirmDelete ? (
             <div className="lb-seed-row">
-              <span className="lb-muted">Delete bookmarks, history, sessions and settings on this device?</span>
+              <span className="lb-muted">Delete history, sessions and settings on this device?</span>
               <m3e-button variant="filled" onClick={onDeleteAll}>Yes, delete</m3e-button>
               <m3e-button onClick={() => setConfirmDelete(false)}>Cancel</m3e-button>
             </div>

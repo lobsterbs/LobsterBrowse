@@ -25,7 +25,7 @@ import {
   type Settings,
   type SiteRule,
 } from "../settings";
-import { pushLog, type Bookmark, type Tab } from "../store";
+import { pushLog, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
 
 type View = "home" | "browser" | "settings" | "logs";
@@ -38,9 +38,6 @@ type Props = {
   setActiveId: (id: number) => void;
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
-  closeTab: (id: number) => void;
-  bookmarks: Bookmark[];
-  onToggleBookmark: (url: string, title: string) => void;
   onHistory: (url: string) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
@@ -61,7 +58,7 @@ function tabLabel(t: Tab): string {
 }
 
 export default function BrowserView(props: Props) {
-  const { settings, rules, tabs, activeId, bookmarks } = props;
+  const { settings, rules, tabs, activeId } = props;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
@@ -70,7 +67,6 @@ export default function BrowserView(props: Props) {
   const lastNav = useRef<Map<number, string>>(new Map());
   const [status, setStatus] = useState<Record<number, { loading: boolean }>>({});
   const [dt, setDtState] = useState<Record<number, DtState>>({});
-  const [showBookmarks, setShowBookmarks] = useState(false);
   /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   /* Toolbar autocomplete: engine-queried suggestions, debounced. */
@@ -99,7 +95,8 @@ export default function BrowserView(props: Props) {
   const [mutedTabs, setMutedTabs] = useState<Set<number>>(new Set());
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
-  /* Site info menu data: the cookies the active page can read. */
+  /* Site info card: open state plus the cookies the page can read. */
+  const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
@@ -242,14 +239,6 @@ export default function BrowserView(props: Props) {
       delete n[tab.id];
       return n;
     });
-
-    if (!settings.proxySearch) {
-      /* Direct mode: hand the URL to the real browser. */
-      setStatus((prev) => ({ ...prev, [tab.id]: { loading: false } }));
-      window.open(url, "_blank", "noopener,noreferrer");
-      pushLog("warn", "proxy disabled — opened " + url + " directly (user IP exposed)");
-      return;
-    }
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true } }));
     const frame = frames.current.get(tab.id);
@@ -514,8 +503,6 @@ export default function BrowserView(props: Props) {
       load(active, url, { push: false });
     }
   };
-  const bookmarked = bookmarks.some((b) => b.url === active.url);
-
   /* Smooth close: the tab collapses first (.closing), the real close
      (and the siblings sliding over) lands after the animation. */
   const closeTabSmooth = (id: number) => {
@@ -860,15 +847,6 @@ export default function BrowserView(props: Props) {
                 </div>
               )}
             </div>
-            {bookmarks.length > 0 && (
-              <div className="lb-newtab-links">
-                {bookmarks.slice(0, 6).map((b) => (
-                  <m3e-button key={b.url} variant="tonal" size="small" onClick={() => load(active, b.url, { push: true })}>
-                    <m3e-icon name="star" aria-hidden={true} /> {b.title || b.url}
-                  </m3e-button>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -883,32 +861,6 @@ export default function BrowserView(props: Props) {
           />
         )}
 
-        {showBookmarks && (
-          <div className="lb-bookmark-panel">
-            <div className="lb-devtools-head">
-              <span className="lb-devtools-title">
-                <m3e-icon name="bookmarks" aria-hidden={true} /> Bookmarks
-              </span>
-              <m3e-icon-button aria-label="Close bookmarks" onClick={() => setShowBookmarks(false)}>
-                <m3e-icon name="close" aria-hidden={true} />
-              </m3e-icon-button>
-            </div>
-            {bookmarks.length === 0 && <p className="lb-muted">No bookmarks yet.</p>}
-            {bookmarks.map((b) => (
-              <div key={b.url} className="lb-bookmark-row">
-                <button className="lb-bookmark-link" onClick={() => load(active, b.url, { push: true })}>
-                  {b.title || b.url}
-                </button>
-                <m3e-icon-button
-                  aria-label="Remove bookmark"
-                  onClick={() => props.onToggleBookmark(b.url, b.title)}
-                >
-                  <m3e-icon name="delete" aria-hidden={true} />
-                </m3e-icon-button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Bottom dock: tucks out of view when idle; hover the visible
@@ -939,9 +891,7 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
-          {/* Equal flex spacers keep the center pill truly centered
-              in the toolbar regardless of the side button count. */}
-          <span className="lb-tb-spacer" aria-hidden={true} />
+          {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
@@ -968,37 +918,47 @@ export default function BrowserView(props: Props) {
                 ))}
               </div>
             )}
-            {/* Site info: a real M3E menu anchored to the lock glyph.
-                Facts are disabled items (not commands), actions are
-                standard items. */}
-            <m3e-menu id="lb-site-menu" aria-label="Site information">
-              <m3e-menu-item disabled>
-                <m3e-icon slot="icon" name="public" aria-hidden={true} />
-                {secure ? "Https connection" : "Http connection, not secure"}
-              </m3e-menu-item>
-              <m3e-menu-item disabled>
-                {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
-              </m3e-menu-item>
-              <m3e-divider />
-              <m3e-menu-item disabled>Site cookies ({siteCookies.length})</m3e-menu-item>
-              {siteCookies.slice(0, 8).map((c) => (
-                <m3e-menu-item key={c} disabled>
-                  <span className="lb-site-cookie">{c}</span>
-                </m3e-menu-item>
-              ))}
-              <m3e-menu-item onClick={clearSiteCookies}>
-                <m3e-icon slot="icon" name="delete" aria-hidden={true} />
-                Clear site cookies
-              </m3e-menu-item>
-              <m3e-menu-item onClick={exportCookies}>
-                <m3e-icon slot="icon" name="download" aria-hidden={true} />
-                Export CSV
-              </m3e-menu-item>
-              <m3e-divider />
-              <m3e-menu-item disabled>
-                <span className="lb-site-note">Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.</span>
-              </m3e-menu-item>
-            </m3e-menu>
+            {/* Site info: a real M3E card (elevated) anchored above the
+                lock glyph. Long cookie lists scroll inside the card. */}
+            {siteInfoOpen && (
+              <m3e-card variant="elevated" className="lb-site-card" aria-label="Site information">
+                <div slot="header" className="lb-site-head">
+                  <span
+                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
+                    aria-hidden={true}
+                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
+                  />
+                  <span className="lb-site-ctitle">{secure ? "Https connection" : "Http connection, not secure"}</span>
+                  <m3e-icon-button aria-label="Close site info" onClick={() => setSiteInfoOpen(false)}>
+                    <m3e-icon name="close" aria-hidden={true} />
+                  </m3e-icon-button>
+                </div>
+                <div slot="content" className="lb-site-body">
+                  <div className="lb-site-row">
+                    {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
+                  </div>
+                  <div className="lb-site-ctitle">Site cookies ({siteCookies.length})</div>
+                  {siteCookies.length > 0 && (
+                    <div className="lb-site-cookies">
+                      {siteCookies.slice(0, 12).map((c) => (
+                        <div key={c} className="lb-site-cookie">{c}</div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="lb-site-note">
+                    Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.
+                  </p>
+                </div>
+                <div slot="actions" className="lb-site-actions">
+                  <m3e-button onClick={clearSiteCookies}>
+                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
+                  </m3e-button>
+                  <m3e-button onClick={exportCookies}>
+                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
+                  </m3e-button>
+                </div>
+              </m3e-card>
+            )}
             {active.url && (
               <>
                 <span
@@ -1006,14 +966,16 @@ export default function BrowserView(props: Props) {
                   role="button"
                   tabIndex={0}
                   aria-label={secure ? "Https connection, site details" : "Not secure, site details"}
-                  onClick={loadSiteCookies}
+                  onClick={() => {
+                    loadSiteCookies();
+                    setSiteInfoOpen((v) => !v);
+                  }}
                 >
                   <span
                     className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
                     aria-hidden={true}
                     dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
                   />
-                  <m3e-menu-trigger for="lb-site-menu" />
                 </span>
                 {icons[active.id] ? (
                   <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
@@ -1068,7 +1030,6 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
-          <span className="lb-tb-spacer" aria-hidden={true} />
           <m3e-icon-button
             aria-label="Developer tools"
             toggle
@@ -1076,14 +1037,6 @@ export default function BrowserView(props: Props) {
             onClick={() => setDt(active.id, { open: !activeDt.open })}
           >
             <m3e-icon name="bug_report" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button
-            aria-label={bookmarked ? "Remove bookmark" : "Bookmark this page"}
-            toggle
-            selected={bookmarked ? "" : undefined}
-            onClick={() => props.onToggleBookmark(active.url, active.title)}
-          >
-            <m3e-icon name="star" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-icon-button
             aria-label={fullscreen ? "Exit full screen" : "Full screen"}

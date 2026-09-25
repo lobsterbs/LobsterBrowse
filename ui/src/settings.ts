@@ -62,7 +62,6 @@ export type SiteRule = {
   domain: string;
   uaPreset?: UaPresetId;
   adblock?: boolean;
-  trackers?: boolean;
 };
 
 export type ProxyEngineId = "scramjet" | "lobsterjet";
@@ -73,20 +72,15 @@ export type Settings = {
   /* Which proxy engine routes navigations: the built-in server-side
      rewriter (scramjet) or a deployed LobsterJet service. */
   proxyEngine: ProxyEngineId;
-  /* Route searches/URLs through the native engine. */
-  proxySearch: boolean;
-  /* Strip known ad hosts from proxied documents (server-side). */
+  /* Strip known ad and tracker hosts from proxied documents
+     (server-side). */
   adblock: boolean;
-  /* Strip known tracker hosts from proxied documents (server-side). */
-  trackers: boolean;
   /* Reject plain-http targets (server-side). */
   httpsOnly: boolean;
+  /* Serve known CDN libraries from the device (LobsterJet worker). */
+  decentraleyes: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
-  /* Re-encode JPEG images at lower quality (server-side). */
-  compressImages: boolean;
-  /* Custom outbound headers, one "Name: value" per line (server-side). */
-  customHeaders: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -103,14 +97,11 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
   engine: "duckduckgo",
   proxyEngine: "lobsterjet",
-  proxySearch: true,
   adblock: true,
-  trackers: true,
+  decentraleyes: true,
   httpsOnly: true,
   uaPreset: "chrome-win",
   uaCustom: "",
-  compressImages: true,
-  customHeaders: "",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -135,8 +126,7 @@ export function loadSettings(): Settings {
         parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
           ? parsed.proxyEngine
           : DEFAULT_SETTINGS.proxyEngine,
-      compressImages: parsed.compressImages === undefined ? true : Boolean(parsed.compressImages),
-      customHeaders: typeof parsed.customHeaders === "string" ? parsed.customHeaders : "",
+      decentraleyes: parsed.decentraleyes === undefined ? true : Boolean(parsed.decentraleyes),
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
@@ -200,14 +190,14 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string): str
   /* Engine options carry the lb_ prefix so the target page can keep
      query keys of its own (like ?ua= or ?ab=) without the engine
      swallowing them. */
-  if (s.adblock && rule?.adblock !== false) parts.push("lb_ab=1");
-  if (s.trackers && rule?.trackers !== false) parts.push("lb_trk=1");
+  if (s.adblock && rule?.adblock !== false) {
+    parts.push("lb_ab=1");
+    parts.push("lb_trk=1");
+  }
   if (s.httpsOnly) parts.push("lb_https=1");
-  if (s.compressImages) parts.push("lb_img=1");
+  parts.push("lb_img=1");
   const ua = resolveUa(s, rules, domain);
   if (ua) parts.push("lb_ua=" + encodeURIComponent(ua));
-  const hdrs = s.customHeaders.trim();
-  if (hdrs) parts.push("lb_hdrs=" + b64urlEncode(hdrs.slice(0, 600)));
   return parts.join("&");
 }
 
