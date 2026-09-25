@@ -136,6 +136,40 @@ const ENGINE_JS: &str = r#"(function(){
     } catch (e) {}
     return sa.call(this, n, v);
   };
+  function unroute(s) {
+    if (s.indexOf(location.origin + "/r/") === 0) s = s.slice(location.origin.length);
+    if (s.indexOf("/r/") !== 0) return s;
+    var seg = s.slice(3).split("?")[0].split("#")[0];
+    var B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    var bytes = [];
+    for (var i = 0; i < seg.length; i += 4) {
+      var n0 = B.indexOf(seg.charAt(i)), n1 = B.indexOf(seg.charAt(i + 1));
+      var n2 = i + 2 < seg.length ? B.indexOf(seg.charAt(i + 2)) : -1;
+      var n3 = i + 3 < seg.length ? B.indexOf(seg.charAt(i + 3)) : -1;
+      if (n0 < 0 || n1 < 0) return s;
+      bytes.push((n0 << 2) | (n1 >> 4));
+      if (n2 >= 0) bytes.push(((n1 & 15) << 4) | (n2 >> 2));
+      if (n3 >= 0) bytes.push(((n2 & 3) << 6) | n3);
+    }
+    var out = "";
+    try { out = decodeURIComponent(escape(String.fromCharCode.apply(null, bytes))); } catch (e) { out = ""; }
+    return out || s;
+  }
+  document.addEventListener("click", function(e){
+    if (e.defaultPrevented) return;
+    var t = e.target; while (t && t.nodeType === 1 && t.tagName !== "A") t = t.parentNode;
+    if (!t || !t.getAttribute) return;
+    var tgt = (t.getAttribute("target") || "").toLowerCase();
+    /* _blank and modified clicks open a new PROXY tab, never a real
+       browser tab (a real tab would leak the /r/ route URL). */
+    if (tgt !== "_blank" && tgt !== "blank" && !e.ctrlKey && !e.metaKey && !e.shiftKey) return;
+    if (e.altKey) return;
+    var href = t.getAttribute("href") || "";
+    if (!href || href.indexOf("javascript:") === 0 || href.charAt(0) === "#") return;
+    e.preventDefault();
+    var real = unroute(new URL(href, PAGE).href);
+    send("navigate", { href: real, newTab: true });
+  }, true);
   window.open = function(u) {
     try { if (u) { send("navigate", { href: new URL(String(u), PAGE).href, newTab: true }); return null; } } catch (e) {}
     return null;
@@ -885,193 +919,6 @@ fn engine_error_page(url: &str, detail: &str) -> Response {
 /// query key belongs to the target page, so GET forms submitting
 /// straight to a /r route keep working. HTML and CSS responses are
 /// rewritten; everything else streams through untouched.
-async fn engine_proxy(
-    State(state): State<Arc<AppState>>,
-    method: Method,
-    Path(target): Path<String>,
-    RawQuery(raw): RawQuery,
-    headers: HeaderMap,
-    body: Option<Bytes>,
-) -> Response {
-    let started = Instant::now();
-    let Some(decoded) = b64url_decode(&target) else {
-        return (StatusCode::BAD_REQUEST, "bad route").into_response();
-    };
-    let Ok(url) = String::from_utf8(decoded) else {
-        return (StatusCode::BAD_REQUEST, "bad route encoding").into_response();
-    };
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return (StatusCode::BAD_REQUEST, "target must be http(s)").into_response();
-    }
+as
 
-    let mut params: HashMap<String, String> = HashMap::new();
-    let mut page_query: Vec<&str> = Vec::new();
-    if let Some(rq) = raw.as_deref() {
-        for part in rq.split('&') {
-            if part.is_empty() {
-                continue;
-            }
-            let (k, v) = match part.find('=') {
-                Some(p) => (&part[..p], &part[p + 1..]),
-                None => (part, ""),
-            };
-            params.insert(k.to_string(), percent_decode(v));
-            if k != "ab" && k != "trk" && k != "https" && k != "ua" {
-                page_query.push(part);
-            }
-        }
-    }
-    let fetch_url = if page_query.is_empty() {
-        url.clone()
-    } else {
-        let sep = if url.contains('?') { '&' } else { '?' };
-        format!("{}{}{}", url, sep, page_query.join("&"))
-    };
-    if params.get("https").map(|v| v == "1").unwrap_or(false) && fetch_url.starts_with("http://") {
-        return engine_error_page(&url, "HTTPS-only mode: plain-http target rejected");
-    }
-
-    let suffix = params_suffix(&params);
-    push_log(&state, "info", &format!("engine {} {}", method, url));
-
-    let mut req = state.client.request(method.clone(), &fetch_url);
-    if let Some(ua) = params.get("ua") {
-        let cleaned: String = ua
-            .chars()
-            .filter(|c| c.is_ascii_graphic() || *c == ' ')
-            .take(512)
-            .collect();
-        if !cleaned.is_empty() {
-            req = req.header(reqwest::header::USER_AGENT, cleaned);
-        }
-    }
-    // Forward a couple of harmless request headers from the browser frame.
-    // (HeaderMap::get consumes its key, so use Copy &str keys here.)
-    for h in ["accept", "accept-language"] {
-        if let Some(v) = headers.get(h) {
-            if let Ok(vs) = v.to_str() {
-                if !vs.is_empty() {
-                    req = req.header(h, vs);
-                }
-            }
-        }
-    }
-    if let Some(b) = body {
-        req = req.body(b);
-    }
-
-    match req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            // Follows redirects: resolve relative URLs against the FINAL
-            // URL, not the one the user typed, or redirected pages
-            // rewrite every link against the wrong origin.
-            let base_url = resp.url().to_string();
-            if base_url != url {
-                push_log(&state, "info", &format!("engine redirect {} -> {}", url, base_url));
-            }
-            let ct = resp
-                .headers()
-                .get(reqwest::header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            let bytes = resp.bytes().await.unwrap_or_default();
-            let is_html = ct.contains("html");
-            let is_css = !is_html && ct.contains("css");
-            let out: Vec<u8> = if is_html {
-                let text = String::from_utf8_lossy(&bytes).into_owned();
-                rewrite_html_doc(&text, &base_url, &params, &suffix, &state).into_bytes()
-            } else if is_css {
-                let text = String::from_utf8_lossy(&bytes).into_owned();
-                rewrite_css(&text, &base_url, &suffix).into_bytes()
-            } else {
-                bytes.to_vec()
-            };
-            push_log(
-                &state,
-                "info",
-                &format!("engine done {} {} -> {} ({} ms)", method, url, status, started.elapsed().as_millis()),
-            );
-            let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response()
-        }
-        Err(e) => engine_error_page(&url, &e.to_string()),
-    }
-}
-
-/// Recent server-side engine log entries, newest last. JSON array.
-async fn logs_endpoint(State(state): State<Arc<AppState>>) -> Response {
-    let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
-    let body = format!("[{}]", logs.iter().cloned().collect::<Vec<String>>().join(","));
-    ([(header::CONTENT_TYPE, "application/json")], body).into_response()
-}
-
-fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
-    let mut text = builtin.to_string();
-    if let Ok(extra) = std::fs::read_to_string(extra_path) {
-        text.push('\n');
-        text.push_str(&extra);
-    }
-    adblock::compile(&text)
-}
-
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "lobster_server=info,tower_http=info".into()),
-        )
-        .init();
-
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(6001);
-    let wisp_path = std::env::var("WISP_PATH").unwrap_or_else(|_| "/wisp/".into());
-    let auth_password = std::env::var("WISP_PASSWORD").ok();
-
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(25))
-        .cookie_store(true)
-        .build()
-        .expect("reqwest client");
-
-    let state = Arc::new(AppState {
-        client,
-        logs: Mutex::new(VecDeque::new()),
-        ads: load_filters("adblock-extra.txt", AD_HOSTS),
-        trackers: load_filters("tracker-extra.txt", TRACKER_HOSTS),
-    });
-    push_log(&state, "info", "native engine log buffer initialised");
-
-    let wisp_state = Arc::new(proxy::ProxyState::new(auth_password));
-    let limiter = Arc::new(Mutex::new(guard::RateLimiter::default()));
-
-    let app = Router::new()
-        .route("/healthz", get(|| async { "ok" }))
-        .route("/r/:target", any(engine_proxy))
-        .route("/logs", get(logs_endpoint))
-        .fallback_service(
-            ServeDir::new("ui")
-                .append_index_html_on_directories(true)
-                .not_found_service(ServeFile::new("ui/index.html")),
-        )
-        .route(
-            &wisp_path,
-            get({
-                let state = wisp_state.clone();
-                let limiter = limiter.clone();
-                move |ws, headers| proxy::handle_upgrade(ws, headers, state, limiter)
-            }),
-        )
-        .layer(CorsLayer::permissive())
-        .with_state(state);
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
-    axum::serve(listener, app).await.expect("server error");
-}
+... [Content truncated]
