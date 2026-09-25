@@ -280,6 +280,8 @@ export default function App() {
             <div key={view} className="lb-view">
               {view === "home" && (
                 <HomePage
+                  settings={settings}
+                  history={history}
                   onNavigate={navigateTo}
                 />
               )}
