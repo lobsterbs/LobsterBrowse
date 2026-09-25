@@ -328,8 +328,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
   return (
     <m3e-card
       variant="elevated"
-      ref={(el: any) => {
-        if (el) el.classList.add("lb-devtools");
+      {...{
+        ref: (el: any) => {
+          if (el) el.classList.add("lb-devtools");
+        },
       }}
       aria-label="Developer tools"
     >
@@ -349,8 +351,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
 
       {/* Real M3E segmented button for the section switch. */}
       <m3e-segmented-button
-          ref={(el: any) => {
-            if (el) el.classList.add("lb-dt-seg");
+          {...{
+            ref: (el: any) => {
+              if (el) el.classList.add("lb-dt-seg");
+            },
           }}
           aria-label="Developer tools sections"
         >
