@@ -1,0 +1,150 @@
+//! wisp-wasm: thin wasm-bindgen wrapper over LobsterBrowse's wisp-core
+//! (Wisp v2.1). The service worker uses these helpers to build and parse
+//! frames; the protocol is NOT reimplemented here.
+//!
+//! Client handshake (v2): after the WebSocket opens with the wisp
+//! subprotocol, the server sends INFO(stream 0). The client replies with
+//! its own INFO(stream 0), then opens streams with CONNECT packets.
+
+use bytes::{Bytes, BytesMut};
+use wasm_bindgen::prelude::*;
+use wisp_core::{encode_packet, CloseReason, Frame, Packet, PacketType, StreamKind};
+
+pub const WISP_VERSION_MAJOR: u8 = 2;
+pub const WISP_VERSION_MINOR: u8 = 1;
+/// Wisp v2 subprotocol name for the WebSocket handshake.
+pub const WISP_SUBPROTOCOL: &str = "wisp";
+
+#[wasm_bindgen]
+pub struct JsFrame {
+    #[wasm_bindgen(js_name = "packetType")]
+    pub packet_type: u8,
+    #[wasm_bindgen(js_name = "streamId")]
+    pub stream_id: u32,
+    pub payload: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl JsFrame {
+    #[wasm_bindgen(getter, js_name = "isData")]
+    pub fn is_data(&self) -> bool {
+        self.packet_type == PacketType::Data as u8
+    }
+    #[wasm_bindgen(getter, js_name = "isContinue")]
+    pub fn is_continue(&self) -> bool {
+        self.packet_type == PacketType::Continue as u8
+    }
+    #[wasm_bindgen(getter, js_name = "isClose")]
+    pub fn is_close(&self) -> bool {
+        self.packet_type == PacketType::Close as u8
+    }
+    #[wasm_bindgen(getter, js_name = "closeReason")]
+    pub fn close_reason(&self) -> u8 {
+        if self.payload.first().copied().unwrap_or(0) == 0 && self.is_close() {
+            0
+        } else {
+            self.payload.first().copied().unwrap_or(0)
+        }
+    }
+    #[wasm_bindgen(getter, js_name = "bufferRemaining")]
+    pub fn buffer_remaining(&self) -> u32 {
+        u32::from_le_bytes([
+            self.payload.first().copied().unwrap_or(0),
+            self.payload.get(1).copied().unwrap_or(0),
+            self.payload.get(2).copied().unwrap_or(0),
+            self.payload.get(3).copied().unwrap_or(0),
+        ])
+    }
+}
+
+/// Client INFO for the v2 handshake (stream 0).
+#[wasm_bindgen]
+pub fn handshake_info() -> Vec<u8> {
+    let pkt = Packet::Info {
+        stream_id: 0,
+        major: WISP_VERSION_MAJOR,
+        minor: WISP_VERSION_MINOR,
+        extensions: Vec::new(),
+    };
+    encode_into_bytes(&pkt)
+}
+
+/// CONNECT for a new TCP stream to host:port.
+#[wasm_bindgen(js_name = "connectTcp")]
+pub fn connect_tcp(stream_id: u32, port: u16, hostname: String) -> Vec<u8> {
+    let pkt = Packet::Connect { stream_id, kind: StreamKind::Tcp, port, hostname };
+    encode_into_bytes(&pkt)
+}
+
+/// DATA payload on a stream.
+#[wasm_bindgen(js_name = "dataPacket")]
+pub fn data_packet(stream_id: u32, payload: Vec<u8>) -> Vec<u8> {
+    let pkt = Packet::Data { stream_id, payload };
+    encode_into_bytes(&pkt)
+}
+
+/// CONTINUE: tell the peer it may keep sending (buffer window).
+#[wasm_bindgen(js_name = "continuePacket")]
+pub fn continue_packet(stream_id: u32, buffer_remaining: u32) -> Vec<u8> {
+    let pkt = Packet::Continue { stream_id, buffer_remaining };
+    encode_into_bytes(&pkt)
+}
+
+/// CLOSE a stream (or stream 0 to end the whole connection).
+#[wasm_bindgen(js_name = "closePacket")]
+pub fn close_packet(stream_id: u32, reason: u8) -> Vec<u8> {
+    let reason = wisp_core::CloseReason::from_u8(reason).unwrap_or(CloseReason::Voluntary);
+    let pkt = Packet::Close { stream_id, reason };
+    encode_into_bytes(&pkt)
+}
+
+/// Parse one WebSocket message into a frame. Returns undefined if the
+/// message is not a valid frame (caller should drop the connection).
+#[wasm_bindgen(js_name = "parseFrame")]
+pub fn parse_frame(msg: Vec<u8>) -> Option<JsFrame> {
+    let mut buf = BytesMut::from(&msg[..]);
+    match Frame::decode(&mut buf) {
+        Ok(Some(frame)) => Some(JsFrame {
+            packet_type: frame.packet_type as u8,
+            stream_id: frame.stream_id,
+            payload: frame.payload.to_vec(),
+        }),
+        _ => None,
+    }
+}
+
+fn encode_into_bytes(pkt: &Packet) -> Vec<u8> {
+    let frame = encode_packet(pkt);
+    let mut out = BytesMut::with_capacity(5 + frame.payload.len());
+    frame.encode_into(&mut out);
+    out.to_vec()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn roundtrip_through_wrapper() {
+        let wire = connect_tcp(7, 443, "example.com".into());
+        assert_eq!(wire[0], 0x01);
+        let mut buf = BytesMut::from(&wire[..]);
+        let frame = Frame::decode(&mut buf).unwrap().unwrap();
+        let pkt = frame.parse_packet().unwrap();
+        match pkt {
+            Packet::Connect { stream_id, kind, port, hostname } => {
+                assert_eq!((stream_id, port, hostname), (7, 443, "example.com".to_string()));
+                assert!(matches!(kind, StreamKind::Tcp));
+            }
+            _ => panic!("wrong packet"),
+        }
+    }
+
+    #[test]
+    fn info_shape() {
+        let wire = handshake_info();
+        assert_eq!(wire[0], 0x05);
+        assert_eq!(wire[5], 2); // major
+        assert_eq!(wire[6], 1); // minor
+    }
+}

@@ -1,0 +1,114 @@
+name: lobsterjet
+
+on:
+  push:
+    paths: ["lobsterjet/**", ".github/workflows/lobsterjet.yml"]
+  pull_request:
+    paths: ["lobsterjet/**"]
+  schedule:
+    - cron: "0 3 * * *" # nightly compat suite
+
+defaults:
+  run:
+    working-directory: lobsterjet
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: cargo check -p lobsterjet-rewriter -p lobsterjet-wisp --target wasm32-unknown-unknown
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-pack --version 0.13.1 || true
+      - name: Build rewriter wasm
+        run: |
+          wasm-pack build crates/rewriter --target web --release --out-name rewriter_wasm
+          mkdir -p app/src/rewriter_wasm
+          cp crates/rewriter/pkg/rewriter_wasm* app/src/rewriter_wasm/
+      - name: Build wisp wasm
+        run: |
+          wasm-pack build crates/wisp-wasm --target web --release --out-name wisp_wasm
+          mkdir -p app/src/wisp_wasm
+          cp crates/wisp-wasm/pkg/wisp_wasm* app/src/wisp_wasm/
+      - name: Measure wasm bundles (record; budget enforcement Phase 1 gate)
+        run: |
+          du -b app/src/rewriter_wasm/rewriter_wasm_bg.wasm app/src/wisp_wasm/wisp_wasm_bg.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lj-wasm
+          path: lobsterjet/app/src/
+
+  app:
+    runs-on: ubuntu-latest
+    needs: wasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lj-wasm
+          path: lobsterjet/app/src/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Vendor libcurl transport
+        run: |
+          # Placeholder seam: CI vendors the libcurl.wasm build (same
+          # proven transport Scramjet uses) as src/libcurl-transport-vendored.
+          # Until vendoring is wired, emit the documented stub so the
+          # build succeeds and the suite reports transport-missing.
+          cat > app/src/libcurl-transport-vendored.ts <<'EOF'
+          export async function init(_cfg: { websocket: string }) {
+            throw new Error("libcurl transport not vendored yet (CI seam)");
+          }
+          export async function fetch(_url: string) {
+            throw new Error("libcurl transport not vendored yet (CI seam)");
+          }
+          EOF
+      - run: cd app && npm install && npx tsc --noEmit && npm run build
+      - name: Bootstrap size budget (must stay under 5 KB minified)
+        run: |
+          SIZE=$(wc -c < app/dist/bootstrap.js)
+          echo "bootstrap.js: $SIZE bytes"
+          test "$SIZE" -lt 5120
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lj-app
+          path: lobsterjet/app/dist/
+
+  compat:
+    # Nightly (and manual) only: needs a deployed engine. Phase 1 gate:
+    # YouTube + Reddit pass with ttfb ratio <= 2x.
+    if: github.event_name == "schedule"
+    runs-on: ubuntu-latest
+    needs: [rust, app]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build server + app, run probes locally
+        run: |
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          cargo build -p lj-server --release
+          cd app && npm install && npm run build && cd ..
+          ./target/release/lj-server --port 6002 &
+          sleep 2
+          node suite/probe.mjs --base http://localhost:6002
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lj-scoreboard
+          path: lobsterjet/suite/scoreboard.*
