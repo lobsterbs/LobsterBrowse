@@ -94,14 +94,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Proxy engine</div>
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              Scramjet (built-in)
+              Scramjet — default
             </m3e-button-segment>
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
               LobsterJet
             </m3e-button-segment>
           </m3e-segmented-button>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Scramjet rewrites pages on the server. LobsterJet registers a service worker and streams through the browser; it activates once the server deployment provides a LobsterJet engine.
+            Scramjet is the built-in engine and the default: it rewrites pages on this server, adds
+            adblock/tracker stripping, HTTPS-only enforcement and privacy signals (Sec-GPC / DNT) on
+            every upstream request. LobsterJet registers a service worker and streams through the
+            browser; it activates once the server deployment provides a LobsterJet engine.
           </p>
         </div>
         <div className="lb-setting-group">

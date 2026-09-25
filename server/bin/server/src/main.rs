@@ -1074,6 +1074,12 @@ async fn engine_proxy(
             }
         }
     }
+    // Privacy signals on every upstream request: Global Privacy Control
+    // and Do Not Track. The target site (and its trackers) receive an
+    // explicit "do not sell or share" signal, same as a privacy-first
+    // browser would send.
+    req = req.header("Sec-GPC", "1");
+    req = req.header("DNT", "1");
     // Referer recovery: the browser sends the engine-local route as the
     // Referer of subresource requests. Decoding it back to the real page
     // URL means upstream sites (and CAPTCHA providers like Cloudflare

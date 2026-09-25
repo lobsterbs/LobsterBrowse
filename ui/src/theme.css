@@ -43,6 +43,8 @@ m3e-nav-rail { transition: width 250ms cubic-bezier(0.2, 0, 0, 1); }
 m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
 m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1); }
+/* The rail holds three items and a toggle: it must never scroll. */
+m3e-nav-rail { overflow: hidden; }
 
 .lb-shell { display: flex; min-height: 100vh; }
 .lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
@@ -265,9 +267,48 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-tabstrip.compact .lb-tab-title { max-width: 90px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: 6px 8px; gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
-/* Incognito toggle in the tab strip: selected state uses the error
-   container tint so it reads as a mode, not a plain button. */
-.lb-tabstrip m3e-icon-button[selected] { color: var(--md-sys-color-on-error-container); background: var(--md-sys-color-error-container); }
+/* Incognito indicator: labeled pill pinned to the far right corner of the
+   tab strip. Off = quiet outline; on = dark hat-on state that cannot be
+   missed. Deliberately text-only: the "incognito" glyph does not exist in
+   the self-hosted Material Symbols font and would render as raw text. */
+.lb-incognito {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--md-sys-color-outline-variant, var(--md-sys-color-outline));
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
+  font-family: inherit;
+  font-size: 12px;
+  font-variation-settings: "wght" 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 180ms var(--m3e-spring), color 180ms ease, border-color 180ms ease;
+}
+.lb-incognito:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
+  color: var(--md-sys-color-on-surface);
+}
+.lb-incognito.on {
+  background: var(--md-sys-color-inverse-surface, #2a2a2a);
+  color: var(--md-sys-color-inverse-on-surface, #f5f5f5);
+  border-color: transparent;
+  font-variation-settings: "wght" 600;
+}
+/* Tucked strip: the pill collapses away with the add-tab button. */
+.lb-tabstrip.tucked:not(:hover) > .lb-incognito {
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+  transition: max-width 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), opacity 300ms ease;
+}
 
 /* Pages fill the whole browser area; the frosted tab strip floats
    above the rendered site. */
