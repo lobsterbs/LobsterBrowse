@@ -397,8 +397,10 @@ export default function BrowserView(props: Props) {
         rootRef.current = el as HTMLElement | null;
       }}
     >
-      {/* Frosted floating tab strip: sits over the page content */}
-      <div className="lb-tabstrip" role="tablist" aria-label="Proxy tabs">
+      {/* Frosted floating tab strip: sits over the page content. Shares
+          the dock's tucked state: after the idle timer it slides up
+          leaving a sliver and collapses to the single active tab. */}
+      <div className={"lb-tabstrip" + (dockTucked ? " tucked" : "")} role="tablist" aria-label="Proxy tabs">
         {tabs.map((t) => (
           <div
             key={t.id}
@@ -565,6 +567,19 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
+          {/* Current page identity in the toolbar: real favicon (fetched
+              through the engine, same blob cache as the tabs) + page
+              title, next to the URL field. */}
+          {active.url && (
+            <span className="lb-tb-page">
+              {icons[active.id] ? (
+                <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
+              ) : (
+                <m3e-icon name="public" aria-hidden={true} />
+              )}
+              <span className="lb-tb-title">{tabLabel(active)}</span>
+            </span>
+          )}
           <input
             className="lb-url-input"
             aria-label="URL or search"
