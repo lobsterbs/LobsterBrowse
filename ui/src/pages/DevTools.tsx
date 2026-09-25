@@ -142,13 +142,18 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
      proxied document. Same-origin frame, so this is a real DOM access. ---- */
   useEffect(() => {
     if (!picking) return;
-    const doc = frame()?.contentDocument;
-    if (!doc) return;
+    const f = frame();
+    if (!f) return;
+    let doc: Document | null = null;
     let current: Element | null = null;
     const outline = (el: Element | null, on: boolean) => {
       const e = el as HTMLElement | null;
-      if (!e || e === doc.documentElement || e === doc.body) return;
-      e.style.outline = on ? "2px solid var(--md-sys-color-primary, #E8552F)" : "";
+      if (!e || e === doc?.documentElement || e === doc?.body) return;
+      try {
+        e.style.outline = on ? "2px solid var(--md-sys-color-primary, #E8552F)" : "";
+      } catch {
+        /* element belonged to a document that is already gone */
+      }
     };
     const onMove = (ev: MouseEvent) => {
       const el = (ev.target as Element | null) ?? null;
@@ -175,16 +180,41 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
         setStyleDraft(info.style);
       }
     };
-    doc.addEventListener("mousemove", onMove, true);
-    doc.addEventListener("mouseleave", onLeave, true);
-    doc.addEventListener("click", onClick, true);
-    doc.body.style.cursor = "crosshair";
-    return () => {
+    const detach = () => {
+      if (!doc) return;
       doc.removeEventListener("mousemove", onMove, true);
       doc.removeEventListener("mouseleave", onLeave, true);
       doc.removeEventListener("click", onClick, true);
       outline(current, false);
-      doc.body.style.cursor = "";
+      current = null;
+      try {
+        if (doc.body) doc.body.style.cursor = "";
+      } catch {
+        /* navigating away already replaced the document */
+      }
+      doc = null;
+    };
+    const attach = () => {
+      detach();
+      doc = frame()?.contentDocument ?? null;
+      if (!doc) return;
+      doc.addEventListener("mousemove", onMove, true);
+      doc.addEventListener("mouseleave", onLeave, true);
+      doc.addEventListener("click", onClick, true);
+      try {
+        if (doc.body) doc.body.style.cursor = "crosshair";
+      } catch {
+        /* body not ready yet; the load re-attach covers it */
+      }
+    };
+    attach();
+    /* The frame's document is replaced on every navigation; re-attach
+       so picking survives a mid-pick navigation instead of dying
+       silently. */
+    f.addEventListener("load", attach);
+    return () => {
+      f.removeEventListener("load", attach);
+      detach();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picking]);

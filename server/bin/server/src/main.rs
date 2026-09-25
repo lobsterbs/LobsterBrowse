@@ -904,22 +904,99 @@ fn rewrite_html_doc(
 /// Engine option query string carried on to every rewritten URL.
 fn params_suffix(params: &HashMap<String, String>) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for k in ["ab", "trk", "https"] {
+    for k in ["ab", "trk", "https", "img"] {
         if let Some(v) = params.get(k) {
             if v == "1" {
-                parts.push(format!("{}=1", k));
+                parts.push(format!("lb_{}=1", k));
             }
         }
     }
     if let Some(ua) = params.get("ua") {
         if !ua.is_empty() {
-            parts.push(format!("ua={}", pct_enc(ua)));
+            parts.push(format!("lb_ua={}", pct_enc(ua)));
+        }
+    }
+    if let Some(h) = params.get("hdrs") {
+        if !h.is_empty() {
+            parts.push(format!("lb_hdrs={}", pct_enc(h)));
         }
     }
     if parts.is_empty() {
         String::new()
     } else {
         format!("?{}", parts.join("&"))
+    }
+}
+
+/// De-AMP: when the fetched page is an AMP variant, follow its
+/// <link rel="canonical"> back to the real page. Conservative: only
+/// triggered when the URL or the markup actually looks like AMP.
+fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
+    if !looks_amp {
+        return None;
+    }
+    let lower = html.to_ascii_lowercase();
+    let mut search = 0;
+    while let Some(i) = lower[search..].find("<link") {
+        let start = search + i;
+        let end = lower[start..].find('>').map(|j| start + j + 1)?;
+        let tag = &lower[start..end];
+        let is_canonical = tag.contains("rel=\"canonical\"")
+            || tag.contains("rel='canonical'")
+            || tag.contains("rel=canonical");
+        if is_canonical {
+            let tag_orig = &html[start..end];
+            let hp = tag_orig.find("href")?;
+            let eq = tag_orig[hp..].find('=')? + hp + 1;
+            let rest = tag_orig[eq..].trim_start();
+            let val = if rest.starts_with('"') || rest.starts_with(''') {
+                let q = rest.chars().next().unwrap();
+                rest[1..].split(q).next()?
+            } else {
+                rest.split([' ', '>', '/']).next()?
+            };
+            let abs = resolve_url(page_url, val)?;
+            if abs.starts_with("http://") || abs.starts_with("https://") {
+                return Some(abs);
+            }
+            return None;
+        }
+        search = end;
+    }
+    None
+}
+
+/// Self-contained same-origin redirect page used by de-AMP: replaces the
+/// proxied iframe with the canonical URL routed through the engine.
+fn de_amp_redirect(route: &str) -> Response {
+    let attr = route.replace('&', "&amp;").replace('"', "&quot;");
+    let js = json_escape(route);
+    let body = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\">\
+         <meta http-equiv=\"refresh\" content=\"0; url={attr}\">\
+         <script>try {{ location.replace(\"{js}\"); }} catch (e) {{}}</script>\
+         </head><body></body></html>"
+    );
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], body).into_response()
+}
+
+/// Re-encode a JPEG at lower quality to save bandwidth (Settings:
+/// image compression). Falls back to the original bytes on any error,
+/// and refuses inputs that are not clearly images (size cap guards RAM).
+fn compress_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
+    if bytes.len() > 8 * 1024 * 1024 || bytes.len() < 128 {
+        return None;
+    }
+    use image::codecs::jpeg::JpegEncoder;
+    let img = image::load_from_memory(bytes).ok()?;
+    let mut out: Vec<u8> = Vec::new();
+    let enc = JpegEncoder::new_with_quality(&mut out, 72);
+    img.write_with_encoder(enc).ok()?;
+    if out.len() < bytes.len() {
+        Some(out)
+    } else {
+        None
     }
 }
 
@@ -1034,9 +1111,18 @@ async fn engine_proxy(
                 None => (part, ""),
             };
             params.insert(k.to_string(), percent_decode(v));
-            if k != "ab" && k != "trk" && k != "https" && k != "ua" {
+            // Engine options are lb_-prefixed, so a target page can keep
+            // query keys like ?ua= or ?ab= of its own without the engine
+            // swallowing them. Legacy bare keys (routes saved before the
+            // rename) are still recognized for compatibility.
+            if !k.starts_with("lb_") {
                 page_query.push(part);
             }
+        }
+    }
+    for k in ["ab", "trk", "https", "ua", "hdrs", "img"] {
+        if let Some(v) = params.remove(&format!("lb_{}", k)) {
+            params.insert(k.to_string(), v);
         }
     }
     let fetch_url = if page_query.is_empty() {
@@ -1080,6 +1166,33 @@ async fn engine_proxy(
     // browser would send.
     req = req.header("Sec-GPC", "1");
     req = req.header("DNT", "1");
+    // Custom outbound header profile (Settings > Advanced): lines of
+    // "Name: value", base64url-encoded in the lb_hdrs param. Applied
+    // last so a profile can override the defaults above. Hop-by-hop and
+    // jar-managed headers are blocked.
+    if let Some(hdrs_b64) = params.get("hdrs") {
+        if let Some(raw) = b64url_decode(hdrs_b64) {
+            if let Ok(text) = String::from_utf8(raw) {
+                for line in text.lines().take(16) {
+                    let Some((name, value)) = line.split_once(':') else {
+                        continue;
+                    };
+                    let name = name.trim();
+                    let value: String = value.chars().filter(|c| *c != '' && *c != '
+').take(512).collect();
+                    let lower = name.to_ascii_lowercase();
+                    let valid = !name.is_empty()
+                        && !value.is_empty()
+                        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                        && !["host", "content-length", "connection", "transfer-encoding", "cookie"]
+                            .contains(&lower.as_str());
+                    if valid {
+                        req = req.header(name, value);
+                    }
+                }
+            }
+        }
+    }
     // Referer recovery: the browser sends the engine-local route as the
     // Referer of subresource requests. Decoding it back to the real page
     // URL means upstream sites (and CAPTCHA providers like Cloudflare
@@ -1127,15 +1240,46 @@ async fn engine_proxy(
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("application/octet-stream")
                 .to_string();
-            let bytes = resp.bytes().await.unwrap_or_default();
             let is_html = ct.contains("html");
             let is_css = !is_html && ct.contains("css");
+            let compress_img = params.get("img").map(|v| v == "1").unwrap_or(false)
+                && ct.starts_with("image/jpeg");
+            // Anything that is neither rewritten nor re-encoded streams
+            // straight through: large downloads and media must not be
+            // buffered in the server's RAM.
+            if !is_html && !is_css && !compress_img {
+                push_log(
+                    &state,
+                    "info",
+                    &format!("engine stream {} {} -> {}", method, url, status),
+                );
+                let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+                let stream = resp.bytes_stream();
+                return Response::builder()
+                    .status(axum_status)
+                    .header(header::CONTENT_TYPE, ct)
+                    .body(Body::from_stream(stream))
+                    .unwrap_or_else(|_| (StatusCode::BAD_GATEWAY, "stream error").into_response());
+            }
+            let bytes = resp.bytes().await.unwrap_or_default();
             let out: Vec<u8> = if is_html {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
+                // De-AMP: an AMP variant page redirects itself to its
+                // canonical URL, routed through the engine with the same
+                // options.
+                if let Some(canon) = amp_canonical(&text, &base_url) {
+                    if canon != base_url {
+                        push_log(&state, "info", &format!("de-amp {} -> {}", base_url, canon));
+                        let route = format!("/r/{}{}", b64url_encode(canon.as_bytes()), suffix);
+                        return de_amp_redirect(&route);
+                    }
+                }
                 rewrite_html_doc(&text, &base_url, &params, &suffix, &state).into_bytes()
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 rewrite_css(&text, &base_url, &suffix).into_bytes()
+            } else if compress_img {
+                compress_jpeg(&bytes).unwrap_or_else(|| bytes.to_vec())
             } else {
                 bytes.to_vec()
             };

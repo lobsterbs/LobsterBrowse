@@ -21,4 +21,5 @@ futures-util = "0.3"
 bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
