@@ -34,6 +34,8 @@ export default function App() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => store.loadBookmarks());
   const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
+  /* Incognito: no history recording, no session persistence while on. */
+  const [incognito, setIncognito] = useState(false);
   const closedTabs = useRef<Tab[]>([]);
   const prevTitle = useRef(document.title);
 
@@ -50,10 +52,10 @@ export default function App() {
     saveSiteRules(next);
   }, []);
 
-  /* Persist the session whenever tabs change. */
+  /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
-    store.saveSessionTabs(tabs);
-  }, [tabs]);
+    if (!incognito) store.saveSessionTabs(tabs);
+  }, [tabs, incognito]);
 
   /* Closing the last tab returns to Home. */
   useEffect(() => {
@@ -80,14 +82,6 @@ export default function App() {
     [tabs, activeId]
   );
 
-  const reopenTab = useCallback(() => {
-    const tab = closedTabs.current.pop();
-    if (!tab) return;
-    setTabs((prev) => [...prev, tab]);
-    setActiveId(tab.id);
-    setView("browser");
-  }, []);
-
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
@@ -98,8 +92,9 @@ export default function App() {
   }, []);
 
   const addHistory = useCallback((url: string) => {
+    if (incognito) return;
     setHistory(store.addHistory(url));
-  }, []);
+  }, [incognito]);
 
   /* Navigate the active proxy tab (used by Home search). */
   const navigateTo = useCallback(
@@ -119,60 +114,8 @@ export default function App() {
     [tabs, activeId, newTab]
   );
 
-  /* ---- Panic button ---- */
-  const matchKeys = (combo: string, e: KeyboardEvent): boolean => {
-    const parts = combo.split("+").map((p) => p.trim().toLowerCase());
-    if (parts.length === 0) return false;
-    const key = parts[parts.length - 1];
-    const needCtrl = parts.includes("ctrl");
-    const needShift = parts.includes("shift");
-    const needAlt = parts.includes("alt");
-    const needMeta = parts.includes("meta") || parts.includes("cmd");
-    const pressed = e.key.toLowerCase();
-    if (e.ctrlKey !== needCtrl || e.shiftKey !== needShift || e.altKey !== needAlt || e.metaKey !== needMeta) return false;
-    if (key.length === 1) return pressed === key;
-    return pressed === key || pressed === "escape" && key === "esc";
-  };
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      /* Panic button: checked first so it always wins. */
-      if (settings.panicEnabled && settings.panicKeys && matchKeys(settings.panicKeys, e)) {
-        e.preventDefault();
-        store.saveSessionTabs(tabs);
-        store.pushLog("warn", "panic shortcut triggered → " + settings.panicUrl);
-        window.location.replace(settings.panicUrl);
-        return;
-      }
-      if (!(e.ctrlKey || e.metaKey || e.key === "F12")) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.shiftKey && e.key.toLowerCase() === "r") {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("lb-reload"));
-      } else if (mod && e.key.toLowerCase() === "l") {
-        e.preventDefault();
-        const el =
-          (document.querySelector(".lb-url-input") as HTMLInputElement | null) ??
-          (document.querySelector("#lb-search-input") as HTMLInputElement | null);
-        el?.focus();
-        el?.select();
-      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "t") {
-        e.preventDefault();
-        newTab();
-      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "w") {
-        e.preventDefault();
-        if (activeId) closeTab(activeId);
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === "t") {
-        e.preventDefault();
-        reopenTab();
-      } else if (e.key === "F12") {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("lb-devtools"));
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [settings, tabs, activeId, newTab, closeTab, reopenTab]);
+  /* ---- Keyboard shortcuts removed by request: no global key
+     handling remains in the app. ---- */
 
   /* ---- Auto cloak ---- */
   useEffect(() => {
@@ -281,6 +224,8 @@ export default function App() {
                   bookmarks={bookmarks}
                   onToggleBookmark={toggleBookmark}
                   onHistory={addHistory}
+                  incognito={incognito}
+                  onIncognitoChange={setIncognito}
                   setView={setView}
                   onOpenLogs={() => setView("logs")}
                 />

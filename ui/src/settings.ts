@@ -45,7 +45,8 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
     ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
   },
   "chrome-android": {
-    name: "Chrome (Android)",
+    name: "Chrome
+ (Android)",
     ua: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
   },
   "safari-ios": {
@@ -83,10 +84,6 @@ export type Settings = {
   httpsOnly: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
-  /* Panic button: shortcut + destination. */
-  panicEnabled: boolean;
-  panicKeys: string;
-  panicUrl: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -103,12 +100,10 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsOnly: true,
   uaPreset: "chrome-win",
   uaCustom: "",
-  panicEnabled: false,
-  panicKeys: "Ctrl+Shift+X",
-  panicUrl: "https://www.wikipedia.org/",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
-  cloakTitle: "Wikipedia",
+  cloakTitle: "
+Wikipedia",
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -175,7 +170,8 @@ export function resolveUa(s: Settings, rules: SiteRule[], domain: string): strin
 
 /* Build the engine option query string for a target URL, applying
    global settings and per-site rules. */
-export function proxyParams(s: Settings, rules: SiteRule[], target: string): string {
+export function proxyParams(s: Settings, rules: SiteRule[], target
+: string): string {
   let domain = "";
   try {
     domain = new URL(target).hostname;
@@ -225,7 +221,8 @@ export function b64urlDecode(s: string): string {
 export function routeUrl(s: Settings, rules: SiteRule[], target: string): string {
   void s.proxyEngine;
   const params = proxyParams(s, rules, target);
-  return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
+  return "/r/" + b64urlEncode(target) +
+ (params ? "?" + params : "");
 }
 
 /* Recover the real URL from a /r/<b64> pathname ("" when invalid). */
