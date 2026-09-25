@@ -225,8 +225,10 @@ export default function App() {
       <div className="lb-cloak">
         <iframe title="Cloak" src={settings.cloakUrl} />
         <m3e-button
-          ref={(el: any) => {
-            if (el) el.classList.add("lb-cloak-return");
+          {...{
+            ref: (el: any) => {
+              if (el) el.classList.add("lb-cloak-return");
+            },
           }}
           variant="filled"
           onClick={uncloak}
@@ -247,7 +249,7 @@ export default function App() {
           id="nav-rail"
           mode="compact"
           aria-label="LobsterBrowse"
-          ref={railRef}
+          {...{ ref: railRef }}
           onClick={(e) => {
             /* Only the rail chrome itself toggles; clicks on nav items
                bubble up here and must not slide the rail away. */
