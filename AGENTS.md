@@ -30,7 +30,7 @@ The server also sends `Sec-GPC: 1` and `DNT: 1` on every upstream request, decod
 
 ### LobsterJet (service worker)
 
-`ui/public/lobsterjet.js` (cache `lobsterjet-v2`). Intercepts GET requests to same-origin `/lj/` paths only:
+`ui/public/lobsterjet.js` (page cache `lobsterjet-v3`, library cache `lobsterjet-decentraleyes-v1`). Intercepts GET requests to same-origin `/lj/` paths only:
 
 - fresh hit (< 10 min; stored Responses carry an `lb-cached-at` header): served straight from the cache;
 - stale hit: served immediately AND revalidated in the background (stale-while-revalidate);
@@ -38,6 +38,8 @@ The server also sends `Sec-GPC: 1` and `DNT: 1` on every upstream request, decod
 - network failure: 504 (no stale copy available).
 
 Cache cap: 60 entries; oldest-by-timestamp evicted on every write. Known gap: the cap is entry-count based, not byte based.
+
+Decentraleyes pass: the worker base64url-decodes the `/lj/` target; if it matches a known CDN library regex (jquery from code.jquery.com / ajax.googleapis.com / cdnjs, lodash, moment, d3 from cdnjs) it answers from the dedicated library cache, primed on first use from pinned jsDelivr URLs (7-day freshness). Version mapping is approximate (pinned major line); the goal is removing the third-party CDN request, not byte-identical files. If jsDelivr is unreachable the normal /lj/ flow takes over. Adding a library means adding a regex + asset pair in `LIBS`.
 
 Link prefetch: the React app (not the shim — the app has same-origin access to the proxied frame documents) attaches pointerover/focusin listeners to each frame document and fetches hovered links' routes through the worker, warming the cache before the click. Wiring lives in the same-origin poll effect in `ui/src/pages/Browser.tsx`, guarded by a WeakSet of wired documents. It skips `target="_blank"` and download links.
 
@@ -61,7 +63,14 @@ The UI consumes this via `fetchSuggestions()` in `ui/src/settings.ts`, debounced
 - The `m3e-icon-button` custom element has no `title` prop (build failure if you add one).
 - `tsc` is strict: custom-element props in JSX must exist in `m3e.d.ts`.
 - Hooks must not appear after early returns in components (conditional hook = crash).
-- The tab strip is `overflow-x: hidden` on purpose: tabs shrink (compact tier at >=6 tabs, tight/favicon-only at >=10) instead of scrolling. Do not reintroduce `overflow-x: auto`.
+- The tab strip is `overflow-x: hidden` on purpose: tabs shrink (compact tier at >=6 tabs, tight/favicon-only at >=10) instead of scrolling. Do not reintroduce `overflow-x: auto`. When the strip tucks idle it slides up leaving a sliver; the real tabs keep their shape (no fake single-tab collapse).
+- Tab close is animated client-side: the tab gets `.closing` for 240ms before the real `closeTab` prop call lands (`closeTabSmooth` in Browser.tsx). Tab switching fades via the `.lb-page` opacity transition.
+- Tab hover preview: a fixed panel under the strip renders a live but scriptless iframe (`sandbox="allow-same-origin"`, no allow-scripts — the page's JS never runs twice and audio can never double) plus a mute toggle. Muting records the tab in `mutedTabs`; the same-origin poll tick re-asserts `muted = true` on every audio/video in that tab's frame because pages keep creating new media elements.
+- The nav rail hides automatically while the browser view is active (state in App.tsx); a floating hamburger (`.lb-rail-fab`) restores it. The fab must stay OUTSIDE the `m3e-nav-rail` element — the rail is `display:none` while hidden and would hide the fab with it.
+- The nav rail badge (tab count) was removed by request. Do not re-add it.
+- The toolbar lock is a clickable inline SVG: green closed lock (https), red broken lock (http). Clicking opens the site-info popup (scheme/host/port, the cookies the page can read, clear-site-cookies which expires them on the host and every parent domain, CSV export). HttpOnly cookies live server-side in the proxy and are honestly documented as invisible in that popup. Certificate status was explicitly dropped from scope.
+- Settings `suggestQueries`, `prefetchLinks`, `autoHideChrome` (all default true, migration-safe in `loadSettings`) gate the suggestion fetches, the link prefetch wiring, and the idle tuck of the toolbar/tab strip respectively.
+- The server's error page (meta `lb-load-error`) is surfaced client-side as a full-area overlay (URL, message, technical log from the DevTools capture, single Try Again). No server changes are needed for it.
 - The bottom dock and tab strip share the `dockTucked` idle-tuck state; transforms must be applied to plain wrapper divs (`.lb-dock-pill`), not the m3e-toolbar host — Lit host display makes transforms silently do nothing.
 - The toolbar's center pill (`.lb-tb-pill`) shows lock + favicon + tab name when collapsed and expands in place into the editable URL when pressed (`tbExpanded` state, `.lb-tb-name` button in `ui/src/pages/Browser.tsx`). The pill owns the chrome (background/border/shape); the `.lb-url-input` inside it is bare text. Do not reintroduce the old separate `.lb-tb-page` + `.lb-tb-urlwrap` structure.
 - URL field text color is explicitly pinned (color, -webkit-text-fill-color, caret-color, placeholder) because of past reports of invisible text. Keep the hardcoded fallbacks.
@@ -77,5 +86,9 @@ Push to `main`, trigger a deploy, poll until `live` (or `build_failed`), and if 
 - Server code: single `main.rs`. Rewriting functions thread `page_url`, `suffix` (engine option query string), and `prefix` (`"/r/"` or `"/lj/"`) through the call chain: `rewrite_html_doc` -> `rewrite_html` -> `rewrite_tag` -> `rewrite_url_attr` / `rewrite_srcset` / `rewrite_css`. If you add a rewriting pass, keep the prefix threading intact or LobsterJet pages will leak onto `/r/` and bypass the service worker cache.
 - `b64url_encode` / `b64url_decode` are the base64url helpers for targets (UTF-8 safe).
 - UI state is localStorage-only (`store.ts`); settings in `settings.ts` with `DEFAULT_SETTINGS` + migration-safe `loadSettings`.
-- Incognito mode: no history recording, no session persistence. The incognito pill is intentionally a labeled text pill — keep it that way.
+- Incognito mode: no history recording, no session persistence. The toggle is an icon button (inline domino-mask SVG — `incognito` glyph missing from the font). Toggling ON suspends the whole normal session (stashed in a ref in App.tsx, never persisted) and opens one fresh empty incognito tab; toggling OFF closes the incognito tabs and restores the suspended session. The session-swap logic lives in `toggleIncognito` in `ui/src/App.tsx`.
 - Privacy stance: the UI stores nothing server-side; the server proxy inherently sees proxied traffic. Be honest about that in user-facing text (the settings panel and tooltips already are).
+
+## Roadmap: independence (planned, NOT yet)
+
+The goal is that LobsterJet eventually fetches upstream pages on its own (client-side, e.g. via a WISP-style engine in the service worker or an edge function we control) instead of depending on the ScramJet server-side rewriter for every byte. Both engines stay; nothing gets renamed. Until that lands, every LobsterJet route still transits the axum server — do not claim client-side fetching, and keep the Settings description honest about the server seeing proxied traffic.

@@ -57,7 +57,7 @@ export default function HomePage({ settings, bookmarks, history, onNavigate }: P
 
   useEffect(() => {
     const q = url.trim();
-    if (!q || looksLikeUrl(q)) {
+    if (!q || looksLikeUrl(q) || !settings.suggestQueries) {
       setRemote([]);
       return;
     }

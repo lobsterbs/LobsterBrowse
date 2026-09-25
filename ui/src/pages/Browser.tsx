@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
 import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
+import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import {
   decodeRoute,
   fetchSuggestions,
@@ -85,6 +86,21 @@ export default function BrowserView(props: Props) {
   const iconCache = useRef<Map<string, string>>(new Map());
   /* Frame documents that already have LobsterJet prefetch listeners. */
   const wiredDocs = useRef<WeakSet<Document>>(new WeakSet());
+  /* Tab-hover live preview: which tab, anchored at which screen x. */
+  const [preview, setPreview] = useState<{ id: number; x: number } | null>(null);
+  const previewTimer = useRef<number | null>(null);
+  /* Tabs muted from the hover preview; re-asserted on every poll tick. */
+  const [mutedTabs, setMutedTabs] = useState<Set<number>>(new Set());
+  /* Tabs animating closed; the real close lands after the collapse. */
+  const [closingIds, setClosingIds] = useState<number[]>([]);
+  /* Lock popup: connection info + cookies visible to the page. */
+  const [lockOpen, setLockOpen] = useState(false);
+  const [siteCookies, setSiteCookies] = useState<string[]>([]);
+  /* Load errors surfaced from the server's meta[lb-load-error]. */
+  const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
+  /* New tab search: smooth width expansion is state-driven, not a
+     classList mutation on the m3e host (React can wipe those). */
+  const [ntTyped, setNtTyped] = useState(false);
 
   /* Dock: tucks out of view when the app is idle; reappears on any
      pointer/keyboard activity in the app, on hovering the visible
@@ -96,6 +112,7 @@ export default function BrowserView(props: Props) {
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
   const hideSoon = () => {
+    if (!settings.autoHideChrome) return;
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
       if (!dockHoverRef.current) setDockTucked(true);
@@ -116,6 +133,12 @@ export default function BrowserView(props: Props) {
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
     };
   }, []);
+  useEffect(() => {
+    if (!settings.autoHideChrome) {
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      setDockTucked(false);
+    }
+  }, [settings.autoHideChrome]);
 
   /* Fullscreen for the browser area. */
   const rootRef = useRef<HTMLElement | null>(null);
@@ -208,6 +231,12 @@ export default function BrowserView(props: Props) {
       delete n[tab.id];
       return n;
     });
+    setErrors((prev) => {
+      if (!prev[tab.id]) return prev;
+      const n = { ...prev };
+      delete n[tab.id];
+      return n;
+    });
 
     if (!settings.proxySearch) {
       /* Direct mode: hand the URL to the real browser. */
@@ -258,12 +287,24 @@ export default function BrowserView(props: Props) {
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
       if (errMeta) {
         setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        pushLog("error", "load failed: " + (errMeta.content || "unknown error"));
+        const msg = errMeta.content || "unknown error";
+        setErrors((prev) =>
+          prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
+            ? prev
+            : { ...prev, [t.id]: { url: t.url, message: msg } }
+        );
+        pushLog("error", "load failed: " + msg);
         return;
       }
       if (!path.startsWith("/r/") && !path.startsWith("/lj/")) return;
       const real = decodeRoute(path);
       if (!real) return;
+      setErrors((prev) => {
+        if (!prev[t.id]) return prev;
+        const n = { ...prev };
+        delete n[t.id];
+        return n;
+      });
       if (real !== t.url) {
         const stack = [...t.stack.slice(0, t.idx + 1), real];
         props.updateTab(t.id, { url: real, stack, idx: stack.length - 1 });
@@ -277,9 +318,21 @@ export default function BrowserView(props: Props) {
         return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
       });
       loadFavicon(t.id, real, doc);
+      /* Re-assert muted tabs: pages keep creating new media elements. */
+      for (const mid of mutedTabs) {
+        const mf = frames.current.get(mid);
+        try {
+          const els = mf && mf.contentDocument ? mf.contentDocument.querySelectorAll("audio,video") : [];
+          els.forEach((el) => {
+            (el as HTMLMediaElement).muted = true;
+          });
+        } catch {
+          /* frame went cross-origin; nothing to do */
+        }
+      }
       /* LobsterJet prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
-      if (!wiredDocs.current.has(doc)) {
+      if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
         wiredDocs.current.add(doc);
         const prefix = settings.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";
         const prefetch = (el: EventTarget | null) => {
@@ -297,7 +350,7 @@ export default function BrowserView(props: Props) {
     }, 1200);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.id, tabs, settings, rules]);
+  }, [active?.id, tabs, settings, rules, mutedTabs]);
 
   /* ---- Hook messages from proxied pages ---- */
   useEffect(() => {
@@ -373,7 +426,7 @@ export default function BrowserView(props: Props) {
      hook order never changes between renders. */
   useEffect(() => {
     const q = draft.trim();
-    if (!q) {
+    if (!q || !settings.suggestQueries) {
       setTbSugg([]);
       setTbSuggOpen(false);
       setTbSuggIdx(-1);
@@ -431,6 +484,95 @@ export default function BrowserView(props: Props) {
   };
   const bookmarked = bookmarks.some((b) => b.url === active.url);
 
+  /* Smooth close: the tab collapses first (.closing), the real close
+     (and the siblings sliding over) lands after the animation. */
+  const closeTabSmooth = (id: number) => {
+    if (closingIds.includes(id)) return;
+    setClosingIds((prev) => [...prev, id]);
+    window.setTimeout(() => {
+      setClosingIds((prev) => prev.filter((x) => x !== id));
+      props.closeTab(id);
+    }, 240);
+  };
+
+  /* Hover preview mute: the poll tick re-asserts it every second. */
+  const toggleMute = (id: number) => {
+    setMutedTabs((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  /* ---- Lock popup: connection facts + cookies of the active site. ---- */
+  const secure = !!active.url && active.url.startsWith("https://");
+  let uParts = { scheme: "", host: "", port: "" };
+  try {
+    const u = new URL(active.url);
+    uParts = {
+      scheme: u.protocol.replace(":", ""),
+      host: u.hostname,
+      port: u.port || (u.protocol === "https:" ? "443 (default)" : "80 (default)"),
+    };
+  } catch {
+    /* not a URL yet */
+  }
+  const openLock = () => {
+    const f = frames.current.get(active.id);
+    let jar: string[] = [];
+    try {
+      const doc = f ? f.contentDocument : null;
+      jar = doc && doc.cookie ? doc.cookie.split(";").map((c) => c.trim()).filter(Boolean) : [];
+    } catch {
+      jar = [];
+    }
+    setSiteCookies(jar);
+    setLockOpen((v) => !v);
+  };
+  /* Expire every cookie the page can see, on the host and every
+     parent domain, so nothing survives. */
+  const clearSiteCookies = () => {
+    const f = frames.current.get(active.id);
+    try {
+      const doc = f ? f.contentDocument : null;
+      if (!doc) return;
+      const host = new URL(active.url).hostname;
+      const domains = [host, ...host.split(".").map((_, i) => host.split(".").slice(i).join(".")).slice(1)];
+      const names = doc.cookie.split(";").map((c) => c.trim().split("=")[0]).filter(Boolean);
+      for (const n of names) {
+        for (const d of domains) {
+          doc.cookie = n + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/" + (d !== host ? ";domain=" + d : "");
+        }
+      }
+      setSiteCookies(doc.cookie.split(";").map((c) => c.trim()).filter(Boolean));
+      pushLog("info", "cleared " + names.length + " site cookie(s) for " + host);
+    } catch {
+      /* frame not reachable */
+    }
+  };
+  const exportCookies = () => {
+    let domain = "";
+    try {
+      domain = new URL(active.url).hostname;
+    } catch {
+      /* keep empty */
+    }
+    const rows = [["name", "value", "domain"]].concat(
+      siteCookies.map((c) => {
+        const i = c.indexOf("=");
+        return [i === -1 ? c : c.slice(0, i), i === -1 ? "" : c.slice(i + 1), domain];
+      })
+    );
+    const csv = rows.map((r) => r.map((x) => '"' + x.replace(/"/g, '""') + '"').join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "lobsterbrowse-cookies.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <section
       className={"lb-browser" + (props.incognito ? " incognito" : "")}
@@ -440,7 +582,8 @@ export default function BrowserView(props: Props) {
     >
       {/* Frosted floating tab strip: sits over the page content. Shares
           the dock's tucked state: after the idle timer it slides up
-          leaving a sliver and collapses to the single active tab. */}
+          leaving a sliver; the real tabs keep their shape and positions
+          (just mostly off-screen), no fake single-tab collapse. */}
       <div
         className={
           "lb-tabstrip" +
@@ -456,8 +599,17 @@ export default function BrowserView(props: Props) {
             key={t.id}
             role="tab"
             aria-selected={t.id === active.id}
-            className={"lb-tab" + (t.id === active.id ? " active" : "")}
+            className={"lb-tab" + (t.id === active.id ? " active" : "") + (closingIds.includes(t.id) ? " closing" : "")}
             onClick={() => props.setActiveId(t.id)}
+            onMouseEnter={(e) => {
+              const x = (e.currentTarget as HTMLElement).getBoundingClientRect().left;
+              if (previewTimer.current) window.clearTimeout(previewTimer.current);
+              previewTimer.current = window.setTimeout(() => setPreview({ id: t.id, x }), 350);
+            }}
+            onMouseLeave={() => {
+              if (previewTimer.current) window.clearTimeout(previewTimer.current);
+              previewTimer.current = window.setTimeout(() => setPreview(null), 150);
+            }}
           >
             {icons[t.id] ? (
               <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
@@ -471,7 +623,7 @@ export default function BrowserView(props: Props) {
               className="lb-tab-close"
               onClick={(e) => {
                 e.stopPropagation();
-                props.closeTab(t.id);
+                closeTabSmooth(t.id);
               }}
             />
           </div>
@@ -479,18 +631,20 @@ export default function BrowserView(props: Props) {
         <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
           <m3e-icon name="add" aria-hidden={true} />
         </m3e-icon-button>
-        {/* Incognito mode indicator, pinned to the far right corner.
-            A labeled pill, not an icon: the "incognito" glyph does not
-            exist in the self-hosted Material Symbols build, so any icon
-            here would render as raw ligature text. Text is unambiguous. */}
+        {/* Incognito toggle, pinned to the far right corner: inline
+            domino-mask SVG (the ligature is missing from the
+            self-hosted Material Symbols font). Toggling on suspends the
+            normal session and opens one empty incognito tab (App.tsx);
+            toggling off closes it and restores the session. */}
         <button
           type="button"
           id="lb-incognito-pill"
           className={"lb-incognito" + (props.incognito ? " on" : "")}
           aria-pressed={props.incognito}
+          aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
           onClick={() => props.onIncognitoChange(!props.incognito)}
         >
-          {props.incognito ? "Incognito on" : "Incognito"}
+          <span className="lb-incognito-ic" dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
         </button>
         <m3e-tooltip for="lb-incognito-pill" position="below">
           {props.incognito
@@ -498,6 +652,50 @@ export default function BrowserView(props: Props) {
             : "Turn on incognito: stops history and session recording."}
         </m3e-tooltip>
       </div>
+
+      {/* Tab hover preview: live (scriptless) render of the hovered
+          tab below the strip, with a mute toggle for playing audio.
+          No allow-scripts: the preview never runs the page's JS, so it
+          can never double audio or side effects. */}
+      {preview &&
+        (() => {
+          const pt = tabs.find((x) => x.id === preview.id);
+          if (!pt || !pt.url) return null;
+          const muted = mutedTabs.has(pt.id);
+          return (
+            <div
+              className="lb-tab-preview"
+              style={{ left: preview.x }}
+              onMouseEnter={() => {
+                if (previewTimer.current) window.clearTimeout(previewTimer.current);
+              }}
+              onMouseLeave={() => {
+                previewTimer.current = window.setTimeout(() => setPreview(null), 150);
+              }}
+            >
+              <div className="lb-tab-preview-bar">
+                <span className="lb-tab-preview-title">{tabLabel(pt)}</span>
+                <button
+                  type="button"
+                  className={"lb-tab-preview-mute" + (muted ? " muted" : "")}
+                  aria-pressed={muted}
+                  aria-label={muted ? "Unmute tab" : "Mute tab"}
+                  onClick={() => toggleMute(pt.id)}
+                >
+                  <m3e-icon name={muted ? "volume_off" : "volume_up"} aria-hidden={true} />
+                </button>
+              </div>
+              <div className="lb-tab-preview-clip">
+                <iframe
+                  className="lb-tab-preview-frame"
+                  title={"Preview of tab " + pt.id}
+                  src={routeUrl(settings, rules, pt.url)}
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Content area: one same-origin engine iframe per tab, inactive ones stay mounted */}
       <div className="lb-pages">
@@ -536,26 +734,61 @@ export default function BrowserView(props: Props) {
           </div>
         )}
 
-        {!active.url && !st.loading && (
+        {errors[active.id] && (
+          <div className="lb-error" role="alertdialog" aria-label="Page failed to load">
+            <m3e-heading variant="title" size="medium" level={2}>This page could not be loaded</m3e-heading>
+            <p className="lb-error-url">{errors[active.id].url}</p>
+            <p className="lb-error-msg">{errors[active.id].message}</p>
+            <div className="lb-error-logs">
+              <div className="lb-error-logs-title">Technical log</div>
+              <div className="lb-error-logline">
+                engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
+              </div>
+              {[
+                ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
+                ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
+              ].map((line, i) => (
+                <div key={i} className="lb-error-logline">{line}</div>
+              ))}
+            </div>
+            <m3e-button
+              variant="filled"
+              onClick={() => {
+                const target = errors[active.id].url;
+                setErrors((prev) => {
+                  const n = { ...prev };
+                  delete n[active.id];
+                  return n;
+                });
+                load(active, target, { push: false });
+              }}
+            >
+              <m3e-icon name="refresh" aria-hidden={true} /> Try again
+            </m3e-button>
+          </div>
+        )}
+
+        {!active.url && !st.loading && !errors[active.id] && (
           <div className="lb-newtab">
-            <m3e-heading variant="title" size="medium" level={2}>New tab</m3e-heading>
-            <m3e-search-bar clearable className="lb-newtab-search">
-              <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
-              <input
-                slot="input"
-                aria-label="Search or URL"
-                placeholder="Search or URL"
-                autoComplete="off"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") go((e.target as HTMLInputElement).value);
-                }}
-                onChange={(e) => {
-                  /* Smooth expansion tracks typed content, not just focus. */
-                  const bar = (e.target as HTMLElement).closest(".lb-newtab-search");
-                  bar?.classList.toggle("filled", !!(e.target as HTMLInputElement).value);
-                }}
-              />
-            </m3e-search-bar>
+            <m3e-heading variant="display" size="medium" level={2}>LobsterBrowse</m3e-heading>
+            <div className={"lb-nt-search" + (ntTyped ? " filled" : "")}>
+              <m3e-search-bar clearable className="lb-newtab-search">
+                <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
+                <input
+                  slot="input"
+                  aria-label="Search or URL"
+                  placeholder="Search or URL"
+                  autoComplete="off"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") go((e.target as HTMLInputElement).value);
+                  }}
+                  onChange={(e) => {
+                    /* Smooth expansion tracks typed content, not just focus. */
+                    setNtTyped(!!(e.target as HTMLInputElement).value);
+                  }}
+                />
+              </m3e-search-bar>
+            </div>
             {bookmarks.length > 0 && (
               <div className="lb-newtab-links">
                 {bookmarks.slice(0, 6).map((b) => (
@@ -635,6 +868,9 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
+          {/* Equal flex spacers keep the center pill truly centered
+              in the toolbar regardless of the side button count. */}
+          <span className="lb-tb-spacer" aria-hidden={true} />
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
@@ -661,12 +897,47 @@ export default function BrowserView(props: Props) {
                 ))}
               </div>
             )}
+            {lockOpen && (
+              <div className="lb-lockpanel" role="dialog" aria-label="Site information">
+                <div className="lb-lockpanel-head">
+                  <span className={"lb-tb-lock " + (secure ? "secure" : "insecure")} aria-hidden={true} dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }} />
+                  <span>{secure ? "Https connection" : "Http connection, not secure"}</span>
+                  <button type="button" className="lb-lockpanel-close" aria-label="Close site information" onClick={() => setLockOpen(false)}>
+                    <m3e-icon name="close" aria-hidden={true} />
+                  </button>
+                </div>
+                <div className="lb-lockpanel-row"><span>Scheme</span><code>{uParts.scheme}</code></div>
+                <div className="lb-lockpanel-row"><span>Host</span><code>{uParts.host}</code></div>
+                <div className="lb-lockpanel-row"><span>Port</span><code>{uParts.port}</code></div>
+                <p className="lb-muted lb-lockpanel-note">
+                  Cookies listed here are the ones the page itself can read. HttpOnly cookies live on
+                  the proxy server side and are not visible to the page.
+                </p>
+                <div className="lb-lockpanel-cookies">
+                  <div className="lb-lockpanel-ctitle">Site cookies ({siteCookies.length})</div>
+                  {siteCookies.length === 0 && <div className="lb-muted">No readable cookies.</div>}
+                  {siteCookies.slice(0, 12).map((c) => (
+                    <div key={c} className="lb-lockpanel-cookie">{c}</div>
+                  ))}
+                </div>
+                <div className="lb-lockpanel-actions">
+                  <m3e-button onClick={clearSiteCookies}>
+                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
+                  </m3e-button>
+                  <m3e-button onClick={exportCookies}>
+                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
+                  </m3e-button>
+                </div>
+              </div>
+            )}
             {active.url && (
               <>
                 <span
-                  className="lb-tb-lock"
-                  role="img"
-                  aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
+                  className={"lb-tb-lock " + (active.url.startsWith("https://") ? "secure" : "insecure")}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={active.url.startsWith("https://") ? "Https connection, site details" : "Not secure, site details"}
+                  onClick={openLock}
                   dangerouslySetInnerHTML={{ __html: active.url.startsWith("https://") ? lockSvg : noEncSvg }}
                 />
                 {icons[active.id] ? (
@@ -722,6 +993,7 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
+          <span className="lb-tb-spacer" aria-hidden={true} />
           <m3e-icon-button
             aria-label="Developer tools"
             toggle
