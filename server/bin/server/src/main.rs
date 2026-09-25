@@ -950,7 +950,7 @@ fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
             let hp = tag_orig.find("href")?;
             let eq = tag_orig[hp..].find('=')? + hp + 1;
             let rest = tag_orig[eq..].trim_start();
-            let val = if rest.starts_with('"') || rest.starts_with(''') {
+            let val = if rest.starts_with('"') || rest.starts_with('\'') {
                 let q = rest.chars().next().unwrap();
                 rest[1..].split(q).next()?
             } else {
@@ -1178,8 +1178,7 @@ async fn engine_proxy(
                         continue;
                     };
                     let name = name.trim();
-                    let value: String = value.chars().filter(|c| *c != '' && *c != '
-').take(512).collect();
+                    let value: String = value.chars().filter(|c| *c != '\u{000d}' && *c != '\u{000a}').take(512).collect();
                     let lower = name.to_ascii_lowercase();
                     let valid = !name.is_empty()
                         && !value.is_empty()
