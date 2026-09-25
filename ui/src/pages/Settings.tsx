@@ -102,16 +102,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-button-segment>
           </m3e-segmented-button>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Scramjet rewrites pages on the server. LobsterJet registers a service worker and streams through the browser; it needs its own deployed engine origin.
+            Scramjet rewrites pages on the server. LobsterJet registers a service worker and streams through the browser; it activates once the server deployment provides a LobsterJet engine.
           </p>
-          {settings.proxyEngine === "lobsterjet" && (
-            <TextInput
-              label="LobsterJet engine URL"
-              value={settings.lobsterjetUrl}
-              placeholder="https://engine.example"
-              onChange={(v) => onChange({ lobsterjetUrl: v })}
-            />
-          )}
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>

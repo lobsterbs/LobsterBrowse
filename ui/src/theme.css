@@ -241,19 +241,20 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-page iframe { width: 100%; height: 100%; border: none; background: #fff; }
 
 .lb-loading { position: absolute; inset: 0; padding: 24px; background: var(--md-sys-color-surface); z-index: 5; display: flex; flex-direction: column; gap: 16px; align-items: center; }
-.lb-loading .lb-spinner { margin-top: 4vh; }
+/* Real M3 Expressive loading indicator (@m3e/web m3e-loading-indicator,
+   shape-morphing, token-driven). Sized up for the page-level wait. */
+.lb-loading m3e-loading-indicator { margin-top: 4vh; width: 56px; height: 56px; }
 .lb-skel { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px; opacity: 0.6;
 }
 
-/* Bottom dock toolbar: persistent, always visible, always clickable.
-   The previous hover-to-reveal design tucked the bar under the edge
-   with an invisible 22px hover strip covering the bottom of every
-   proxied page: on touch devices it never revealed, and the strip
-   swallowed clicks meant for the page. No transforms, no hover
-   dependency, no pointer-event tricks. */
+/* Bottom dock toolbar: hides out of view after a few idle seconds and
+   reappears when the pointer nears the bottom edge. The hidden state
+   leaves a 12px sliver that is part of the toolbar pill itself; the
+   dock wrapper is pointer-events:none so nothing invisible overlays
+   the proxied page (the old hover-strip bug swallowed page clicks). */
 .lb-dock {
   position: absolute;
   bottom: 10px;
@@ -264,6 +265,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   align-items: flex-end;
   z-index: 10;
   padding: 0 8px;
+  pointer-events: none;
 }
 .lb-toolbar {
   pointer-events: auto;
@@ -272,7 +274,6 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
      (vibrant would paint it with primaryContainer, i.e. red). */
   --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
   --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
-  transform: none;
   opacity: 1;
   width: fit-content;
   min-width: min(780px, calc(100vw - 16px));
@@ -300,6 +301,14 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 @media (prefers-color-scheme: dark) {
   .lb-url-input { background: rgba(255, 255, 255, 0.12); }
 }
+
+/* Tucked state: 12px of the pill stays visible and grabbable. */
+.lb-dock.tucked .lb-toolbar { transform: translateY(calc(100% - 12px)); }
+/* Hovering the pill (including the sliver) or focusing its URL field
+   brings it back; pointer activity near the bottom edge does the
+   same via JS. */
+.lb-toolbar:hover,
+.lb-toolbar:focus-within { transform: none; }
 
 /* DevTools panel */
 .lb-devtools {
@@ -340,18 +349,6 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
 .lb-net { flex: 1; overflow: auto; font-size: 12px; }
-
-/* Circular loading spinner, theme-aware. */
-.lb-spinner {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid color-mix(in srgb, var(--md-sys-color-primary) 25%, transparent);
-  border-top-color: var(--md-sys-color-primary);
-  animation: lb-spin 0.9s linear infinite;
-  flex-shrink: 0;
-}
-@keyframes lb-spin { to { transform: rotate(360deg); } }
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: 8px; cursor: pointer; padding: 4px 6px; align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
@@ -364,6 +361,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-script-item { display: flex; gap: 8px; align-items: center; padding: 6px; flex-wrap: wrap; }
 .lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .lb-check { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.lb-dt-script-run { display: flex; align-items: center; gap: 10px; font-size: 12px; opacity: 0.85; flex-wrap: wrap; }
 .lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
 .lb-script-list { margin: 4px 0; padding-left: 20px; font-size: 12px; word-break: break-all; max-height: 40%; overflow: auto; }
 

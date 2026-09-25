@@ -73,9 +73,6 @@ export type Settings = {
   /* Which proxy engine routes navigations: the built-in server-side
      rewriter (scramjet) or a deployed LobsterJet service. */
   proxyEngine: ProxyEngineId;
-  /* LobsterJet engine origin, e.g. https://engine.example. Used only
-     when proxyEngine === "lobsterjet". */
-  lobsterjetUrl: string;
   /* Route searches/URLs through the native engine. */
   proxySearch: boolean;
   /* Strip known ad hosts from proxied documents (server-side). */
@@ -100,7 +97,6 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
   engine: "duckduckgo",
   proxyEngine: "scramjet",
-  lobsterjetUrl: "",
   proxySearch: true,
   adblock: true,
   trackers: true,
@@ -131,7 +127,6 @@ export function loadSettings(): Settings {
         parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
           ? parsed.proxyEngine
           : DEFAULT_SETTINGS.proxyEngine,
-      lobsterjetUrl: typeof parsed.lobsterjetUrl === "string" ? parsed.lobsterjetUrl : "",
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -223,15 +218,12 @@ export function b64urlDecode(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-/* Build the navigation route for a target URL: the same-origin /r
-   route for the built-in engine, or the LobsterJet embed contract
-   (<engine-origin>/?url=<target>) when that engine is selected. */
+/* Build the navigation route for a target URL. Both engines route
+   through the same-origin server for now: when the deployment
+   provides a LobsterJet engine this is where its route shape plugs
+   in. Until then the built-in rewriter serves every navigation. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string): string {
-  if (s.proxyEngine === "lobsterjet") {
-    const base = s.lobsterjetUrl.trim().replace(/\/+$/, "");
-    if (base) return base + "/?url=" + encodeURIComponent(target);
-    /* No engine configured: fall through to the built-in engine. */
-  }
+  void s.proxyEngine;
   const params = proxyParams(s, rules, target);
   return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
 }
