@@ -93,18 +93,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Proxy engine</div>
           <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              Scramjet — default
-            </m3e-button-segment>
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              LobsterJet
+              LobsterJet — default
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+              ScramJet
             </m3e-button-segment>
           </m3e-segmented-button>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Scramjet is the built-in engine and the default: it rewrites pages on this server, adds
-            adblock/tracker stripping, HTTPS-only enforcement and privacy signals (Sec-GPC / DNT) on
-            every upstream request. LobsterJet registers a service worker and streams through the
-            browser; it activates once the server deployment provides a LobsterJet engine.
+            LobsterJet is the service-worker streaming engine and the project default. It is still
+            pre-release: no server deployment provides it yet, so until it ships, every navigation is
+            served by the ScramJet server-side rewriter on this server regardless of this choice.
+            ScramJet does adblock/tracker stripping, HTTPS-only enforcement, privacy signals
+            (Sec-GPC / DNT), image compression and AMP de-amping on every upstream request.
           </p>
         </div>
         <div className="lb-setting-group">
@@ -153,6 +154,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row label="Ad blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
           <Row label="Tracker blocking (server-side)" icon="track_changes" on={settings.trackers} toggle={() => onChange({ trackers: !settings.trackers })} />
+          <Row
+            label="Compress JPEG images (server-side)"
+            icon="compress"
+            on={settings.compressImages}
+            toggle={() => onChange({ compressImages: !settings.compressImages })}
+          />
         </m3e-list>
       </Panel>
 
@@ -194,6 +201,24 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Custom outbound headers (server-side)</div>
+          <p className="lb-muted">
+            One header per line, "Name: value". Applied to every upstream request, so a profile can
+            override the engine defaults. Host, Content-Length, Connection, Transfer-Encoding and
+            Cookie are blocked.
+          </p>
+          <textarea
+            className="lb-input lb-console-area"
+            rows={3}
+            aria-label="Custom outbound headers"
+            placeholder={"Accept-Language: nb-NO,nb;q=0.9\nX-Custom-Header: anything"}
+            value={settings.customHeaders}
+            spellCheck={false}
+            onChange={(e) => onChange({ customHeaders: e.target.value })}
+          />
+        </div>
+        <m3e-divider />
         <div className="lb-setting-group">
           <div className="lb-setting-label">Technical logs</div>
           <m3e-button onClick={onOpenLogs}>
