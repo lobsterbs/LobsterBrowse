@@ -1,24 +1,32 @@
 /* LobsterJet service worker: interception + header surgery + streaming
-   rewriter + wisp transport.
+   rewriter + wisp transport + SiteConfig rules + plugin hooks + the
+   network inspector's log.
 
    URL shape: engine-local routes under a configurable prefix (default
    /j/, rotatable at runtime via an lj:config message). Requests that
-   are engine assets or the wisp endpoint pass through untouched.
+   are engine assets (sw.js, bootstrap.js, devtools.html, ...) or the
+   wisp endpoint pass through untouched. All prefix/scheme decisions go
+   through ./codec helpers (bug-scout fix: "/j/" was previously hard
+   -coded here while decoding used the rotated prefix).
 
    Phase 2 control plane (postMessage from the engine adapter):
      { type: "lj:config", prefix, scheme }   rotate the URL shape
      { type: "lj:siteRoute", site, enabled } per-site interception toggle
      { type: "lj:teardown" }                 unregister + drop caches
+   Phase 4 control plane:
+     { type: "lj:getNetLog" }                snapshot of the request log
    Replies are posted back on the given MessageChannel port, so the
-   adapter gets real acknowledgements, not fire-and-forget.
+   adapter (and the devtools page) get real acknowledgements.
 
    The rewriter wasm (wasm-bindgen output of crates/rewriter) is emitted
    by the build pipeline to src/rewriter_wasm/ (see workflow:
    wasm-pack build --target web -> copy into app/src/rewriter_wasm). */
 
 /// <reference lib="webworker" />
-import { decodePath, setScheme } from "./codec";
+import { decodePath, isEnginePath, setScheme, currentPrefix } from "./codec";
 import { LJ_WISP_URL } from "./config";
+import { ruleFor, siteRules } from "./siteconfig";
+import { applyOnRequest, applyOnResponse } from "./plugins";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -71,6 +79,8 @@ function stripHostile(headers: Headers): Headers {
 interface JsRewriter {
   process(chunk: string): string;
   finish(): string;
+  add_injection(path: string): void;
+  set_blocked_hosts(hosts: string[]): void;
 }
 interface RewriterMod {
   JsRewriter: new (origin: string, base: string, prefix: string) => JsRewriter;
@@ -91,8 +101,14 @@ function isCss(resp: Response): boolean {
 
 /** HTML bodies: pipe response chunks through the wasm rewriter. The
     bootstrap needs the page's real destination on window.__LJ, so we
-    emit a tiny inline script before the first rewritten chunk. */
-function rewriteStream(body: ReadableStream<Uint8Array>, base: string): ReadableStream<Uint8Array> {
+    emit a tiny inline script before the first rewritten chunk.
+    SiteConfig per-site rules are applied to this rewriter instance:
+    injections (Phase 3 hooks) and blocked hosts (ad stripping). */
+function rewriteStream(
+  body: ReadableStream<Uint8Array>,
+  base: string,
+  rule: { inject?: string[]; block?: string[] },
+): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const modP = rewriter();
@@ -101,7 +117,9 @@ function rewriteStream(body: ReadableStream<Uint8Array>, base: string): Readable
     async start(controller) {
       controller.enqueue(encoder.encode(ljInit));
       const mod = await modP;
-      const rw = new mod.JsRewriter(self.location.origin, base, "/j/");
+      const rw = new mod.JsRewriter(self.location.origin, base, currentPrefix());
+      for (const path of rule.inject ?? []) rw.add_injection(path);
+      if (rule.block?.length) rw.set_blocked_hosts(rule.block);
       const reader = body.getReader();
       try {
         for (;;) {
@@ -120,6 +138,34 @@ function rewriteStream(body: ReadableStream<Uint8Array>, base: string): Readable
       }
     },
   });
+}
+
+/* ---- Network inspector log (Phase 4) -------------------------------- */
+/* Fixed-size ring buffer of proxied requests. The devtools page polls
+   lj:getNetLog; a snapshot plus a monotonically increasing sequence
+   lets it drop entries it has already seen. */
+
+export interface NetEntry {
+  seq: number;
+  ts: number;
+  method: string;
+  /** Engine-local request path. */
+  path: string;
+  /** Real destination URL. */
+  dest: string;
+  status: number;
+  /** Total time until response headers, ms. */
+  ms: number;
+  err?: string;
+}
+
+const NET_LIMIT = 256;
+const netLog: NetEntry[] = [];
+let netSeq = 0;
+
+function netLogPush(entry: Omit<NetEntry, "seq" | "ts">): void {
+  netLog.push({ ...entry, seq: ++netSeq, ts: Date.now() });
+  if (netLog.length > NET_LIMIT) netLog.shift();
 }
 
 /* ---- Per-site route table ------------------------------------------ */
@@ -155,7 +201,7 @@ self.addEventListener("fetch", (e: FetchEvent) => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // not ours: browser handles it
   if (url.pathname.startsWith("/wisp/")) return; // transport endpoint: passthrough
-  if (!url.pathname.startsWith("/j/") && !url.pathname.startsWith("/m/")) return; // engine asset: passthrough
+  if (!isEnginePath(url.pathname)) return; // engine asset: passthrough
 
   const dest = decodePath(url.pathname);
   if (!dest) {
@@ -177,28 +223,53 @@ self.addEventListener("fetch", (e: FetchEvent) => {
 
   e.respondWith(
     (async () => {
+      const t0 = Date.now();
+      const rules = await siteRules();
+      const rule = ruleFor(rules, target);
+      const plugins = rule.plugins;
       try {
+        const fwd = forwardedHeaders(e.request);
+        await applyOnRequest(plugins, target, fwd);
         const resp = await wispFetch(target, {
           method: e.request.method,
-          headers: forwardedHeaders(e.request),
+          headers: fwd,
           body: ["GET", "HEAD"].includes(e.request.method) ? undefined : e.request.body,
           redirect: "follow",
         });
         const headers = stripHostile(resp.headers);
         headers.set("x-lj-proxy", "1");
+        void applyOnResponse(plugins, target, resp.status, headers);
+        netLogPush({
+          method: e.request.method,
+          path: url.pathname + url.search,
+          dest: target,
+          status: resp.status,
+          ms: Date.now() - t0,
+        });
         if (isHtml(resp) && resp.body) {
-          return new Response(rewriteStream(resp.body, target), { status: resp.status, headers });
+          return new Response(rewriteStream(resp.body, target, rule), {
+            status: resp.status,
+            headers,
+          });
         }
         if (isCss(resp) && resp.body) {
           // Standalone stylesheets: one-shot url() pass through the
           // rewriter module. Small bodies, not first-paint documents.
           const mod = await rewriter();
           const css = await resp.text();
-          const out = mod.rewriteCss(css, self.location.origin, target, "/j/");
+          const out = mod.rewriteCss(css, self.location.origin, target, currentPrefix());
           return new Response(out, { status: resp.status, headers });
         }
         return new Response(resp.body, { status: resp.status, headers });
       } catch (err) {
+        netLogPush({
+          method: e.request.method,
+          path: url.pathname + url.search,
+          dest: target,
+          status: 0,
+          ms: Date.now() - t0,
+          err: String(err),
+        });
         return new Response(`lobsterjet: upstream fetch failed: ${String(err)}`, {
           status: 502,
           headers: { "content-type": "text/plain" },
@@ -224,10 +295,10 @@ function forwardedHeaders(req: Request): Headers {
   return out;
 }
 
-/* ---- Control plane (Phase 2) --------------------------------------- */
+/* ---- Control plane (Phase 2 + Phase 4) ---------------------------- */
 
 interface ControlMessage {
-  type: "lj:config" | "lj:siteRoute" | "lj:teardown" | "lj:ping";
+  type: "lj:config" | "lj:siteRoute" | "lj:teardown" | "lj:ping" | "lj:getNetLog";
   prefix?: string;
   scheme?: "b64u" | "mirror";
   site?: string;
@@ -269,6 +340,10 @@ self.addEventListener("message", (e: ExtendableMessageEvent) => {
           await self.registration.unregister();
         })(),
       );
+      break;
+    case "lj:getNetLog":
+      // Snapshot for the devtools network inspector.
+      reply({ entries: netLog, lastSeq: netSeq });
       break;
     default:
       reply({ ok: false, error: "unknown message" });

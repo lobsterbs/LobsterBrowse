@@ -100,3 +100,21 @@ jobs:
         with:
           name: lj-scoreboard
           path: lobsterjet/suite/scoreboard.*
+      # Publish the scoreboard as a public page (Phase 4): the latest
+      # JSON + Markdown land on the "scoreboard" branch, force-updated
+      # so the branch always reflects the newest nightly run.
+      - name: Publish scoreboard branch
+        if: always()
+        run: |
+          if [ ! -f suite/scoreboard.json ]; then
+            echo "no scoreboard produced; skipping publish"
+            exit 0
+          fi
+          git config user.name "lobsterjet-ci"
+          git config user.email "ci@lobsterbrowse.invalid"
+          git checkout --orphan scoreboard
+          git rm -rf --quiet . || true
+          cp suite/scoreboard.json suite/scoreboard.md . 2>/dev/null || cp suite/scoreboard.json .
+          git add scoreboard.*
+          git commit -m "scoreboard: nightly compat run ${GITHUB_RUN_ID}"
+          git push -f origin HEAD:scoreboard

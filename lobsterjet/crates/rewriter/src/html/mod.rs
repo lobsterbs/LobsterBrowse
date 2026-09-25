@@ -9,12 +9,17 @@
 //! Text is emitted immediately: a chunk with no '<' is pure text and
 //! flushes in full. Only an open '<' (or an in-progress raw block) is
 //! ever retained across chunk boundaries.
+//!
+//! Phase 3: ad/tracker blocking (tags whose resolved URL host matches
+//! cfg.block_hosts are dropped entirely, so the request never fires)
+//! and injection hooks (per-site extra <script>s emitted right after
+//! the bootstrap).
 
 pub mod css;
 pub mod url_attrs;
 
 use crate::config::RewriteConfig;
-use crate::encode::resolve;
+use crate::encode::{resolve, url_host};
 
 /// Tokenizer state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +36,12 @@ enum St {
     Comment,
     Doctype,
 }
+
+/// Tags whose entire element is dropped when its URL attribute points
+/// at a blocked host.
+const BLOCKABLE: &[&str] = &[
+    "script", "img", "iframe", "link", "source", "video", "audio", "embed", "track", "object",
+];
 
 pub struct Rewriter {
     cfg: RewriteConfig,
@@ -53,6 +64,16 @@ impl Rewriter {
         self.base = base.to_string();
     }
 
+    /// Replace the block_hosts list (Phase 3 ad/tracker stripping).
+    pub fn set_blocked_hosts(&mut self, hosts: Vec<String>) {
+        self.cfg.block_hosts = hosts;
+    }
+
+    /// Add a script path to inject after <head> opens (Phase 3 hooks).
+    pub fn add_injection(&mut self, path: &str) {
+        self.cfg.injections.push(path.to_string());
+    }
+
     fn enc(&self, url: &str) -> String {
         if url.starts_with(&self.cfg.origin) {
             // Already engine-local (nested rewriting): keep as-is.
@@ -60,6 +81,23 @@ impl Rewriter {
         }
         let abs = resolve(url, &self.base);
         self.cfg.encode_url(&abs)
+    }
+
+    /// Emit bootstrap + injections. Called once, right after <head>
+    /// (fallback <html>, final fallback at finish()).
+    fn emit_injections(&mut self) -> String {
+        if self.injected {
+            return String::new();
+        }
+        self.injected = true;
+        let mut out = String::new();
+        if self.cfg.inject_bootstrap {
+            out.push_str(&format!("<script src=\"{}\"></script>", self.cfg.bootstrap_path));
+        }
+        for path in &self.cfg.injections {
+            out.push_str(&format!("<script src=\"{}\"></script>", path));
+        }
+        out
     }
 
     pub fn process(&mut self, chunk: &str) -> String {
@@ -116,17 +154,11 @@ impl Rewriter {
                             out.push_str(&rewritten);
                             self.buf.drain(..end);
                             let raw = is_raw_tag(&self.cur_tag);
-                            // Inject the bootstrap right after the opening
-                            // <head> (fallback: <html>) so it precedes all
-                            // page scripts.
-                            if !self.injected && self.cfg.inject_bootstrap
-                                && (self.cur_tag == "head" || self.cur_tag == "html")
-                            {
-                                out.push_str(&format!(
-                                    "<script src=\"{}\"></script>",
-                                    self.cfg.bootstrap_path
-                                ));
-                                self.injected = true;
+                            // Inject bootstrap + per-site hooks right after
+                            // the opening <head> (fallback: <html>) so they
+                            // precede all page scripts.
+                            if self.cur_tag == "head" || self.cur_tag == "html" {
+                                out.push_str(&self.emit_injections());
                             }
                             self.st = if raw { St::Raw } else { St::Text };
                             self.cur_tag.clear();
@@ -167,11 +199,7 @@ impl Rewriter {
     /// Flush: emit retained buffer as-is (end of stream).
     pub fn finish(&mut self) -> String {
         let mut out = std::mem::take(&mut self.buf);
-        if !self.injected && self.cfg.inject_bootstrap {
-            let tag = format!("<script src=\"{}\"></script>", self.cfg.bootstrap_path);
-            out = format!("{}{}", tag, out);
-            self.injected = true;
-        }
+        out.push_str(&self.emit_injections());
         self.st = St::Text;
         out
     }
@@ -212,7 +240,8 @@ impl Rewriter {
         Some((end, rewritten))
     }
 
-    /// Rewrite one complete, well-formed tag string.
+    /// Rewrite one complete, well-formed tag string. Returns an empty
+    /// string when the tag is dropped (blocked host).
     fn rewrite_single_tag(&self, raw: &str) -> String {
         let name_end = raw[1..]
             .find(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/')
@@ -223,11 +252,16 @@ impl Rewriter {
         out.push('<');
         out.push_str(&raw[1..name_end]);
         let mut rest = &raw[name_end..];
+        let mut first_url: Option<String> = None;
         while let Some(attr) = next_attr(rest) {
             let (consumed, attr_name, attr_value, quoted) = attr;
             let lower = attr_name.to_ascii_lowercase();
             match attr_value {
                 Some(v) => {
+                    if url_attrs::is_url_attr(&name, &lower) && first_url.is_none() {
+                        // Remember the first URL for the block decision.
+                        first_url = Some(resolve(&v, &self.base));
+                    }
                     let newv = if lower == "srcset" || lower == "imagesrcset" {
                         Some(url_attrs::rewrite_srcset(&v, |u| self.enc(u)))
                     } else if lower == "style" && self.cfg.rewrite_css {
@@ -246,6 +280,16 @@ impl Rewriter {
                 }
             }
             rest = &rest[consumed..];
+        }
+        // Block decision: only whole-resource tags with a blocked URL
+        // host are dropped. Rewriting already happened above; dropping
+        // the final output is still cheaper than a request.
+        if BLOCKABLE.contains(&name.as_str()) {
+            if let Some(url) = &first_url {
+                if self.cfg.is_blocked(url) {
+                    return String::new();
+                }
+            }
         }
         out.push_str(rest);
         out
@@ -412,6 +456,19 @@ mod tests {
     }
 
     #[test]
+    fn injects_hooks_after_head() {
+        let c = RewriteConfig::default();
+        let mut r = Rewriter::new(c);
+        r.add_injection("/hooks/youtube.js");
+        r.set_base("https://example.com/");
+        let out = r.process("<html><head><title>t</title></head><body></body>");
+        let bi = out.find("bootstrap.js").unwrap();
+        let hi = out.find("youtube.js").unwrap();
+        assert!(bi < hi, "hooks must come after bootstrap: {}", out);
+        assert_eq!(out.matches("youtube.js").count(), 1);
+    }
+
+    #[test]
     fn style_urls() {
         let mut r = Rewriter::new(cfg());
         r.set_base("https://example.com/");
@@ -448,5 +505,36 @@ mod tests {
         let b = r.process(" class='x'>after");
         assert!(b.starts_with("<div class='x'>"), "got: {}", b);
         assert!(b.ends_with("after"));
+    }
+
+    #[test]
+    fn blocks_ad_script_and_img() {
+        let c = RewriteConfig {
+            block_hosts: vec!["ads.example.net".into(), "tracker.io".into()],
+            ..cfg()
+        };
+        let mut r = Rewriter::new(c);
+        r.set_base("https://example.com/");
+        let out = r.process(
+            "<html><head></head><body><script src=\"https://cdn.ads.example.net/x.js\"></script>\
+             <img src=\"https://tracker.io/pixel.gif\">\
+             <img src=\"https://img.example.com/ok.png\">\
+             <a href=\"https://tracker.io/ad\">link text stays</a></body></html>",
+        );
+        assert!(!out.contains("ads.example.net"), "blocked script dropped: {}", out);
+        assert!(!out.contains("pixel.gif"), "blocked img dropped: {}", out);
+        assert!(out.contains("img.example.com/ok.png".replace("img.example.com", "example.com/j/") || out.contains("/j/")), "kept img rewritten: {}", out);
+        assert!(out.contains("link text stays"), "anchor text survives: {}", out);
+        // Anchors are not blockable: navigation is content, not a subresource.
+        assert!(out.contains("<a "), "anchor kept: {}", out);
+    }
+
+    #[test]
+    fn blocked_subdomain_matches() {
+        let c = RewriteConfig { block_hosts: vec!["doubleclick.net".into()], ..cfg() };
+        let mut r = Rewriter::new(c);
+        r.set_base("https://example.com/");
+        let out = r.process("<img src=\"https://ad.doubleclick.net/x.gif\">");
+        assert!(out.trim().is_empty(), "got: {:?}", out);
     }
 }

@@ -130,9 +130,44 @@ pub fn resolve(url: &str, base: &str) -> String {
     format!("{}{}{}", root, path, suffix)
 }
 
+/// Extract the host from an absolute URL (scheme://[user@]host[:port]/...).
+/// Naive but sufficient for block matching; returns None for relative
+/// or non-HTTP URLs. IPv6 bracket form supported.
+pub fn url_host(url: &str) -> Option<&str> {
+    let idx = url.find("://")?;
+    let rest = &url[idx + 3..];
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    let hostport = match authority.rfind('@') {
+        Some(i) => &authority[i + 1..], // strip userinfo
+        None => authority,
+    };
+    if let Some(start) = hostport.strip_prefix('[') {
+        let close = start.find(']')?;
+        return Some(&hostport[..close + 2]);
+    }
+    match hostport.rfind(':') {
+        Some(i) if !hostport[i + 1..].is_empty()
+            && hostport[i + 1..].chars().all(|c| c.is_ascii_digit()) =>
+        {
+            Some(&hostport[..i])
+        }
+        _ => Some(hostport),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosts() {
+        assert_eq!(url_host("https://example.com/x"), Some("example.com"));
+        assert_eq!(url_host("https://EXAMPLE.com:8443/x"), Some("EXAMPLE.com"));
+        assert_eq!(url_host("http://u:p@cdn.example.net/x"), Some("cdn.example.net"));
+        assert_eq!(url_host("https://[::1]:8443/x"), Some("[::1]"));
+        assert_eq!(url_host("/relative"), None);
+    }
 
     #[test]
     fn b64_roundtrip() {

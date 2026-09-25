@@ -1,4 +1,5 @@
-//! Rewrite configuration: origin, URL codec scheme, feature toggles.
+//! Rewrite configuration: origin, URL codec scheme, feature toggles,
+//! per-site injection hooks and ad/tracker host blocking.
 
 use crate::encode::Codec;
 
@@ -19,7 +20,11 @@ pub struct RewriteConfig {
     pub inject_bootstrap: bool,
     /// Bootstrap asset path on the engine origin.
     pub bootstrap_path: String,
-    /// Strip ad/tracker hosts at the rewrite layer (Phase 3, off for now).
+    /// Extra scripts injected right after <head> opens (userscript-style
+    /// hooks, per-site; Phase 3 injection hooks API).
+    pub injections: Vec<String>,
+    /// Strip ad/tracker subresources at the rewrite layer: hosts whose
+    /// requests should never leave the browser (Phase 3).
     pub block_hosts: Vec<String>,
 }
 
@@ -32,6 +37,7 @@ impl Default for RewriteConfig {
             rewrite_js_literals: true,
             inject_bootstrap: true,
             bootstrap_path: "/bootstrap.js".into(),
+            injections: Vec::new(),
             block_hosts: Vec::new(),
         }
     }
@@ -46,5 +52,19 @@ impl RewriteConfig {
             }
             Codec::PathMirror => format!("{}/m/{}", self.origin, dest),
         }
+    }
+
+    /// True when the host of `url` matches a block_hosts entry (exact or
+    /// parent-domain suffix). Blocking happens at rewrite time: the
+    /// tag never reaches the DOM, so no request is ever issued.
+    pub fn is_blocked(&self, url: &str) -> bool {
+        let Some(host) = crate::encode::url_host(url) else {
+            return false;
+        };
+        let host = host.to_ascii_lowercase();
+        self.block_hosts.iter().any(|b| {
+            let b = b.to_ascii_lowercase();
+            host == b || host.ends_with(&format!(".{}", b))
+        })
     }
 }

@@ -37,6 +37,19 @@ impl JsRewriter {
     pub fn finish(&mut self) -> String {
         self.inner.finish()
     }
+
+    /// Phase 3 injection hooks: add a script path injected into <head>
+    /// of this page (per-site, userscript-style).
+    pub fn add_injection(&mut self, path: String) {
+        self.inner.add_injection(&path);
+    }
+
+    /// Phase 3 ad/tracker blocking: hosts whose subresource tags are
+    /// dropped at rewrite time.
+    #[wasm_bindgen(js_name = "setBlockedHosts")]
+    pub fn set_blocked_hosts(&mut self, hosts: Vec<String>) {
+        self.inner.set_blocked_hosts(hosts);
+    }
 }
 
 /// One-shot CSS pass for standalone stylesheets: rewrite every url()
