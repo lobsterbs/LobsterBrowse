@@ -30,6 +30,9 @@ type Props = {
   bookmarks: Bookmark[];
   onToggleBookmark: (url: string, title: string) => void;
   onHistory: (url: string) => void;
+  /* Incognito session: no history recording, no session persistence. */
+  incognito: boolean;
+  onIncognitoChange: (v: boolean) => void;
   setView: (v: View) => void;
   onOpenLogs: () => void;
 };
@@ -243,7 +246,7 @@ export default function BrowserView(props: Props) {
       if (real !== t.url) {
         const stack = [...t.stack.slice(0, t.idx + 1), real];
         props.updateTab(t.id, { url: real, stack, idx: stack.length - 1 });
-        props.onHistory(real);
+        if (!props.incognito) props.onHistory(real);
         pushLog("info", "url sync " + real);
       }
       const title = (doc.title || "").trim();
@@ -304,19 +307,7 @@ export default function BrowserView(props: Props) {
         const title = String(d.title ?? "");
         if (title) props.updateTab(tabId, { title });
         setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false } }));
-        if (tab.url) props.onHistory(tab.url);
-        const w = frames.current.get(tabId)?.contentWindow;
-        if (w) {
-          for (const s of dtBase().scripts) {
-            if (s.autorun) {
-              try {
-                (w as unknown as { eval: (c: string) => unknown }).eval(s.code);
-              } catch (err) {
-                pushLog("error", "autorun script failed: " + (err instanceof Error ? err.message : String(err)));
-              }
-            }
-          }
-        }
+        if (tab.url && !props.incognito) props.onHistory(tab.url);
       } else if (data.lb === "navigate") {
         const href = String(d.href ?? "");
         const abs = (() => {
@@ -335,28 +326,6 @@ export default function BrowserView(props: Props) {
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs, activeId, settings, rules, dt]);
-
-  /* ---- Shortcuts from the app shell ---- */
-  useEffect(() => {
-    const reload = () => {
-      if (active) load(active, active.url || "", { push: false });
-    };
-    const toggleDt = () => {
-      if (!active) return;
-      const id = active.id;
-      setDtState((prev) => {
-        const base = prev[id] ?? emptyDt();
-        return { ...prev, [id]: { ...base, open: !base.open } };
-      });
-    };
-    window.addEventListener("lb-reload", reload);
-    window.addEventListener("lb-devtools", toggleDt);
-    return () => {
-      window.removeEventListener("lb-reload", reload);
-      window.removeEventListener("lb-devtools", toggleDt);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs, activeId, settings, rules, dt]);
 
@@ -400,7 +369,16 @@ export default function BrowserView(props: Props) {
       {/* Frosted floating tab strip: sits over the page content. Shares
           the dock's tucked state: after the idle timer it slides up
           leaving a sliver and collapses to the single active tab. */}
-      <div className={"lb-tabstrip" + (dockTucked ? " tucked" : "")} role="tablist" aria-label="Proxy tabs">
+      <div
+        className={
+          "lb-tabstrip" +
+          (dockTucked ? " tucked" : "") +
+          (tabs.length >= 6 ? " compact" : "") +
+          (tabs.length >= 10 ? " tight" : "")
+        }
+        role="tablist"
+        aria-label="Proxy tabs"
+      >
         {tabs.map((t) => (
           <div
             key={t.id}
@@ -428,6 +406,15 @@ export default function BrowserView(props: Props) {
         ))}
         <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
           <m3e-icon name="add" aria-hidden={true} />
+        </m3e-icon-button>
+        <m3e-icon-button
+          aria-label={props.incognito ? "Leave incognito mode" : "Enter incognito mode"}
+          title={props.incognito ? "Incognito on" : "Incognito"}
+          toggle
+          selected={props.incognito ? "" : undefined}
+          onClick={() => props.onIncognitoChange(!props.incognito)}
+        >
+          <m3e-icon name="incognito" aria-hidden={true} />
         </m3e-icon-button>
       </div>
 
@@ -572,6 +559,12 @@ export default function BrowserView(props: Props) {
               title, next to the URL field. */}
           {active.url && (
             <span className="lb-tb-page">
+              <m3e-icon
+                name={active.url.startsWith("https://") ? "lock" : "no_encryption"}
+                aria-label={active.url.startsWith("https://") ? "Secure connection" : "Not secure"}
+                className="lb-tb-lock"
+                aria-hidden={true}
+              />
               {icons[active.id] ? (
                 <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
               ) : (

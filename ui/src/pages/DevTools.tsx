@@ -1,11 +1,15 @@
-/* DevTools panel — real console/network/inspector/storage/scripts views
-   for the currently selected proxy tab. Each tab keeps its own state.
+/* DevTools panel — console / network / inspector for the currently
+   selected proxy tab. Each tab keeps its own state.
 
-   How this works with the document proxy: proxied pages are served
-   from the LobsterBrowse origin (/p), rendered in a same-origin iframe.
-   That gives the panel real access to the page: JavaScript is executed
-   with iframe.contentWindow.eval, and console/network events arrive
-   from the hook the server injects into every proxied document. */
+   Proxied pages are served from the LobsterBrowse origin (/r), rendered
+   in a same-origin iframe. That gives the panel real access to the page:
+   JavaScript is executed with iframe.contentWindow.eval, and console /
+   network events arrive from the hook the server injects into every
+   proxied document.
+
+   Built from real M3E components: m3e-card as the container,
+   m3e-segmented-button for the section switch, m3e-textinput for the
+   edit fields. */
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
@@ -28,18 +32,15 @@ export type NetEntry = {
   ts: number;
 };
 
-export type InjectedScript = { id: number; code: string; autorun: boolean };
-
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "inspector" | "storage" | "scripts";
+  page: "console" | "network" | "inspector";
   console: ConsoleEntry[];
   net: NetEntry[];
   levelFilter: string;
   consoleFilter: string;
   netFilter: string;
   history: string[];
-  scripts: InjectedScript[];
 };
 
 export function emptyDt(): DtState {
@@ -52,7 +53,6 @@ export function emptyDt(): DtState {
     consoleFilter: "",
     netFilter: "",
     history: [],
-    scripts: [],
   };
 }
 
@@ -61,7 +61,7 @@ export function nextEntryId(): number {
   return entryId++;
 }
 
-/* ---- Value formatting: expandable objects/arrays, DOM elements ---- */
+/* ---- Value formatting ---- */
 
 function formatValue(v: unknown): string {
   if (v === null) return "null";
@@ -77,41 +77,29 @@ function formatValue(v: unknown): string {
   }
 }
 
-function JsonTree({ name, value, depth }: { name?: string; value: unknown; depth: number }) {
-  const label = name === undefined ? "" : name + ": ";
-  if (value !== null && typeof value === "object") {
-    let entries: Array<[string, unknown]> = [];
-    if (Array.isArray(value)) {
-      entries = value.map((v, i) => [String(i), v]);
-    } else {
-      entries = Object.entries(value as Record<string, unknown>);
-    }
-    const summary = Array.isArray(value)
-      ? `Array(${value.length})`
-      : (value as { constructor?: { name?: string } }).constructor?.name || "Object";
-    return (
-      <details open={depth < 2} style={{ marginLeft: 8 }}>
-        <summary style={{ cursor: "pointer", listStyle: "revert" }}>
-          {label}
-          <span style={{ opacity: 0.6 }}>{summary}</span>
-        </summary>
-        {entries.map(([k, v]) => (
-          <JsonTree key={k} name={k} value={v} depth={depth + 1} />
-        ))}
-      </details>
-    );
-  }
-  return (
-    <div style={{ marginLeft: 8 }}>
-      {label}
-      <span style={{ fontFamily: "ui-monospace, monospace", wordBreak: "break-all" }}>{formatValue(value)}</span>
-    </div>
-  );
-}
-
 function ts(t: number): string {
   const d = new Date(t);
   return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
+}
+
+/* What the inspector shows for the picked element. */
+type Picked = {
+  tag: string;
+  id: string;
+  cls: string;
+  text: string;
+  style: string;
+};
+
+function describe(el: Element): Picked {
+  const e = el as HTMLElement;
+  return {
+    tag: el.tagName.toLowerCase(),
+    id: el.id || "",
+    cls: el.className && typeof el.className === "string" ? el.className : "",
+    text: (e.innerText || "").slice(0, 500),
+    style: e.getAttribute("style") || "",
+  };
 }
 
 type Props = {
@@ -126,24 +114,99 @@ type Props = {
 const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
-  ["inspector", "Inspector", "travel_explore"],
-  ["storage", "Storage", "database"],
-  ["scripts", "Scripts", "code"],
+  ["inspector", "Inspect", "travel_explore"],
 ];
 
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
   const [multi, setMulti] = useState(false);
-  const [inspectorTick, setInspectorTick] = useState(0);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<{ el: HTMLElement; info: Picked } | null>(null);
+  const [textDraft, setTextDraft] = useState("");
+  const [styleDraft, setStyleDraft] = useState("");
   const consoleRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
   }, [dt.console.length]);
 
-  /* Execute JavaScript in the proxied page's context. */
+  /* Stop picking when the panel closes or the section changes. */
+  useEffect(() => {
+    if (picking) setPicking(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dt.page, dt.open]);
+
+  /* ---- Element picker: hover highlight + click to select, live on the
+     proxied document. Same-origin frame, so this is a real DOM access. ---- */
+  useEffect(() => {
+    if (!picking) return;
+    const doc = frame()?.contentDocument;
+    if (!doc) return;
+    let current: Element | null = null;
+    const outline = (el: Element | null, on: boolean) => {
+      const e = el as HTMLElement | null;
+      if (!e || e === doc.documentElement || e === doc.body) return;
+      e.style.outline = on ? "2px solid var(--md-sys-color-primary, #E8552F)" : "";
+    };
+    const onMove = (ev: MouseEvent) => {
+      const el = (ev.target as Element | null) ?? null;
+      if (el === current) return;
+      outline(current, false);
+      current = el;
+      outline(current, true);
+    };
+    const onLeave = () => {
+      outline(current, false);
+      current = null;
+    };
+    const onClick = (ev: MouseEvent) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const el = ev.target as Element;
+      outline(current, false);
+      current = null;
+      setPicking(false);
+      if (el instanceof HTMLElement) {
+        const info = describe(el);
+        setPicked({ el, info });
+        setTextDraft(info.text);
+        setStyleDraft(info.style);
+      }
+    };
+    doc.addEventListener("mousemove", onMove, true);
+    doc.addEventListener("mouseleave", onLeave, true);
+    doc.addEventListener("click", onClick, true);
+    doc.body.style.cursor = "crosshair";
+    return () => {
+      doc.removeEventListener("mousemove", onMove, true);
+      doc.removeEventListener("mouseleave", onLeave, true);
+      doc.removeEventListener("click", onClick, true);
+      outline(current, false);
+      doc.body.style.cursor = "";
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picking]);
+
+  /* Apply text / style edits live to the picked element. */
+  const applyText = (v: string) => {
+    setTextDraft(v);
+    if (picked) picked.el.innerText = v;
+  };
+  const applyStyle = (v: string) => {
+    setStyleDraft(v);
+    if (picked) {
+      picked.el.removeAttribute("style");
+      if (v.trim()) picked.el.setAttribute("style", v);
+    }
+  };
+  const deletePicked = () => {
+    if (picked) picked.el.remove();
+    setPicked(null);
+  };
+
+  /* ---- Console: real JS eval in the proxied page context. ---- */
   const runCode = (code: string) => {
     const entry = (kind: ConsoleEntry["kind"], text: string) =>
       setDt({ console: [...dt.console, { id: nextEntryId(), kind, text, ts: Date.now() }] });
@@ -232,55 +295,35 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
   );
 
-  /* Inspector reads, refreshed on demand. */
-  const doc = frame()?.contentDocument;
-  const win = frame()?.contentWindow;
-  const inspect = () => setInspectorTick((t) => t + 1);
-  const scriptsList: string[] = doc
-    ? Array.from(doc.scripts).map((s) => (s.src ? s.src : "[inline script, " + s.text.length + " chars]"))
-    : [];
-  const storageKeys = (kind: "localStorage" | "sessionStorage"): string[] => {
-    try {
-      const s = win?.[kind];
-      if (!s) return [];
-      const keys: string[] = [];
-      for (let i = 0; i < s.length; i++) keys.push(s.key(i) ?? "");
-      return keys;
-    } catch {
-      return ["<unavailable>"];
-    }
-  };
-  const cookieValue = (() => {
-    try {
-      return doc?.cookie || "(none)";
-    } catch {
-      return "<unavailable>";
-    }
-  })();
-
   return (
-    <aside className="lb-devtools" aria-label="Developer tools">
+    <m3e-card variant="elevated" className="lb-devtools" aria-label="Developer tools">
       <div className="lb-devtools-head">
         <span className="lb-devtools-title">
           <m3e-icon name="bug_report" aria-hidden={true} /> DevTools — {tab.title || "tab"}
         </span>
-        <m3e-icon-button aria-label="Close developer tools" onClick={onClose}>
-          <m3e-icon name="close" aria-hidden={true} />
-        </m3e-icon-button>
+        <span className="lb-devtools-head-actions">
+          <m3e-icon-button aria-label="View app logs" onClick={onOpenLogs}>
+            <m3e-icon name="history" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-icon-button aria-label="Close developer tools" onClick={onClose}>
+            <m3e-icon name="close" aria-hidden={true} />
+          </m3e-icon-button>
+        </span>
       </div>
-      <m3e-divider />
-      <m3e-tabs variant="secondary" className="lb-dt-tabs" aria-label="Developer tools sections">
+
+      {/* Real M3E segmented button for the section switch. */}
+      <m3e-segmented-button className="lb-dt-seg" aria-label="Developer tools sections">
         {PAGES.map(([page, label, icon]) => (
-          <m3e-tab
+          <m3e-button-segment
             key={page}
-            selected={dt.page === page ? "" : undefined}
+            checked={dt.page === page ? "" : undefined}
             onClick={() => setDt({ page: page })}
           >
             <m3e-icon slot="icon" name={icon} aria-hidden={true} />
             {label}
-          </m3e-tab>
+          </m3e-button-segment>
         ))}
-      </m3e-tabs>
+      </m3e-segmented-button>
 
       {dt.page === "console" && (
         <div className="lb-dt-body">
@@ -398,134 +441,70 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
       {dt.page === "inspector" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
-            <m3e-button onClick={inspect}>
-              <m3e-icon name="refresh" aria-hidden={true} /> Refresh
+            <m3e-button
+              variant={picking ? "filled" : "tonal"}
+              onClick={() => setPicking(!picking)}
+            >
+              <m3e-icon name="highlight_alt" aria-hidden={true} />
+              {picking ? "Click an element…" : "Pick element"}
             </m3e-button>
+            {picked && (
+              <>
+                <m3e-button onClick={() => setPicked(null)}>
+                  <m3e-icon name="close" aria-hidden={true} /> Deselect
+                </m3e-button>
+                <m3e-button variant="tonal" onClick={deletePicked}>
+                  <m3e-icon name="delete" aria-hidden={true} /> Delete element
+                </m3e-button>
+              </>
+            )}
           </div>
-          {!doc ? (
+          {!frame()?.contentDocument ? (
             <p className="lb-muted">No proxied page in this tab.</p>
+          ) : picking ? (
+            <p className="lb-muted">
+              Move the mouse over the page to highlight an element, then click to select and edit it here.
+            </p>
+          ) : picked ? (
+            <div className="lb-inspect">
+              <div className="lb-inspect-id">
+                <m3e-icon name="code" aria-hidden={true} />
+                <code>
+                  &lt;{picked.info.tag}
+                  {picked.info.id ? ' id="' + picked.info.id + '"' : ""}
+                  {picked.info.cls ? ' class="' + picked.info.cls + '"' : ""}
+                  &gt;
+                </code>
+              </div>
+              <label className="lb-inspect-label" htmlFor="lb-dt-text">Text content</label>
+              <textarea
+                id="lb-dt-text"
+                className="lb-input lb-console-area"
+                rows={3}
+                value={textDraft}
+                onChange={(e) => applyText(e.target.value)}
+              />
+              <label className="lb-inspect-label" htmlFor="lb-dt-style">Inline style (CSS)</label>
+              <textarea
+                id="lb-dt-style"
+                className="lb-input lb-console-area"
+                rows={3}
+                placeholder="e.g. color: red; font-size: 24px;"
+                value={styleDraft}
+                onChange={(e) => styleApply(e.target.value)}
+              />
+              <p className="lb-muted">Edits apply live to the proxied page. They vanish on the next navigation.</p>
+            </div>
           ) : (
             <div className="lb-inspect">
-              <div><b>Title:</b> {doc.title || "(none)"}</div>
-              <div><b>Ready state:</b> {doc.readyState}</div>
+              <div><b>Title:</b> {frame()?.contentDocument?.title || "(none)"}</div>
               <div><b>Proxied URL:</b> {tab.url}</div>
-              <div><b>Doctype:</b> {doc.doctype ? doc.doctype.name : "(none)"}</div>
-              <div><b>Elements:</b> {doc.getElementsByTagName("*").length}</div>
-              <div><b>Scripts:</b> {scriptsList.length}</div>
-              <ul className="lb-script-list">
-                {scriptsList.slice(0, 30).map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
+              <div><b>Elements:</b> {frame()?.contentDocument?.getElementsByTagName("*").length ?? 0}</div>
+              <p className="lb-muted">Press "Pick element", then hover and click anything on the page to edit its text and inline style.</p>
             </div>
           )}
         </div>
       )}
-
-      {dt.page === "storage" && (
-        <div className="lb-dt-body">
-          <p className="lb-muted">
-            The document proxy serves every page from the LobsterBrowse origin, so this is the proxy
-            origin's storage — cookies set by target sites are held in the server-side cookie jar, not here.
-          </p>
-          <div className="lb-inspect">
-            <div><b>Cookie (proxy origin):</b> {cookieValue}</div>
-            <div><b>localStorage:</b></div>
-            <ul className="lb-script-list">
-              {storageKeys("localStorage").map((k) => (
-                <li key={k}>
-                  {k} = {String((win?.localStorage as Storage | null)?.getItem(k) ?? "").slice(0, 120)}
-                </li>
-              ))}
-            </ul>
-            <div><b>sessionStorage:</b></div>
-            <ul className="lb-script-list">
-              {storageKeys("sessionStorage").map((k) => (
-                <li key={k}>
-                  {k} = {String((win?.sessionStorage as Storage | null)?.getItem(k) ?? "").slice(0, 120)}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {dt.page === "scripts" && (
-        <div className="lb-dt-body">
-          <p className="lb-muted">
-            Scripts run in this tab's proxied page context. "Run on page load" executes after each
-            navigation of this tab only.
-          </p>
-          <textarea
-            className="lb-input lb-console-area"
-            rows={5}
-            aria-label="Script source"
-            placeholder="// e.g. document.body.style.background = 'red'"
-            value={cmd}
-            onChange={(e) => setCmd(e.target.value)}
-          />
-          <div className="lb-dt-toolbar">
-            <m3e-button
-              variant="filled"
-              onClick={() => {
-                if (cmd.trim()) runCode(cmd);
-              }}
-            >
-              <m3e-icon name="play_arrow" aria-hidden={true} /> Execute
-            </m3e-button>
-            <m3e-button
-              onClick={() => {
-                if (!cmd.trim()) return;
-                setDt({ scripts: [...dt.scripts, { id: nextEntryId(), code: cmd, autorun: false }] });
-                setCmd("");
-              }}
-            >
-              <m3e-icon name="save" aria-hidden={true} /> Save
-            </m3e-button>
-          </div>
-          {dt.scripts.length > 0 && (
-            <div className="lb-net">
-              {dt.scripts.map((s) => (
-                <div key={s.id} className="lb-net-row lb-script-item">
-                  <code className="lb-script-code">{s.code}</code>
-                  <span className="lb-dt-script-run">
-                    Run on page load
-                    <m3e-switch
-                      checked={s.autorun ? "" : undefined}
-                      aria-label="Run on page load"
-                      onClick={() =>
-                        setDt({
-                          scripts: dt.scripts.map((x) => (x.id === s.id ? { ...x, autorun: !x.autorun } : x)),
-                        })
-                      }
-                    />
-                  </span>
-                  <m3e-icon-button aria-label="Run script" onClick={() => runCode(s.code)}>
-                    <m3e-icon name="play_arrow" aria-hidden={true} />
-                  </m3e-icon-button>
-                  <m3e-icon-button
-                    aria-label="Delete script"
-                    onClick={() => setDt({ scripts: dt.scripts.filter((x) => x.id !== s.id) })}
-                  >
-                    <m3e-icon name="delete" aria-hidden={true} />
-                  </m3e-icon-button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="lb-dt-toolbar">
-            <m3e-button onClick={onOpenLogs}>
-              <m3e-icon name="history" aria-hidden={true} /> View logs
-            </m3e-button>
-          </div>
-        </div>
-      )}
-    </aside>
+    </m3e-card>
   );
-}
-
-/* Expandable result tree used by the console when an expression
-   returns an object or array. */
-export function ResultTree({ value }: { value: unknown }) {
-  return <JsonTree value={value} depth={0} />;
 }

@@ -72,7 +72,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     ua: true,
     privacy: true,
     appearance: false,
-    panic: false,
     cloak: false,
     advanced: false,
   });
@@ -173,29 +172,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               ))}
             </m3e-chip-set>
           </div>
-        </div>
-      </Panel>
-
-      <Panel id="panel-panic" icon="panic" title="Panic Button" open={open.panic} toggle={() => toggle("panic")}>
-        <m3e-list>
-          <Row label="Enable panic shortcut" icon="power_settings_new" on={settings.panicEnabled} toggle={() => onChange({ panicEnabled: !settings.panicEnabled })} />
-        </m3e-list>
-        <div className="lb-setting-group">
-          <TextInput
-            label="Shortcut (e.g. Ctrl+Shift+X)"
-            value={settings.panicKeys}
-            onChange={(v) => onChange({ panicKeys: v })}
-          />
-          <TextInput
-            label="Panic destination"
-            value={settings.panicUrl}
-            placeholder="https://www.wikipedia.org/"
-            onChange={(v) => onChange({ panicUrl: v })}
-          />
-          <p className="lb-muted">
-            Triggering the shortcut navigates this tab to the destination immediately. Your proxy tabs are
-            saved on this device and are restored when you come back.
-          </p>
         </div>
       </Panel>
 
