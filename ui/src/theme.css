@@ -199,31 +199,15 @@ m3e-nav-rail { overflow: hidden; }
   transition: opacity 300ms ease, transform 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), gap 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 /* Same retract logic as the bottom dock: after the shared idle timer
-   the strip slides up leaving a 16px sliver and the open tabs
-   smoothly collapse into the single active one; hovering (or any
-   pointer/keyboard activity, via the shared state) expands it back. */
+   the strip slides up leaving a 16px sliver. The tabs themselves are
+   NOT collapsed or faked: they keep their real shape and positions,
+   they are just mostly off-screen with the strip. Hovering (or any
+   pointer/keyboard activity, via the shared state) slides it back. */
 .lb-tabstrip.tucked { transform: translateY(calc(-100% + 16px)); gap: 0; }
 .lb-tabstrip:hover { transform: translateY(0); }
 /* In fullscreen the strip mostly fades out; hover brings it back. */
 .lb-browser:fullscreen .lb-tabstrip:not(.tucked) { opacity: 0.35; }
 .lb-browser:fullscreen .lb-tabstrip:not(.tucked):hover { opacity: 1; }
-/* Tucked: inactive tabs smoothly collapse to zero (max-width +
-   padding + opacity all transition), leaving one compact pill. */
-.lb-tabstrip.tucked:not(:hover) .lb-tab:not(.active) {
-  max-width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  gap: 0;
-  opacity: 0;
-  border-width: 0;
-  overflow: hidden;
-}
-.lb-tabstrip.tucked:not(:hover) > m3e-icon-button {
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-width 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), opacity 300ms ease;
-}
 /* Tabs, M3E style: pill chips with a state layer, an active container
    tint, springy press physics and icon-button close affordance. */
 .lb-tab {
@@ -282,7 +266,8 @@ m3e-nav-rail { overflow: hidden; }
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  padding: 7px 14px;
+  justify-content: center;
+  padding: 7px;
   border-radius: 999px;
   border: 1px solid var(--md-sys-color-outline-variant, var(--md-sys-color-outline));
   background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
@@ -305,16 +290,6 @@ m3e-nav-rail { overflow: hidden; }
   border-color: transparent;
   font-variation-settings: "wght" 600;
 }
-/* Tucked strip: the pill collapses away with the add-tab button. */
-.lb-tabstrip.tucked:not(:hover) > .lb-incognito {
-  max-width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  opacity: 0;
-  border-width: 0;
-  overflow: hidden;
-  transition: max-width 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), opacity 300ms ease;
-}
 
 /* Pages fill the whole browser area; the frosted tab strip floats
    above the rendered site. */
@@ -325,8 +300,8 @@ m3e-nav-rail { overflow: hidden; }
   overflow: hidden;
   background: var(--md-sys-color-surface);
 }
-.lb-page { position: absolute; inset: 0; visibility: hidden; }
-.lb-page.active { visibility: visible; }
+.lb-page { position: absolute; inset: 0; visibility: hidden; opacity: 0; transition: opacity 180ms ease, visibility 0s 180ms; }
+.lb-page.active { visibility: visible; opacity: 1; transition: opacity 180ms ease; }
 .lb-page iframe { width: 100%; height: 100%; border: none; background: #fff; }
 
 .lb-loading { position: absolute; inset: 0; padding: 24px; background: var(--md-sys-color-surface); z-index: 5; display: flex; flex-direction: column; gap: 16px; align-items: center; }
@@ -390,7 +365,8 @@ m3e-nav-rail { overflow: hidden; }
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 200px;
+  /* Fixed-basis between equal spacers = truly centered. */
+  flex: 0 1 320px;
   min-width: 160px;
   max-width: 460px;
   margin: 0 6px;
@@ -685,13 +661,15 @@ m3e-icon-button:active { transform: scale(0.88); }
   background: var(--md-sys-color-surface);
   z-index: 5;
 }
-/* Search expands smoothly when focused or filled with text. */
-.lb-newtab-search {
+/* Search expands smoothly as the user types (state-driven .filled on
+   a plain wrapper div; the m3e host fills it at 100%). */
+.lb-nt-search {
   width: min(420px, 100%);
   transition: width 320ms cubic-bezier(0.2, 0, 0, 1);
 }
-.lb-newtab-search:focus-within,
-.lb-newtab-search.filled { width: min(640px, 100%); }
+.lb-nt-search.filled,
+.lb-nt-search:focus-within { width: min(640px, 100%); }
+.lb-newtab-search { width: 100%; }
 /* m3e text field slotted input */
 .lb-newtab-search::part(input),
 .lb-newtab-search input {
@@ -709,3 +687,196 @@ m3e-icon-button:active { transform: scale(0.88); }
   justify-content: center;
   max-width: 720px;
 }
+
+/* ---- Feature batch: rail compaction/hiding, lock popup, tab preview,
+   smooth tab close/switch, error page, segment wrapping, small screens. ---- */
+
+/* Compact nav rail: narrower track, tighter items; contents stay. */
+m3e-nav-rail { width: 60px !important; }
+m3e-nav-rail m3e-nav-item { margin: 2px 0; }
+/* Hidden rail during proxy sessions; the shell flexes, content fills. */
+m3e-nav-rail.lb-rail-hidden { display: none !important; }
+/* Floating hamburger that brings the hidden rail back. Sits below the
+   tab strip so it never covers a tab. */
+.lb-rail-fab {
+  position: fixed;
+  top: 54px;
+  left: 10px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--md-sys-color-on-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.lb-rail-fab:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, var(--md-sys-color-surface));
+}
+
+/* Toolbar centering spacers: equal growth both sides of the pill. */
+.lb-tb-spacer { flex: 1 1 0; min-width: 0; }
+
+/* Lock colors: green closed (https), red broken (http). Clickable. */
+.lb-tb-lock { cursor: pointer; }
+.lb-tb-lock.secure { color: #1e8e3e; }
+.lb-tb-lock.insecure { color: #d93025; }
+
+/* Lock popup: opens upward from the pill like the autocomplete. */
+.lb-lockpanel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  z-index: 45;
+  background: var(--md-sys-color-surface, #fef7ff);
+  border: 1px solid var(--md-sys-color-outline, #79747e);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.lb-lockpanel-head { display: flex; align-items: center; gap: 8px; font-variation-settings: "wght" 500; }
+.lb-lockpanel-head > span:last-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lockpanel-close {
+  background: none; border: none; color: inherit; cursor: pointer;
+  display: flex; align-items: center; padding: 2px; border-radius: 999px;
+}
+.lb-lockpanel-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.lb-lockpanel-row span { opacity: 0.65; }
+.lb-lockpanel-row code { font-family: ui-monospace, monospace; word-break: break-all; }
+.lb-lockpanel-note { font-size: 11px; margin: 0; }
+.lb-lockpanel-cookies {
+  max-height: 130px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.lb-lockpanel-ctitle { font-variation-settings: "wght" 500; margin-bottom: 4px; }
+.lb-lockpanel-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; padding: 2px 0; opacity: 0.85; }
+.lb-lockpanel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Incognito icon button. */
+.lb-incognito-ic { width: 18px; height: 18px; display: inline-flex; }
+.lb-incognito-ic svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+
+/* Tab hover preview: live (scriptless) render below the strip. */
+.lb-tab-preview {
+  position: absolute;
+  top: 46px;
+  z-index: 30;
+  width: 264px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
+  background: var(--md-sys-color-surface);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+}
+.lb-tab-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent);
+}
+.lb-tab-preview-title { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-tab-preview-mute {
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+}
+.lb-tab-preview-mute.muted { color: var(--md-sys-color-error, #b3261e); }
+.lb-tab-preview-clip { width: 256px; height: 160px; overflow: hidden; position: relative; }
+.lb-tab-preview-frame {
+  width: 1024px;
+  height: 640px;
+  border: none;
+  background: #fff;
+  transform: scale(0.25);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+/* Smooth tab close: the closing tab collapses, siblings slide over. */
+.lb-tab.closing {
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  gap: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+
+/* Error page: full-area, informative, single action. */
+.lb-error {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  background: var(--md-sys-color-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px;
+  text-align: center;
+}
+.lb-error-url, .lb-error-msg { margin: 0; max-width: 640px; word-break: break-all; }
+.lb-error-url { font-family: ui-monospace, monospace; font-size: 13px; opacity: 0.8; }
+.lb-error-msg { color: var(--md-sys-color-error, #b3261e); font-size: 14px; }
+.lb-error-logs {
+  width: min(640px, 100%);
+  max-height: 180px;
+  overflow: auto;
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-variant, var(--md-sys-color-surface)) 40%, transparent);
+}
+.lb-error-logs-title { font-variation-settings: "wght" 500; margin-bottom: 4px; }
+.lb-error-logline { opacity: 0.8; word-break: break-all; padding: 1px 0; }
+
+/* Settings: segmented buttons wrap instead of getting cut off. */
+.lb-seg-wrap { display: flex; width: 100%; max-width: 100%; }
+.lb-seg-wrap m3e-segmented-button { display: flex; flex-wrap: wrap; width: 100%; max-width: 100%; }
+.lb-seg-wrap m3e-button-segment { max-width: 100%; }
+
+/* Small screens: tighter chrome, no hover preview. */
+@media (max-width: 600px) {
+  .lb-tab-preview { display: none; }
+  .lb-tb-pill { flex-basis: 180px; max-width: 240px; min-width: 120px; }
+  .lb-tb-spacer { flex: 0.4 1 0; }
+  .lb-lockpanel { left: auto; right: 0; width: 280px; }
+  .lb-error { padding: 16px; }
+  .lb-error-logs { max-height: 120px; }
+  .lb-tab { max-width: 110px; }
+  .lb-tab-title { max-width: 60px; }
+  .lb-setting-group { padding: 8px 8px 4px; }
+  .lb-view-content { padding: 0 4px; }
+  m3e-nav-rail { width: 52px !important; }
+}
+

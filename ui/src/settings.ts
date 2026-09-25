@@ -91,6 +91,12 @@ export type Settings = {
   cloakEnabled: boolean;
   cloakUrl: string;
   cloakTitle: string;
+  /* Engine-queried completions in the search fields. */
+  suggestQueries: boolean;
+  /* Warm the LobsterJet cache when links are hovered. */
+  prefetchLinks: boolean;
+  /* Tuck the toolbar and tab strip when the app is idle. */
+  autoHideChrome: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -108,6 +114,9 @@ export const DEFAULT_SETTINGS: Settings = {
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
+  suggestQueries: true,
+  prefetchLinks: true,
+  autoHideChrome: true,
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -128,6 +137,9 @@ export function loadSettings(): Settings {
           : DEFAULT_SETTINGS.proxyEngine,
       compressImages: parsed.compressImages === undefined ? true : Boolean(parsed.compressImages),
       customHeaders: typeof parsed.customHeaders === "string" ? parsed.customHeaders : "",
+      suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
+      prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
+      autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

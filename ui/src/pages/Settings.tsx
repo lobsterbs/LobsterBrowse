@@ -92,6 +92,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Proxy engine</div>
+          <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
               LobsterJet — default
@@ -100,6 +101,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               ScramJet
             </m3e-button-segment>
           </m3e-segmented-button>
+          </div>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             LobsterJet is the project default: a service worker that caches proxied pages on your
             device (cache-first, 10-minute freshness, network fallback), so repeat visits load
@@ -111,6 +113,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
+          <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
             {(Object.keys(ENGINES) as EngineId[]).map((id) => (
               <m3e-button-segment key={id} checked={settings.engine === id ? "" : undefined} onClick={() => onChange({ engine: id })}>
@@ -118,16 +121,21 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               </m3e-button-segment>
             ))}
           </m3e-segmented-button>
+          </div>
         </div>
         <m3e-list>
           <Row label="Proxy through server (server-side)" icon="vpn_lock" on={settings.proxySearch} toggle={() => onChange({ proxySearch: !settings.proxySearch })} />
           <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
+          <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
+          <Row label="Prefetch links on hover (LobsterJet)" icon="bolt" on={settings.prefetchLinks} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
+          <Row label="Hide toolbar when idle" icon="visibility_off" on={settings.autoHideChrome} toggle={() => onChange({ autoHideChrome: !settings.autoHideChrome })} />
         </m3e-list>
       </Panel>
 
       <Panel id="panel-ua" icon="devices" title="User-Agent" open={open.ua} toggle={() => toggle("ua")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Preset</div>
+          <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="User-Agent preset">
             {(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map((id) => (
               <m3e-button-segment key={id} checked={settings.uaPreset === id ? "" : undefined} onClick={() => onChange({ uaPreset: id })}>
@@ -138,6 +146,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               Custom
             </m3e-button-segment>
           </m3e-segmented-button>
+          </div>
         </div>
         {settings.uaPreset === "custom" && (
           <div className="lb-setting-group">
@@ -218,6 +227,31 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             spellCheck={false}
             onChange={(e) => onChange({ customHeaders: e.target.value })}
           />
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">LobsterJet cache</div>
+          <p className="lb-muted">
+            Cached proxied pages and local libraries live on this device in the service worker
+            cache. Clearing drops every entry; pages reload from the server on the next visit.
+          </p>
+          <m3e-button
+            onClick={() => {
+              (async () => {
+                try {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                  if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                    M3eSnackbar.open("LobsterJet cache cleared", { duration: 3000 });
+                  }
+                } catch {
+                  /* caches unavailable */
+                }
+              })();
+            }}
+          >
+            <m3e-icon name="delete" aria-hidden={true} /> Clear LobsterJet cache
+          </m3e-button>
         </div>
         <m3e-divider />
         <div className="lb-setting-group">

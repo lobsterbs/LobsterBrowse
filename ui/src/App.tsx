@@ -25,6 +25,12 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
   const [view, setView] = useState<View>("home");
+  /* Proxy sessions hide the nav rail for full-page content; a floating
+     hamburger brings it back. Leaving the browser view resets it. */
+  const [railHidden, setRailHidden] = useState(false);
+  useEffect(() => {
+    setRailHidden(view === "browser");
+  }, [view]);
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
@@ -102,6 +108,33 @@ export default function App() {
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
+
+  /* Incognito session swap: turning incognito on suspends the whole
+     normal session (stashed in a ref, not persisted) and drops you on
+     one fresh empty incognito tab; turning it off closes the incognito
+     tabs and restores the suspended session exactly as it was. */
+  const suspendedTabs = useRef<Tab[] | null>(null);
+  const toggleIncognito = useCallback(
+    (v: boolean) => {
+      setIncognito(v);
+      if (v) {
+        suspendedTabs.current = tabs;
+        const t = freshTab();
+        setTabs([t]);
+        setActiveId(t.id);
+        setView("browser");
+        store.pushLog("info", "incognito session started, " + tabs.length + " tabs suspended");
+      } else {
+        const restore = suspendedTabs.current ?? [];
+        suspendedTabs.current = null;
+        setTabs(restore);
+        setActiveId(restore.length > 0 ? restore[restore.length - 1].id : 0);
+        if (restore.length === 0 && tabs.length === 0) setView("home");
+        store.pushLog("info", "incognito session closed, " + restore.length + " tabs restored");
+      }
+    },
+    [tabs]
+  );
 
   const toggleBookmark = useCallback((url: string, title: string) => {
     if (!url) return;
@@ -184,7 +217,7 @@ export default function App() {
   return (
     <m3e-theme color={settings.seed} strong-focus={true}>
       <div className="lb-shell">
-        <m3e-nav-rail id="nav-rail" mode="compact" aria-label="LobsterBrowse">
+        <m3e-nav-rail id="nav-rail" mode="compact" aria-label="LobsterBrowse" className={railHidden ? "lb-rail-hidden" : ""}>
           <m3e-icon-button toggle aria-label="Toggle navigation rail">
             <m3e-icon name="menu" aria-hidden={true} />
             <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
@@ -209,8 +242,6 @@ export default function App() {
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
           </m3e-nav-item>
           <m3e-tooltip for="nav-browse" position="after">Proxy browser</m3e-tooltip>
-          {/* Live tab count on the Browse item, real M3E badge. */}
-          {tabs.length > 0 && <m3e-badge for="nav-browse">{tabs.length}</m3e-badge>}
           <m3e-nav-item
             id="nav-settings"
             selected={view === "settings" ? "" : undefined}
@@ -220,6 +251,19 @@ export default function App() {
           </m3e-nav-item>
           <m3e-tooltip for="nav-settings" position="after">Preferences — saved on this device</m3e-tooltip>
         </m3e-nav-rail>
+
+        {/* Floating hamburger: restores the nav rail during a proxy
+            session (the rail itself is display:none while hidden). */}
+        {view === "browser" && railHidden && (
+          <button
+            type="button"
+            className="lb-rail-fab"
+            aria-label="Show navigation rail"
+            onClick={() => setRailHidden(false)}
+          >
+            <m3e-icon name="menu" aria-hidden={true} />
+          </button>
+        )}
 
         <div className="lb-main">
           {/* The browser view gets every pixel: no header there. */}
@@ -253,7 +297,7 @@ export default function App() {
                   onToggleBookmark={toggleBookmark}
                   onHistory={addHistory}
                   incognito={incognito}
-                  onIncognitoChange={setIncognito}
+                  onIncognitoChange={toggleIncognito}
                   setView={setView}
                   onOpenLogs={() => setView("logs")}
                 />
