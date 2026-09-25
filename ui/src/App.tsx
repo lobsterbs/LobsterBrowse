@@ -236,7 +236,10 @@ export default function App() {
           mode="compact"
           aria-label="LobsterBrowse"
           className={railHidden ? "lb-rail-hidden" : ""}
-          onClick={() => {
+          onClick={(e) => {
+            /* Only the rail chrome itself toggles; clicks on nav items
+               bubble up here and must not slide the rail away. */
+            if ((e.target as HTMLElement).closest("m3e-nav-item")) return;
             if (view === "browser") setRailHidden(!railHidden);
           }}
         >
