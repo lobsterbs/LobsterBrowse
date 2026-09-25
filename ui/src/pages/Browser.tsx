@@ -205,7 +205,16 @@ export default function BrowserView(props: Props) {
       } catch {
         return;
       }
-      if (!doc || !path.startsWith("/r/")) return;
+      if (!doc) return;
+      /* Detailed error page: the server renders meta[lb-load-error]
+         at the same /r/ path; surface it and stop the spinner. */
+      const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
+      if (errMeta) {
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
+        pushLog("error", "load failed: " + (errMeta.content || "unknown error"));
+        return;
+      }
+      if (!path.startsWith("/r/")) return;
       const real = decodeRoute(path);
       if (!real) return;
       if (real !== t.url) {
@@ -408,12 +417,21 @@ export default function BrowserView(props: Props) {
                 else frames.current.delete(t.id);
               }}
               sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
+              /* Cross-origin frames (LobsterJet) can't be polled; the
+                 load event is the only reliable "done" signal there. */
+              onLoad={() =>
+                setStatus((prev) => {
+                  const cur = prev[t.id];
+                  return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
+                })
+              }
             />
           </div>
         ))}
 
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
+            <div className="lb-spinner" aria-hidden="true" />
             <m3e-skeleton animation="wave" shape="rounded" className="lb-skel">
               <div style={{ width: "45%", height: 28 }} />
               <div style={{ width: "92%", height: 14 }} />
