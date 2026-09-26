@@ -35,6 +35,33 @@ const ENGINE_JS: &str = r#"(function(){
   var PAGE = window.__lbPageUrl;
   var PARAMS = window.__lbParams || "";
   var send = function(type, data){ try { parent.postMessage({ lb: type, data: data }, "*"); } catch (e) {} };
+  /* Resource-failure diagnostics: structured what-failed-and-why
+     reports for the DevTools diagnostics view and the error page.
+     Sensitive query parameters are redacted before anything leaves
+     the page. */
+  var redact = function(u){
+    return String(u).replace(/([?&])(token|access_token|api_key|apikey|password|secret|authorization|session)=[^&]*/gi, "$1$2=[redacted]");
+  };
+  var fail = function(kind, info){
+    try {
+      info = info || {};
+      send("resfail", { kind: kind, url: redact(info.url || ""), reason: info.reason || "UNKNOWN",
+        status: info.status || 0, note: String(info.note || "").slice(0, 400), ts: Date.now() });
+    } catch (e) {}
+  };
+  /* Resource load failures fire a capture-phase error event on the
+     ELEMENT (script/style/img/source/media/iframe), not the window. */
+  window.addEventListener("error", function(e){
+    var t = e.target;
+    if (!t || !t.tagName || t === window) return;
+    var tag = String(t.tagName).toUpperCase();
+    var kind = (tag === "IMG" || tag === "SOURCE") ? "image"
+      : tag === "SCRIPT" ? "javascript"
+      : tag === "LINK" ? ((t.rel && String(t.rel).toLowerCase().indexOf("stylesheet") >= 0) ? "css" : "link")
+      : tag === "IFRAME" ? "iframe"
+      : (tag === "VIDEO" || tag === "AUDIO") ? "media" : "resource";
+    fail(kind, { url: (t.src || t.href || t.data || ""), reason: "RESOURCE_LOAD_FAILURE" });
+  }, true);
   var fmt = function(a){ if (typeof a === "string") return a;
     try { return JSON.stringify(a, null, 1); } catch (e) { return String(a); } };
   ["log","info","warn","error","debug"].forEach(function(m){
@@ -94,8 +121,21 @@ const ENGINE_JS: &str = r#"(function(){
     } catch (e) {}
     return of.call(window, routed, init).then(function(resp){
       send("net", { url: String(url0), method: method, status: resp.status, ok: resp.ok, dur: Date.now() - t0, ts: Date.now() });
+      if (!resp.ok) {
+        fail("fetch", { url: String(url0), reason: "HTTP_ERROR", status: resp.status });
+      } else {
+        /* MIME mismatch: a script/css/font/image request answered with
+           an HTML body (usually a proxy error page) is one of the most
+           common "site looks broken" causes. */
+        var ct = (resp.headers && resp.headers.get) ? (resp.headers.get("content-type") || "") : "";
+        var path = String(url0).split("?")[0].split("#")[0];
+        if (/text\/html/i.test(ct) && /\.(js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|webp|svg|json|wasm)$/i.test(path)) {
+          fail("fetch", { url: String(url0), reason: "MIME_TYPE_ERROR", status: resp.status, note: "received content-type " + ct });
+        }
+      }
       return resp; }, function(err){
       send("net", { url: String(url0), method: method, status: 0, error: String(err), dur: Date.now() - t0, ts: Date.now() });
+      fail("fetch", { url: String(url0), reason: "FETCH_FAILURE", note: String(err).slice(0, 200) });
       throw err; }); }; }
   if (window.XMLHttpRequest && XMLHttpRequest.prototype.open) {
     var ox = XMLHttpRequest.prototype.open;
@@ -104,12 +144,21 @@ const ENGINE_JS: &str = r#"(function(){
       this.__lb = { method: String(m).toUpperCase(), url: String(u), t0: Date.now() };
       var self = this;
       this.addEventListener("loadend", function(){ var i2 = self.__lb;
-        if (i2) send("net", { url: i2.url, method: i2.method, status: self.status, dur: Date.now() - i2.t0, ts: Date.now() }); });
+        if (i2) send("net", { url: i2.url, method: i2.method, status: self.status, dur: Date.now() - i2.t0, ts: Date.now() });
+        if (i2 && self.status === 0) fail("xhr", { url: i2.url, reason: "XHR_FAILURE" });
+        else if (i2 && self.status >= 400) fail("xhr", { url: i2.url, reason: "HTTP_ERROR", status: self.status }); });
       return ox.apply(this, arguments); }; }
   var OWS = window.WebSocket;
-  if (OWS) { var WS = function(u, p){ send("net", { url: String(u), method: "WS", status: 101, ts: Date.now() });
-      var ws = p !== undefined ? new OWS(u, p) : new OWS(u);
-      ws.addEventListener("close", function(){ send("net", { url: String(u), method: "WS", status: 1006, ts: Date.now() }); });
+  if (OWS) { var WS = function(u, p){
+      send("net", { url: String(u), method: "WS", status: 101, ts: Date.now() });
+      var ws;
+      try { ws = p !== undefined ? new OWS(u, p) : new OWS(u); }
+      catch (e) {
+        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE", note: String(e).slice(0, 200) });
+        throw e;
+      }
+      ws.addEventListener("close", function(){ send("net", { url: String(u), method: "WS", status: 1006, ts: Date.now() });
+        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE" }); });
       return ws; };
     WS.prototype = OWS.prototype; window.WebSocket = WS; }
   function prop(clazz, name) {
@@ -1677,6 +1726,32 @@ fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
     None
 }
 
+/// Build/identity endpoint: the single authoritative source the Settings
+/// About section reads. Versions come from the compiler (this exact
+/// binary); the deployment identifier from the git commit the platform
+/// built from (RENDER_GIT_COMMIT on Render, LB_BUILD_ID as a portable
+/// fallback, "unknown" honestly when neither is set). No invented data.
+async fn build_endpoint() -> Response {
+    let build = std::env::var("RENDER_GIT_COMMIT")
+        .or_else(|_| std::env::var("LB_BUILD_ID"))
+        .unwrap_or_else(|_| "unknown".to_string());
+    let build_short: String = build.chars().take(7).collect();
+    let body = format!(
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"lobsterjet\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        env!("CARGO_PKG_VERSION"),
+        "1.0 Nitride",
+        env!("CARGO_PKG_VERSION"),
+        json_escape(&build),
+        json_escape(&build_short),
+    );
+    Response::builder()
+        .status(200)
+        .header("content-type", "application/json")
+        .header("cache-control", "no-store")
+        .body(body.into())
+        .unwrap()
+}
+
 /// TLS certificate details for the site info card. The browser never
 /// makes a direct TLS connection to proxied sites, so this reads the
 /// host's public CT-log record: crt.sh first, Cert Spotter as the
@@ -1805,6 +1880,7 @@ async fn main() {
                 .route("/suggest", get(suggest_endpoint))
 .route("/logs", get(logs_endpoint))
 .route("/cert", get(cert_endpoint))
+.route("/build", get(build_endpoint))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
         // The service worker script gets Service-Worker-Allowed so a
         // "/" scope registration is possible later; its chunks and
