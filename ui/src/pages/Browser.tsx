@@ -28,7 +28,7 @@ import {
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
-import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
+import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
 
 type View = "home" | "browser" | "settings" | "logs";
 
@@ -58,6 +58,15 @@ function tabLabel(t: Tab): string {
   } catch {
     return t.url;
   }
+}
+
+/* Redact obviously sensitive query parameters before a URL enters any
+   diagnostic surface (DevTools, error page, logs). */
+function redactUrl(u: string): string {
+  return String(u).replace(
+    /([?&])(token|access_token|api_key|apikey|password|secret|authorization|session)=[^&]*/gi,
+    "$1$2=[redacted]",
+  );
 }
 
 /* Installed-extension summary from the engine control plane. */
@@ -93,7 +102,14 @@ export default function BrowserView(props: Props) {
   /* Last URL each tab was asked to load — guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
-  const [status, setStatus] = useState<Record<number, { loading: boolean }>>({});
+  /* Per-tab navigation generation: every load() bumps it, so results
+     from an older navigation (a slow "ready", a late poll callback, a
+     certificate lookup for a page we already left) can be detected and
+     dropped. navId is the short human-readable diagnostic ID
+     (NAV-XXXX) shown on the error page. */
+  const navGen = useRef<Map<number, number>>(new Map());
+  const navId = useRef<Map<number, string>>(new Map());
+  const [status, setStatus] = useState<Record<number, { loading: boolean; nav?: string }>>({});
   const [dt, setDtState] = useState<Record<number, DtState>>({});
   /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
@@ -330,11 +346,41 @@ export default function BrowserView(props: Props) {
         iconCache.current.set(href, "");
       });
   };
+  /* Blob URL lifecycle: the cache dedupes per icon URL and stays
+     bounded; eviction revokes only URLs no tab is still using, and
+     everything left is revoked when the browser view unmounts. */
+  const iconsRef = useRef<Record<number, string>>({});
+  iconsRef.current = icons;
+  useEffect(() => {
+    const cache = iconCache.current;
+    if (cache.size <= 64) return;
+    const inUse = new Set(Object.values(iconsRef.current));
+    const evict = cache.size - 64;
+    let i = 0;
+    for (const [k, v] of Array.from(cache.entries())) {
+      if (i >= evict) break;
+      cache.delete(k);
+      i++;
+      if (v && !inUse.has(v)) URL.revokeObjectURL(v);
+    }
+  }, [icons]);
+  useEffect(
+    () => () => {
+      for (const v of iconCache.current.values()) if (v) URL.revokeObjectURL(v);
+      iconCache.current.clear();
+    },
+    [],
+  );
 
   /* ---- Navigation ---- */
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
+    /* New navigation generation: older generations' results are stale. */
+    const gen = (navGen.current.get(tab.id) ?? 0) + 1;
+    navGen.current.set(tab.id, gen);
+    const nid = "NAV-" + gen.toString(16).toUpperCase().padStart(4, "0").slice(-4);
+    navId.current.set(tab.id, nid);
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
     const idx = push ? stack.length - 1 : tab.idx;
     props.updateTab(tab.id, { url, stack, idx, title: "" });
@@ -355,12 +401,16 @@ export default function BrowserView(props: Props) {
       return n;
     });
 
-    setStatus((prev) => ({ ...prev, [tab.id]: { loading: true } }));
+    setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
     const frame = frames.current.get(tab.id);
     const href = routeUrl(settings, rules, url);
     if (frame) frame.src = href;
-    pushLog("info", "engine nav " + url);
+    pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
+  /* Stable handle to the current load(): the mount-once message
+     listener calls this instead of capturing a render-time closure. */
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   /* ---- Auto-load: a tab whose URL was set without a navigation
      (Home search, restored session, newTab(url)) starts loading as
@@ -415,9 +465,24 @@ export default function BrowserView(props: Props) {
         return n;
       });
       if (real !== t.url) {
-        const stack = [...t.stack.slice(0, t.idx + 1), real];
-        props.updateTab(t.id, { url: real, stack, idx: stack.length - 1 });
-        if (!props.incognito) props.onHistory(real);
+        /* History semantics: a URL change seen by polling is NOT always
+           a new navigation. If the page used history.back()/forward()
+           (popstate), the polled URL matches an adjacent stack entry:
+           move the index, do not append. A→B→C + back stays A→B→C at
+           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
+           replaceState to a different path) pushes a fresh entry. */
+        const stack = t.stack;
+        const idx = t.idx;
+        let patch: Partial<Tab>;
+        if (idx > 0 && stack[idx - 1] === real) {
+          patch = { url: real, idx: idx - 1 };
+        } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
+          patch = { url: real, idx: idx + 1 };
+        } else {
+          patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+          if (!props.incognito) props.onHistory(real);
+        }
+        props.updateTab(t.id, patch);
         pushLog("info", "url sync " + real);
       }
       const title = (doc.title || "").trim();
@@ -462,13 +527,44 @@ export default function BrowserView(props: Props) {
   }, [active?.id, tabs, settings, rules, mutedTabs]);
 
   /* ---- Hook messages from proxied pages ---- */
+  /* ---- Hook messages from proxied pages ----
+     ONE listener, registered once on mount. The old effect depended on
+     [tabs, activeId, settings, rules, dt], so every state change tore
+     the listener down and re-registered it (churn + dropped-message
+     races). Everything the handler needs now comes from a `live` ref
+     refreshed on every render, so the listener identity never changes
+     and never reads stale render-time state. */
+  const live = useRef({
+    tabs,
+    dt,
+    incognito: props.incognito,
+    onHistory: props.onHistory,
+    newTab: props.newTab,
+    updateTab: props.updateTab,
+  });
+  live.current = {
+    tabs,
+    dt,
+    incognito: props.incognito,
+    onHistory: props.onHistory,
+    newTab: props.newTab,
+    updateTab: props.updateTab,
+  };
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      /* Sender + origin validation: proxied frames are same-origin by
+         architecture (that is what gives DevTools its page access), so
+         a message from any other origin is not one of ours. */
+      if (e.origin !== window.location.origin) return;
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
-      if (!data || typeof data.lb !== "string") return;
+      /* Schema validation: {lb: string, data?: object}. Anything else
+         (including unknown lb types) is dropped. */
+      if (!data || typeof data.lb !== "string" || data.lb.length > 32) return;
+      if (data.data !== undefined && typeof data.data !== "object") return;
+      const L = live.current;
       let tabId: number | null = null;
       let tab: Tab | undefined;
-      for (const t of tabs) {
+      for (const t of L.tabs) {
         const f = frames.current.get(t.id);
         if (f && e.source === f.contentWindow) {
           tabId = t.id;
@@ -478,14 +574,17 @@ export default function BrowserView(props: Props) {
       }
       if (tabId === null || !tab) return;
       const d = data.data ?? {};
-      const dtBase = () => dtOf(tabId as number);
+      const dtBase = () => L.dt[tabId as number] ?? emptyDt();
+      /* Maximum string lengths: a hostile or broken page must not be
+         able to stuff megabytes into DevTools state. */
+      const cap = (v: unknown, n: number) => String(v ?? "").slice(0, n);
 
       if (data.lb === "console") {
         const level = String(d.level ?? "log");
         const kind =
           level === "error" ? "error" : level === "warn" ? "warn" : level === "info" ? "info" : level === "debug" ? "debug" : "log";
         setDt(tabId, {
-          console: [...dtBase().console, { id: nextEntryId(), kind, text: String(d.text ?? ""), ts: Number(d.ts ?? Date.now()) }],
+          console: [...dtBase().console, { id: nextEntryId(), kind, text: cap(d.text, 4000), ts: Number(d.ts ?? Date.now()) }].slice(-500),
         });
       } else if (data.lb === "net") {
         setDt(tabId, {
@@ -493,41 +592,65 @@ export default function BrowserView(props: Props) {
             ...dtBase().net,
             {
               id: nextEntryId(),
-              url: String(d.url ?? ""),
-              method: String(d.method ?? "GET"),
+              url: cap(d.url, 2000),
+              method: cap(d.method, 10) || "GET",
               status: Number(d.status ?? 0),
               ok: d.ok === undefined ? undefined : Boolean(d.ok),
               dur: d.dur === undefined ? undefined : Number(d.dur),
-              error: d.error === undefined ? undefined : String(d.error),
+              error: d.error === undefined ? undefined : cap(d.error, 500),
               ts: Number(d.ts ?? Date.now()),
             },
           ].slice(-500),
         });
+      } else if (data.lb === "resfail") {
+        /* Resource-failure diagnostics: what failed, where, why. */
+        const entry: ResFailEntry = {
+          id: nextEntryId(),
+          url: redactUrl(cap(d.url, 2000)),
+          kind: cap(d.kind, 40) || "unknown",
+          reason: cap(d.reason, 60) || "UNKNOWN",
+          status: d.status === undefined ? undefined : Number(d.status) || 0,
+          note: d.note === undefined ? undefined : cap(d.note, 400),
+          ts: Number(d.ts ?? Date.now()) || Date.now(),
+        };
+        setDtState((prev) => {
+          const base = prev[tabId as number] ?? emptyDt();
+          return { ...prev, [tabId as number]: { ...base, fails: [...base.fails, entry].slice(-200) } };
+        });
       } else if (data.lb === "ready") {
-        const title = String(d.title ?? "");
-        if (title) props.updateTab(tabId, { title });
-        setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false } }));
-        if (tab.url && !props.incognito) props.onHistory(tab.url);
+        /* Stale-navigation guard: a ready that arrives after a newer
+           load() started must not update the tab (title/status). */
+        if (lastNav.current.get(tabId) !== tab.url) return;
+        const title = cap(d.title, 300);
+        if (title) L.updateTab(tabId, { title });
+        setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
+        if (tab.url && !L.incognito) L.onHistory(tab.url);
       } else if (data.lb === "navigate") {
-        const href = String(d.href ?? "");
+        const href = cap(d.href, 2000);
+        if (!href) return;
         const abs = (() => {
           try {
             return new URL(href, tab.url).href;
           } catch {
-            return href;
+            return "";
           }
         })();
+        /* Scheme validation: only http(s) navigations. javascript:,
+           data:, blob:, file: and friends are rejected outright — a
+           proxied page must not script the browser surface. */
+        if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
-          props.newTab(abs);
+          L.newTab(abs);
         } else {
-          load(tab, abs, { push: true });
+          loadRef.current(tab, abs, { push: true });
         }
       }
+      /* Unknown data.lb values are ignored by design. */
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs, activeId, settings, rules, dt]);
+  }, []);
 
   const draft = active ? (drafts[active.id] ?? active.url) : "";
   /* Query the search engine for completions of the current draft.
@@ -625,6 +748,35 @@ export default function BrowserView(props: Props) {
     setClosingIds((prev) => [...prev, id]);
     window.setTimeout(() => {
       setClosingIds((prev) => prev.filter((x) => x !== id));
+      /* Full per-tab state cleanup: status, DevTools, drafts, icons,
+         errors, mute set, navigation bookkeeping and the frame handle.
+         (The favicon blob URL itself is shared through iconCache, so
+         it is only revoked when no tab uses it anymore.) */
+      frames.current.delete(id);
+      lastNav.current.delete(id);
+      navGen.current.delete(id);
+      navId.current.delete(id);
+      setMutedTabs((prev) => {
+        const n = new Set(prev);
+        n.delete(id);
+        return n;
+      });
+      const drop = <T extends Record<number, unknown>>(prev: T): T => {
+        if (!(id in prev)) return prev;
+        const n = { ...prev };
+        delete n[id];
+        return n;
+      };
+      setStatus(drop);
+      setDrafts(drop);
+      setIcons(drop);
+      setErrors(drop);
+      setDtState((prev) => {
+        if (!prev[id]) return prev;
+        const n = { ...prev };
+        delete n[id];
+        return n;
+      });
       props.closeTab(id);
     }, 240);
   };
@@ -660,17 +812,25 @@ export default function BrowserView(props: Props) {
   >(null);
   const loadSiteCert = (host: string) => {
     if (!host) return;
+    /* Navigation-generation guard: if the tab navigates while the CT
+       lookup is in flight, the stale answer is dropped. */
+    const tabId = active.id;
+    const gen = navGen.current.get(tabId);
     setSiteCert("checking");
     fetch("/cert?host=" + encodeURIComponent(host))
       .then((r) => r.json() as Promise<{ ok: boolean; issuer?: string; notAfter?: string; days?: number }>)
       .then((d) => {
+        if (navGen.current.get(tabId) !== gen) return;
         if (d && d.ok && d.issuer) {
           setSiteCert({ issuer: d.issuer, notAfter: d.notAfter ?? "", days: d.days ?? 0 });
         } else {
           setSiteCert("error");
         }
       })
-      .catch(() => setSiteCert("error"));
+      .catch(() => {
+        if (navGen.current.get(tabId) !== gen) return;
+        setSiteCert("error");
+      });
   };
   const loadSiteCookies = () => {
     const f = frames.current.get(active.id);
@@ -877,7 +1037,25 @@ export default function BrowserView(props: Props) {
               <div className="lb-error-logline">
                 engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
+              <div className="lb-error-logline">
+                navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
+              </div>
+              {activeDt.fails.length > 0 && (
+                <div className="lb-error-logline">
+                  resource failures: {activeDt.fails.length} (
+                  {Object.entries(
+                    activeDt.fails.reduce<Record<string, number>>((a, f) => {
+                      a[f.kind] = (a[f.kind] ?? 0) + 1;
+                      return a;
+                    }, {}),
+                  )
+                    .map(([k, n]) => n + " × " + k)
+                    .join(", ")}
+                  )
+                </div>
+              )}
               {[
+                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " — " + f.reason + (f.note ? " (" + f.note + ")" : "")),
                 ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
                 ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
               ].map((line, i) => (
@@ -1177,20 +1355,22 @@ export default function BrowserView(props: Props) {
                   </div>
                   {secure && (
                     <>
-                      <div className="lb-site-ctitle">Certificate</div>
+                      <div className="lb-site-ctitle">Public certificate record</div>
                       {siteCert === null && <div className="lb-site-row">Press the lock again to check the certificate.</div>}
-                      {siteCert === "checking" && <div className="lb-site-row">Checking certificate...</div>}
+                      {siteCert === "checking" && <div className="lb-site-row">Checking certificate record...</div>}
                       {siteCert === "error" && <div className="lb-site-row">Certificate data unavailable (no public CT-log record or lookup failed).</div>}
                       {siteCert && siteCert !== "checking" && siteCert !== "error" && (
                         <div className="lb-site-row">
                           Issuer: {siteCert.issuer}
                           <br />
                           Valid until {siteCert.notAfter} ({siteCert.days} days left)
+                          <br />
+                          <span className="lb-muted">Source: Certificate Transparency logs (crt.sh / Cert Spotter). This is the public record for the host, not the certificate this session actually negotiated.</span>
                         </div>
                       )}
                     </>
                   )}
-                  <div className="lb-site-ctitle">Site cookies ({siteCookies.length})</div>
+                  <div className="lb-site-ctitle">Page-readable cookies ({siteCookies.length})</div>
                   {siteCookies.length > 0 && (
                     <div className="lb-site-cookies">
                       {siteCookies.slice(0, 12).map((c) => (
@@ -1204,7 +1384,7 @@ export default function BrowserView(props: Props) {
                 </div>
                 <div slot="actions" className="lb-site-actions">
                   <m3e-button onClick={clearSiteCookies}>
-                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
+                    <m3e-icon name="delete" aria-hidden={true} /> Clear page-readable cookies
                   </m3e-button>
                   <m3e-button onClick={exportCookies}>
                     <m3e-icon name="download" aria-hidden={true} /> Export CSV

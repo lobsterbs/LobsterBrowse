@@ -32,11 +32,40 @@ export type NetEntry = {
   ts: number;
 };
 
+/* One resource load failure captured from the page runtime (the
+   engine shim reports these as `resfail` hook messages). */
+export type ResFailEntry = {
+  id: number;
+  url: string;
+  kind: string;
+  reason: string;
+  status?: number;
+  note?: string;
+  ts: number;
+};
+
+/* Human labels for the structured failure reasons the shim emits. */
+const REASON_TEXT: Record<string, string> = {
+  HTTP_ERROR: "HTTP error status",
+  MIME_TYPE_ERROR: "Wrong content type (MIME mismatch)",
+  FETCH_FAILURE: "fetch() failed",
+  XHR_FAILURE: "XMLHttpRequest failed",
+  RESOURCE_LOAD_FAILURE: "Resource failed to load",
+  WEBSOCKET_FAILURE: "WebSocket closed unexpectedly",
+  JAVASCRIPT_EXCEPTION: "JavaScript exception",
+  UNKNOWN: "Unknown",
+};
+
+export function reasonText(code: string): string {
+  return REASON_TEXT[code] ?? code;
+}
+
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "inspector";
+  page: "console" | "network" | "inspector" | "diagnostics";
   console: ConsoleEntry[];
   net: NetEntry[];
+  fails: ResFailEntry[];
   levelFilter: string;
   consoleFilter: string;
   netFilter: string;
@@ -49,6 +78,7 @@ export function emptyDt(): DtState {
     page: "console",
     console: [],
     net: [],
+    fails: [],
     levelFilter: "all",
     consoleFilter: "",
     netFilter: "",
@@ -115,6 +145,7 @@ const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
   ["inspector", "Inspect", "travel_explore"],
+  ["diagnostics", "Diagnostics", "bug_report"],
 ];
 
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
@@ -325,6 +356,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
   );
 
+  /* Failure counts by resource type for the diagnostics summary. */
+  const failCounts = dt.fails.reduce<Record<string, number>>((acc, f) => {
+    acc[f.kind] = (acc[f.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <m3e-card
       variant="elevated"
@@ -480,6 +517,52 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               </details>
             ))}
           </div>
+        </div>
+      )}
+
+      {dt.page === "diagnostics" && (
+        <div className="lb-dt-body">
+          <div className="lb-dt-toolbar">
+            <m3e-icon-button aria-label="Clear diagnostics" onClick={() => setDt({ fails: [] })}>
+              <m3e-icon name="mop" aria-hidden={true} />
+            </m3e-icon-button>
+          </div>
+          <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
+            Why didn&apos;t this load? Every entry below is a real load failure captured from the page
+            runtime (the engine shim&apos;s resfail reports). Successful loads are in the Network section.
+          </p>
+          {dt.fails.length === 0 ? (
+            <div className="lb-net">
+              <p className="lb-muted">No resource failures captured.</p>
+            </div>
+          ) : (
+            <div className="lb-net">
+              <div className="lb-diag-counts">
+                {Object.entries(failCounts).map(([kind, n]) => (
+                  <span key={kind} className="lb-diag-chip">
+                    {n} × {kind}
+                  </span>
+                ))}
+              </div>
+              {dt.fails.map((f) => (
+                <details key={f.id} className="lb-net-row">
+                  <summary className="lb-net-summary">
+                    <span className="lb-net-status lb-bad">FAIL</span>
+                    <span className="lb-net-method">{f.kind}</span>
+                    <span className="lb-net-url">{f.url || "(no URL)"}</span>
+                    {f.status !== undefined && f.status !== 0 && <span className="lb-net-dur">{f.status}</span>}
+                  </summary>
+                  <div className="lb-net-detail">
+                    <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
+                    <div>Resource type: {f.kind}</div>
+                    {f.status !== undefined && <div>HTTP status: {f.status}</div>}
+                    {f.note && <div>Note: {f.note}</div>}
+                    <div>Time: {ts(f.ts)}</div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

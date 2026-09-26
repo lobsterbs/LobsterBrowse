@@ -703,11 +703,9 @@ m3e-icon-button:active { transform: scale(0.88); }
    overrides): tighter compact width, thin inline padding, and the
    hamburger centered in the rail with no wasted space on the left. */
 m3e-nav-rail {
-  /* A bit longer on the right side (toward the browse view): the
-     compact width is ours to set via the component token. */
-  --m3e-nav-rail-compact-width: 7.5rem;
-  /* One token drives BOTH sides, so left and right inset are
-     pixel-identical by construction. */
+  /* Slightly narrower, still symmetric: one token drives BOTH sides,
+     so left and right inset are pixel-identical by construction. */
+  --m3e-nav-rail-compact-width: 7rem;
   --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space100);
 }
 m3e-nav-rail { transition: margin-left 250ms cubic-bezier(0.2, 0, 0, 1); }
@@ -812,3 +810,25 @@ m3e-nav-rail.lb-rail-hidden {
   to { opacity: 1; transform: scale(1); }
 }
 .lb-newtab { animation: lb-fade-in 240ms cubic-bezier(0.2, 0, 0, 1); }
+
+/* ---- Settings: About / Build ---- */
+.lb-about { margin-top: var(--md-sys-measurement-space100); }
+.lb-build {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 2px var(--md-sys-measurement-space200);
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.lb-build-row span:first-child { opacity: 0.8; margin-right: var(--md-sys-measurement-space200); }
+.lb-build-row span:last-child { color: var(--md-sys-color-on-surface); }
+
+/* ---- DevTools diagnostics ---- */
+.lb-diag-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.lb-diag-chip {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
+  color: var(--md-sys-color-on-surface);
+}

@@ -311,6 +311,7 @@ export default function App() {
                   onRulesChange={updateRules}
                   onOpenLogs={() => setView("logs")}
                   onDeleteAll={deleteAll}
+                  onNavigate={(url) => newTab(url)}
                 />
               )}
               {view === "logs" && <LogsPage onBack={() => setView("home")} />}

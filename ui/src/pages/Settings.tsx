@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
@@ -16,6 +16,9 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
+  /* Navigate the active proxy surface in-app (used for the add-ons
+     store: it must load through the engine, not the external browser). */
+  onNavigate: (url: string) => void;
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -67,7 +70,7 @@ function TextInput(props: { label: string; value: string; placeholder?: string; 
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onNavigate }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     search: true,
     ua: true,
@@ -100,8 +103,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     return { ok: true, message: "Valid User-Agent string." };
   };
 
-  /* Extension imports: packaged (.xpi/.zip) bytes or an unpacked
-     folder listing, handed to the engine worker. */
+  /* Extension import: one action, Import package (.xpi/.zip). The file
+     bytes are handed to the engine worker, which owns the package
+     parser and registration. */
   const [extImport, setExtImport] = useState<{ status: string; busy: boolean }>({ status: "", busy: false });
   const importZip = async (file: File) => {
     setExtImport({ status: "Importing " + file.name + "...", busy: true });
@@ -117,34 +121,55 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       busy: false,
     });
   };
-  const importFolder = async (list: FileList) => {
-    const files: Array<[string, Uint8Array]> = [];
-    let total = 0;
-    for (const f of Array.from(list)) {
-      const path = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
-      /* Strip the picked folder's own top-level directory name: the
-         engine expects paths relative to the extension root. */
-      const rel = path.split("/").slice(1).join("/") || f.name;
-      total += f.size;
-      if (files.length >= 100 || total > 20 * 1024 * 1024) continue;
-      files.push([rel, new Uint8Array(await f.arrayBuffer())]);
-    }
-    if (files.length === 0) {
-      setExtImport({ status: "No usable files (max 100 files, 20MB total).", busy: false });
-      return;
-    }
-    setExtImport({ status: "Importing " + files.length + " files...", busy: true });
-    const rep = await zlSend({ type: "zl:installExtFiles", files }, 20000);
-    setExtImport({
-      status:
-        rep && rep.ok
-          ? "Installed " + String(rep.id)
-          : rep && rep.error
-            ? "Import failed: " + String(rep.error)
-            : "Import failed: the Zeolite service worker could not be reached on this origin.",
-      busy: false,
-    });
-  };
+
+  /* About / Build: one authoritative source. The /build endpoint on
+     the deployed server reports the versions compiled into that exact
+     build plus its deployment git commit, so the UI never claims a
+     version the deployed build does not have. */
+  const [build, setBuild] = useState<{
+    lb: string;
+    zeolite: string;
+    lobsterjet: string;
+    build: string;
+    buildShort: string;
+  } | null>(null);
+  const [buildError, setBuildError] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/build")
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{
+              ok: boolean;
+              lb?: string;
+              zeolite?: string;
+              lobsterjet?: string;
+              build?: string;
+              buildShort?: string;
+            }>)
+          : null,
+      )
+      .then((d) => {
+        if (cancelled) return;
+        if (d && d.ok && d.lb) {
+          setBuild({
+            lb: String(d.lb),
+            zeolite: String(d.zeolite ?? "unknown"),
+            lobsterjet: String(d.lobsterjet ?? "unknown"),
+            build: String(d.build ?? "unknown"),
+            buildShort: String(d.buildShort ?? "unknown"),
+          });
+        } else {
+          setBuildError(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBuildError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <section className="lb-view-content" aria-label="Settings">
@@ -245,15 +270,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Get extensions</div>
-          <m3e-button onClick={() => window.open("https://addons.mozilla.org/", "_blank", "noopener")}>
+          {/* The store loads INSIDE LobsterBrowse, through the active
+             proxy engine, exactly like any other site. */}
+          <m3e-button onClick={() => onNavigate("https://addons.mozilla.org/")}>
             <m3e-icon name="storefront" aria-hidden={true} /> Browse the Mozilla add-ons store
           </m3e-button>
           <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Downloads from the store land in your Downloads folder as .xpi; import that file below.
+            The store opens in a proxied tab. Downloads land in your Downloads folder as .xpi; import that file below.
           </p>
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Import locally</div>
+          {/* Exactly one import action: our button triggers the picker;
+             the input itself stays hidden. */}
           <label className="lb-import-row">
             <input
               type="file"
@@ -269,25 +298,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
             </m3e-button>
           </label>
-          <label className="lb-import-row">
-            <input
-              type="file"
-              className="lb-import-folder"
-              {...({ webkitdirectory: "", directory: "" } as any)}
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) importFolder(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <m3e-button onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-folder")?.click())}>
-              <m3e-icon name="folder_open" aria-hidden={true} /> Import unpacked folder
-            </m3e-button>
-          </label>
           <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
             Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
             (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
-            Max 100 files, 20MB total per import. The engine validates the manifest and
-            permission grants; a bad package only lands that extension in an error state.
+            The engine validates the manifest and permission grants; a bad package only lands that
+            extension in an error state.
           </p>
           {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
         </div>
@@ -434,6 +449,22 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           )}
         </div>
       </Panel>
+
+      <div className="lb-setting-group lb-about">
+        <div className="lb-setting-label">About</div>
+        {build ? (
+          <div className="lb-build" title={"Build " + build.build}>
+            <div className="lb-build-row"><span>LobsterBrowse</span><span>{build.lb}</span></div>
+            <div className="lb-build-row"><span>Zeolite</span><span>{build.zeolite}</span></div>
+            <div className="lb-build-row"><span>LobsterJet</span><span>{build.lobsterjet}</span></div>
+            <div className="lb-build-row"><span>Build</span><span>{build.buildShort}</span></div>
+          </div>
+        ) : buildError ? (
+          <p className="lb-muted" style={{ fontSize: 12 }}>Build information unavailable on this deployment.</p>
+        ) : (
+          <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
+        )}
+      </div>
     </section>
   );
 }

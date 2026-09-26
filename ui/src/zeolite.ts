@@ -11,22 +11,37 @@
 
 export async function zlWorker(): Promise<ServiceWorker | null> {
   if (!("serviceWorker" in navigator)) return null;
-  /* The worker that already controls this page wins (engine tabs). */
-  const ctrl = navigator.serviceWorker.controller;
-  if (ctrl) return ctrl;
   try {
-    /* ES module build (static chunk imports): module or the browser
-       rejects the script outright. */
+    /* Always (re-)register: this also fetches the registration for the
+       already-installed worker. */
     const reg = await navigator.serviceWorker.register("/zlsw/sw.js", {
       scope: "/",
       type: "module",
     });
-    /* Fresh install: give activation a moment, but never hang. */
+    /* Root cause of "Import failed: unknown message": a STALE worker
+       that controls this page (registered before the zl: control
+       messages existed) used to win, and it answers every control
+       message with "unknown message". Ask the browser to check the
+       server for a newer script, then prefer the NEWEST worker
+       instance: installing/waiting beat active/controller, because a
+       control message works against any worker instance, not just the
+       one controlling this page. */
+    try {
+      await reg.update();
+    } catch {
+      /* update failed (offline): fall through to whatever is installed */
+    }
     await Promise.race([
       navigator.serviceWorker.ready,
       new Promise((resolve) => setTimeout(resolve, 5000)),
     ]);
-    return reg.active ?? reg.waiting ?? reg.installing ?? null;
+    return (
+      reg.installing ??
+      reg.waiting ??
+      reg.active ??
+      navigator.serviceWorker.controller ??
+      null
+    );
   } catch (err) {
     console.warn("[lb] Zeolite worker registration failed:", err);
     return null;
