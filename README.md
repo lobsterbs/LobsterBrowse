@@ -35,7 +35,8 @@ keeps working same-origin inside the app's sandboxed iframe:
 - A runtime shim is injected after <head>: fetch/XHR, element src/href
   setters, setAttribute, history.pushState/replaceState and window.open
   are routed through the engine, and console/network activity is
-  reported to the in-app DevTools via postMessage.
+  reported to the in-app DevTools via postMessage
+.
 - Everything else (images, fonts, scripts, downloads) streams through
   untouched. Redirects are followed server-side and relative URLs are
   resolved against the final URL.
@@ -57,17 +58,41 @@ Zeolite (github.com/lobsterbs/Zeolite) is the interception-based proxy
 engine: a service worker on the engine origin, a Rust/WASM streaming
 rewriter, and a Gecko/WebExtension compatibility runtime. In Settings
 you can point tabs at a Zeolite engine instance; tabs then load through
-`?url=<target>` embedding instead of /r, gaining full client-side
-interception, streaming rewrite and the extension runtime.
+  `?url=<target>` embedding instead of /r, gaining full client-side
+  interception, streaming rewrite and the extension runtime.
+
+The Zeolite engine bundle is vendored into the server image at /zlsw and
+served from this origin with Service-Worker-Allowed: /, so the UI
+registers it at the root scope (it passes through every non-engine
+path). That service worker is the extensions control plane:
 
 - The toolbar has an extensions button listing installed extensions
-  (enable/disable, errors) through the engine's control plane.
-- Extensions work when a Zeolite service worker controls the tab. If it
-  does not (engine not embedded, or the engine SW not served from this
-  origin yet), the panel says so instead of pretending.
-- Known integration gap: the UI does not yet serve/register the Zeolite
-  service worker from the LobsterBrowse origin, so the extension panel
-  is only live inside tabs the engine already controls.
+  (enable/disable, incognito grant, options page, permissions, errors)
+  through the engine's control plane (zl:listExt / zl:extInfo /
+  zl:extEnable).
+- Settings has an Extensions category: browse the Mozilla add-ons
+  store, import a packaged .xpi/.zip, or import an unpacked folder
+  (manifest.json required; max 100 files, 20MB; no native code). The
+  engine validates the manifest and permission grants; a bad package
+  only lands that extension in an error state.
+- The extensions panel works on any page of this origin: it uses the
+  service worker that already controls engine tabs, otherwise it
+  registers the vendored worker as a pure control plane.
+
+## Server endpoints
+
+- /r/<base64url target> - the native rewriting engine
+- /lj/<base64url target> - same engine handler (Zeolite SW entry route)
+- /suggest - engine search suggestions (server-side, avoids CORS)
+- /cert?host=<host> - TLS certificate details for the site info card,
+  read from public CT-log data (crt.sh, Cert Spotter fallback). The
+  browser never makes a direct TLS connection to proxied sites, so
+  this is the public record, not the negotiated certificate.
+- /logs - server-side engine log ring buffer
+- /zlsw/ - the vendored Zeolite engine bundle (sw.js + chunks)
+- /zl-ext/, /zl-cs/ - extension asset routes served by the engine SW
+- /healthz - liveness probe
+
 
 ## Fonts and privacy
 
@@ -82,4 +107,5 @@ user's device.
     cargo test && cargo build --release
 
     cd ui
-    npm install && npm run build
+    npm install && npm run buil
+d
