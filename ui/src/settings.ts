@@ -178,7 +178,7 @@ export function resolveUa(s: Settings, rules: SiteRule[], domain: string): strin
 
 /* Build the engine option query string for a target URL, applying
    global settings and per-site rules. */
-export function proxyParams(s: Settings, rules: SiteRule[], target: string): string {
+export function proxyParams(s: Settings, rules: SiteRule[], target: string, incognito = false): string {
   let domain = "";
   try {
     domain = new URL(target).hostname;
@@ -196,6 +196,10 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string): str
   }
   if (s.httpsOnly) parts.push("lb_https=1");
   parts.push("lb_img=1");
+  /* Incognito (74.9): the engine keeps a separate cookie jar for
+     lb_inc routes, so incognito browsing never mixes cookies with the
+     normal shared jar. */
+  if (incognito) parts.push("lb_inc=1");
   const ua = resolveUa(s, rules, domain);
   if (ua) parts.push("lb_ua=" + encodeURIComponent(ua));
   return parts.join("&");
@@ -231,8 +235,8 @@ export function b64urlDecode(s: string): string {
    through the same-origin server for now: when the deployment
    provides a LobsterJet engine this is where its route shape plugs
    in. Until then the built-in rewriter serves every navigation. */
-export function routeUrl(s: Settings, rules: SiteRule[], target: string): string {
-  const params = proxyParams(s, rules, target);
+export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false): string {
+  const params = proxyParams(s, rules, target, incognito);
   /* LobsterJet routes hit the service worker's client-side cache first;
      the server answers them identically when no worker is installed. */
   const base = s.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";

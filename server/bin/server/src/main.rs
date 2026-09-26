@@ -307,6 +307,10 @@ const TRACKER_HOSTS: &str = "\
 
 struct AppState {
     client: reqwest::Client,
+    /// Separate cookie jar for incognito routes (74.9): requests with
+    /// lb_inc=1 use this client, so incognito cookies never mix into
+    /// the shared jar (and vice versa). RAM only, no persistence.
+    incognito_client: reqwest::Client,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     logs: Mutex<VecDeque<String>>,
     ads: adblock::FilterSet,
@@ -1144,7 +1148,7 @@ fn rewrite_html_doc(
 /// Engine option query string carried on to every rewritten URL.
 fn params_suffix(params: &HashMap<String, String>) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for k in ["ab", "trk", "https", "img"] {
+    for k in ["ab", "trk", "https", "img", "inc"] {
         if let Some(v) = params.get(k) {
             if v == "1" {
                 parts.push(format!("lb_{}=1", k));
@@ -1383,7 +1387,7 @@ async fn engine_proxy(
             }
         }
     }
-    for k in ["ab", "trk", "https", "ua", "hdrs", "img"] {
+    for k in ["ab", "trk", "https", "ua", "hdrs", "img", "inc"] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
         }
@@ -1417,7 +1421,13 @@ async fn engine_proxy(
     let prefix = if uri.path().starts_with("/lj/") { "/lj/" } else { "/r/" };
     push_log(&state, "info", &format!("engine {} {}", method, url));
 
-    let mut req = state.client.request(method.clone(), &fetch_url);
+    /* 74.9 engine-side incognito enforcement: lb_inc=1 requests use a
+       separate client with its own cookie jar, so incognito cookies
+       never mix into the shared jar (and back). The suffix keeps the
+       flag on every rewritten subresource and link. */
+    let use_incognito = params.get("inc").map(|v| v == "1").unwrap_or(false);
+    let client = if use_incognito { &state.incognito_client } else { &state.client };
+    let mut req = client.request(method.clone(), &fetch_url);
     if let Some(ua) = params.get("ua") {
         let cleaned: String = ua
             .chars()
@@ -1931,16 +1941,23 @@ async fn main() {
     let wisp_path = std::env::var("WISP_PATH").unwrap_or_else(|_| "/wisp/".into());
     let auth_password = std::env::var("WISP_PASSWORD").ok();
 
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-        .connect_timeout(std::time::Duration::from_secs(8))
-        .timeout(std::time::Duration::from_secs(20))
-        .cookie_store(true)
-        .build()
-        .expect("reqwest client");
+    let build_client = || {
+        reqwest::Client::builder()
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .connect_timeout(std::time::Duration::from_secs(8))
+            .timeout(std::time::Duration::from_secs(20))
+            .cookie_store(true)
+            .build()
+            .expect("reqwest client")
+    };
+    let client = build_client();
+    /* 74.9: a second client means a second cookie jar. Incognito routes
+       (lb_inc=1) use it; cookies never cross between the two jars. */
+    let incognito_client = build_client();
 
     let state = Arc::new(AppState {
         client,
+        incognito_client,
         logs: Mutex::new(VecDeque::new()),
         ads: load_filters("adblock-extra.txt", AD_HOSTS),
         trackers: load_filters("tracker-extra.txt", TRACKER_HOSTS),
