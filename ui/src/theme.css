@@ -362,16 +362,15 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-toolbar {
   display: block;
   pointer-events: auto;
-  min-height: 56px;
+  min-height: 44px;
+  --m3e-toolbar-size: 44px;
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
   --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   opacity: 1;
   width: fit-content;
-  min-width: min(780px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
-  flex-wrap: wrap;
   background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -390,7 +389,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   gap: var(--md-sys-measurement-space100);
   /* Auto margins center the pill in the toolbar. */
   flex: 0 1 320px;
-  min-width: 160px;
+  min-width: 120px;
   max-width: 460px;
   margin: 0 auto;
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space150);
@@ -503,15 +502,22 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 /* DevTools panel */
 .lb-devtools {
   position: absolute;
-  top: 0; right: 0;
-  width: min(480px, 100%);
-  height: 100%;
+  top: var(--md-sys-measurement-space100);
+  right: var(--md-sys-measurement-space100);
+  bottom: 78px;
+  width: min(480px, calc(100% - var(--md-sys-measurement-space200)));
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
-  border-left: 1px solid var(--md-sys-color-outline);
-  z-index: 8;
+  border: 1px solid var(--md-sys-color-outline-variant, var(--md-sys-color-outline));
+  border-radius: 16px;
+  z-index: 9;
   display: flex;
   flex-direction: column;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.3);
+  animation: lb-dt-in 240ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+}
+@keyframes lb-dt-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
@@ -719,7 +725,7 @@ m3e-nav-rail {
   /* Reserved rail space reduced by request: was 7rem + space100 sides.
      5.5rem keeps labels readable but gives the browse view a good
      bit more room. Never set width/overflow directly on the host. */
-  --m3e-nav-rail-compact-width: 5rem;
+  --m3e-nav-rail-compact-width: 4.8rem;
   --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space75);
 }
 m3e-nav-rail { transition: margin-left 250ms cubic-bezier(0.2, 0, 0, 1); }
@@ -832,8 +838,8 @@ m3e-nav-rail.lb-rail-hidden {
   gap: var(--md-sys-measurement-space100);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, var(--md-sys-color-surface)) 100%, transparent);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 35%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 60%, transparent);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -920,8 +926,9 @@ m3e-nav-rail.lb-rail-hidden {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(760px, calc(100vw - 24px));
+  width: min(640px, calc(100vw - 24px));
   z-index: 45;
+  border-radius: 20px;
   animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 .lb-tabs-row {
@@ -929,7 +936,7 @@ m3e-nav-rail.lb-rail-hidden {
   flex-direction: row;
   gap: var(--md-sys-measurement-space100);
   width: 100%;
-  max-height: 220px;
+  max-height: 176px;
   overflow-x: auto;
   overflow-y: hidden;
   padding: var(--md-sys-measurement-space50);
@@ -939,7 +946,7 @@ m3e-nav-rail.lb-rail-hidden {
   display: flex;
   flex-direction: column;
   gap: var(--md-sys-measurement-space50);
-  width: 176px;
+  width: 164px;
   padding: var(--md-sys-measurement-space50);
   border-radius: 12px;
   cursor: pointer;
@@ -957,15 +964,15 @@ m3e-nav-rail.lb-rail-hidden {
 }
 .lb-tab-preview {
   position: relative;
-  width: 160px;
-  height: 100px;
+  width: 148px;
+  height: 88px;
   border-radius: 8px;
   overflow: hidden;
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
 }
 .lb-tab-preview iframe {
-  width: 640px;
-  height: 400px;
+  width: 592px;
+  height: 352px;
   border: 0;
   transform: scale(0.25);
   transform-origin: 0 0;
@@ -976,7 +983,7 @@ m3e-nav-rail.lb-rail-hidden {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100px;
+  height: 88px;
   opacity: 0.5;
 }
 .lb-tabs-tile-head {
@@ -1007,6 +1014,13 @@ m3e-nav-rail.lb-rail-hidden {
 @keyframes lb-card-in {
   from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.lb-tabs-card.leaving {
+  animation: lb-card-out 200ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)) forwards;
+}
+@keyframes lb-card-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  to { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
 }
 /* Tab-count icon: inline SVG (same self-hosted Material Symbols route
    as the lock and incognito icons), so it never depends on the icon
