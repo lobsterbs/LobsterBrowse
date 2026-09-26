@@ -633,7 +633,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -1010,36 +1010,6 @@ fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
 fn rewrite_html_doc(
     html: &str,
     page_url: &str,
-    params: &HashMap<String, S
-    let pre = format!(
-        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>{}</script><script>{}</script>",
-        json_escape(page_url),
-        json_escape(suffix),
-        ENGINE_JS,
-        COMPAT_JS
-    );
-    let lower = html.to_ascii_lowercase();
-    let head_end = match lower.find("<head>") {
-        Some(i) => Some(i + "<head>".len()),
-        None => lower
-            .find("<head ")
-            .and_then(|i| lower[i..].find('>').map(|j| i + j + 1)),
-    };
-    match head_end {
-        Some(pos) => {
-            let mut owned = html;
-            owned.insert_str(pos, &pre);
-            owned
-        }
-        None => format!("{}{}", pre, html),
-    }
-}
-
-/// Full HTML pipeline: ad/tracker stripping, CSP/base/SRI cleanup,
-/// URL rewriting and shim injection.
-fn rewrite_html_doc(
-    html: &str,
-    page_url: &str,
     params: &HashMap<String, String>,
     suffix: &str,
     prefix: &str,
@@ -1106,7 +1076,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
     if !looks_amp {
         return None;
     }
