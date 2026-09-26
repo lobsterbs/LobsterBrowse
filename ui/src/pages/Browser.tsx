@@ -213,7 +213,6 @@ export default function BrowserView(props: Props) {
     }
     setExtList(Array.isArray(rep.extensions) ? (rep.extensions as ExtInfo[]) : []);
   };
-  };
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
   /* New tab search: smooth width expansion is state-driven, not a

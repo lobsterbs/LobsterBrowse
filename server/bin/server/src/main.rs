@@ -1590,6 +1590,7 @@ fn days_until(date: &str) -> Option<i64> {
 /// Field scanning instead of serde_json keeps dependencies unchanged.
 async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery) -> Response {
     let host = q
+        .as_deref()
         .and_then(|qs| qs.split('&').find_map(|kv| kv.strip_prefix("host=")))
         .map(percent_decode)
         .unwrap_or_default();
