@@ -846,7 +846,171 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
     out
 }
 
+/// Neutralize frame-buster code in served scripts and inline JS.
+///
+/// The browser renders engine pages inside its UI frame, so `top` is
+/// cross-origin from the page's perspective. Classic frame-buster code
+/// (`if (top != self) top.location = location`) then throws a
+/// SecurityError at the top level of the script, aborting every
+/// statement after it - sites like detectmybrowser.com lose their
+/// whole app to this. Two rewrites restore top-level semantics:
+///
+/// - framed-detection guards fold to their "not framed" values;
+/// - `top.location` navigation writes sink into a harmless property
+///   (page code must never navigate the UI shell), reads map to the
+///   page's own location.
+fn js_antiframe(js: &str) -> String {
+    let mut s = replace_bound(js, "window.self", "self");
+    s = replace_bound(&s, "window.top", "top");
+    for (pat, rep) in [
+        ("top !== self", "self !== self"),
+        ("top != self", "self != self"),
+        ("top === self", "self === self"),
+        ("top == self", "self == self"),
+        ("self !== top", "self !== self"),
+        ("self != top", "self != self"),
+        ("self === top", "self === self"),
+        ("self == top", "self == self"),
+        ("top!==self", "self!==self"),
+        ("top!=self", "self!=self"),
+        ("top===self", "self===self"),
+        ("top==self", "self==self"),
+        ("self!==top", "self!==self"),
+        ("self!=top", "self!=self"),
+        ("self===top", "self===self"),
+        ("self==top", "self==self"),
+    ] {
+        s = replace_bound(&s, pat, rep);
+    }
+    js_antiframe_scan(&s)
+}
+
+fn lb_is_ident(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$'
+}
+
+/// Substring replace that respects identifier boundaries, so
+/// `window.topology` never matches the `window.top` pattern.
+fn replace_bound(s: &str, pat: &str, rep: &str) -> String {
+    let bytes = s.as_bytes();
+    let pb = pat.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(pb)
+            && (i == 0 || !lb_is_ident(bytes[i - 1]))
+            && (i + pb.len() >= bytes.len() || !lb_is_ident(bytes[i + pb.len()]))
+        {
+            out.push_str(rep);
+            i += pb.len();
+            continue;
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// Second pass: classify each `top.location` use. Navigation writes sink
+/// into the LB_antiframe property (no navigation, no exception, the
+/// script keeps running); reads become same-origin reads of the page's
+/// own location. The noop sinks are defined by the injected shim.
+fn js_antiframe_scan(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let tok = b"top.location";
+    let tok_len = tok.len();
+    let mut out = String::with_capacity(s.len() + 32);
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(tok)
+            && (i == 0 || !(bytes[i - 1] == b'.' || lb_is_ident(bytes[i - 1])))
+            && (i + tok_len >= bytes.len() || !lb_is_ident(bytes[i + tok_len]))
+        {
+            let after = i + tok_len;
+            let mut j = after;
+            while j < bytes.len() && matches!(bytes[j], b' ' | b'\t' | b'\n' | b'\r') {
+                j += 1;
+            }
+            let is_write = j < bytes.len()
+                && bytes[j] == b'='
+                && (j + 1 >= bytes.len() || bytes[j + 1] != b'=');
+            if is_write {
+                out.push_str("self.LB_antiframe");
+                i += tok_len;
+                continue;
+            }
+            if bytes[j..].starts_with(b".href") {
+                let mut k = j + 5;
+                while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') {
+                    k += 1;
+                }
+                if k < bytes.len()
+                    && bytes[k] == b'='
+                    && (k + 1 >= bytes.len() || bytes[k + 1] != b'=')
+                {
+                    out.push_str("self.LB_antiframe");
+                    i += tok_len + 5;
+                    continue;
+                }
+            }
+            if bytes[j..].starts_with(b".replace") {
+                out.push_str("self.LB_antiframe_replace");
+                i += tok_len + 8;
+                continue;
+            }
+            if bytes[j..].starts_with(b".reload") {
+                out.push_str("self.LB_antiframe_reload");
+                i += tok_len + 7;
+                continue;
+            }
+            if bytes[j..].starts_with(b".assign") {
+                out.push_str("self.LB_antiframe_assign");
+                i += tok_len + 7;
+                continue;
+            }
+            out.push_str("self.location");
+            i += tok_len;
+            continue;
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
+    let pre = format!(
+        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>window.LB_antiframe=0;window.LB_antiframe_replace=function(){};window.LB_antiframe_reload=function(){};window.LB_antiframe_assign=function(){};</script><script>{}</script><script>{}</script>",
+        json_escape(page_url),
+        json_escape(suffix),
+        ENGINE_JS,
+        COMPAT_JS
+    );
+    let lower = html.to_ascii_lowercase();
+    let head_end = match lower.find("<head>") {
+        Some(i) => Some(i + "<head>".len()),
+        None => lower
+            .find("<head ")
+            .and_then(|i| lower[i..].find('>').map(|j| i + j + 1)),
+    };
+    match head_end {
+        Some(pos) => {
+            let mut owned = html;
+            owned.insert_str(pos, &pre);
+            owned
+        }
+        None => format!("{}{}", pre, html),
+    }
+}
+
+/// Full HTML pipeline: ad/tracker stripping, CSP/base/SRI cleanup,
+/// URL rewriting and shim injection.
+fn rewrite_html_doc(
+    html: &str,
+    page_url: &str,
+    params: &HashMap<String, S
     let pre = format!(
         "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>{}</script><script>{}</script>",
         json_escape(page_url),
@@ -897,6 +1061,9 @@ fn rewrite_html_doc(
     let cleaned = strip_base_tags(&cleaned);
     let cleaned = strip_integrity(&cleaned);
     let rewritten = rewrite_html(&cleaned, page_url, suffix, prefix);
+    // Frame-buster neutralization for inline scripts: the same pass the
+    // engine applies to served .js bodies.
+    let rewritten = js_antiframe(&rewritten);
     // Challenge/CAPTCHA widget documents are integrity-sensitive: the
     // injected shim (console hooks, fetch patches, page globals) trips
     // anti-bot checks and the widget refuses to run. URL rewriting is
@@ -1255,12 +1422,13 @@ async fn engine_proxy(
                 .to_string();
             let is_html = ct.contains("html");
             let is_css = !is_html && ct.contains("css");
+            let is_js = !is_html && !is_css && (ct.contains("javascript") || ct.contains("ecmascript"));
             let compress_img = params.get("img").map(|v| v == "1").unwrap_or(false)
                 && ct.starts_with("image/jpeg");
             // Anything that is neither rewritten nor re-encoded streams
             // straight through: large downloads and media must not be
             // buffered in the server's RAM.
-            if !is_html && !is_css && !compress_img {
+            if !is_html && !is_css && !is_js && !compress_img {
                 push_log(
                     &state,
                     "info",
@@ -1291,6 +1459,9 @@ async fn engine_proxy(
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 rewrite_css(&text, &base_url, &suffix, prefix).into_bytes()
+            } else if is_js {
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                js_antiframe(&text).into_bytes()
             } else if compress_img {
                 compress_jpeg(&bytes).unwrap_or_else(|| bytes.to_vec())
             } else {
@@ -1469,4 +1640,53 @@ async fn main() {
     info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
+}
+
+#[cfg(test)]
+mod antiframe_tests {
+    use super::js_antiframe;
+
+    #[test]
+    fn classic_buster_is_neutralized() {
+        assert_eq!(
+            js_antiframe("if (top != self) {\n  top.location = location;\n}\nalert('rest of app');"),
+            "if (self != self) {\n  self.LB_antiframe = location;\n}\nalert('rest of app');"
+        );
+    }
+
+    #[test]
+    fn href_write_and_calls_sink() {
+        assert_eq!(
+            js_antiframe("top.location.href = u; top.location.replace(x); top.location.reload();"),
+            "self.LB_antiframe = u; self.LB_antiframe_replace(x); self.LB_antiframe_reload();"
+        );
+    }
+
+    #[test]
+    fn reads_and_comparisons_survive() {
+        assert_eq!(
+            js_antiframe("var u = top.location.href; if (top.location == x) {} if (top == self) boot();"),
+            "var u = self.location.href; if (self.location == x) {} if (self == self) boot();"
+        );
+    }
+
+    #[test]
+    fn window_forms_and_boundaries() {
+        assert_eq!(
+            js_antiframe("if (window.top != window.self) { window.top.location = document.location; }"),
+            "if (self != self) { self.LB_antiframe = document.location; }"
+        );
+        assert_eq!(
+            js_antiframe("var window.topology; var laptop = 1;"),
+            "var window.topology; var laptop = 1;"
+        );
+    }
+
+    #[test]
+    fn minified_guards_fold() {
+        assert_eq!(
+            js_antiframe("if(top!=self){top.location=location}"),
+            "if(self!=self){self.LB_antiframe=location}"
+        );
+    }
 }
