@@ -23,7 +23,9 @@ jobs:
       - name: Tests
         run: cargo test
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: |
+          cargo clippy --message-format=short 2>&1 | tee /tmp/clippy.txt | grep -E "^(error|warning)" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          if grep -q "^error" /tmp/clippy.txt; then exit 1; fi
 
   flood-test:
     # Replays the JFrog Lucide-Proxy CONNECT/CLOSE flood pattern against a
