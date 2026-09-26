@@ -633,7 +633,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" Ã¢ÂÂ rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -1076,7 +1076,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("Ã¢ÂÂ¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
     if !looks_amp {
         return None;
     }
@@ -1584,10 +1584,105 @@ fn days_until(date: &str) -> Option<i64> {
     Some(days - today)
 }
 
+/* Fetch raw JSON from a CT-log API. Errors carry the reason so the
+   log line explains the failure instead of guessing. */
+async fn ct_fetch(state: &AppState, url: &str) -> Result<String, String> {
+    let resp = state
+        .client
+        .get(url)
+        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(12))
+        .send()
+        .await
+        .map_err(|e| format!("request failed: {}", e))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("status {}", status));
+    }
+    resp.text().await.map_err(|e| format!("body read failed: {}", e))
+}
+
+/* Does a crt.sh record cover the host? crt.sh matches substring, so a
+   query for github.com also returns random subdomain certs; prefer
+   records whose common_name is the host, a wildcard for it, or whose
+   name_value (newline-separated SANs) lists it. */
+fn cert_covers_host(rec: &str, host: &str) -> bool {
+    if let Some(cn) = scan_json_str(rec, "common_name") {
+        if cn == host {
+            return true;
+        }
+        if let Some(suffix) = cn.strip_prefix("*.") {
+            if host.ends_with(suffix) {
+                return true;
+            }
+        }
+    }
+    if let Some(nv) = scan_json_str(rec, "name_value") {
+        if nv.split('\n').any(|n| n == host) {
+            return true;
+        }
+    }
+    false
+}
+
+/* Pick the best record from a crt.sh array: newest not_after among
+   the records that cover the host, else the newest overall. ISO-8601
+   dates compare correctly as plain strings. Returns (issuer,
+   not_after). */
+fn best_crtsh(body: &str, host: &str) -> Option<(String, String)> {
+    let mut best_covered: Option<(String, String)> = None;
+    let mut best_any: Option<(String, String)> = None;
+    for rec in body.split("{\"issuer_ca_id\"") {
+        if rec.is_empty() {
+            continue;
+        }
+        let issuer = scan_json_str(rec, "issuer_name");
+        let not_after = scan_json_str(rec, "not_after");
+        let (issuer, not_after) = match (issuer, not_after) {
+            (Some(i), Some(n)) => (i, n),
+            _ => continue,
+        };
+        let newer = |slot: &Option<(String, String)>, na: &str| {
+            slot.as_ref().map_or(true, |(cur, _)| na > cur.as_str())
+        };
+        if cert_covers_host(rec, host) && newer(&best_covered, &not_after) {
+            best_covered = Some((issuer.clone(), not_after.clone()));
+        }
+        if newer(&best_any, &not_after) {
+            best_any = Some((issuer, not_after));
+        }
+    }
+    best_covered.or(best_any)
+}
+
+/* Pick the best Cert Spotter issuance (their list is newest-first):
+   the first one whose dns_names include the host. Returns (issuer,
+   not_after). */
+fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
+    for rec in body.split("{\"id\"") {
+        if rec.is_empty() {
+            continue;
+        }
+        if !rec.contains(&format!("\"{}\"", host)) {
+            continue;
+        }
+        let issuer = rec
+            .split("\"issuer\"")
+            .nth(1)
+            .and_then(|seg| scan_json_str(seg, "name"))
+            .unwrap_or_default();
+        let not_after = scan_json_str(rec, "not_after")?;
+        return Some((issuer, not_after));
+    }
+    None
+}
+
 /// TLS certificate details for the site info card. The browser never
-/// makes a direct TLS connection to proxied sites, so this asks
-/// crt.sh (public CT-log data) for the host's newest certificate.
-/// Field scanning instead of serde_json keeps dependencies unchanged.
+/// makes a direct TLS connection to proxied sites, so this reads the
+/// host's public CT-log record: crt.sh first, Cert Spotter as the
+/// fallback. Field scanning instead of serde_json keeps dependencies
+/// unchanged. Honest failure: the card says the data is unavailable,
+/// never invents a certificate.
 async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery) -> Response {
     let host = q
         .as_deref()
@@ -1602,28 +1697,40 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
             .into_response();
     }
     push_log(&state, "info", &format!("cert lookup {}", host));
-    let url = format!("https://crt.sh/?q={}&output=json", json_escape(&host));
-    let fetched = state
-        .client
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(6))
-        .send()
-        .await;
-    let body = match fetched {
-        Ok(resp) if resp.status().is_success() => resp.text().await.unwrap_or_default(),
-        _ => {
-            push_log(&state, "warn", &format!("cert lookup {} failed (no CT-log record or unreachable)", host));
-            return (
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
-            )
-                .into_response();
+    /* crt.sh first: query the host, pick the best record. */
+    let crtsh_url = format!("https://crt.sh/?q={}&output=json", json_escape(&host));
+    let picked = match ct_fetch(&state, &crtsh_url).await {
+        Ok(body) => best_crtsh(&body, &host),
+        Err(err) => {
+            push_log(&state, "warn", &format!("cert lookup {}: crt.sh {}", host, err));
+            None
         }
     };
-    let issuer = scan_json_str(&body, "issuer_name");
-    let not_after = scan_json_str(&body, "not_after");
-    match (issuer, not_after) {
-        (Some(issuer), Some(not_after)) => {
+    let picked = match picked {
+        Some(p) => Some(p),
+        None => {
+            /* Fallback: Cert Spotter public issuances API. */
+            let cs_url = format!(
+                "https://api.certspotter.com/v1/issuances?domain={}&include_certificates=false",
+                json_escape(&host)
+            );
+            match ct_fetch(&state, &cs_url).await {
+                Ok(body) => {
+                    let p = best_certspotter(&body, &host);
+                    if p.is_none() {
+                        push_log(&state, "warn", &format!("cert lookup {}: no parseable Cert Spotter record", host));
+                    }
+                    p
+                }
+                Err(err) => {
+                    push_log(&state, "warn", &format!("cert lookup {}: certspotter {}", host, err));
+                    None
+                }
+            }
+        }
+    };
+    match picked {
+        Some((issuer, not_after)) if !issuer.is_empty() && !not_after.is_empty() => {
             let days = days_until(&not_after).unwrap_or(0);
             let out = format!(
                 "{{\"ok\":true,\"host\":\"{}\",\"issuer\":\"{}\",\"notAfter\":\"{}\",\"days\":{}}}",
@@ -1635,16 +1742,14 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
             push_log(&state, "info", &format!("cert lookup {} ok: {} ({} days left)", host, issuer, days));
             ([(header::CONTENT_TYPE, "application/json")], out).into_response()
         }
-        _ => {
-            push_log(&state, "warn", &format!("cert lookup {}: no parseable CT-log record", host));
-            (
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
-            )
-                .into_response()
-        }
+        _ => (
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
+        )
+            .into_response(),
     }
 }
+
 
 fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
     let mut text = builtin.to_string();
