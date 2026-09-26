@@ -407,7 +407,9 @@ export default function BrowserView(props: Props) {
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
     const frame = frames.current.get(tab.id);
-    const href = routeUrl(settings, rules, url);
+    /* 74.9: incognito tabs route through the engine's separate cookie
+       jar (lb_inc=1) so their cookies never mix into the shared one. */
+    const href = routeUrl(settings, rules, url, props.incognito);
     if (frame) frame.src = href;
     pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
