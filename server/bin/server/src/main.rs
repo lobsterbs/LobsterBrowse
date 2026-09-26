@@ -680,7 +680,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -1123,7 +1123,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
     if !looks_amp {
         return None;
     }
@@ -1904,6 +1904,12 @@ async fn main() {
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
         .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
+        // Extension subsystem routes live in the Zeolite worker
+        // (IndexedDB-backed), NOT on this server: any request that
+        // slips past the worker gets an honest 404, never the SPA
+        // fallback (see extension_route_not_found).
+        .route("/zl-ext/*path", any(extension_route_not_found))
+        .route("/zl-cs/*path", any(extension_route_not_found))
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
@@ -1926,6 +1932,28 @@ async fn main() {
     info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// Extension asset/content-script routes (/zl-ext/, /zl-cs/) are served
+/// ONLY by the Zeolite extension worker from its IndexedDB store in the
+/// browser. The server has no extension store, so direct requests that
+/// bypass the worker must fail honestly with a 404 instead of falling
+/// through the SPA fallback (which would hand back index.html with a
+/// 200 and a text/html MIME — a silent lie about the resource).
+///
+/// Traversal safety: the path is never mapped to the filesystem here;
+/// ServeDir (used for the real static trees) rejects dot-dot sequences
+/// on its own, and the extension worker's own getResource enforces the
+/// web_accessible_resources globs per extension id (32-hex, no
+/// separators), so an encoded traversal (%2e%2e) cannot resolve to a
+/// sibling origin path.
+async fn extension_route_not_found() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "extension resources are served by the engine worker only",
+    )
+        .into_response()
 }
 
 /// Zeolite engine service worker (vendored build, zlsw/sw.js). The
