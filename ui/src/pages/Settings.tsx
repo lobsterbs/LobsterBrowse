@@ -37,10 +37,10 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
   );
 }
 
-function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
+function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; off?: boolean }) {
   return (
     <m3e-list-item>
-      <div className="lb-setting-row">
+      <div className={"lb-setting-row" + (props.off ? " lb-off" : "")}>
         <span className="lb-setting-label">
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
@@ -126,7 +126,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
-          <Row label="Prefetch links on hover (Zeolite)" icon="bolt" on={settings.prefetchLinks} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
+          <Row label="Prefetch links on hover (Zeolite)" icon="bolt" on={settings.prefetchLinks} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
           <Row label="Hide toolbar when idle" icon="visibility_off" on={settings.autoHideChrome} toggle={() => onChange({ autoHideChrome: !settings.autoHideChrome })} />
         </m3e-list>
       </Panel>
@@ -162,7 +162,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
+          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
       </Panel>
 
@@ -210,6 +210,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             Cached proxied pages and local libraries live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
           </p>
+          <div className={settings.proxyEngine !== "lobsterjet" ? "lb-off" : ""}>
           <m3e-button
             onClick={() => {
               (async () => {
@@ -227,6 +228,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           >
             <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
+          </div>
+          {settings.proxyEngine !== "lobsterjet" && (
+            <p className="lb-muted" style={{ fontSize: 12 }}>
+              Cache options apply when Zeolite is the proxy engine.
+            </p>
+          )}
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
