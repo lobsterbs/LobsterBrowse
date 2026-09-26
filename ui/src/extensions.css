@@ -1,0 +1,68 @@
+/* Extensions toolbar panel: floats bottom-right above the dock.
+   Uses surface tokens with fallbacks so it reads fine on both the
+   light and dark theme. */
+.lb-ext-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 76px;
+  z-index: 60;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: var(--m3e-sys-color-surface-container-high, #2b2b2b);
+  color: var(--m3e-sys-color-on-surface, #e6e1e5);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.lb-ext-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+}
+.lb-ext-head > span:last-child {
+  display: inline-flex;
+  align-items: center;
+}
+.lb-ext-title {
+  font-weight: 500;
+}
+.lb-ext-note {
+  margin: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.lb-ext-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.lb-ext-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+}
+.lb-ext-item:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+.lb-ext-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-ext-ver {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.lb-ext-state {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.8;
+}
+.lb-ext-state.off {
+  opacity: 0.5;
+}
