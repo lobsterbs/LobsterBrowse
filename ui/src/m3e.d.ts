@@ -21,7 +21,7 @@ type M3eBase = {
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "m3e-theme": M3eBase & { color?: string; "strong-focus"?: boolean };
+      "m3e-theme": M3eBase & { color?: string; scheme?: string; "strong-focus"?: boolean };
       "m3e-content-pane": M3eBase;
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
@@ -63,6 +63,8 @@ declare module "react" {
       };
       "m3e-badge": M3eBase & { for?: string; size?: string; position?: string };
       "m3e-loading-indicator": M3eBase & { variant?: string };
+      "m3e-linear-progress-indicator": M3eBase & { value?: string | number; max?: string | number; mode?: string; variant?: string; "buffer-value"?: string | number };
+      "m3e-circular-progress-indicator": M3eBase & { value?: string | number; max?: string | number; indeterminate?: boolean | string; variant?: string };
       "m3e-tabs": M3eBase & { variant?: string; stretch?: boolean | string; "header-position"?: string; "disable-pagination"?: boolean | string };
       "m3e-tab": M3eBase & { for?: string; selected?: boolean | string; disabled?: boolean };
       "m3e-tab-panel": M3eBase & { id?: string };

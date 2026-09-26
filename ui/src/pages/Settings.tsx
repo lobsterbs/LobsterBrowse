@@ -462,18 +462,20 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <div className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>
-        {build ? (
-          <div className="lb-build" title={"Build " + build.build}>
-            <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build.lb}</span></span>
-            <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build.zeolite}</span></span>
-            <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build.buildShort}</span></span>
-          </div>
-        ) : buildError ? (
+        {/* The pills always render (unknown while loading or on
+            failure), so the About section never looks empty. */}
+        <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
+          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
+        </div>
+        {buildError && (
           <p className="lb-muted" style={{ fontSize: 12 }}>
             Build information unavailable on this deployment.
             {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
           </p>
-        ) : (
+        )}
+        {!build && !buildError && (
           <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
         )}
       </div>
