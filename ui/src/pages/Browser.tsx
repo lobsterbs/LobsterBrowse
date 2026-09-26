@@ -99,7 +99,7 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  /* Last URL each tab was asked to load — guards the auto-load effect
+  /* Last URL each tab was asked to load â guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
   /* Per-tab navigation generation: every load() bumps it, so results
@@ -468,8 +468,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. A→B→C + back stays A→B→C at
-           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
+           move the index, do not append. AâBâC + back stays AâBâC at
+           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -636,7 +636,7 @@ export default function BrowserView(props: Props) {
           }
         })();
         /* Scheme validation: only http(s) navigations. javascript:,
-           data:, blob:, file: and friends are rejected outright — a
+           data:, blob:, file: and friends are rejected outright â a
            proxied page must not script the browser surface. */
         if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
@@ -1035,7 +1035,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
+                engine {settings.proxyEngine} Â· route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1049,13 +1049,13 @@ export default function BrowserView(props: Props) {
                       return a;
                     }, {}),
                   )
-                    .map(([k, n]) => n + " × " + k)
+                    .map(([k, n]) => n + " Ã " + k)
                     .join(", ")}
                   )
                 </div>
               )}
               {[
-                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " — " + f.reason + (f.note ? " (" + f.note + ")" : "")),
+                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " â " + f.reason + (f.note ? " (" + f.note + ")" : "")),
                 ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
                 ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
               ].map((line, i) => (
@@ -1311,12 +1311,12 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="extension" aria-hidden={true} />
           </m3e-icon-button>
-        </m3e-toolbar>
-          {/* Incognito toggle moved from the tab strip into the
-              toolbar: one icon button, same pill states. Toggling on
+          {/* Incognito toggle: a regular 40x40 icon button inside the
+              toolbar, same slot as the other toggles. Toggling on
               suspends the normal session and opens one empty
               incognito tab (App.tsx); toggling off closes it and
-              restores the session. */}
+              restores the session. The domino mask is an inline SVG
+              (no font glyph exists), sized by CSS. */}
           <button
             type="button"
             id="lb-incognito-pill"
@@ -1332,6 +1332,7 @@ export default function BrowserView(props: Props) {
               ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
+        </m3e-toolbar>
           {/* Site info: a real M3E card (elevated) anchored above the
               toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). Long cookie

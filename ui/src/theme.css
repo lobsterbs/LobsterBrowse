@@ -260,28 +260,38 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
-/* Incognito indicator: labeled pill pinned to the far right corner of the
-   tab strip. Off = quiet outline; on = dark hat-on state that cannot be
-   missed. Deliberately text-only: the "incognito" glyph does not exist in
-   the self-hosted Material Symbols font and would render as raw text. */
+/* Incognito toggle: a 40x40 icon button inside the toolbar, matching
+   the m3e-icon-button geometry. Off = quiet outline; on = dark
+   hat-on state that cannot be missed. The domino mask is an inline
+   SVG (the glyph does not exist in the self-hosted Material Symbols
+   font); the icon span constrains it to 24px — without it the raw
+   SVG defaults to 300x150 and the button becomes massive. */
 .lb-incognito {
-  margin-left: auto;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--md-sys-measurement-space100);
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--md-sys-color-outline-variant, var(--md-sys-color-outline));
-  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  background: transparent;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   font-family: inherit;
-  font-size: 12px;
-  font-variation-settings: "wght" 500;
-  letter-spacing: 0.02em;
   cursor: pointer;
-  white-space: nowrap;
   transition: background 180ms var(--m3e-spring), color 180ms ease, border-color 180ms ease;
+}
+.lb-incognito-ic {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+.lb-incognito-ic svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 .lb-incognito:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
@@ -785,15 +795,6 @@ m3e-nav-rail.lb-rail-hidden {
    surrogates; the buttons trigger them. */
 .lb-import-row { display: block; margin: 6px 0; }
 .lb-import-row input[type="file"] { display: none; }
-
-/* Incognito icon button inside the toolbar: square icon-button
-   sizing, not the wide labeled pill from the tab strip. */
-.lb-toolbar .lb-incognito {
-  margin-left: 0;
-  padding: 0;
-  width: 40px;
-  height: 40px;
-}
 
 /* Suggestion dropdowns: grow/fade in instead of appearing instantly. */
 @keyframes lb-pop-in {
