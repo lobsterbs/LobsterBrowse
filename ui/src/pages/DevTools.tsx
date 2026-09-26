@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
+import { zlSend } from "../zeolite";
 
 export type ConsoleEntry = {
   id: number;
@@ -151,6 +152,94 @@ const PAGES: Array<[DtState["page"], string, string]> = [
   ["inspector", "Inspect", "travel_explore"],
   ["diagnostics", "Diagnostics", "bug_report"],
 ];
+
+/* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
+/* Live transport stats, fallback records and diag events from the
+   engine's control plane. Polled only while this section is mounted
+   (the diagnostics page is open): no cost during normal browsing.
+   Stats are engine-wide, not per-tab. */
+
+type ZlFallback = { ts: number; url: string; reason: string; traceId?: string };
+type ZlStats = { native: number; fallback: number; fallbacks: ZlFallback[] };
+type ZlDiagEvent = {
+  seq: number;
+  ts: number;
+  category: string;
+  severity: string;
+  message: string;
+  stage?: string;
+  url?: string;
+  technicalReason?: string;
+};
+
+function ZeoliteDiagnostics() {
+  const [stats, setStats] = useState<ZlStats | null>(null);
+  const [events, setEvents] = useState<ZlDiagEvent[]>([]);
+  const diagSeq = useRef(0);
+
+  useEffect(() => {
+    let dead = false;
+    const tick = async () => {
+      const nl = await zlSend({ type: "zl:getNetLog", since: 0 });
+      if (!dead && nl && nl.stats) setStats(nl.stats as ZlStats);
+      const dg = await zlSend({ type: "zl:getDiag", since: diagSeq.current });
+      if (!dead && dg && dg.ok && Array.isArray(dg.events)) {
+        if (typeof dg.lastSeq === "number" && dg.lastSeq > diagSeq.current) diagSeq.current = dg.lastSeq;
+        setEvents((prev) =>
+          [...prev, ...(dg.events as ZlDiagEvent[]).filter((ev) => !prev.some((p) => p.seq === ev.seq))].slice(-60),
+        );
+      }
+    };
+    void tick();
+    const iv = setInterval(tick, 5000);
+    return () => {
+      dead = true;
+      clearInterval(iv);
+    };
+  }, []);
+
+  if (!stats) return null;
+  const notable = events
+    .filter((e) => e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK")
+    .slice(-25)
+    .reverse();
+  return (
+    <div className="lb-net" style={{ marginBottom: "12px" }}>
+      <div className="lb-diag-counts">
+        <span className="lb-diag-chip">NativeTransit: {stats.native}</span>
+        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} — Alpha</span>
+      </div>
+      {stats.fallbacks
+        .slice(-10)
+        .reverse()
+        .map((f, i) => (
+          <details key={f.ts + "-" + i} className="lb-net-row">
+            <summary className="lb-net-summary">
+              <span className="lb-net-status lb-bad">FB</span>
+              <span className="lb-net-method">{f.reason}</span>
+              <span className="lb-net-url">{f.url}</span>
+              <span className="lb-net-dur">{ts(f.ts)}</span>
+            </summary>
+          </details>
+        ))}
+      {notable.map((e) => (
+        <details key={e.seq} className="lb-net-row">
+          <summary className="lb-net-summary">
+            <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
+            <span className="lb-net-method">{e.category}</span>
+            <span className="lb-net-url">{e.message}</span>
+            <span className="lb-net-dur">{ts(e.ts)}</span>
+          </summary>
+          <div className="lb-net-detail">
+            {e.stage && <div>Stage: {e.stage}</div>}
+            {e.url && <div>URL: {e.url}</div>}
+            {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
+          </div>
+        </details>
+      ))}
+    </div>
+  );
+}
 
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
   const [cmd, setCmd] = useState("");
@@ -535,6 +624,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             Why didn&apos;t this load? Every entry below is a real load failure captured from the page
             runtime (the engine shim&apos;s resfail reports). Successful loads are in the Network section.
           </p>
+          <ZeoliteDiagnostics />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
               <p className="lb-muted">No resource failures captured.</p>
