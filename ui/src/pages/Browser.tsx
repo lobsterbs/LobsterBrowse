@@ -58,6 +58,16 @@ function tabLabel(t: Tab): string {
   }
 }
 
+/* Installed-extension summary from the engine control plane. */
+type ExtInfo = {
+  id: string;
+  name: string;
+  version: string;
+  state: string;
+  enabled: boolean;
+  lastError: string | null;
+};
+
 export default function BrowserView(props: Props) {
   const { settings, rules, tabs, activeId } = props;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
@@ -99,6 +109,35 @@ export default function BrowserView(props: Props) {
   /* Site info card: open state plus the cookies the page can read. */
   const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
+  /* Extensions panel: asks the controlling service worker for the
+     installed list (Zeolite zl:listExt control message). When no
+     Zeolite worker is controlling the page it degrades honestly. */
+  const [extPanelOpen, setExtPanelOpen] = useState(false);
+  const [extBusy, setExtBusy] = useState(false);
+  const [extList, setExtList] = useState<ExtInfo[] | null>(null);
+  const loadExtensions = () => {
+    const swc = navigator.serviceWorker?.controller;
+    if (!swc) {
+      setExtBusy(false);
+      setExtList(null);
+      return;
+    }
+    setExtBusy(true);
+    const ch = new MessageChannel();
+    let settled = false;
+    const finish = (list: ExtInfo[] | null) => {
+      if (settled) return;
+      settled = true;
+      setExtBusy(false);
+      setExtList(list);
+    };
+    ch.port1.onmessage = (ev) => {
+      const d = ev.data as { ok?: boolean; extensions?: ExtInfo[] };
+      finish(d && d.ok && Array.isArray(d.extensions) ? d.extensions : null);
+    };
+    swc.postMessage({ type: "zl:listExt" }, [ch.port2]);
+    setTimeout(() => finish(null), 1500);
+  };
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
   /* New tab search: smooth width expansion is state-driven, not a
@@ -1047,9 +1086,58 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-icon-button
+            aria-label="Extensions"
+            toggle
+            selected={extPanelOpen ? "" : undefined}
+            onClick={() => {
+              const next = !extPanelOpen;
+              setExtPanelOpen(next);
+              if (next) loadExtensions();
+            }}
+          >
+            <m3e-icon name="extension" aria-hidden={true} />
+          </m3e-icon-button>
         </m3e-toolbar>
         </div>
       </div>
+
+      {extPanelOpen && (
+        <div className="lb-ext-panel" role="dialog" aria-label="Extensions">
+          <div className="lb-ext-head">
+            <span className="lb-ext-title">Extensions</span>
+            <span>
+              <m3e-icon-button aria-label="Refresh extensions" onClick={() => loadExtensions()}>
+                <m3e-icon name="refresh" aria-hidden={true} />
+              </m3e-icon-button>
+              <m3e-icon-button aria-label="Close extensions" onClick={() => setExtPanelOpen(false)}>
+                <m3e-icon name="close" aria-hidden={true} />
+              </m3e-icon-button>
+            </span>
+          </div>
+          {extList === null ? (
+            <p className="lb-ext-note">
+              {extBusy
+                ? "Querying the engine service worker..."
+                : "Engine extensions unavailable. No Zeolite service worker is controlling this page, so no extensions are installed."}
+            </p>
+          ) : extList.length === 0 ? (
+            <p className="lb-ext-note">No extensions installed.</p>
+          ) : (
+            <div className="lb-ext-list">
+              {extList.map((e) => (
+                <div key={e.id} className="lb-ext-item" title={e.lastError ?? ""}>
+                  <span className="lb-ext-name">{e.name}</span>
+                  <span className="lb-ext-ver">{e.version}</span>
+                  <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
+                    {e.enabled ? e.state : "disabled"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
