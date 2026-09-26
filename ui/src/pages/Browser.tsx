@@ -644,6 +644,35 @@ export default function BrowserView(props: Props) {
         } else {
           loadRef.current(tab, abs, { push: true });
         }
+      } else if (data.lb === "nav") {
+        /* Event-driven SPA navigation (74.6): the page hook reports
+           pushState/replaceState/popstate/hashchange the instant they
+           happen, so the toolbar and tab stack update without waiting
+           for the 1.2s poll (which stays as a fallback for favicon,
+           error-meta, mute and title). Same history semantics as the
+           poll: a change to an adjacent stack entry moves the index
+           (back/forward), a genuinely new URL pushes. */
+        const real = cap(d.url, 2000);
+        if (!real || !/^https?:/i.test(real)) return;
+        if (real !== tab.url) {
+          const stack = tab.stack;
+          const idx = tab.idx;
+          let patch: Partial<Tab>;
+          if (idx > 0 && stack[idx - 1] === real) {
+            patch = { url: real, idx: idx - 1 };
+          } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
+            patch = { url: real, idx: idx + 1 };
+          } else {
+            patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+            if (!L.incognito) L.onHistory(real);
+          }
+          L.updateTab(tabId, patch);
+          pushLog("info", "url sync " + real);
+        }
+        setStatus((prev) => {
+          const cur = prev[tabId as number];
+          return cur && cur.loading ? { ...prev, [tabId as number]: { loading: false } } : prev;
+        });
       }
       /* Unknown data.lb values are ignored by design. */
     };

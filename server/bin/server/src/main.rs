@@ -228,8 +228,25 @@ const ENGINE_JS: &str = r##"(function(){
     return null;
   };
   var ops = history.pushState, ors = history.replaceState;
-  history.pushState = function(st, t, u) { try { if (u) arguments[2] = route(u); } catch (e) {} return ops.apply(history, arguments); };
-  history.replaceState = function(st, t, u) { try { if (u) arguments[2] = route(u); } catch (e) {} return ors.apply(history, arguments); };
+  /* Event-driven SPA navigation (74.6): report every history change
+     the moment it happens so the UI syncs without poll latency. The
+     URL is un-routed back to the real destination before it leaves
+     the page. */
+  var navSend = function(op) {
+    try { send("nav", { op: op, url: unroute(location.href), ts: Date.now() }); } catch (e) {}
+  };
+  history.pushState = function(st, t, u) {
+    try { if (u) arguments[2] = route(u); } catch (e) {}
+    var r = ops.apply(history, arguments);
+    navSend("push");
+    return r; };
+  history.replaceState = function(st, t, u) {
+    try { if (u) arguments[2] = route(u); } catch (e) {}
+    var r = ors.apply(history, arguments);
+    navSend("replace");
+    return r; };
+  window.addEventListener("popstate", function(){ navSend("pop"); });
+  window.addEventListener("hashchange", function(){ navSend("hash"); });
   window.addEventListener("load", function(){ send("ready", { title: document.title }); });
 })();
 "##;
