@@ -1538,6 +1538,113 @@ async fn logs_endpoint(State(state): State<Arc<AppState>>) -> Response {
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
 }
 
+/* Pull one string value out of raw JSON without a parser: find the
+   key, skip to the opening quote of the value, then read until an
+   unescaped closing quote (handles \" and \\ escapes). */
+fn scan_json_str(body: &str, key: &str) -> Option<String> {
+    let key_pat = format!("\"{}\"", key);
+    let start = body.find(&key_pat)? + key_pat.len();
+    let rest = &body[start..];
+    let q1 = rest.find('"')? + 1;
+    let mut out = String::new();
+    let mut esc = false;
+    for ch in rest[q1..].chars() {
+        if esc {
+            esc = false;
+            out.push(match ch {
+                'n' => '\n',
+                other => other,
+            });
+            continue;
+        }
+        match ch {
+            '\\' => esc = true,
+            '"' => return Some(out),
+            other => out.push(other),
+        }
+    }
+    None
+}
+
+/* Days from today until a "YYYY-MM-DD..." date prefix, via the civil
+   epoch-day formula (Howard Hinnant). None when unparseable. */
+fn days_until(date: &str) -> Option<i64> {
+    let mut parts = date.splitn(3, '-');
+    let y: i64 = parts.next()?.parse().ok()?;
+    let m: i64 = parts.next()?.parse().ok()?;
+    let d: i64 = parts.next()?.split(&['T', ' ', '/'][..]).next()?.parse().ok()?;
+    let (y2, m2) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
+    let era = if y2 >= 0 { y2 } else { y2 - 399 } / 400;
+    let yoe = y2 - era * 400;
+    let mp = (m2 + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    let today = (now_secs() / 86400) as i64;
+    Some(days - today)
+}
+
+/// TLS certificate details for the site info card. The browser never
+/// makes a direct TLS connection to proxied sites, so this asks
+/// crt.sh (public CT-log data) for the host's newest certificate.
+/// Field scanning instead of serde_json keeps dependencies unchanged.
+async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery) -> Response {
+    let host = q
+        .and_then(|qs| qs.split('&').find_map(|kv| kv.strip_prefix("host=")))
+        .map(percent_decode)
+        .unwrap_or_default();
+    if host.is_empty() {
+        return (
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
+        )
+            .into_response();
+    }
+    push_log(&state, "info", &format!("cert lookup {}", host));
+    let url = format!("https://crt.sh/?q={}&output=json", json_escape(&host));
+    let fetched = state
+        .client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(6))
+        .send()
+        .await;
+    let body = match fetched {
+        Ok(resp) if resp.status().is_success() => resp.text().await.unwrap_or_default(),
+        _ => {
+            push_log(&state, "warn", &format!("cert lookup {} failed (no CT-log record or unreachable)", host));
+            return (
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
+            )
+                .into_response();
+        }
+    };
+    let issuer = scan_json_str(&body, "issuer_name");
+    let not_after = scan_json_str(&body, "not_after");
+    match (issuer, not_after) {
+        (Some(issuer), Some(not_after)) => {
+            let days = days_until(&not_after).unwrap_or(0);
+            let out = format!(
+                "{{\"ok\":true,\"host\":\"{}\",\"issuer\":\"{}\",\"notAfter\":\"{}\",\"days\":{}}}",
+                json_escape(&host),
+                json_escape(&issuer),
+                json_escape(&not_after),
+                days
+            );
+            push_log(&state, "info", &format!("cert lookup {} ok: {} ({} days left)", host, issuer, days));
+            ([(header::CONTENT_TYPE, "application/json")], out).into_response()
+        }
+        _ => {
+            push_log(&state, "warn", &format!("cert lookup {}: no parseable CT-log record", host));
+            (
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
+            )
+                .into_response()
+        }
+    }
+}
+
 fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
     let mut text = builtin.to_string();
     if let Ok(extra) = std::fs::read_to_string(extra_path) {
@@ -1591,6 +1698,7 @@ async fn main() {
         .route("/lj/:target", any(engine_proxy))
                 .route("/suggest", get(suggest_endpoint))
 .route("/logs", get(logs_endpoint))
+.route("/cert", get(cert_endpoint))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
         // The service worker script gets Service-Worker-Allowed so a
         // "/" scope registration is possible later; its chunks and

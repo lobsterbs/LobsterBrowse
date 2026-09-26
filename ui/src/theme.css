@@ -194,7 +194,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   /* Never scrollable: tabs shrink (compact/tight tiers) to fit. */
   overflow-x: hidden;
   overflow-y: hidden;
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
+  padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space100);
   background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
@@ -216,15 +216,15 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-tab {
   display: flex;
   align-items: center;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space125);
+  gap: var(--md-sys-measurement-space75);
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
   /* Shrinkable so the strip never needs to scroll. */
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 170px;
+  max-width: 150px;
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
@@ -243,7 +243,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
   font-variation-settings: "wght" 560;
 }
-.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 150px; min-width: 0; }
+.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 120px; min-width: 0; }
 .lb-tab-favicon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; object-fit: contain; }
 .lb-tab .lb-tab-close {
   border-radius: 50%;
@@ -256,8 +256,8 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 /* Many tabs: shrink automatically. compact = tighter pill (>=6 tabs),
    tight = drop the titles, favicon-only pills (>=10 tabs). */
 .lb-tabstrip.compact { gap: var(--md-sys-measurement-space50); }
-.lb-tabstrip.compact .lb-tab { max-width: 170px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space125); gap: var(--md-sys-measurement-space75); font-size: 12px; }
-.lb-tabstrip.compact .lb-tab-title { max-width: 90px; }
+.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: 12px; }
+.lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
 /* Incognito indicator: labeled pill pinned to the far right corner of the
@@ -345,14 +345,14 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   min-height: 56px;
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
-  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
-  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
+  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   opacity: 1;
   width: fit-content;
   min-width: min(780px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
   flex-wrap: wrap;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent) !important;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
@@ -705,7 +705,9 @@ m3e-icon-button:active { transform: scale(0.88); }
 m3e-nav-rail {
   /* A bit longer on the right side (toward the browse view): the
      compact width is ours to set via the component token. */
-  --m3e-nav-rail-compact-width: 6.5rem;
+  --m3e-nav-rail-compact-width: 7.5rem;
+  /* One token drives BOTH sides, so left and right inset are
+     pixel-identical by construction. */
   --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space100);
 }
 m3e-nav-rail { transition: margin-left 250ms cubic-bezier(0.2, 0, 0, 1); }
@@ -753,3 +755,60 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break
 
 ... [Content truncated]
+/* ---- Feature batch: UA dropdown, ext detail switches, incognito in
+   the toolbar, smooth suggestion pop-in, new-tab fade. ---- */
+
+/* Settings: native dropdown replacing the overflowing UA segmented
+   buttons; themed to match the text fields. */
+.lb-select {
+  width: 100%;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: var(--m3e-shape-md, 12px);
+  border: 1px solid var(--md-sys-color-outline, #79747e);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lb-ua-active {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
+  color: var(--md-sys-color-on-surface);
+  font-size: 12px;
+}
+.lb-ua-bad { color: #d93025; }
+
+/* Settings extension import rows: the file inputs are invisible
+   surrogates; the buttons trigger them. */
+.lb-import-row { display: block; margin: 6px 0; }
+.lb-import-row input[type="file"] { display: none; }
+
+/* Incognito icon button inside the toolbar: square icon-button
+   sizing, not the wide labeled pill from the tab strip. */
+.lb-toolbar .lb-incognito {
+  margin-left: 0;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+}
+
+/* Suggestion dropdowns: grow/fade in instead of appearing instantly. */
+@keyframes lb-pop-in {
+  from { opacity: 0; transform: translateY(6px) scaleY(0.96); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+.lb-ac,
+.lb-tb-ac,
+.lb-nt-ac { animation: lb-pop-in 160ms cubic-bezier(0.2, 0, 0, 1); }
+
+/* New tab page: gentle fade so tab switches feel deliberate. */
+@keyframes lb-fade-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.lb-newtab { animation: lb-fade-in 240ms cubic-bezier(0.2, 0, 0, 1); }

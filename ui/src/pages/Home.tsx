@@ -116,7 +116,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
             slot="input"
             id="lb-search-input"
             ref={inputRef}
-            aria-label="Search or URL"
+            aria-label={"Search with " + ENGINES[settings.engine].name + " or URL"}
             value={url}
             onChange={(e) => {
               setUrl(e.target.value);
@@ -129,7 +129,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
               setIdx(-1);
             }}
             onKeyDown={onKey}
-            placeholder="Search or URL"
+            placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
             autoComplete="off"
           />
         </m3e-search-bar>
