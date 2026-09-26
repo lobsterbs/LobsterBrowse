@@ -1565,7 +1565,8 @@ async fn main() {
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(25))
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(20))
         .cookie_store(true)
         .build()
         .expect("reqwest client");
