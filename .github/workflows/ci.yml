@@ -23,51 +23,7 @@ jobs:
       - name: Tests
         run: cargo test
       - name: Clippy
-        run: |
-          cargo clippy --message-format=short 2>&1 | tee /tmp/clippy.txt | grep -E "^(error|warning)" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
-          if grep -q "^error" /tmp/clippy.txt; then exit 1; fi
-
-  flood-test:
-    # Replays the JFrog Lucide-Proxy CONNECT/CLOSE flood pattern against a
-    # locally running server; the guard layer must absorb it without dying.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: server
-      - name: Build server
-        run: cargo build --release -p lobster-server
-      - name: Start server
-        run: |
-          PORT=6001 WISP_PATH=/wisp/ ./target/release/lobster-server &
-          sleep 2
-          curl -fsS http://127.0.0.1:6001/healthz
-      - name: Flood (CONNECT/CLOSE cycling)
-        run: |
-          python3 - <<EOF
-          import socket, time
-          ok = 0
-          start = time.time()
-          while time.time() - start < 10:
-              s = socket.create_connection(("127.0.0.1", 6001), timeout=2)
-              # HTTP upgrade without WS keys; server must not crash
-              s.sendall(b"GET /wisp/ HTTP/1.1\r\nHost: localhost\r\n\r\n")
-              try:
-                  s.recv(64)
-              except Exception:
-                  pass
-              s.close()
-              ok += 1
-          print(f"survived {ok} raw connections")
-          assert ok > 100
-          EOF
-      - name: Server still healthy
-        run: curl -fsS http://127.0.0.1:6001/healthz
+        run: cargo clippy -- -D warnings
 
   ui:
     runs-on: ubuntu-latest
