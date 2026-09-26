@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
 import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
+import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
 import {
   decodeRoute,
   ENGINES,
@@ -69,6 +70,37 @@ function redactUrl(u: string): string {
   );
 }
 
+/* ---- Downloads (UI-side manager) ----
+   Proxied pages fetch through the engine, so every download is
+   relayed by our server but SAVED on the user's device. Captured
+   a[download] links (and obvious file links) are streamed by the app
+   with visible progress instead of a silent browser download. */
+type DlItem = {
+  id: number;
+  name: string;
+  url: string;
+  size: number;
+  got: number;
+  status: "active" | "done" | "error";
+  error?: string;
+};
+const DL_FILE_RE = /\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar|exe|msi|dmg|pkg|deb|rpm|apk|iso|mp3|flac|wav|ogg|m4a|mp4|mkv|webm|mov|avi|pdf|epub|doc|docx|xls|xlsx|ppt|pptx|csv|json|txt)([?#].*)?$/i;
+function dlIconFor(name: string): string {
+  const n = name.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/.test(n)) return "image";
+  if (/\.(mp3|flac|wav|ogg|m4a)$/.test(n)) return "audio_file";
+  if (/\.(mp4|mkv|webm|mov|avi)$/.test(n)) return "video_file";
+  if (/\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar)$/.test(n)) return "folder_zip";
+  return "draft";
+}
+function fmtBytes(n: number): string {
+  if (!n || n < 0) return "0 B";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB";
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+
 /* Installed-extension summary from the engine control plane. */
 type ExtInfo = {
   id: string;
@@ -117,9 +149,6 @@ export default function BrowserView(props: Props) {
   const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
   const [tbSuggOpen, setTbSuggOpen] = useState(false);
   const [tbSuggIdx, setTbSuggIdx] = useState(-1);
-  /* Suggest-in-flight indicator: true between the debounced fetch
-     starting and its answer landing. */
-  const [tbSuggLoading, setTbSuggLoading] = useState(false);
   /* Center pill: collapsed shows the tab name; pressed, it expands in
      place into the editable URL (the name hides). */
   const [tbExpanded, setTbExpanded] = useState(false);
@@ -140,8 +169,85 @@ export default function BrowserView(props: Props) {
   /* Site info card: open state plus the cookies the page can read. */
   const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
-     button opens a card listing every tab (switch, close). */
+     button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
+  /* ---- Downloads ---- */
+  const [downloads, setDownloads] = useState<DlItem[]>([]);
+  const [dlOpen, setDlOpen] = useState(false);
+  const dlSeq = useRef(1);
+  /* Frame documents that already carry the download click capture. */
+  const dlWired = useRef<WeakSet<Document>>(new WeakSet());
+  const startDownload = (href: string, name: string) => {
+    const id = dlSeq.current++;
+    /* Engine-routed hrefs (/r/, /lj/) are fetched as-is; anything
+       else goes through routeUrl so settings and site rules apply. */
+    const target = href.startsWith("/r/") || href.startsWith("/lj/") ? href : routeUrl(settings, rules, href);
+    setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
+    pushLog("info", "download start " + name);
+    /* Ask for notification permission once, on the first download. */
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        const p = Notification.requestPermission() as unknown;
+        if (p && typeof (p as Promise<void>).catch === "function") (p as Promise<void>).catch(() => {});
+      }
+    } catch {
+      /* notifications unavailable */
+    }
+    (async () => {
+      try {
+        const res = await fetch(target);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const size = Number(res.headers.get("content-length")) || 0;
+        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
+        const chunks: BlobPart[] = [];
+        if (res.body) {
+          const reader = res.body.getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              const buf = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+              chunks.push(buf);
+              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: d.got + value.byteLength } : d)));
+            }
+          }
+        } else {
+          chunks.push(await res.blob());
+        }
+        const blob = new Blob(chunks);
+        setDownloads((prev) =>
+          prev.map((d) => (d.id === id ? { ...d, size: d.size || blob.size, got: blob.size, status: "done" } : d)),
+        );
+        /* Saved on the user's device via a blob anchor click. */
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objUrl;
+        a.download = name;
+        a.click();
+        window.setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+        pushLog("info", "download done " + name + " (" + fmtBytes(blob.size) + ")");
+        /* Notification (system when permitted, snackbar always), then
+           the entry goes away a few seconds after completion. */
+        try {
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification("LobsterBrowse download complete", { body: name });
+          }
+        } catch {
+          /* notifications unavailable */
+        }
+        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+          M3eSnackbar.open("Downloaded " + name, { duration: 4000 });
+        }
+        window.setTimeout(() => {
+          setDownloads((prev) => prev.filter((d) => d.id !== id));
+        }, 4000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        pushLog("error", "download failed " + name + ": " + msg);
+        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
+      }
+    })();
+  };
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the
@@ -595,6 +701,45 @@ export default function BrowserView(props: Props) {
         doc.addEventListener("pointerover", (e) => prefetch(e.target), { passive: true });
         doc.addEventListener("focusin", (e) => prefetch(e.target), true);
       }
+      /* Download interception (always on, independent of the
+         prefetch setting): capture-phase click handler on a[download]
+         links and obvious file links, so the app can stream them with
+         visible progress. */
+      if (!dlWired.current.has(doc)) {
+        dlWired.current.add(doc);
+        doc.addEventListener(
+          "click",
+          (e) => {
+            const el = e.target as Element | null;
+            const a = el && el.closest ? (el.closest("a[href]") as HTMLAnchorElement | null) : null;
+            if (!a) return;
+            const attr = a.getAttribute("download");
+            const href = a.getAttribute("href") || "";
+            if (!href || href.startsWith("javascript:") || href.startsWith("blob:") || href.startsWith("data:")) return;
+            let original = href;
+            try {
+              const dec = decodeRoute(href);
+              if (dec) original = dec;
+            } catch {
+              /* not an engine route; keep the raw href */
+            }
+            if (!attr && !DL_FILE_RE.test(original)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            let name = (attr || "").trim();
+            if (!name) {
+              try {
+                const abs = new URL(original, t.url).href;
+                name = decodeURIComponent(new URL(abs).pathname.split("/").filter(Boolean).pop() || "download");
+              } catch {
+                name = "download";
+              }
+            }
+            startDownload(href, name.slice(0, 120));
+          },
+          true,
+        );
+      }
     }, 1200);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -768,12 +913,10 @@ export default function BrowserView(props: Props) {
       setTbSugg([]);
       setTbSuggOpen(false);
       setTbSuggIdx(-1);
-      setTbSuggLoading(false);
       return;
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      setTbSuggLoading(true);
       fetchSuggestions(settings.engine, draft)
         .then((list) => {
           if (cancelled) return;
@@ -786,10 +929,8 @@ export default function BrowserView(props: Props) {
              whether the box is empty because of the network or the
              setting. */
           pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length);
-          setTbSuggLoading(false);
         })
         .catch((err) => {
-          setTbSuggLoading(false);
           if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
         });
     }, 160);
@@ -995,7 +1136,13 @@ export default function BrowserView(props: Props) {
                 if (el) frames.current.set(t.id, el);
                 else frames.current.delete(t.id);
               }}
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-top-navigation-by-user-activation"
+              /* No sandbox attribute: engine frames are same-origin by
+                 design, so the old allow-same-origin + allow-scripts
+                 sandbox provided no real isolation (that exact pair is
+                 what triggers the "can escape its sandboxing" console
+                 warning) while adding navigation/download quirks.
+                 Hostile page scripts are contained server-side by the
+                 antiframe rewrite instead. */
               /* Cross-origin frames (LobsterJet) can't be polled; the
                  load event is the only reliable "done" signal there. */
               onLoad={() =>
@@ -1095,13 +1242,85 @@ export default function BrowserView(props: Props) {
           sliver, focus the URL field, or move the pointer / type to
           bring it back. */}
       <div
-        className={"lb-dock" + (dockTucked ? " tucked" : "")}
+        className={"lb-dock" + (dockTucked ? " tucked" : "") + (tabsOpen ? " tabs-open" : "")}
         onMouseEnter={() => (dockHoverRef.current = true)}
         onMouseLeave={() => {
           dockHoverRef.current = false;
           hideSoon();
         }}
       >
+        {/* Tab switcher: its own surface while the toolbar slides
+            away (.lb-dock.tabs-open). Horizontal row of live preview
+            tiles (scriptless engine frames, scaled 0.25), not a list. */}
+        {tabsOpen && (
+          <m3e-card variant="elevated" className="lb-tabs-card" aria-label="Tab switcher">
+            <div slot="header" className="lb-site-head">
+              <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
+              <span>
+                <m3e-icon-button aria-label="New tab" onClick={() => { props.newTab(); setTabsOpen(false); }}>
+                  <m3e-icon name="add" aria-hidden={true} />
+                </m3e-icon-button>
+                <m3e-icon-button aria-label="Close tab switcher" onClick={() => setTabsOpen(false)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
+              </span>
+            </div>
+            <div slot="content" className="lb-tabs-row">
+              {tabs.map((t) => (
+                <div
+                  key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  className={"lb-tabs-tile" + (t.id === active.id ? " active" : "") + (closingIds.includes(t.id) ? " closing" : "")}
+                  aria-label={"Switch to " + tabLabel(t)}
+                  onClick={() => {
+                    props.setActiveId(t.id);
+                    setTabsOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      props.setActiveId(t.id);
+                      setTabsOpen(false);
+                    }
+                  }}
+                >
+                  <div className="lb-tab-preview">
+                    {t.url ? (
+                      <iframe
+                        src={routeUrl(settings, rules, t.url)}
+                        title={"Preview of " + tabLabel(t)}
+                        sandbox="allow-same-origin"
+                        loading="lazy"
+                        tabIndex={-1}
+                      />
+                    ) : (
+                      <div className="lb-tab-empty">
+                        <m3e-icon name="public" aria-hidden={true} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="lb-tabs-tile-head">
+                    {icons[t.id] ? (
+                      <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
+                    ) : (
+                      <m3e-icon name="public" aria-hidden={true} />
+                    )}
+                    <span className="lb-tabs-title">{tabLabel(t)}</span>
+                    <m3e-icon
+                      name="close"
+                      aria-hidden={true}
+                      className="lb-tab-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTabSmooth(t.id);
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </m3e-card>
+        )}
         <div className="lb-dock-pill">
           <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
           {/* Compaction 1: tabs live in the toolbar too. The count
@@ -1116,9 +1335,10 @@ export default function BrowserView(props: Props) {
             onClick={() => {
               setTabsOpen((v) => !v);
               setSiteInfoOpen(false);
+              setDlOpen(false);
             }}
           >
-            <m3e-icon name="tab" aria-hidden={true} />
+            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
             <span className="lb-tabs-count">{tabs.length}</span>
           </button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
@@ -1179,6 +1399,7 @@ export default function BrowserView(props: Props) {
                     if (secure && uParts.host && !siteInfoOpen) loadSiteCert(uParts.host);
                     setSiteInfoOpen((v) => !v);
                     setTabsOpen(false);
+                    setDlOpen(false);
                   }}
                 >
                   <span
@@ -1193,11 +1414,6 @@ export default function BrowserView(props: Props) {
                   <m3e-icon name="public" aria-hidden={true} />
                 )}
               </>
-            )}
-            {tbSuggLoading && (
-              <span className="lb-sugg-load" aria-hidden={true}>
-                <m3e-loading-indicator aria-label="Loading suggestions" />
-              </span>
             )}
             {tbExpanded || !active.url ? (
               <input
@@ -1269,6 +1485,22 @@ export default function BrowserView(props: Props) {
               {activeDt.fails.length}
             </button>
           )}
+          {/* Downloads: the button appears only while something is
+              downloading (or just finished); opens the download card. */}
+          {downloads.length > 0 && (
+            <m3e-icon-button
+              aria-label={"Downloads (" + downloads.length + ")"}
+              toggle
+              selected={dlOpen ? "" : undefined}
+              onClick={() => {
+                setDlOpen((v) => !v);
+                setTabsOpen(false);
+                setSiteInfoOpen(false);
+              }}
+            >
+              <m3e-icon name="download" aria-hidden={true} />
+            </m3e-icon-button>
+          )}
           <m3e-icon-button
             aria-label={fullscreen ? "Exit full screen" : "Full screen"}
             toggle
@@ -1311,55 +1543,6 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
-          {/* Compaction 1: the toolbar tab list card — every tab with
-              favicon, title, switch on click, close per row. Same
-              anchoring as the site info card; only one is open. */}
-          {tabsOpen && (
-            <m3e-card variant="elevated" className="lb-tabs-card" aria-label="Tab list">
-              <div slot="header" className="lb-site-head">
-                <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
-                <m3e-icon-button aria-label="Close tab list" onClick={() => setTabsOpen(false)}>
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </div>
-              <div slot="content" className="lb-tabs-list">
-                {tabs.map((t) => (
-                  <div
-                    key={t.id}
-                    role="button"
-                    tabIndex={0}
-                    className={"lb-tabs-item" + (t.id === active.id ? " active" : "")}
-                    onClick={() => {
-                      props.setActiveId(t.id);
-                      setTabsOpen(false);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        props.setActiveId(t.id);
-                        setTabsOpen(false);
-                      }
-                    }}
-                  >
-                    {icons[t.id] ? (
-                      <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
-                    ) : (
-                      <m3e-icon name="public" aria-hidden={true} />
-                    )}
-                    <span className="lb-tabs-title">{tabLabel(t)}</span>
-                    <m3e-icon
-                      name="close"
-                      aria-hidden={true}
-                      className="lb-tab-close"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTabSmooth(t.id);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </m3e-card>
-          )}
           {/* Site info: a real M3E card (elevated) anchored above the
               toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). Long cookie
@@ -1420,6 +1603,49 @@ export default function BrowserView(props: Props) {
                 </div>
               </m3e-card>
             )}
+          {dlOpen && downloads.length > 0 && (
+            <m3e-card variant="elevated" className="lb-dl-card" aria-label="Downloads">
+              <div slot="header" className="lb-site-head">
+                <span className="lb-site-ctitle">Downloads ({downloads.length})</span>
+                <m3e-icon-button aria-label="Close downloads" onClick={() => setDlOpen(false)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
+              </div>
+              <div slot="content" className="lb-dl-list">
+                {downloads.map((d) => (
+                  <div key={d.id} className="lb-dl-item">
+                    <m3e-icon name={dlIconFor(d.name)} aria-hidden={true} />
+                    <div className="lb-dl-body">
+                      <div className="lb-dl-name" title={d.name}>{d.name}</div>
+                      {d.status === "active" && (
+                        <div className="lb-dl-progress">
+                          <m3e-linear-progress-indicator
+                            aria-label={"Downloading " + d.name}
+                            value={d.size > 0 ? String(Math.round((d.got / d.size) * 100)) : undefined}
+                            max="100"
+                            mode={d.size > 0 ? undefined : "indeterminate"}
+                          />
+                        </div>
+                      )}
+                      <div className="lb-dl-meta">
+                        {d.status === "active"
+                          ? (d.size > 0 ? fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
+                          : d.status === "done"
+                            ? "Complete, saved to your device"
+                            : "Failed: " + d.error}
+                      </div>
+                    </div>
+                    <m3e-icon-button
+                      aria-label={"Remove " + d.name + " from the list"}
+                      onClick={() => setDownloads((prev) => prev.filter((x) => x.id !== d.id))}
+                    >
+                      <m3e-icon name="close" aria-hidden={true} />
+                    </m3e-icon-button>
+                  </div>
+                ))}
+              </div>
+            </m3e-card>
+          )}
         </div>
       </div>
 

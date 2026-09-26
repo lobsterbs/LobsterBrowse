@@ -7,7 +7,7 @@
    generates the full dynamic palette from the Settings seed color.
    No static fallbacks here: static values froze parts of the UI on a
    hardcoded palette that ignored the user's seed. */
-:root { color-scheme: light dark; }
+:root { color-scheme: dark; }
 
 body {
   margin: 0;
@@ -395,19 +395,13 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   margin: 0 auto;
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space150);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
   transition: background 180ms ease, border-color 180ms ease;
 }
 .lb-tb-pill.expanded {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, rgba(0, 0, 0, 0.08));
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
-}
-@media (prefers-color-scheme: dark) {
-  .lb-tb-pill { background: rgba(255, 255, 255, 0.12); }
-  .lb-tb-pill.expanded {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
-  }
 }
 .lb-tb-favicon { width: 18px; height: 18px; border-radius: 6px; object-fit: contain; flex-shrink: 0; }
 /* Security indicator: sits before the favicon with breathing room.
@@ -442,24 +436,21 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space175);
   border-radius: 999px;
   border: none;
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--md-sys-color-on-surface, #1d1b20) !important;
-  -webkit-text-fill-color: var(--md-sys-color-on-surface, #1d1b20);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--md-sys-color-on-surface, #ece6f0) !important;
+  -webkit-text-fill-color: var(--md-sys-color-on-surface, #ece6f0);
   caret-color: var(--md-sys-color-primary, #6750a4);
   font-family: inherit;
   font-size: 13px;
   outline: none;
 }
 .lb-url-input::placeholder {
-  color: var(--md-sys-color-on-surface-variant, #49454f);
-  -webkit-text-fill-color: var(--md-sys-color-on-surface-variant, #49454f);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  -webkit-text-fill-color: var(--md-sys-color-on-surface-variant, #cac4d0);
   opacity: 0.7;
 }
 .lb-url-input:focus {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, rgba(0, 0, 0, 0.08));
-}
-@media (prefers-color-scheme: dark) {
-  .lb-url-input { background: rgba(255, 255, 255, 0.12); color: var(--md-sys-color-on-surface, #ece6f0) !important; -webkit-text-fill-color: var(--md-sys-color-on-surface, #ece6f0); }
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
 }
 
 /* The URL input inside the pill: the pill supplies the chrome, the
@@ -921,57 +912,152 @@ m3e-nav-rail.lb-rail-hidden {
   cursor: pointer;
 }
 .lb-diag-tb-chip m3e-icon { font-size: 16px; }
-/* Tab list card: anchored above the toolbar like the site card. */
+/* Tab switcher card (v2): a horizontal row of live preview tiles.
+   While it is open the toolbar slides away (.lb-dock.tabs-open) and
+   the card takes the dock place at the bottom of the screen. */
 .lb-tabs-card {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 320px;
-  max-width: calc(100vw - 32px);
+  width: min(760px, calc(100vw - 24px));
   z-index: 45;
+  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
-.lb-tabs-list {
+.lb-tabs-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  max-height: 220px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--md-sys-measurement-space50);
+}
+.lb-tabs-tile {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  max-height: 264px;
-  overflow: auto;
-}
-.lb-tabs-item {
-  display: flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100);
+  gap: var(--md-sys-measurement-space50);
+  width: 176px;
+  padding: var(--md-sys-measurement-space50);
   border-radius: 12px;
-  font-size: 13px;
   cursor: pointer;
+  transition: background 160ms ease, transform 160ms var(--m3e-spring), opacity 240ms ease;
 }
-.lb-tabs-item:hover {
+.lb-tabs-tile:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
 }
-.lb-tabs-item.active {
+.lb-tabs-tile.active {
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
 }
-.lb-tabs-title {
+.lb-tabs-tile.closing {
+  opacity: 0;
+  transform: scale(0.92);
+}
+.lb-tab-preview {
+  position: relative;
+  width: 160px;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
+}
+.lb-tab-preview iframe {
+  width: 640px;
+  height: 400px;
+  border: 0;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.lb-tab-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100px;
+  opacity: 0.5;
+}
+.lb-tabs-tile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space75);
+  font-size: 12px;
+  min-width: 0;
+}
+.lb-tabs-tile-head .lb-tabs-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Suggest loading: small inline M3E indicator inside the URL pill. */
-.lb-sugg-load {
-  display: inline-flex;
-  align-items: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
+.lb-tabs-tile .lb-tab-close {
+  font-size: 15px;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
-.lb-sugg-load m3e-loading-indicator {
-  width: 18px;
-  height: 18px;
+.lb-tabs-tile:hover .lb-tab-close,
+.lb-tabs-tile.active .lb-tab-close { opacity: 0.8; }
+.lb-tabs-tile .lb-tab-close:hover { opacity: 1; }
+/* The toolbar slides fully away while the tab switcher is open; this
+   rule must sit after the dock hover/reveal rules to win the cascade. */
+.lb-dock.tabs-open .lb-dock-pill { transform: translateY(calc(100% + 24px)); }
+@keyframes lb-card-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+/* Tab-count icon: inline SVG (same self-hosted Material Symbols route
+   as the lock and incognito icons), so it never depends on the icon
+   font being loaded to be visible. */
+.lb-tabs-ic {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.lb-tabs-ic svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.lb-tabs-ic svg path,
+.lb-tabs-ic svg g,
+.lb-tabs-ic svg circle,
+.lb-tabs-ic svg rect { fill: currentColor; }
+/* Download card: same anchoring pattern as the site card. */
+.lb-dl-card {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  z-index: 45;
+  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+}
+.lb-dl-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space75);
+  width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.lb-dl-item {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space100);
+}
+.lb-dl-item > m3e-icon { flex-shrink: 0; }
+.lb-dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25); }
+.lb-dl-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
+.lb-dl-meta { font-size: 11px; opacity: 0.65; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-tabs-card, .lb-dl-card { animation: none; }
+  .lb-tabs-tile, .lb-dock-pill { transition: none; }
 }
 
 /* Copied-to-clipboard toast (Logs): M3E-styled transient snackbar. */

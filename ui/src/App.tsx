@@ -230,7 +230,7 @@ export default function App() {
   }
 
   return (
-    <m3e-theme color={settings.seed} strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
       <div className="lb-shell">
         {/* The rail is always fully visible in every view: no hiding,
            no sliver, no click-to-toggle. */}
