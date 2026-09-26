@@ -1590,6 +1590,19 @@ async fn main() {
         .route("/lj/:target", any(engine_proxy))
                 .route("/suggest", get(suggest_endpoint))
 .route("/logs", get(logs_endpoint))
+        // Zeolite engine bundle, vendored into zlsw/ at build time.
+        // The service worker script gets Service-Worker-Allowed so a
+        // "/" scope registration is possible later; its chunks and
+        // wasm assets are plain static files under the same prefix.
+        // The worker registers at its natural /zlsw/ scope today and
+        // acts purely as the extension control plane: it controls no
+        // pages, so proxied /lj/ and /r/ browsing is untouched.
+        .route("/zlsw/sw.js", get(zl_sw_js))
+        .nest_service("/zlsw", ServeDir::new("zlsw"))
+        // The engine worker's transport adapter resolves the vendored
+        // libcurl bundle at the origin root (/libcurl/index.mjs);
+        // serve the vendored copy from the bundle directory.
+        .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
@@ -1610,6 +1623,22 @@ async fn main() {
     info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// Zeolite engine service worker (vendored build, zlsw/sw.js). The
+/// Service-Worker-Allowed header permits a "/" scope registration;
+/// no-cache so UI updates pick up new bundle builds promptly.
+async fn zl_sw_js() -> Response {
+    match tokio::fs::read("zlsw/sw.js").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/javascript")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .header("service-worker-allowed", "/")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
 }
 
 #[cfg(test)]
