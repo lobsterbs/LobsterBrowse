@@ -116,10 +116,14 @@ export default function BrowserView(props: Props) {
   const [extPanelOpen, setExtPanelOpen] = useState(false);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
+  /* Last registration/reply failure, shown verbatim in the panel. */
+  const [extError, setExtError] = useState<string | null>(null);
   const loadExtensions = async () => {
+    setExtError(null);
     if (!("serviceWorker" in navigator)) {
       setExtBusy(false);
       setExtList(null);
+      setExtError("this browser has no service worker support");
       return;
     }
     /* Prefer the worker that already controls the page (engine tabs);
@@ -130,7 +134,13 @@ export default function BrowserView(props: Props) {
     let swc: ServiceWorker | null = navigator.serviceWorker.controller;
     if (!swc) {
       try {
-        const reg = await navigator.serviceWorker.register("/zlsw/sw.js");
+        /* The engine bundle is an ES module build (static chunk
+           imports): it must be registered as a module or the browser
+           rejects the script outright. */
+        const reg = await navigator.serviceWorker.register("/zlsw/sw.js", {
+          scope: "/zlsw/",
+          type: "module",
+        });
         /* Give a fresh install a moment to activate; ready resolves
            once any registration of ours is active. */
         await Promise.race([
@@ -138,13 +148,18 @@ export default function BrowserView(props: Props) {
           new Promise((resolve) => setTimeout(resolve, 5000)),
         ]);
         swc = reg.active ?? reg.waiting ?? reg.installing ?? null;
-      } catch {
-        swc = null;
+      } catch (err) {
+        console.warn("[lb] Zeolite worker registration failed:", err);
+        setExtBusy(false);
+        setExtList(null);
+        setExtError(String(err));
+        return;
       }
     }
     if (!swc) {
       setExtBusy(false);
       setExtList(null);
+      setExtError("registration produced no active, waiting or installing worker");
       return;
     }
     setExtBusy(true);
@@ -161,7 +176,10 @@ export default function BrowserView(props: Props) {
       finish(d && d.ok && Array.isArray(d.extensions) ? d.extensions : null);
     };
     swc.postMessage({ type: "zl:listExt" }, [ch.port2]);
-    setTimeout(() => finish(null), 1500);
+    setTimeout(() => {
+      setExtError("the worker did not answer zl:listExt in time");
+      finish(null);
+    }, 3000);
   };
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
@@ -1144,7 +1162,9 @@ export default function BrowserView(props: Props) {
             <p className="lb-ext-note">
               {extBusy
                 ? "Querying the engine service worker..."
-                : "Engine extensions unavailable. The Zeolite service worker could not be registered or reached on this origin."}
+                : extError
+                  ? "Engine extensions unavailable: " + extError
+                  : "Engine extensions unavailable. No Zeolite service worker on this origin."}
             </p>
           ) : extList.length === 0 ? (
             <p className="lb-ext-note">No extensions installed.</p>
