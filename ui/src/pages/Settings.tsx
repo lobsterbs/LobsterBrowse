@@ -95,7 +95,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              LobsterJet — default
+              Zeolite — default
             </m3e-button-segment>
             <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
@@ -103,7 +103,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </m3e-segmented-button>
           </div>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            LobsterJet is the project default: a service worker that caches proxied pages on your
+            Zeolite is the project default: a service worker that caches proxied pages on your
             device (cache-first, 10-minute freshness, network fallback), so repeat visits load
             without touching the server. When the worker is not installed the same /lj/ routes are
             served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
@@ -126,7 +126,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
-          <Row label="Prefetch links on hover (LobsterJet)" icon="bolt" on={settings.prefetchLinks} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
+          <Row label="Prefetch links on hover (Zeolite)" icon="bolt" on={settings.prefetchLinks} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
           <Row label="Hide toolbar when idle" icon="visibility_off" on={settings.autoHideChrome} toggle={() => onChange({ autoHideChrome: !settings.autoHideChrome })} />
         </m3e-list>
       </Panel>
@@ -205,7 +205,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">LobsterJet cache</div>
+          <div className="lb-setting-label">Zeolite cache</div>
           <p className="lb-muted">
             Cached proxied pages and local libraries live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
@@ -217,7 +217,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
                   const keys = await caches.keys();
                   await Promise.all(keys.map((k) => caches.delete(k)));
                   if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                    M3eSnackbar.open("LobsterJet cache cleared", { duration: 3000 });
+                    M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
                   }
                 } catch {
                   /* caches unavailable */
@@ -225,7 +225,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               })();
             }}
           >
-            <m3e-icon name="delete" aria-hidden={true} /> Clear LobsterJet cache
+            <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
         </div>
         <m3e-divider />
