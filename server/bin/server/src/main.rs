@@ -633,7 +633,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" Ã¢ÂÂ rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -982,7 +982,7 @@ fn js_antiframe_scan(s: &str) -> String {
 
 fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
     let pre = format!(
-        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>window.LB_antiframe=0;window.LB_antiframe_replace=function(){};window.LB_antiframe_reload=function(){};window.LB_antiframe_assign=function(){};</script><script>{}</script><script>{}</script>",
+        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>window.LB_antiframe=0;window.LB_antiframe_replace=function(){{}};window.LB_antiframe_reload=function(){{}};window.LB_antiframe_assign=function(){{}};</script><script>{}</script><script>{}</script>",
         json_escape(page_url),
         json_escape(suffix),
         ENGINE_JS,
@@ -1076,7 +1076,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("Ã¢ÂÂ¡");
     if !looks_amp {
         return None;
     }
