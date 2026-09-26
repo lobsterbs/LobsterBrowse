@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/wisp-core",
-  "crates/wisp-extensions",
-  "crates/guard",
   "crates/adblock",
   "bin/server",
 ]

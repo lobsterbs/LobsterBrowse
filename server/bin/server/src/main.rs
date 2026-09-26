@@ -9,8 +9,6 @@
 //! setters at runtime, and the devtools hook reports console and
 //! network activity to the UI.
 
-mod proxy;
-
 use axum::body::{Body, Bytes};
 use axum::extract::{OriginalUri, Path, RawQuery, State};
 use axum::http::{header, HeaderMap, Method, StatusCode};
@@ -1867,8 +1865,20 @@ async fn main() {
     });
     push_log(&state, "info", "native engine log buffer initialised");
 
-    let wisp_state = Arc::new(proxy::ProxyState::new(auth_password));
-    let limiter = Arc::new(Mutex::new(guard::RateLimiter::default()));
+    // Zeolite is the authoritative wisp server: resolve-then-validate
+    // SSRF policy (DNS-rebinding safe), real UDP datagram relay, credit
+    // windows, connection/stream limits and extension auth all live there.
+    // The old local wisp handler (proxy.rs) was removed.
+    let mut zl_cfg = zeolite_server::Config::from_env();
+    if zl_cfg.password.is_none() {
+        // Preserve the previous WISP_PASSWORD / WISP_PASSWORD deployment
+        // knobs for existing deployments.
+        if let Some(pw) = auth_password.filter(|p| !p.is_empty()) {
+            let user = std::env::var("WISP_USERNAME").unwrap_or_else(|_| "user".into());
+            zl_cfg.password = Some((user, pw));
+        }
+    }
+    let wisp_state = zeolite_server::Shared::new(zl_cfg);
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -1903,8 +1913,10 @@ async fn main() {
             &wisp_path,
             get({
                 let state = wisp_state.clone();
-                let limiter = limiter.clone();
-                move |ws, headers| proxy::handle_upgrade(ws, headers, state, limiter)
+                move |ws: axum::extract::ws::WebSocketUpgrade| {
+                    let state = state.clone();
+                    async move { zeolite_server::wisp_handler(State(state), ws).await }
+                }
             }),
         )
         .layer(CorsLayer::permissive())
