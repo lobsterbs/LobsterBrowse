@@ -1,111 +1,67 @@
 # LobsterBrowse
-
-Fully open-source, 100% free Rust Wisp server with a Material 3 Expressive
-in-app browser: proxied tabs, real DevTools, server-side ad/tracker
-blocking, per-site rules, panic button, auto cloak, resumable sessions,
-and a Zeolite engine integration with extension support.
-
+![LobsterBrowse banner](assets/lobsterbrowse-banner.svg)
+**Open-source proxy browser · Rust + React + Material 3 Expressive**
+LobsterBrowse is a browser-style proxy application built around Rust/Axum, React/M3E, Wisp transport, structured DevTools diagnostics and Zeolite integration.
 ## Architecture
-
-- server/ - Rust workspace (clean-room Wisp v2.1 implementation, MIT OR Apache-2.0)
-  - wisp-core - protocol framing: CONNECT / DATA / CONTINUE / CLOSE / INFO + v2 handshake
-  - wisp-extensions - password auth, Ed25519 key auth, MOTD, UDP, stream confirmation
-  - guard - SSRF hardening, rate limiting, flood detection, destination policy
-  - adblock - uAssets/EasyList network-filter engine (hostname matching at CONNECT time)
-  - bin/server - tokio + axum HTTP/WSS entrypoint. Also serves:
-    - /r/<base64url target> - the native rewriting engine (see below)
-    - /logs - server-side engine log ring buffer
-    - /healthz - liveness probe
-    - the built UI (ui/) from the same origin
-- ui/ - Material 3 Expressive shell (community M3E web components, dynamic color)
-
-## The native engine (/r)
-
-Every navigation goes to /r/<base64url of the target URL> plus engine
-options (ab, trk, https, ua) as query parameters. The server fetches the
-target with a shared cookie jar and rewrites the response so the page
-keeps working same-origin inside the app's sandboxed iframe:
-
-- HTML: URL-bearing attributes (href/src/action/poster/srcset/style) and
-  inline CSS url()/@import references are rewritten to other /r routes.
-  Blocked ad/tracker tags are stripped, CSP/XFO meta tags removed, base
-  tags and SRI integrity attributes dropped.
-- CSS: url() and @import references are rewritten against the final
-  (post-redirect) document URL.
-- A runtime shim is injected after <head>: fetch/XHR, element src/href
-  setters, setAttribute, history.pushState/replaceState and window.open
-  are routed through the engine, and console/network activity is
-  reported to the in-app DevTools via postMessage
-.
-- Everything else (images, fonts, scripts, downloads) streams through
-  untouched. Redirects are followed server-side and relative URLs are
-  resolved against the final URL.
-
-Known limits of same-origin rewriting, stated honestly:
-
-- JS document.cookie writes land on our origin, not the target's, so
-  sites that lean on client-side cookies misbehave.
-- WebSockets are not proxied through /r; sites that need them partially fail.
-- Service workers are not supported.
-- No rewriter catches everything; heavy SPA sites can still break.
-
-The Wisp endpoint (/wisp/, configurable via WISP_PATH) is a TCP/UDP
-tunnel for a future native Wisp client and is independent of /r.
-
-## Zeolite engine integration
-
-Zeolite (github.com/lobsterbs/Zeolite) is the interception-based proxy
-engine: a service worker on the engine origin, a Rust/WASM streaming
-rewriter, and a Gecko/WebExtension compatibility runtime. In Settings
-you can point tabs at a Zeolite engine instance; tabs then load through
-  `?url=<target>` embedding instead of /r, gaining full client-side
-  interception, streaming rewrite and the extension runtime.
-
-The Zeolite engine bundle is vendored into the server image at /zlsw and
-served from this origin with Service-Worker-Allowed: /, so the UI
-registers it at the root scope (it passes through every non-engine
-path). That service worker is the extensions control plane:
-
-- The toolbar has an extensions button listing installed extensions
-  (enable/disable, incognito grant, options page, permissions, errors)
-  through the engine's control plane (zl:listExt / zl:extInfo /
-  zl:extEnable).
-- Settings has an Extensions category: browse the Mozilla add-ons
-  store, import a packaged .xpi/.zip, or import an unpacked folder
-  (manifest.json required; max 100 files, 20MB; no native code). The
-  engine validates the manifest and permission grants; a bad package
-  only lands that extension in an error state.
-- The extensions panel works on any page of this origin: it uses the
-  service worker that already controls engine tabs, otherwise it
-  registers the vendored worker as a pure control plane.
-
-## Server endpoints
-
-- /r/<base64url target> - the native rewriting engine
-- /lj/<base64url target> - same engine handler (Zeolite SW entry route)
-- /suggest - engine search suggestions (server-side, avoids CORS)
-- /cert?host=<host> - TLS certificate details for the site info card,
-  read from public CT-log data (crt.sh, Cert Spotter fallback). The
-  browser never makes a direct TLS connection to proxied sites, so
-  this is the public record, not the negotiated certificate.
-- /logs - server-side engine log ring buffer
-- /zlsw/ - the vendored Zeolite engine bundle (sw.js + chunks)
-- /zl-ext/, /zl-cs/ - extension asset routes served by the engine SW
-- /healthz - liveness probe
-
-
-## Fonts and privacy
-
-Typography (Roboto Flex variable) and Material Symbols are self-hosted via
-npm at build time. The app makes zero requests to Google CDNs. All
-settings, history, bookmarks and sessions live in localStorage on the
-user's device.
-
+    LobsterBrowse UI
+          |
+    +-----+------+
+    |            |
+  /r + /lj     Zeolite
+  rewriting     engine
+    |            |
+    +---- Wisp--+
+           |
+        upstream
+## Server
+- server/bin/server — Tokio + Axum HTTP/WSS entrypoint.
+- server/crates/adblock — network filtering.
+- /r/<base64url target> — server-side rewriting.
+- /lj/<base64url target> — legacy /lj server handler.
+- /wisp/ — Wisp endpoint.
+- /logs — bounded diagnostics.
+- /healthz — liveness.
+- /zlsw/ — published Zeolite bundle.
+- /zl-ext/ and /zl-cs/ — extension routes.
+- /suggest — search suggestion proxy.
+## UI
+React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions, link prefetch and the retained /lj cache worker.
+## Zeolite integration
+Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code.
+## NativeTransit direction
+NativeTransit is the next transport/interception architecture:
+    LobsterBrowse -> Zeolite -> Transport
+                              |-> NativeTransit
+                              |-> RewriteFallback -> Wisp -> Network
+> Do not rewrite website content unless the engine needs to.
+This is a design direction, not a claim that NativeTransit has already replaced rewriting. Do not remove the existing rewriting engine until compatibility tests demonstrate that it is no longer needed.
+When implemented, DevTools should show transport path, NativeTransit vs RewriteFallback, fallback reason, and whether a failure is upstream, transport, browser/runtime, policy or rewriting related.
+## Current rewriting behavior
+The server path handles URL-bearing HTML attributes, CSS url()/@import, srcset and inline styles, plus runtime handling for fetch/XHR, URL-bearing element properties, history and window.open. Redirects are followed and relative URLs resolved against the final URL. Non-rewritable content streams without unnecessary buffering.
+Known limitations include client-side cookie differences, limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps.
+## Proxy options
+| Option | Purpose |
+| --- | --- |
+| lb_ab=1 | ad filtering |
+| lb_trk=1 | tracker filtering |
+| lb_https=1 | reject plain HTTP |
+| lb_img=1 | JPEG re-encoding |
+| lb_ua= | user-agent override |
+## DevTools
+DevTools is a real diagnostic surface. Events should identify trace/request ID, redacted URL, subsystem, severity, lifecycle stage and concrete cause where known. A normal WebSocket close is not an error. NativeTransit diagnostics should expose native-vs-fallback behavior.
+## UI rules
+No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
+## Privacy
+LobsterBrowse is a proxy, so the server necessarily sees traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
-
-    cd server
-    cargo test && cargo build --release
-
-    cd ui
-    npm install && npm run buil
-d
+cd server && cargo test && cargo build --release
+cd ui && npm install && npm run build
+## Deployment
+The application is deployed on Render. After deployment changes verify /healthz, UI, /r/, /lj/, /zlsw/, Wisp and extension routes when relevant.
+## Contributing
+Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
+## Architecture goal
+LobsterBrowse = host application + browser UI
+Zeolite = reusable interception/transport engine
+Wisp = transport foundation
+RewriteFallback = compatibility escape hatch
