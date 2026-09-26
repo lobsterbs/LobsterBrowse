@@ -4,3 +4,16 @@
    later, so the cascade resolves in favour of these rules). */
 m3e-nav-rail { padding: 16px 0; }
 m3e-nav-rail m3e-nav-item { margin: 7px 0; }
+/* Glued rail: sticky to the top of the scrolling viewport so page
+   scrolling never drags it along, full viewport height, never
+   scrollable itself (one screenful of items), and it keeps its
+   flex slot so long page content cannot squeeze it. */
+m3e-nav-rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: flex-start;
+  flex-shrink: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}

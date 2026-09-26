@@ -7,6 +7,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
+import { zlSend } from "../zeolite";
 
 type Props = {
   settings: Settings;
@@ -72,6 +73,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     ua: true,
     privacy: true,
     appearance: false,
+    extensions: false,
     cloak: false,
     advanced: false,
   });
@@ -81,6 +83,68 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   const [ruleDomain, setRuleDomain] = useState("");
   const [ruleUa, setRuleUa] = useState<UaPresetId>("server-default");
   const [ruleAdblock, setRuleAdblock] = useState(true);
+
+  /* Custom User-Agent draft + a light validator. Real sites only need
+     a syntactically sane string with at least one product/version
+     token; the Mozilla/5.0 prefix is a warning, not a failure. */
+  const [uaDraft, setUaDraft] = useState(settings.uaCustom);
+  const parseUa = (v: string): { ok: boolean; message: string } => {
+    const s = v.trim();
+    if (!s) return { ok: false, message: "Enter a User-Agent string." };
+    if (/[\x00-\x1f]/.test(s)) return { ok: false, message: "Control characters are not allowed." };
+    if (s.length > 512) return { ok: false, message: "Too long (max 512 characters)." };
+    if (!/[A-Za-z0-9-]+\/[0-9A-Za-z.+*-]+/.test(s))
+      return { ok: false, message: "No product/version token found (e.g. Chrome/124.0.0.0)." };
+    if (!s.startsWith("Mozilla/5.0"))
+      return { ok: true, message: "Valid, but it does not start with Mozilla/5.0; some sites may misbehave." };
+    return { ok: true, message: "Valid User-Agent string." };
+  };
+
+  /* Extension imports: packaged (.xpi/.zip) bytes or an unpacked
+     folder listing, handed to the engine worker. */
+  const [extImport, setExtImport] = useState<{ status: string; busy: boolean }>({ status: "", busy: false });
+  const importZip = async (file: File) => {
+    setExtImport({ status: "Importing " + file.name + "...", busy: true });
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
+    setExtImport({
+      status:
+        rep && rep.ok
+          ? "Installed " + String(rep.id) + (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
+          : rep && rep.error
+            ? "Import failed: " + String(rep.error)
+            : "Import failed: the Zeolite service worker could not be reached on this origin.",
+      busy: false,
+    });
+  };
+  const importFolder = async (list: FileList) => {
+    const files: Array<[string, Uint8Array]> = [];
+    let total = 0;
+    for (const f of Array.from(list)) {
+      const path = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
+      /* Strip the picked folder's own top-level directory name: the
+         engine expects paths relative to the extension root. */
+      const rel = path.split("/").slice(1).join("/") || f.name;
+      total += f.size;
+      if (files.length >= 100 || total > 20 * 1024 * 1024) continue;
+      files.push([rel, new Uint8Array(await f.arrayBuffer())]);
+    }
+    if (files.length === 0) {
+      setExtImport({ status: "No usable files (max 100 files, 20MB total).", busy: false });
+      return;
+    }
+    setExtImport({ status: "Importing " + files.length + " files...", busy: true });
+    const rep = await zlSend({ type: "zl:installExtFiles", files }, 20000);
+    setExtImport({
+      status:
+        rep && rep.ok
+          ? "Installed " + String(rep.id)
+          : rep && rep.error
+            ? "Import failed: " + String(rep.error)
+            : "Import failed: the Zeolite service worker could not be reached on this origin.",
+      busy: false,
+    });
+  };
 
   return (
     <section className="lb-view-content" aria-label="Settings">
@@ -126,37 +190,49 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
-          <Row label="Prefetch links on hover (Zeolite)" icon="bolt" on={settings.prefetchLinks} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ prefetchLinks: !settings.prefetchLinks })} />
-          <Row label="Hide toolbar when idle" icon="visibility_off" on={settings.autoHideChrome} toggle={() => onChange({ autoHideChrome: !settings.autoHideChrome })} />
         </m3e-list>
       </Panel>
 
       <Panel id="panel-ua" icon="devices" title="User-Agent" open={open.ua} toggle={() => toggle("ua")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Preset</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="User-Agent preset">
+          {/* Dropdown: the preset list outgrew segmented buttons (seven
+              entries wrap badly and never fit the panel). */}
+          <select
+            className="lb-select"
+            aria-label="User-Agent preset"
+            value={settings.uaPreset}
+            onChange={(e) => onChange({ uaPreset: e.target.value as UaPresetId })}
+          >
             {(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map((id) => (
-              <m3e-button-segment key={id} checked={settings.uaPreset === id ? "" : undefined} onClick={() => onChange({ uaPreset: id })}>
-                {UA_PRESETS[id].name}
-              </m3e-button-segment>
+              <option key={id} value={id}>{UA_PRESETS[id].name}</option>
             ))}
-            <m3e-button-segment checked={settings.uaPreset === "custom" ? "" : undefined} onClick={() => onChange({ uaPreset: "custom" })}>
-              Custom
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
+            <option value="custom">Custom</option>
+          </select>
+          {settings.uaPreset === "custom" && settings.uaCustom.trim() && (
+            <span className="lb-ua-active">Custom User-Agent active</span>
+          )}
         </div>
-        {settings.uaPreset === "custom" && (
-          <div className="lb-setting-group">
-            <TextInput
-              label="Custom User-Agent (server-side)"
-              value={settings.uaCustom}
-              placeholder="Mozilla/5.0 …"
-              onChange={(v) => onChange({ uaCustom: v })}
-            />
-          </div>
-        )}
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Custom User-Agent (server-side)</div>
+          <TextInput
+            label="Manual User-Agent string"
+            value={uaDraft}
+            placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64) ..."
+            onChange={setUaDraft}
+          />
+          {uaDraft.trim() && (
+            <p className={"lb-muted" + (parseUa(uaDraft).ok ? "" : " lb-ua-bad")}>{parseUa(uaDraft).message}</p>
+          )}
+          <m3e-button
+            disabled={parseUa(uaDraft).ok === false ? true : undefined}
+            onClick={() => {
+              onChange({ uaCustom: uaDraft.trim(), uaPreset: "custom" });
+            }}
+          >
+            <m3e-icon name="check" aria-hidden={true} /> Save and use
+          </m3e-button>
+        </div>
       </Panel>
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
@@ -164,6 +240,57 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
           <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
+      </Panel>
+
+      <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Get extensions</div>
+          <m3e-button onClick={() => window.open("https://addons.mozilla.org/", "_blank", "noopener")}>
+            <m3e-icon name="storefront" aria-hidden={true} /> Browse the Mozilla add-ons store
+          </m3e-button>
+          <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Downloads from the store land in your Downloads folder as .xpi; import that file below.
+          </p>
+        </div>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Import locally</div>
+          <label className="lb-import-row">
+            <input
+              type="file"
+              accept=".xpi,.zip"
+              className="lb-import-file"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importZip(f);
+                e.target.value = "";
+              }}
+            />
+            <m3e-button onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}>
+              <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
+            </m3e-button>
+          </label>
+          <label className="lb-import-row">
+            <input
+              type="file"
+              className="lb-import-folder"
+              {...({ webkitdirectory: "", directory: "" } as any)}
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) importFolder(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <m3e-button onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-folder")?.click())}>
+              <m3e-icon name="folder_open" aria-hidden={true} /> Import unpacked folder
+            </m3e-button>
+          </label>
+          <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
+            (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
+            Max 100 files, 20MB total per import. The engine validates the manifest and
+            permission grants; a bad package only lands that extension in an error state.
+          </p>
+          {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
+        </div>
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>

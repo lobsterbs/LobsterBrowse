@@ -275,9 +275,10 @@ export function looksLikeUrl(s: string): boolean {
   return /^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(" ");
 }
 
-/* Engine-queried search suggestions, fetched through the server's
-   /suggest endpoint (server-side to avoid CORS). Never throws. */
-export async function fetchSuggestions(engine: EngineId, q: string): Promise<string[]> {
+/* Engine-queried search suggestions for one engine, fetched through
+   the server's /suggest endpoint (server-side to avoid CORS). Never
+   throws. Public entry: fetchSuggestions, below. */
+export async function suggestFrom(engine: EngineId, q: string): Promise<string[]> {
   const query = q.trim();
   if (!query) return [];
   try {
@@ -290,4 +291,16 @@ export async function fetchSuggestions(engine: EngineId, q: string): Promise<str
   } catch {
     return [];
   }
+}
+
+/* Suggestions for the search bars. Some engines are unreachable from
+   the server's network (DuckDuckGo rate-limits the Render egress), so
+   when the selected engine yields nothing the query silently retries
+   against Bing: an empty answer box is worse than a second opinion.
+   Users who picked Bing get exactly one attempt. */
+export async function fetchSuggestions(engine: EngineId, q: string): Promise<string[]> {
+  const primary = await suggestFrom(engine, q);
+  if (primary.length > 0) return primary;
+  if (engine === "bing") return [];
+  return suggestFrom("bing", q);
 }

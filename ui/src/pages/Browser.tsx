@@ -17,6 +17,7 @@ import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import {
   decodeRoute,
+  ENGINES,
   fetchSuggestions,
   looksLikeUrl,
   normalizeUrl,
@@ -25,6 +26,7 @@ import {
   type Settings,
   type SiteRule,
 } from "../settings";
+import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState } from "./DevTools";
 
@@ -66,6 +68,21 @@ type ExtInfo = {
   state: string;
   enabled: boolean;
   lastError: string | null;
+};
+
+/* Full detail surface from zl:extInfo (one extension). */
+type ExtDetail = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  state: string;
+  enabled: boolean;
+  lastError: string | null;
+  permissions: string[];
+  hostPermissions: string[];
+  contentScripts: number;
+  optionsPath: string | null;
 };
 
 export default function BrowserView(props: Props) {
@@ -118,68 +135,84 @@ export default function BrowserView(props: Props) {
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
   /* Last registration/reply failure, shown verbatim in the panel. */
   const [extError, setExtError] = useState<string | null>(null);
+  /* Extension detail card: the manifest surface from zl:extInfo. */
+  const [extDetail, setExtDetail] = useState<ExtDetail | null>(null);
+  const [extDetailError, setExtDetailError] = useState<string | null>(null);
+  /* Per-extension incognito grants. UI-side only for now: the engine
+     has no incognito concept yet, so this records the user's intent
+     (and is enforced once the engine grows incognito tabs). */
+  const [extIncognito, setExtIncognito] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("lobsterbrowse-ext-incognito") ?? "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  const saveExtIncognito = (next: Record<string, boolean>) => {
+    setExtIncognito(next);
+    try {
+      localStorage.setItem("lobsterbrowse-ext-incognito", JSON.stringify(next));
+    } catch {
+      /* storage unavailable (private mode quirks) */
+    }
+  };
+  const openExtDetail = async (id: string) => {
+    setExtDetailError(null);
+    setExtDetail(null);
+    const rep = await zlSend({ type: "zl:extInfo", extId: id }, 6000);
+    if (rep && rep.ok && rep.extension) {
+      setExtDetail(rep.extension as ExtDetail);
+    } else {
+      setExtDetailError(
+        rep && rep.error ? String(rep.error) : "the worker did not answer zl:extInfo",
+      );
+    }
+  };
+  const toggleExtEnabled = async (id: string, on: boolean) => {
+    const rep = await zlSend({ type: "zl:extEnable", extId: id, enabled: on }, 6000);
+    if (!rep || !rep.ok) {
+      setExtDetailError(
+        rep && rep.error ? String(rep.error) : "the worker did not answer zl:extEnable",
+      );
+      return;
+    }
+    /* Mirror the new state locally and refresh list + detail. */
+    loadExtensions();
+    setExtDetail((d) => (d && d.id === id ? { ...d, enabled: on } : d));
+  };
+  const toggleExtIncognito = (id: string, on: boolean) =>
+    saveExtIncognito({ ...extIncognito, [id]: on });
+  const openExtOptions = (d: ExtDetail) => {
+    if (d.optionsPath) window.open("/zl-ext/" + d.id + "/" + d.optionsPath, "_blank");
+  };
   const loadExtensions = async () => {
     setExtError(null);
+    setExtDetail(null);
+    setExtDetailError(null);
     if (!("serviceWorker" in navigator)) {
       setExtBusy(false);
       setExtList(null);
       setExtError("this browser has no service worker support");
       return;
     }
-    /* Prefer the worker that already controls the page (engine tabs);
-       otherwise register the same-origin vendored engine worker and
-       talk to it as a pure control plane. It registers at its natural
-       /zlsw/ scope, so it intercepts nothing: /r/ and /lj/ browsing
-       keeps going through the server-side engine unchanged. */
-    let swc: ServiceWorker | null = navigator.serviceWorker.controller;
-    if (!swc) {
-      try {
-        /* The engine bundle is an ES module build (static chunk
-           imports): it must be registered as a module or the browser
-           rejects the script outright. */
-        const reg = await navigator.serviceWorker.register("/zlsw/sw.js", {
-          scope: "/zlsw/",
-          type: "module",
-        });
-        /* Give a fresh install a moment to activate; ready resolves
-           once any registration of ours is active. */
-        await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise((resolve) => setTimeout(resolve, 5000)),
-        ]);
-        swc = reg.active ?? reg.waiting ?? reg.installing ?? null;
-      } catch (err) {
-        console.warn("[lb] Zeolite worker registration failed:", err);
-        setExtBusy(false);
-        setExtList(null);
-        setExtError(String(err));
-        return;
-      }
-    }
-    if (!swc) {
-      setExtBusy(false);
+    /* The shared zeolite.ts plumbing registers the vendored worker
+       (root scope; it passes through every non-engine path) and
+       talks to it as a control plane when nothing controls the page. */
+    setExtBusy(true);
+    const rep = await zlSend({ type: "zl:listExt" }, 5000);
+    setExtBusy(false);
+    if (!rep) {
       setExtList(null);
-      setExtError("registration produced no active, waiting or installing worker");
+      setExtError("the Zeolite service worker could not be registered or reached on this origin");
       return;
     }
-    setExtBusy(true);
-    const ch = new MessageChannel();
-    let settled = false;
-    const finish = (list: ExtInfo[] | null) => {
-      if (settled) return;
-      settled = true;
-      setExtBusy(false);
-      setExtList(list);
-    };
-    ch.port1.onmessage = (ev) => {
-      const d = ev.data as { ok?: boolean; extensions?: ExtInfo[] };
-      finish(d && d.ok && Array.isArray(d.extensions) ? d.extensions : null);
-    };
-    swc.postMessage({ type: "zl:listExt" }, [ch.port2]);
-    setTimeout(() => {
-      setExtError("the worker did not answer zl:listExt in time");
-      finish(null);
-    }, 3000);
+    if (!rep.ok) {
+      setExtList(null);
+      setExtError(rep.error ? String(rep.error) : "zl:listExt failed");
+      return;
+    }
+    setExtList(Array.isArray(rep.extensions) ? (rep.extensions as ExtInfo[]) : []);
+  };
   };
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
@@ -620,6 +653,26 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
+  /* TLS certificate details for the site card. The server checks the
+     host's public CT-log record (crt.sh), so this works even though
+     the browser never makes a direct TLS connection to the site. */
+  const [siteCert, setSiteCert] = useState<
+    { issuer: string; notAfter: string; days: number } | null | "checking" | "error"
+  >(null);
+  const loadSiteCert = (host: string) => {
+    if (!host) return;
+    setSiteCert("checking");
+    fetch("/cert?host=" + encodeURIComponent(host))
+      .then((r) => r.json() as Promise<{ ok: boolean; issuer?: string; notAfter?: string; days?: number }>)
+      .then((d) => {
+        if (d && d.ok && d.issuer) {
+          setSiteCert({ issuer: d.issuer, notAfter: d.notAfter ?? "", days: d.days ?? 0 });
+        } else {
+          setSiteCert("error");
+        }
+      })
+      .catch(() => setSiteCert("error"));
+  };
   const loadSiteCookies = () => {
     const f = frames.current.get(active.id);
     let jar: string[] = [];
@@ -732,26 +785,6 @@ export default function BrowserView(props: Props) {
         <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
           <m3e-icon name="add" aria-hidden={true} />
         </m3e-icon-button>
-        {/* Incognito toggle, pinned to the far right corner: inline
-            domino-mask SVG (the ligature is missing from the
-            self-hosted Material Symbols font). Toggling on suspends the
-            normal session and opens one empty incognito tab (App.tsx);
-            toggling off closes it and restores the session. */}
-        <button
-          type="button"
-          id="lb-incognito-pill"
-          className={"lb-incognito" + (props.incognito ? " on" : "")}
-          aria-pressed={props.incognito}
-          aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
-          onClick={() => props.onIncognitoChange(!props.incognito)}
-        >
-          <span className="lb-incognito-ic" dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
-        </button>
-        <m3e-tooltip for="lb-incognito-pill" position="below">
-          {props.incognito
-            ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
-            : "Turn on incognito: stops history and session recording."}
-        </m3e-tooltip>
       </div>
 
       {/* Tab hover preview: live (scriptless) render of the hovered
@@ -877,8 +910,8 @@ export default function BrowserView(props: Props) {
                 <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
                 <input
                   slot="input"
-                  aria-label="Search or URL"
-                  placeholder="Search or URL"
+                  aria-label={"Search with " + ENGINES[settings.engine].name + " or URL"}
+                  placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                   autoComplete="off"
                   value={ntDraft}
                   spellCheck={false}
@@ -1001,56 +1034,16 @@ export default function BrowserView(props: Props) {
                 ))}
               </div>
             )}
-            {/* Site info: a real M3E card (elevated) anchored above the
-                lock glyph. Long cookie lists scroll inside the card. */}
-            {siteInfoOpen && (
-              <m3e-card variant="elevated" className="lb-site-card" aria-label="Site information">
-                <div slot="header" className="lb-site-head">
-                  <span
-                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
-                    aria-hidden={true}
-                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
-                  />
-                  <span className="lb-site-ctitle">{secure ? "Https connection" : "Http connection, not secure"}</span>
-                  <m3e-icon-button aria-label="Close site info" onClick={() => setSiteInfoOpen(false)}>
-                    <m3e-icon name="close" aria-hidden={true} />
-                  </m3e-icon-button>
-                </div>
-                <div slot="content" className="lb-site-body">
-                  <div className="lb-site-row">
-                    {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
-                  </div>
-                  <div className="lb-site-ctitle">Site cookies ({siteCookies.length})</div>
-                  {siteCookies.length > 0 && (
-                    <div className="lb-site-cookies">
-                      {siteCookies.slice(0, 12).map((c) => (
-                        <div key={c} className="lb-site-cookie">{c}</div>
-                      ))}
-                    </div>
-                  )}
-                  <p className="lb-site-note">
-                    Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.
-                  </p>
-                </div>
-                <div slot="actions" className="lb-site-actions">
-                  <m3e-button onClick={clearSiteCookies}>
-                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
-                  </m3e-button>
-                  <m3e-button onClick={exportCookies}>
-                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
-                  </m3e-button>
-                </div>
-              </m3e-card>
-            )}
             {active.url && (
               <>
                 <span
                   className="lb-tb-lock-wrap"
                   role="button"
                   tabIndex={0}
-                  aria-label={secure ? "Https connection, site details" : "Not secure, site details"}
+                  aria-label={secure ? "https connection, site details" : "Not secure, site details"}
                   onClick={() => {
                     loadSiteCookies();
+                    if (secure && uParts.host && !siteInfoOpen) loadSiteCert(uParts.host);
                     setSiteInfoOpen((v) => !v);
                   }}
                 >
@@ -1072,7 +1065,7 @@ export default function BrowserView(props: Props) {
                 ref={urlInputRef}
                 className="lb-url-input"
                 aria-label="URL or search"
-                placeholder="Search or URL"
+                placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                 value={draft}
                 spellCheck={false}
                 onChange={(e) => {
@@ -1142,6 +1135,84 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="extension" aria-hidden={true} />
           </m3e-icon-button>
         </m3e-toolbar>
+          {/* Incognito toggle moved from the tab strip into the
+              toolbar: one icon button, same pill states. Toggling on
+              suspends the normal session and opens one empty
+              incognito tab (App.tsx); toggling off closes it and
+              restores the session. */}
+          <button
+            type="button"
+            id="lb-incognito-pill"
+            className={"lb-incognito" + (props.incognito ? " on" : "")}
+            aria-pressed={props.incognito}
+            aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
+            onClick={() => props.onIncognitoChange(!props.incognito)}
+          >
+            <span className="lb-incognito-ic" dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
+          </button>
+          <m3e-tooltip for="lb-incognito-pill" position="above">
+            {props.incognito
+              ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
+              : "Turn on incognito: stops history and session recording."}
+          </m3e-tooltip>
+          {/* Site info: a real M3E card (elevated) anchored above the
+              toolbar (outside the identity pill, so opening it can
+              never inflate the pill or the toolbar). Long cookie
+              lists scroll inside the card. */}
+          {siteInfoOpen && (
+              <m3e-card variant="elevated" className="lb-site-card" aria-label="Site information">
+                <div slot="header" className="lb-site-head">
+                  <span
+                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
+                    aria-hidden={true}
+                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
+                  />
+                  <span className="lb-site-ctitle">{secure ? "https connection" : "http connection, not secure"}</span>
+                  <m3e-icon-button aria-label="Close site info" onClick={() => setSiteInfoOpen(false)}>
+                    <m3e-icon name="close" aria-hidden={true} />
+                  </m3e-icon-button>
+                </div>
+                <div slot="content" className="lb-site-body">
+                  <div className="lb-site-row">
+                    {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
+                  </div>
+                  {secure && (
+                    <>
+                      <div className="lb-site-ctitle">Certificate</div>
+                      {siteCert === null && <div className="lb-site-row">Press the lock again to check the certificate.</div>}
+                      {siteCert === "checking" && <div className="lb-site-row">Checking certificate...</div>}
+                      {siteCert === "error" && <div className="lb-site-row">Certificate data unavailable (no public CT-log record or lookup failed).</div>}
+                      {siteCert && siteCert !== "checking" && siteCert !== "error" && (
+                        <div className="lb-site-row">
+                          Issuer: {siteCert.issuer}
+                          <br />
+                          Valid until {siteCert.notAfter} ({siteCert.days} days left)
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="lb-site-ctitle">Site cookies ({siteCookies.length})</div>
+                  {siteCookies.length > 0 && (
+                    <div className="lb-site-cookies">
+                      {siteCookies.slice(0, 12).map((c) => (
+                        <div key={c} className="lb-site-cookie">{c}</div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="lb-site-note">
+                    Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.
+                  </p>
+                </div>
+                <div slot="actions" className="lb-site-actions">
+                  <m3e-button onClick={clearSiteCookies}>
+                    <m3e-icon name="delete" aria-hidden={true} /> Clear site cookies
+                  </m3e-button>
+                  <m3e-button onClick={exportCookies}>
+                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
+                  </m3e-button>
+                </div>
+              </m3e-card>
+            )}
         </div>
       </div>
 
@@ -1171,7 +1242,17 @@ export default function BrowserView(props: Props) {
           ) : (
             <div className="lb-ext-list">
               {extList.map((e) => (
-                <div key={e.id} className="lb-ext-item" title={e.lastError ?? ""}>
+                <div
+                  key={e.id}
+                  className={"lb-ext-item" + (extDetail && extDetail.id === e.id ? " sel" : "")}
+                  title={e.lastError ?? ""}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openExtDetail(e.id)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") openExtDetail(e.id);
+                  }}
+                >
                   <span className="lb-ext-name">{e.name}</span>
                   <span className="lb-ext-ver">{e.version}</span>
                   <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
@@ -1179,6 +1260,62 @@ export default function BrowserView(props: Props) {
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+          {extDetailError && <p className="lb-ext-err">{extDetailError}</p>}
+          {extDetail && (
+            <div className="lb-ext-detail">
+              <div className="lb-ext-dhead">
+                <span className="lb-ext-dname">
+                  {extDetail.name} <span className="lb-ext-ver">{extDetail.version}</span>
+                </span>
+                <m3e-icon-button aria-label="Close extension details" onClick={() => setExtDetail(null)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
+              </div>
+              {extDetail.description && <p className="lb-ext-desc">{extDetail.description}</p>}
+              <div className="lb-ext-trow">
+                <span className="lb-ext-tlabel">Enabled</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={extDetail.enabled}
+                  className={"lb-ext-switch" + (extDetail.enabled ? " on" : "")}
+                  onClick={() => toggleExtEnabled(extDetail.id, !extDetail.enabled)}
+                >
+                  <span className="lb-ext-knob" />
+                </button>
+              </div>
+              <div className="lb-ext-trow">
+                <span className="lb-ext-tlabel">Allow in incognito tabs</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!!extIncognito[extDetail.id]}
+                  className={"lb-ext-switch" + (extIncognito[extDetail.id] ? " on" : "")}
+                  onClick={() => toggleExtIncognito(extDetail.id, !extIncognito[extDetail.id])}
+                >
+                  <span className="lb-ext-knob" />
+                </button>
+              </div>
+              {(extDetail.permissions.length > 0 || extDetail.hostPermissions.length > 0) && (
+                <div className="lb-ext-perms">
+                  {[...extDetail.permissions, ...extDetail.hostPermissions].slice(0, 12).map((p) => (
+                    <code key={p}>{p}</code>
+                  ))}
+                </div>
+              )}
+              {extDetail.contentScripts > 0 && (
+                <p className="lb-ext-desc">
+                  {extDetail.contentScripts} content script{extDetail.contentScripts === 1 ? "" : "s"} registered.
+                </p>
+              )}
+              {extDetail.optionsPath && (
+                <m3e-button className="lb-ext-optbtn" onClick={() => openExtOptions(extDetail)}>
+                  <m3e-icon name="settings" aria-hidden={true} /> Open options page
+                </m3e-button>
+              )}
+              {extDetail.lastError && <p className="lb-ext-err">{extDetail.lastError}</p>}
             </div>
           )}
         </div>

@@ -66,3 +66,76 @@
 .lb-ext-state.off {
   opacity: 0.5;
 }
+
+/* Installed list entries are clickable: they open the detail card. */
+.lb-ext-item { cursor: pointer; }
+.lb-ext-item.sel { background: color-mix(in srgb, var(--m3e-sys-color-primary, #cfbfe0) 22%, transparent); }
+.lb-ext-detail {
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  padding: 8px;
+  animation: lb-ext-pop 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes lb-ext-pop {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lb-ext-dhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 6px;
+}
+.lb-ext-dname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ext-desc { margin: 4px 0; font-size: 12px; line-height: 1.4; opacity: 0.85; }
+.lb-ext-perms { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.lb-ext-perms code {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.18);
+}
+.lb-ext-trow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.lb-ext-tlabel { opacity: 0.9; }
+/* Hand-rolled switch: no m3e switch component exists yet. */
+.lb-ext-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid var(--m3e-sys-color-primary, #cfbfe0);
+  background: transparent;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.lb-ext-switch.on {
+  background: var(--m3e-sys-color-primary, #cfbfe0);
+  border-color: var(--m3e-sys-color-primary, #cfbfe0);
+}
+.lb-ext-knob {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--m3e-sys-color-primary, #cfbfe0);
+  transform: translateY(-50%);
+  transition: left 160ms cubic-bezier(0.2, 0, 0, 1), background 160ms ease;
+}
+.lb-ext-switch.on .lb-ext-knob {
+  left: 20px;
+  background: var(--m3e-sys-color-on-primary, #381e72);
+}
+.lb-ext-optbtn { margin-top: 6px; }
+.lb-ext-err {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #f28b82;
+  word-break: break-word;
+}
