@@ -109,14 +109,39 @@ export default function BrowserView(props: Props) {
   /* Site info card: open state plus the cookies the page can read. */
   const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
-  /* Extensions panel: asks the controlling service worker for the
-     installed list (Zeolite zl:listExt control message). When no
-     Zeolite worker is controlling the page it degrades honestly. */
+  /* Extensions panel: asks the service worker for the installed list
+     (Zeolite zl:listExt control message). The worker controlling the
+     page wins; otherwise the vendored worker at /zlsw/sw.js is
+     registered and used as a control plane (no page control). */
   const [extPanelOpen, setExtPanelOpen] = useState(false);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
-  const loadExtensions = () => {
-    const swc = navigator.serviceWorker?.controller;
+  const loadExtensions = async () => {
+    if (!("serviceWorker" in navigator)) {
+      setExtBusy(false);
+      setExtList(null);
+      return;
+    }
+    /* Prefer the worker that already controls the page (engine tabs);
+       otherwise register the same-origin vendored engine worker and
+       talk to it as a pure control plane. It registers at its natural
+       /zlsw/ scope, so it intercepts nothing: /r/ and /lj/ browsing
+       keeps going through the server-side engine unchanged. */
+    let swc: ServiceWorker | null = navigator.serviceWorker.controller;
+    if (!swc) {
+      try {
+        const reg = await navigator.serviceWorker.register("/zlsw/sw.js");
+        /* Give a fresh install a moment to activate; ready resolves
+           once any registration of ours is active. */
+        await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
+        swc = reg.active ?? reg.waiting ?? reg.installing ?? null;
+      } catch {
+        swc = null;
+      }
+    }
     if (!swc) {
       setExtBusy(false);
       setExtList(null);
@@ -1119,7 +1144,7 @@ export default function BrowserView(props: Props) {
             <p className="lb-ext-note">
               {extBusy
                 ? "Querying the engine service worker..."
-                : "Engine extensions unavailable. No Zeolite service worker is controlling this page, so no extensions are installed."}
+                : "Engine extensions unavailable. The Zeolite service worker could not be registered or reached on this origin."}
             </p>
           ) : extList.length === 0 ? (
             <p className="lb-ext-note">No extensions installed.</p>
