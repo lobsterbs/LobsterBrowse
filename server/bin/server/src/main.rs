@@ -1827,10 +1827,9 @@ async fn build_endpoint() -> Response {
         .unwrap_or_else(|_| "unknown".to_string());
     let build_short: String = build.chars().take(7).collect();
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"lobsterjet\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         env!("CARGO_PKG_VERSION"),
-        "1.0 Nitride",
-        env!("CARGO_PKG_VERSION"),
+        "1.1 Nitride",
         json_escape(&build),
         json_escape(&build_short),
     );

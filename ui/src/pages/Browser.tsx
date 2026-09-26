@@ -117,12 +117,9 @@ export default function BrowserView(props: Props) {
   const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
   const [tbSuggOpen, setTbSuggOpen] = useState(false);
   const [tbSuggIdx, setTbSuggIdx] = useState(-1);
-  /* New tab search autocomplete: same engine-queried suggestions
-     as the toolbar pill, plus its own keyboard navigation. */
-  const [ntSugg, setNtSugg] = useState<{ text: string; url: string }[]>([]);
-  const [ntSuggOpen, setNtSuggOpen] = useState(false);
-  const [ntSuggIdx, setNtSuggIdx] = useState(-1);
-  const [ntDraft, setNtDraft] = useState("");
+  /* Suggest-in-flight indicator: true between the debounced fetch
+     starting and its answer landing. */
+  const [tbSuggLoading, setTbSuggLoading] = useState(false);
   /* Center pill: collapsed shows the tab name; pressed, it expands in
      place into the editable URL (the name hides). */
   const [tbExpanded, setTbExpanded] = useState(false);
@@ -145,6 +142,10 @@ export default function BrowserView(props: Props) {
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
   const [siteInfoOpen, setSiteInfoOpen] = useState(false);
+  /* Compaction 1: tabs also surface from the toolbar. A tab-count
+     button opens a card listing every tab (switch, close); the
+     floating strip still exists and tucks when idle. */
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the
@@ -235,9 +236,6 @@ export default function BrowserView(props: Props) {
   };
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
-  /* New tab search: smooth width expansion is state-driven, not a
-     classList mutation on the m3e host (React can wipe those). */
-  const [ntTyped, setNtTyped] = useState(false);
 
   /* Dock: tucks out of view when the app is idle; reappears on any
      pointer/keyboard activity in the app, on hovering the visible
@@ -388,6 +386,9 @@ export default function BrowserView(props: Props) {
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
     const idx = push ? stack.length - 1 : tab.idx;
     props.updateTab(tab.id, { url, stack, idx, title: "" });
+    /* Navigating away collapses the pill back to name mode (an empty
+     * tab keeps it expanded via the empty-tab effect). */
+    setTbExpanded(false);
     setDrafts((prev) => {
       const n = { ...prev };
       delete n[tab.id];
@@ -750,10 +751,12 @@ export default function BrowserView(props: Props) {
       setTbSugg([]);
       setTbSuggOpen(false);
       setTbSuggIdx(-1);
+      setTbSuggLoading(false);
       return;
     }
     let cancelled = false;
     const t = setTimeout(() => {
+      setTbSuggLoading(true);
       fetchSuggestions(settings.engine, draft)
         .then((list) => {
           if (cancelled) return;
@@ -766,8 +769,10 @@ export default function BrowserView(props: Props) {
              whether the box is empty because of the network or the
              setting. */
           pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length);
+          setTbSuggLoading(false);
         })
         .catch((err) => {
+          setTbSuggLoading(false);
           if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
         });
     }, 160);
@@ -778,37 +783,16 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, settings.engine]);
 
-  /* New tab search: engine-queried completions of the draft,
-     debounced like the toolbar ones, before the early return. */
+  /* Compaction 4: an empty tab IS the new-tab search. The in-page hero
+     with its own search bar is gone; the toolbar pill expands and
+     takes focus instead, so there is exactly one search surface. */
   useEffect(() => {
-    const q = ntDraft.trim();
-    if (!q || !settings.suggestQueries) {
-      setNtSugg([]);
-      setNtSuggOpen(false);
-      setNtSuggIdx(-1);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, ntDraft)
-        .then((list) => {
-          if (cancelled) return;
-          const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
-          setNtSugg(items);
-          setNtSuggOpen(items.length > 0);
-          setNtSuggIdx(-1);
-          pushLog("info", "suggest [" + settings.engine + "] '" + ntDraft.slice(0, 40) + "' -> " + items.length);
-        })
-        .catch((err) => {
-          if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
-        });
-    }, 160);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
+    if (active?.url) return;
+    setTbExpanded(true);
+    const t = window.setTimeout(() => urlInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ntDraft, settings.engine]);
+  }, [active?.id, active?.url]);
 
   /* Expanding the center pill focuses (and selects) the URL text. */
   useEffect(() => {
@@ -1181,69 +1165,9 @@ export default function BrowserView(props: Props) {
           </div>
         )}
 
-        {!active.url && !st.loading && !errors[active.id] && (
-          <div className="lb-newtab">
-            <m3e-heading variant="display" size="medium" level={2}>LobsterBrowse</m3e-heading>
-            <div className={"lb-nt-search" + (ntTyped ? " filled" : "")}>
-              <m3e-search-bar clearable className="lb-newtab-search">
-                <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
-                <input
-                  slot="input"
-                  aria-label={"Search with " + ENGINES[settings.engine].name + " or URL"}
-                  placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
-                  autoComplete="off"
-                  value={ntDraft}
-                  spellCheck={false}
-                  onBlur={() => setNtSuggOpen(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const pick =
-                        ntSuggOpen && ntSuggIdx >= 0
-                          ? ntSugg[ntSuggIdx]?.url
-                          : (e.target as HTMLInputElement).value;
-                      setNtSuggOpen(false);
-                      if (pick) go(pick);
-                    } else if (e.key === "ArrowDown" && ntSuggOpen) {
-                      e.preventDefault();
-                      setNtSuggIdx((p) => Math.min(p + 1, ntSugg.length - 1));
-                    } else if (e.key === "ArrowUp" && ntSuggOpen) {
-                      e.preventDefault();
-                      setNtSuggIdx((p) => Math.max(p - 1, -1));
-                    } else if (e.key === "Escape") {
-                      setNtSuggOpen(false);
-                    }
-                  }}
-                  onChange={(e) => {
-                    /* Smooth expansion tracks typed content, not just focus. */
-                    setNtTyped(!!(e.target as HTMLInputElement).value);
-                    setNtDraft((e.target as HTMLInputElement).value);
-                  }}
-                />
-              </m3e-search-bar>
-              {ntSuggOpen && (
-                <div className="lb-nt-ac" role="listbox" aria-label="Suggestions">
-                  {ntSugg.map((it, i) => (
-                    <button
-                      key={it.url}
-                      type="button"
-                      role="option"
-                      aria-selected={i === ntSuggIdx}
-                      className={"lb-nt-ac-item" + (i === ntSuggIdx ? " active" : "")}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setNtSuggOpen(false);
-                        go(it.url);
-                      }}
-                    >
-                      <m3e-icon name="search" aria-hidden={true} />
-                      <span className="lb-nt-ac-text">{it.text}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Compaction 4: the in-page new-tab hero is gone. An empty
+            tab expands and focuses the toolbar pill instead (see the
+            empty-tab effect), so there is exactly one search surface. */}
 
         {activeDt.open && (
           <DevTools
@@ -1271,6 +1195,24 @@ export default function BrowserView(props: Props) {
       >
         <div className="lb-dock-pill">
           <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
+          {/* Compaction 1: tabs live in the toolbar too. The count
+              button opens the tab list card (same anchoring pattern
+              as the site info card). */}
+          <button
+            type="button"
+            id="lb-tabs-pill"
+            className={"lb-tabs-btn" + (tabsOpen ? " on" : "")}
+            aria-pressed={tabsOpen}
+            aria-label={"Open tab list (" + tabs.length + " tabs)"}
+            onClick={() => {
+              setTabsOpen((v) => !v);
+              setSiteInfoOpen(false);
+            }}
+          >
+            <m3e-icon name="tab" aria-hidden={true} />
+            <span className="lb-tabs-count">{tabs.length}</span>
+          </button>
+          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
@@ -1324,6 +1266,7 @@ export default function BrowserView(props: Props) {
                     loadSiteCookies();
                     if (secure && uParts.host && !siteInfoOpen) loadSiteCert(uParts.host);
                     setSiteInfoOpen((v) => !v);
+                    setTabsOpen(false);
                   }}
                 >
                   <span
@@ -1338,6 +1281,11 @@ export default function BrowserView(props: Props) {
                   <m3e-icon name="public" aria-hidden={true} />
                 )}
               </>
+            )}
+            {tbSuggLoading && (
+              <span className="lb-sugg-load" aria-hidden={true}>
+                <m3e-loading-indicator aria-label="Loading suggestions" />
+              </span>
             )}
             {tbExpanded || !active.url ? (
               <input
@@ -1393,6 +1341,22 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="bug_report" aria-hidden={true} />
           </m3e-icon-button>
+          {/* Compaction 3: the diagnostics summary lives on the
+              toolbar. The chip appears only when this tab captured
+              load failures; it opens DevTools on the diagnostics
+              page. */}
+          {activeDt.fails.length > 0 && (
+            <button
+              type="button"
+              className="lb-diag-tb-chip"
+              aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
+              title={activeDt.fails.length + " load failures — open diagnostics"}
+              onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
+            >
+              <m3e-icon name="warning" aria-hidden={true} />
+              {activeDt.fails.length}
+            </button>
+          )}
           <m3e-icon-button
             aria-label={fullscreen ? "Exit full screen" : "Full screen"}
             toggle
@@ -1435,6 +1399,55 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
+          {/* Compaction 1: the toolbar tab list card — every tab with
+              favicon, title, switch on click, close per row. Same
+              anchoring as the site info card; only one is open. */}
+          {tabsOpen && (
+            <m3e-card variant="elevated" className="lb-tabs-card" aria-label="Tab list">
+              <div slot="header" className="lb-site-head">
+                <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
+                <m3e-icon-button aria-label="Close tab list" onClick={() => setTabsOpen(false)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
+              </div>
+              <div slot="content" className="lb-tabs-list">
+                {tabs.map((t) => (
+                  <div
+                    key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    className={"lb-tabs-item" + (t.id === active.id ? " active" : "")}
+                    onClick={() => {
+                      props.setActiveId(t.id);
+                      setTabsOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        props.setActiveId(t.id);
+                        setTabsOpen(false);
+                      }
+                    }}
+                  >
+                    {icons[t.id] ? (
+                      <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
+                    ) : (
+                      <m3e-icon name="public" aria-hidden={true} />
+                    )}
+                    <span className="lb-tabs-title">{tabLabel(t)}</span>
+                    <m3e-icon
+                      name="close"
+                      aria-hidden={true}
+                      className="lb-tab-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTabSmooth(t.id);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </m3e-card>
+          )}
           {/* Site info: a real M3E card (elevated) anchored above the
               toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). Long cookie
