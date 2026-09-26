@@ -1913,9 +1913,9 @@ async fn main() {
             &wisp_path,
             get({
                 let state = wisp_state.clone();
-                move |ws: axum::extract::ws::WebSocketUpgrade| {
+                move |ws: axum::extract::ws::WebSocketUpgrade, headers: axum::http::HeaderMap| {
                     let state = state.clone();
-                    async move { zeolite_server::wisp_handler(State(state), ws).await }
+                    async move { zeolite_server::wisp_handler(State(state), ws, headers).await }
                 }
             }),
         )
