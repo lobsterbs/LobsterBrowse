@@ -454,10 +454,10 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-label">About</div>
         {build ? (
           <div className="lb-build" title={"Build " + build.build}>
-            <div className="lb-build-row"><span>LobsterBrowse</span><span>{build.lb}</span></div>
-            <div className="lb-build-row"><span>Zeolite</span><span>{build.zeolite}</span></div>
-            <div className="lb-build-row"><span>LobsterJet</span><span>{build.lobsterjet}</span></div>
-            <div className="lb-build-row"><span>Build</span><span>{build.buildShort}</span></div>
+            <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build.lb}</span></span>
+            <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build.zeolite}</span></span>
+            <span className="lb-build-chip"><span className="lb-build-name">LobsterJet</span><span className="lb-build-val">{build.lobsterjet}</span></span>
+            <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build.buildShort}</span></span>
           </div>
         ) : buildError ? (
           <p className="lb-muted" style={{ fontSize: 12 }}>Build information unavailable on this deployment.</p>
