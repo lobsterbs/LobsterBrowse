@@ -24,7 +24,7 @@ jobs:
         run: cargo test
       - name: Clippy
         run: |
-          cargo clippy --message-format=short 2>&1 | tee /tmp/clippy.txt | grep -E "(error|warning):" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          cargo clippy --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt | grep -E "(error|warning):" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
           if grep -qE "(error|warning):" /tmp/clippy.txt; then exit 1; fi
 
   ui:
