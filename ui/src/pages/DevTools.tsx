@@ -41,6 +41,10 @@ export type ResFailEntry = {
   reason: string;
   status?: number;
   note?: string;
+  /* Navigation the failure belongs to (NAV-XXXX): ties a resource
+     failure back to the navigation that triggered it, so the error
+     page id and the DevTools entry correlate. */
+  nav?: string;
   ts: number;
 };
 
@@ -556,6 +560,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
                     <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
                     <div>Resource type: {f.kind}</div>
                     {f.status !== undefined && <div>HTTP status: {f.status}</div>}
+                    {f.nav && <div>Navigation: {f.nav}</div>}
                     {f.note && <div>Note: {f.note}</div>}
                     <div>Time: {ts(f.ts)}</div>
                   </div>

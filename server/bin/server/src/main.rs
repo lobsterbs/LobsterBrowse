@@ -1240,7 +1240,29 @@ fn compress_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-fn engine_error_page(url: &str, detail: &str) -> Response {
+/// Engine-side error response.
+///
+/// Root cause of the historical MIME-mismatch noise (74.3): the engine
+/// forwards the upstream status and content-type verbatim, so a script or
+/// style request answered upstream with 200 + text/html (soft-404 page,
+/// bot check) arrives as text/html, and the browser refuses to execute
+/// it. The second source was this very function: it used to answer EVERY
+/// failed fetch, including subresource requests, with a text/html 502
+/// page, so a failed <script src> produced a MIME mismatch instead of a
+/// clean network error. The client shim now detects and reports the
+/// first case (MIME_TYPE_ERROR); this function fixes the second: only
+/// navigation requests (sec-fetch-dest document/iframe, or no header at
+/// all) get the interactive HTML error card. Subresource requests get an
+/// honest 502 text/plain body.
+fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
+    if !wants_html {
+        return (
+            StatusCode::BAD_GATEWAY,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            format!("lobsterbrowse proxy error: {}\nurl: {}\n", detail, url),
+        )
+            .into_response();
+    }
     // Scramjet compatibility layer: when the rewriter cannot handle a
     // site, offer the deployed headless-browser service as fallback.
     let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
@@ -1372,8 +1394,19 @@ async fn engine_proxy(
         let sep = if url.contains('?') { '&' } else { '?' };
         format!("{}{}{}", url, sep, page_query.join("&"))
     };
+    /* 74.3: only navigations get the interactive HTML error card.
+       The browser sets sec-fetch-dest on same-origin subresource
+       requests (script/style/image/font/fetch) and it cannot be forged
+       by page script, so it is a reliable discriminator. Missing header
+       (curl, tests, old browsers) keeps the HTML page. */
+    let fetch_dest = headers
+        .get("sec-fetch-dest")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let wants_html_page = matches!(fetch_dest.as_str(), "" | "document" | "iframe");
     if params.get("https").map(|v| v == "1").unwrap_or(false) && fetch_url.starts_with("http://") {
-        return engine_error_page(&url, "HTTPS-only mode: plain-http target rejected");
+        return engine_error_page(&url, "HTTPS-only mode: plain-http target rejected", wants_html_page);
     }
 
     let suffix = params_suffix(&params);
@@ -1541,7 +1574,7 @@ async fn engine_proxy(
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response()
         }
-        Err(e) => engine_error_page(&url, &e.to_string()),
+        Err(e) => engine_error_page(&url, &e.to_string(), wants_html_page),
     }
 }
 

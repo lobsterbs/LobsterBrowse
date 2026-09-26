@@ -478,7 +478,9 @@ export default function BrowserView(props: Props) {
                 url: redactUrl(t.url || ""),
                 kind,
                 reason,
+                status: 0,
                 note: n + " stripped by the proxy rewriter (page would otherwise break inside the iframe)",
+                nav: navId.current.get(t.id),
                 ts: Date.now(),
               });
               setDtState((prev) => {
@@ -649,6 +651,9 @@ export default function BrowserView(props: Props) {
           reason: cap(d.reason, 60) || "UNKNOWN",
           status: d.status === undefined ? undefined : Number(d.status) || 0,
           note: d.note === undefined ? undefined : cap(d.note, 400),
+          /* 74.4 failure chain: which navigation this failure belongs
+             to, same NAV-XXXX id the error page shows. */
+          nav: navId.current.get(tabId as number),
           ts: Number(d.ts ?? Date.now()) || Date.now(),
         };
         setDtState((prev) => {
