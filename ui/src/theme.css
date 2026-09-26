@@ -77,6 +77,11 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 /* Settings */
 .lb-panel-header { cursor: pointer; }
 .lb-panel-body { padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
+/* Zeolite-only options grayed out while ScramJet is the proxy
+   engine: they need the service worker cache, which ScramJet does
+   not use. */
+.lb-setting-row.lb-off,
+.lb-off { opacity: 0.45; pointer-events: none; }
 .lb-setting-row {
   display: flex;
   justify-content: space-between;
@@ -698,16 +703,13 @@ m3e-icon-button:active { transform: scale(0.88); }
    overrides): tighter compact width, thin inline padding, and the
    hamburger centered in the rail with no wasted space on the left. */
 m3e-nav-rail {
-  --m3e-nav-rail-compact-width: 4.5rem;
+  /* A bit longer on the right side (toward the browse view): the
+     compact width is ours to set via the component token. */
+  --m3e-nav-rail-compact-width: 5.5rem;
   --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space100);
-  /* More vertical length for the rail container: block padding is
-     ours (the component only defaults it), so give the items room
-     to breathe instead of the stock space550/space100 squeeze. */
-  padding-block: var(--md-sys-measurement-space600)
-    var(--md-sys-measurement-space300);
 }
 m3e-nav-rail { transition: margin-left 250ms cubic-bezier(0.2, 0, 0, 1); }
-m3e-nav-rail m3e-nav-item { margin: var(--md-sys-measurement-space100) 0; }
+m3e-nav-rail m3e-nav-item { margin: var(--md-sys-measurement-space25) 0; }
 /* Browse view: the rail slides off-screen like the rest of the chrome,
    but a sliver stays visible (space75 = 6dp) so the user can grab/click
    it to bring it back. Clicking the visible rail hides it again. */
@@ -749,7 +751,6 @@ m3e-nav-rail.lb-rail-hidden {
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
 }
 .lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; white-space: normal; }
-.lb-site-note { font-size: 11px; opacity: 0.65; white-space: normal; margin: 0; }
-.lb-site-actions { display: 
+.lb-site-note { font-si
 
 ... [Content truncated]
