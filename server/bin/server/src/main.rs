@@ -30,7 +30,7 @@ use tracing::info;
 /// src/href assignments and history changes through /r routes; the hook
 /// reports console output, errors, network traffic and page loads to
 /// the parent UI window (same origin) via postMessage.
-const ENGINE_JS: &str = r#"(function(){
+const ENGINE_JS: &str = r##"(function(){
   if (window.__lbHook) return; window.__lbHook = true;
   var PAGE = window.__lbPageUrl;
   var PARAMS = window.__lbParams || "";
@@ -234,7 +234,7 @@ const ENGINE_JS: &str = r#"(function(){
   history.replaceState = function(st, t, u) { try { if (u) arguments[2] = route(u); } catch (e) {} return ors.apply(history, arguments); };
   window.addEventListener("load", function(){ send("ready", { title: document.title }); });
 })();
-"#;
+"##;
 
 /// Compatibility layer for proxied pages running inside a sandboxed
 /// same-origin frame: service workers, install prompts and push
