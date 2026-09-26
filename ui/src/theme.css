@@ -770,9 +770,7 @@ m3e-nav-rail.lb-rail-hidden {
   border-radius: 10px;
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
 }
-.lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break
-
-... [Content truncated]
+.lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }
 /* ---- Feature batch: UA dropdown, ext detail switches, incognito in
    the toolbar, smooth suggestion pop-in, new-tab fade. ---- */
 
