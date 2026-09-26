@@ -2,7 +2,8 @@
 
 Fully open-source, 100% free Rust Wisp server with a Material 3 Expressive
 in-app browser: proxied tabs, real DevTools, server-side ad/tracker
-blocking, per-site rules, panic button, auto cloak and resumable sessions.
+blocking, per-site rules, panic button, auto cloak, resumable sessions,
+and a Zeolite engine integration with extension support.
 
 ## Architecture
 
@@ -49,6 +50,24 @@ Known limits of same-origin rewriting, stated honestly:
 
 The Wisp endpoint (/wisp/, configurable via WISP_PATH) is a TCP/UDP
 tunnel for a future native Wisp client and is independent of /r.
+
+## Zeolite engine integration
+
+Zeolite (github.com/lobsterbs/Zeolite) is the interception-based proxy
+engine: a service worker on the engine origin, a Rust/WASM streaming
+rewriter, and a Gecko/WebExtension compatibility runtime. In Settings
+you can point tabs at a Zeolite engine instance; tabs then load through
+`?url=<target>` embedding instead of /r, gaining full client-side
+interception, streaming rewrite and the extension runtime.
+
+- The toolbar has an extensions button listing installed extensions
+  (enable/disable, errors) through the engine's control plane.
+- Extensions work when a Zeolite service worker controls the tab. If it
+  does not (engine not embedded, or the engine SW not served from this
+  origin yet), the panel says so instead of pretending.
+- Known integration gap: the UI does not yet serve/register the Zeolite
+  service worker from the LobsterBrowse origin, so the extension panel
+  is only live inside tabs the engine already controls.
 
 ## Fonts and privacy
 
