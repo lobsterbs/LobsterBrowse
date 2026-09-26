@@ -765,7 +765,7 @@ export default function BrowserView(props: Props) {
                 if (el) frames.current.set(t.id, el);
                 else frames.current.delete(t.id);
               }}
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-top-navigation-by-user-activation"
               /* Cross-origin frames (LobsterJet) can't be polled; the
                  load event is the only reliable "done" signal there. */
               onLoad={() =>
