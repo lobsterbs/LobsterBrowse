@@ -490,7 +490,21 @@ export default function BrowserView(props: Props) {
                 const fails = [...base.fails];
                 if (csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
                 if (sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
-                return { ...prev, [t.id]: { ...base, fails: fails.slice(-200) } };
+                /* Own the proxy's own interventions in the page console:
+                   entries explicitly prefixed as engine-caused, so a
+                   broken page is never silently blamed on the site. */
+                const bits: string[] = [];
+                if (csp > 0) bits.push(csp + " CSP meta tag(s)");
+                if (sri > 0) bits.push(sri + " integrity attribute(s)");
+                const ctext =
+                  "[LobsterBrowse engine] This proxy stripped " +
+                  bits.join(" and ") +
+                  " from the page. SRI hashes and CSP rules no longer match rewritten content; the rewriter removes them so the page loads at all. If the page misbehaves, this is the proxy's doing, not the website's.";
+                const console_ = [
+                  ...base.console,
+                  { id: nextEntryId(), kind: "warn" as const, text: ctext, ts: Date.now() },
+                ].slice(-500);
+                return { ...prev, [t.id]: { ...base, fails: fails.slice(-200), console: console_ } };
               });
               pushLog("info", "rewrite diag: csp stripped=" + csp + " sri stripped=" + sri);
             }
@@ -740,13 +754,22 @@ export default function BrowserView(props: Props) {
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, draft).then((list) => {
-        if (cancelled) return;
-        const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
-        setTbSugg(items);
-        setTbSuggOpen(items.length > 0);
-        setTbSuggIdx(-1);
-      });
+      fetchSuggestions(settings.engine, draft)
+        .then((list) => {
+          if (cancelled) return;
+          const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
+          setTbSugg(items);
+          setTbSuggOpen(items.length > 0);
+          setTbSuggIdx(-1);
+          /* Diagnostics: the suggest endpoint is server-proxied and can
+             fail per engine; a zero count in the app log pinpoints
+             whether the box is empty because of the network or the
+             setting. */
+          pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length);
+        })
+        .catch((err) => {
+          if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
+        });
     }, 160);
     return () => {
       cancelled = true;
@@ -767,13 +790,18 @@ export default function BrowserView(props: Props) {
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, ntDraft).then((list) => {
-        if (cancelled) return;
-        const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
-        setNtSugg(items);
-        setNtSuggOpen(items.length > 0);
-        setNtSuggIdx(-1);
-      });
+      fetchSuggestions(settings.engine, ntDraft)
+        .then((list) => {
+          if (cancelled) return;
+          const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
+          setNtSugg(items);
+          setNtSuggOpen(items.length > 0);
+          setNtSuggIdx(-1);
+          pushLog("info", "suggest [" + settings.engine + "] '" + ntDraft.slice(0, 40) + "' -> " + items.length);
+        })
+        .catch((err) => {
+          if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
+        });
     }, 160);
     return () => {
       cancelled = true;
