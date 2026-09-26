@@ -171,6 +171,17 @@ export default function BrowserView(props: Props) {
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
+  /* Tab card leave animation: stay mounted briefly while the
+     .leaving class plays the exit animation, then unmount. */
+  const [tabsMounted, setTabsMounted] = useState(false);
+  const [tabsLeaving, setTabsLeaving] = useState(false);
+  useEffect(() => {
+    if (tabsOpen) { setTabsMounted(true); setTabsLeaving(false); return; }
+    if (!tabsMounted) return;
+    setTabsLeaving(true);
+    const t = window.setTimeout(() => { setTabsMounted(false); setTabsLeaving(false); }, 200);
+    return () => window.clearTimeout(t);
+  }, [tabsOpen, tabsMounted]);
   /* ---- Downloads ---- */
   const [downloads, setDownloads] = useState<DlItem[]>([]);
   const [dlOpen, setDlOpen] = useState(false);
@@ -1158,7 +1169,7 @@ export default function BrowserView(props: Props) {
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
             <m3e-loading-indicator variant="contained" aria-label="Loading page" />
-            <m3e-skeleton animation="wave" shape="rounded" className="lb-skel">
+            <m3e-skeleton animation="wave" shape="rounded" {...{ class: "lb-skel" }}>
               <div style={{ width: "45%", height: 28 }} />
               <div style={{ width: "92%", height: 14 }} />
               <div style={{ width: "88%", height: 14 }} />
@@ -1252,8 +1263,8 @@ export default function BrowserView(props: Props) {
         {/* Tab switcher: its own surface while the toolbar slides
             away (.lb-dock.tabs-open). Horizontal row of live preview
             tiles (scriptless engine frames, scaled 0.25), not a list. */}
-        {tabsOpen && (
-          <m3e-card variant="elevated" className="lb-tabs-card" aria-label="Tab switcher">
+        {tabsMounted && (
+          <m3e-card variant="elevated" aria-label="Tab switcher" {...{ class: "lb-tabs-card" + (tabsLeaving ? " leaving" : "") }}>
             <div slot="header" className="lb-site-head">
               <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
               <span>
@@ -1289,7 +1300,6 @@ export default function BrowserView(props: Props) {
                       <iframe
                         src={routeUrl(settings, rules, t.url)}
                         title={"Preview of " + tabLabel(t)}
-                        sandbox="allow-same-origin"
                         loading="lazy"
                         tabIndex={-1}
                       />
@@ -1322,7 +1332,7 @@ export default function BrowserView(props: Props) {
           </m3e-card>
         )}
         <div className="lb-dock-pill">
-          <m3e-toolbar variant="standard" shape="rounded" className="lb-toolbar">
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
               as the site info card). */}
@@ -1548,7 +1558,7 @@ export default function BrowserView(props: Props) {
               never inflate the pill or the toolbar). Long cookie
               lists scroll inside the card. */}
           {siteInfoOpen && (
-              <m3e-card variant="elevated" className="lb-site-card" aria-label="Site information">
+              <m3e-card variant="elevated" aria-label="Site information" {...{ class: "lb-site-card" }}>
                 <div slot="header" className="lb-site-head">
                   <span
                     className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
@@ -1604,7 +1614,7 @@ export default function BrowserView(props: Props) {
               </m3e-card>
             )}
           {dlOpen && downloads.length > 0 && (
-            <m3e-card variant="elevated" className="lb-dl-card" aria-label="Downloads">
+            <m3e-card variant="elevated" aria-label="Downloads" {...{ class: "lb-dl-card" }}>
               <div slot="header" className="lb-site-head">
                 <span className="lb-site-ctitle">Downloads ({downloads.length})</span>
                 <m3e-icon-button aria-label="Close downloads" onClick={() => setDlOpen(false)}>
@@ -1744,7 +1754,7 @@ export default function BrowserView(props: Props) {
                 </p>
               )}
               {extDetail.optionsPath && (
-                <m3e-button className="lb-ext-optbtn" onClick={() => openExtOptions(extDetail)}>
+                <m3e-button onClick={() => openExtOptions(extDetail)} {...{ class: "lb-ext-optbtn" }}>
                   <m3e-icon name="settings" aria-hidden={true} /> Open options page
                 </m3e-button>
               )}
