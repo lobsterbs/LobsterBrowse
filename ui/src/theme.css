@@ -1021,6 +1021,20 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-tabs-ic svg g,
 .lb-tabs-ic svg circle,
 .lb-tabs-ic svg rect { fill: currentColor; }
+/* Suggest loading (Home search bar): small inline M3E indicator.
+   The toolbar pill copy was removed; this one stays for Home. */
+.lb-sugg-load {
+  display: inline-flex;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.lb-sugg-load m3e-loading-indicator {
+  width: 18px;
+  height: 18px;
+}
+
 /* Download card: same anchoring pattern as the site card. */
 .lb-dl-card {
   position: absolute;
