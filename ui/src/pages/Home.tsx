@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
+import { pushLog } from "../store";
 
 type Props = {
   settings: Settings;
@@ -47,24 +48,35 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
   /* Engine-queried completions, fetched through the server's /suggest
      endpoint and merged below the local matches. */
   const [remote, setRemote] = useState<string[]>([]);
+  /* Suggest fetch in flight: shows the M3E loading indicator in the
+     search bar so a slow engine is visibly working. */
+  const [suggLoading, setSuggLoading] = useState(false);
 
   useEffect(() => {
     const q = url.trim();
     if (!q || looksLikeUrl(q) || !settings.suggestQueries) {
       setRemote([]);
+      setSuggLoading(false);
       return;
     }
     let cancelled = false;
+    setSuggLoading(true);
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, q).then((list) => {
-        if (!cancelled) setRemote(list);
+        if (cancelled) return;
+        setRemote(list);
+        setSuggLoading(false);
+        if (list.length === 0) {
+          pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + " + bing fallback)");
+        }
       });
     }, 160);
     return () => {
       cancelled = true;
       clearTimeout(t);
+      setSuggLoading(false);
     };
-  }, [url, settings.engine]);
+  }, [url, settings.engine, settings.suggestQueries]);
 
   const suggestions = buildSuggests(url, {
     history,
@@ -133,6 +145,11 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
             autoComplete="off"
           />
         </m3e-search-bar>
+        {suggLoading && (
+          <span className="lb-sugg-load" aria-hidden={true}>
+            <m3e-loading-indicator aria-label="Loading suggestions" />
+          </span>
+        )}
         {open && suggestions.length > 0 && (
           <div className="lb-ac" role="listbox" aria-label="Suggestions">
             {suggestions.map((s, i) => (

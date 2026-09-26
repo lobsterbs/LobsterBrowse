@@ -1530,6 +1530,25 @@ async fn engine_proxy(
                 .unwrap_or("application/octet-stream")
                 .to_string();
             let is_html = ct.contains("html");
+            // Rate-limit loop breaker: Brave (and other engines) answer
+            // a captcha challenge with 429 + HTML that self-refreshes
+            // inside the proxied iframe forever — the challenge scripts
+            // never pass through our shim, so the loop cannot be solved.
+            // Instead of serving that hostile page, render our own
+            // honest error card telling the user the site rate-limited
+            // the proxy and to retry later.
+            if status.as_u16() == 429 && is_html && wants_html_page {
+                push_log(
+                    &state,
+                    "warn",
+                    &format!("engine 429 rate-limit page suppressed for {}", url),
+                );
+                return engine_error_page(
+                    &url,
+                    "The site rate-limited the proxy (HTTP 429) and served a captcha page that cannot be solved inside the proxy. Wait a moment and retry.",
+                    wants_html_page,
+                );
+            }
             let is_css = !is_html && ct.contains("css");
             let is_js = !is_html && !is_css && (ct.contains("javascript") || ct.contains("ecmascript"));
             let compress_img = params.get("img").map(|v| v == "1").unwrap_or(false)
@@ -1828,8 +1847,8 @@ async fn build_endpoint() -> Response {
     let build_short: String = build.chars().take(7).collect();
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
-        env!("CARGO_PKG_VERSION"),
-        "1.1 Nitride",
+        format!("{} Molt", env!("CARGO_PKG_VERSION")),
+        "1.1 Chabazite",
         json_escape(&build),
         json_escape(&build_short),
     );

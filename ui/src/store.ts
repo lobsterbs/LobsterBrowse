@@ -66,12 +66,23 @@ export function saveSessionTabs(tabs: Tab[]) {
 
 /* ---- Client-side technical log ring ---- */
 
-const logRing: LogEntry[] = [];
+const LOGS_KEY = "lobsterbrowse-logs";
+/* Restored from localStorage at startup: the old in-memory ring was
+   wiped on every reload, which is why the Logs page showed "No client
+   log entries yet" right after a hard refresh. */
+let logRing: LogEntry[] = readJson<LogEntry[]>(LOGS_KEY, []).filter(
+  (l) => l && typeof l.ts === "number" && typeof l.msg === "string"
+);
 const LOG_LIMIT = 300;
+
+function persistLogs() {
+  writeJson(LOGS_KEY, logRing);
+}
 
 export function pushLog(level: LogEntry["level"], msg: string) {
   logRing.push({ ts: Date.now(), level, msg });
   if (logRing.length > LOG_LIMIT) logRing.shift();
+  persistLogs();
 }
 
 export function getLogs(): LogEntry[] {
@@ -80,6 +91,7 @@ export function getLogs(): LogEntry[] {
 
 export function clearLogs() {
   logRing.length = 0;
+  persistLogs();
 }
 
 /* ---- Wipe everything ---- */
@@ -100,4 +112,5 @@ export function clearAllData() {
   } catch {
     /* ignore */
   }
+  logRing.length = 0;
 }
