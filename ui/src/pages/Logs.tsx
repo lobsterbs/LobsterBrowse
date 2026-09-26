@@ -10,6 +10,23 @@ export default function LogsPage({ onBack }: { onBack: () => void }) {
   const [client, setClient] = useState<LogEntry[]>([]);
   const [server, setServer] = useState<ServerLog[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2000);
+  };
+
+  const copyText = (label: string, text: string) => {
+    if (!navigator.clipboard?.writeText) {
+      notify("Clipboard unavailable");
+      return;
+    }
+    navigator.clipboard
+      .writeText(text)
+      .then(() => notify(label + " copied"))
+      .catch(() => notify("Copy failed"));
+  };
 
   useEffect(() => {
     setClient(getLogs());
@@ -61,12 +78,23 @@ export default function LogsPage({ onBack }: { onBack: () => void }) {
         </m3e-button>
         <m3e-button
           onClick={() =>
-            navigator.clipboard?.writeText(
+            copyText(
+              "Client logs",
               client.map((l) => new Date(l.ts).toISOString() + " " + l.level + " " + l.msg).join("\n")
             )
           }
         >
           <m3e-icon name="content_copy" aria-hidden={true} /> Copy client logs
+        </m3e-button>
+        <m3e-button
+          onClick={() =>
+            copyText(
+              "Server logs",
+              server.map((l) => new Date(l.ts * 1000).toISOString() + " " + l.level + " " + l.msg).join("\n")
+            )
+          }
+        >
+          <m3e-icon name="content_copy" aria-hidden={true} /> Copy server logs
         </m3e-button>
       </div>
 
@@ -94,6 +122,8 @@ export default function LogsPage({ onBack }: { onBack: () => void }) {
           ))}
         </div>
       </div>
+
+      {toast && <div className="lb-toast" role="status">{toast}</div>}
     </section>
   );
 }

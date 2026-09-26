@@ -8,6 +8,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { zlSend } from "../zeolite";
+import { pushLog } from "../store";
 
 type Props = {
   settings: Settings;
@@ -133,21 +134,25 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     buildShort: string;
   } | null>(null);
   const [buildError, setBuildError] = useState(false);
+  const [buildErrorDetail, setBuildErrorDetail] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/build")
-      .then((r) =>
-        r.ok
-          ? (r.json() as Promise<{
-              ok: boolean;
-              lb?: string;
-              zeolite?: string;
-              lobsterjet?: string;
-              build?: string;
-              buildShort?: string;
-            }>)
-          : null,
-      )
+    /* Cache-busted: some edge caches serve a stale /build despite
+       no-store, which previously left the About pills stuck on
+       "Loading". Failures now log to the client log (visible on the
+       Logs page) with the actual reason instead of failing silently. */
+    fetch("/build?t=" + Date.now(), { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json() as Promise<{
+          ok: boolean;
+          lb?: string;
+          zeolite?: string;
+          lobsterjet?: string;
+          build?: string;
+          buildShort?: string;
+        }>;
+      })
       .then((d) => {
         if (cancelled) return;
         if (d && d.ok && d.lb) {
@@ -157,12 +162,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             build: String(d.build ?? "unknown"),
             buildShort: String(d.buildShort ?? "unknown"),
           });
+          setBuildErrorDetail(null);
         } else {
           setBuildError(true);
+          setBuildErrorDetail("endpoint returned " + JSON.stringify(d).slice(0, 120));
+          pushLog("warn", "settings: /build returned an unexpected body");
         }
       })
-      .catch(() => {
-        if (!cancelled) setBuildError(true);
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setBuildError(true);
+        setBuildErrorDetail(msg);
+        pushLog("error", "settings: /build fetch failed: " + msg);
       });
     return () => {
       cancelled = true;
@@ -457,7 +469,10 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build.buildShort}</span></span>
           </div>
         ) : buildError ? (
-          <p className="lb-muted" style={{ fontSize: 12 }}>Build information unavailable on this deployment.</p>
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            Build information unavailable on this deployment.
+            {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
+          </p>
         ) : (
           <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
         )}

@@ -133,18 +133,14 @@ export default function BrowserView(props: Props) {
      many CSP meta tags and SRI integrity attributes it stripped; log
      each distinct report once, not on every poll tick. */
   const lastDiag = useRef<Map<number, string>>(new Map());
-  /* Tab-hover live preview: which tab, anchored at which screen x. */
-  const [preview, setPreview] = useState<{ id: number; x: number } | null>(null);
-  const previewTimer = useRef<number | null>(null);
-  /* Tabs muted from the hover preview; re-asserted on every poll tick. */
-  const [mutedTabs, setMutedTabs] = useState<Set<number>>(new Set());
+  /* URLs already recovered from an escaped navigation, per tab+URL. */
+  const lastEscape = useRef<Set<string>>(new Set());
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
   const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
-     button opens a card listing every tab (switch, close); the
-     floating strip still exists and tucks when idle. */
+     button opens a card listing every tab (switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
@@ -512,7 +508,40 @@ export default function BrowserView(props: Props) {
           }
         }
       }
-      if (!path.startsWith("/r/") && !path.startsWith("/lj/")) return;
+      /* Escaped-navigation recovery: challenge pages (Anubis etc.) get
+         no shim on their intermediate hosts, so their JS sometimes
+         "solves" the challenge by navigating the frame to a bare app
+         path, which the SPA fallback answers with index.html — the
+         user sees our app shell pretending to be the site. Detect a
+         frame sitting on a non-route app path while the tab has a real
+         URL, reconstruct the intended target and reload it through the
+         engine. Each distinct URL is recovered once per tab (lastEscape
+         guard), so a site that genuinely 404s into the fallback does
+         not loop. */
+      const appPrefixes = [
+        "/zlsw", "/libcurl", "/zl-ext", "/zl-cs", "/suggest", "/cert",
+        "/logs", "/build", "/wisp", "/favicon",
+      ];
+      const isAppPath = appPrefixes.some((p) => path === p || path.startsWith(p + "/"));
+      if (!path.startsWith("/r/") && !path.startsWith("/lj/")) {
+        if (!t.url || path === "/" || isAppPath) return;
+        try {
+          const loc = f.contentWindow!.location;
+          const intended = new URL(loc.pathname + loc.search, t.url).href;
+          if (!intended.startsWith("http")) return;
+          const key = t.id + "|" + intended;
+          if (lastEscape.current.has(key)) return;
+          lastEscape.current.add(key);
+          pushLog(
+            "warn",
+            "escaped navigation recovered: " + loc.pathname + " -> " + intended
+          );
+          f.src = routeUrl(settings, rules, intended, props.incognito);
+        } catch {
+          /* cross-origin or gone: nothing to recover */
+        }
+        return;
+      }
       const real = decodeRoute(path);
       if (!real) return;
       setErrors((prev) => {
@@ -549,18 +578,6 @@ export default function BrowserView(props: Props) {
         return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
       });
       loadFavicon(t.id, real, doc);
-      /* Re-assert muted tabs: pages keep creating new media elements. */
-      for (const mid of mutedTabs) {
-        const mf = frames.current.get(mid);
-        try {
-          const els = mf && mf.contentDocument ? mf.contentDocument.querySelectorAll("audio,video") : [];
-          els.forEach((el) => {
-            (el as HTMLMediaElement).muted = true;
-          });
-        } catch {
-          /* frame went cross-origin; nothing to do */
-        }
-      }
       /* LobsterJet prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
@@ -581,7 +598,7 @@ export default function BrowserView(props: Props) {
     }, 1200);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.id, tabs, settings, rules, mutedTabs]);
+  }, [active?.id, tabs, settings, rules]);
 
   /* ---- Hook messages from proxied pages ---- */
   /* ---- Hook messages from proxied pages ----
@@ -842,11 +859,6 @@ export default function BrowserView(props: Props) {
       lastNav.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
-      setMutedTabs((prev) => {
-        const n = new Set(prev);
-        n.delete(id);
-        return n;
-      });
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
         if (!(id in prev)) return prev;
         const n = { ...prev };
@@ -865,16 +877,6 @@ export default function BrowserView(props: Props) {
       });
       props.closeTab(id);
     }, 240);
-  };
-
-  /* Hover preview mute: the poll tick re-asserts it every second. */
-  const toggleMute = (id: number) => {
-    setMutedTabs((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
   };
 
   /* ---- Lock popup: connection facts + cookies of the active site. ---- */
@@ -979,102 +981,9 @@ export default function BrowserView(props: Props) {
         rootRef.current = el as HTMLElement | null;
       }}
     >
-      {/* Frosted floating tab strip: sits over the page content. Shares
-          the dock's tucked state: after the idle timer it slides up
-          leaving a sliver; the real tabs keep their shape and positions
-          (just mostly off-screen), no fake single-tab collapse. */}
-      <div
-        className={
-          "lb-tabstrip" +
-          (dockTucked ? " tucked" : "") +
-          (tabs.length >= 6 ? " compact" : "") +
-          (tabs.length >= 10 ? " tight" : "")
-        }
-        role="tablist"
-        aria-label="Proxy tabs"
-      >
-        {tabs.map((t) => (
-          <div
-            key={t.id}
-            role="tab"
-            aria-selected={t.id === active.id}
-            className={"lb-tab" + (t.id === active.id ? " active" : "") + (closingIds.includes(t.id) ? " closing" : "")}
-            onClick={() => props.setActiveId(t.id)}
-            onMouseEnter={(e) => {
-              const x = (e.currentTarget as HTMLElement).getBoundingClientRect().left;
-              if (previewTimer.current) window.clearTimeout(previewTimer.current);
-              previewTimer.current = window.setTimeout(() => setPreview({ id: t.id, x }), 350);
-            }}
-            onMouseLeave={() => {
-              if (previewTimer.current) window.clearTimeout(previewTimer.current);
-              previewTimer.current = window.setTimeout(() => setPreview(null), 150);
-            }}
-          >
-            {icons[t.id] ? (
-              <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
-            ) : (
-              <m3e-icon name="public" aria-hidden={true} />
-            )}
-            <span className="lb-tab-title">{tabLabel(t)}</span>
-            <m3e-icon
-              name="close"
-              aria-hidden={true}
-              className="lb-tab-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTabSmooth(t.id);
-              }}
-            />
-          </div>
-        ))}
-        <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
-          <m3e-icon name="add" aria-hidden={true} />
-        </m3e-icon-button>
-      </div>
-
-      {/* Tab hover preview: live (scriptless) render of the hovered
-          tab below the strip, with a mute toggle for playing audio.
-          No allow-scripts: the preview never runs the page's JS, so it
-          can never double audio or side effects. */}
-      {preview &&
-        (() => {
-          const pt = tabs.find((x) => x.id === preview.id);
-          if (!pt || !pt.url) return null;
-          const muted = mutedTabs.has(pt.id);
-          return (
-            <div
-              className="lb-tab-preview"
-              style={{ left: preview.x }}
-              onMouseEnter={() => {
-                if (previewTimer.current) window.clearTimeout(previewTimer.current);
-              }}
-              onMouseLeave={() => {
-                previewTimer.current = window.setTimeout(() => setPreview(null), 150);
-              }}
-            >
-              <div className="lb-tab-preview-bar">
-                <span className="lb-tab-preview-title">{tabLabel(pt)}</span>
-                <button
-                  type="button"
-                  className={"lb-tab-preview-mute" + (muted ? " muted" : "")}
-                  aria-pressed={muted}
-                  aria-label={muted ? "Unmute tab" : "Mute tab"}
-                  onClick={() => toggleMute(pt.id)}
-                >
-                  <m3e-icon name={muted ? "volume_off" : "volume_up"} aria-hidden={true} />
-                </button>
-              </div>
-              <div className="lb-tab-preview-clip">
-                <iframe
-                  className="lb-tab-preview-frame"
-                  title={"Preview of tab " + pt.id}
-                  src={routeUrl(settings, rules, pt.url)}
-                  sandbox="allow-same-origin"
-                />
-              </div>
-            </div>
-          );
-        })()}
+      {/* Compaction 1 (final): the floating tab strip is GONE. Tabs
+          live in the toolbar only: the tab-count button opens the tab
+          list card; the + button creates a tab. */}
 
       {/* Content area: one same-origin engine iframe per tab, inactive ones stay mounted */}
       <div className="lb-pages">
@@ -1213,6 +1122,9 @@ export default function BrowserView(props: Props) {
             <span className="lb-tabs-count">{tabs.length}</span>
           </button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
+            <m3e-icon name="add" aria-hidden={true} />
+          </m3e-icon-button>
           <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
             <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
