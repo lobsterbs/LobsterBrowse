@@ -448,11 +448,15 @@ fn extract_src_host(tag: &str) -> Option<String> {
 
 /// Remove <meta http-equiv="content-security-policy"> tags; the page CSP
 /// would block the injected engine shim and break same-origin framing.
-fn strip_csp_meta(html: &str) -> String {
+/// Returns the cleaned HTML plus how many CSP/XFO meta tags were removed
+/// (74.7: the count feeds the lb-diag diagnostic meta so the UI can
+/// attribute breakage to CSP stripping).
+fn strip_csp_meta(html: &str) -> (String, usize) {
     let lower = html.to_lowercase();
     let mut out = String::with_capacity(html.len());
     let mut i = 0usize;
     let mut search = 0usize;
+    let mut removed = 0usize;
     while let Some(rel) = lower[search..].find("<meta") {
         let start = search + rel;
         let Some(tag_end_rel) = lower[start..].find('>') else {
@@ -463,11 +467,12 @@ fn strip_csp_meta(html: &str) -> String {
         if tag.contains("content-security-policy") || tag.contains("x-frame-options") {
             out.push_str(&html[i..start]);
             i = tag_end + 1;
+            removed += 1;
         }
         search = tag_end;
     }
     out.push_str(&html[i.min(html.len())..]);
-    out
+    (out, removed)
 }
 
 /// Drop <base> tags: every relative URL is resolved and rewritten
@@ -497,10 +502,13 @@ fn strip_base_tags(html: &str) -> String {
 
 /// Drop integrity="..." attributes: rewritten resources legitimately
 /// differ from upstream bytes, so SRI would reject every one of them.
-fn strip_integrity(html: &str) -> String {
+/// Returns the cleaned HTML plus the removed-attribute count (74.7:
+/// feeds the lb-diag diagnostic meta).
+fn strip_integrity(html: &str) -> (String, usize) {
     let lower = html.to_ascii_lowercase();
     let mut out = String::with_capacity(html.len());
     let mut i = 0usize;
+    let mut removed = 0usize;
     while let Some(rel) = lower[i..].find("integrity=") {
         let start = i + rel;
         let prev_ok = start == 0 || {
@@ -523,9 +531,10 @@ fn strip_integrity(html: &str) -> String {
         };
         out.push_str(&html[i..start]);
         i = start + 10 + skip;
+        removed += 1;
     }
     out.push_str(&html[i.min(html.len())..]);
-    out
+    (out, removed)
 }
 
 const B64URL_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -1044,11 +1053,12 @@ fn js_antiframe_scan(s: &str) -> String {
     out
 }
 
-fn inject_shim(html: String, page_url: &str, suffix: &str) -> String {
+fn inject_shim(html: String, page_url: &str, suffix: &str, diag: &str) -> String {
     let pre = format!(
-        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script><script>window.LB_antiframe=0;window.LB_antiframe_replace=function(){{}};window.LB_antiframe_reload=function(){{}};window.LB_antiframe_assign=function(){{}};</script><script>{}</script><script>{}</script>",
+        "<script>window.__lbPageUrl=\"{}\";window.__lbParams=\"{}\";</script>{}<script>window.LB_antiframe=0;window.LB_antiframe_replace=function(){{}};window.LB_antiframe_reload=function(){{}};window.LB_antiframe_assign=function(){{}};</script><script>{}</script><script>{}</script>",
         json_escape(page_url),
         json_escape(suffix),
+        diag,
         ENGINE_JS,
         COMPAT_JS
     );
@@ -1091,22 +1101,44 @@ fn rewrite_html_doc(
     } else {
         strip_blocked(html, &filters)
     };
-    let cleaned = strip_csp_meta(&cleaned);
+    let (cleaned, csp_removed) = strip_csp_meta(&cleaned);
     let cleaned = strip_base_tags(&cleaned);
-    let cleaned = strip_integrity(&cleaned);
+    let (cleaned, sri_removed) = strip_integrity(&cleaned);
     let rewritten = rewrite_html(&cleaned, page_url, suffix, prefix);
     // Frame-buster neutralization for inline scripts: the same pass the
     // engine applies to served .js bodies.
     let rewritten = js_antiframe(&rewritten);
     // Challenge/CAPTCHA widget documents are integrity-sensitive: the
     // injected shim (console hooks, fetch patches, page globals) trips
+    // 74.7 diagnostics: record how much CSP/SRI hygiene the engine
+    // performed on this document, so the UI can attribute breakage to
+    // stripping instead of guessing. Meta placement inside <head> comes
+    // free via inject_shim's pre-script insertion; for challenge hosts
+    // (no shim) the meta is prepended inside the rewritten head by the
+    // same lower/insert helper to keep the doctype intact.
+    let diag = if csp_removed + sri_removed > 0 {
+        format!(
+            "<meta name=\"lb-diag\" content=\"csp={};sri={}\">",
+            csp_removed, sri_removed
+        )
+    } else {
+        String::new()
+    };
     // anti-bot checks and the widget refuses to run. URL rewriting is
     // kept so their subresources still route through the engine; only
     // the script injection is skipped.
     if is_challenge_host(&host_of(page_url)) {
-        return rewritten;
+        if diag.is_empty() {
+            return rewritten;
+        }
+        let lower = rewritten.to_ascii_lowercase();
+        let mut owned = rewritten;
+        if let Some(hpos) = lower.find("<head").and_then(|i| lower[i..].find('>').map(|j| i + j + 1)) {
+            owned.insert_str(hpos, &diag);
+        }
+        return owned;
     }
-    inject_shim(rewritten, page_url, suffix)
+    inject_shim(rewritten, page_url, suffix, &diag)
 }
 
 /// Engine option query string carried on to every rewritten URL.
