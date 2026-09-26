@@ -581,7 +581,7 @@ export default function BrowserView(props: Props) {
 
       if (data.lb === "console") {
         const level = String(d.level ?? "log");
-        const kind =
+        const kind: "error" | "warn" | "info" | "debug" | "log" =
           level === "error" ? "error" : level === "warn" ? "warn" : level === "info" ? "info" : level === "debug" ? "debug" : "log";
         setDt(tabId, {
           console: [...dtBase().console, { id: nextEntryId(), kind, text: cap(d.text, 4000), ts: Number(d.ts ?? Date.now()) }].slice(-500),
