@@ -132,6 +132,10 @@ export default function BrowserView(props: Props) {
   const iconCache = useRef<Map<string, string>>(new Map());
   /* Frame documents that already have LobsterJet prefetch listeners. */
   const wiredDocs = useRef<WeakSet<Document>>(new WeakSet());
+  /* Last lb-diag content seen per tab: the proxy rewriter reports how
+     many CSP meta tags and SRI integrity attributes it stripped; log
+     each distinct report once, not on every poll tick. */
+  const lastDiag = useRef<Map<number, string>>(new Map());
   /* Tab-hover live preview: which tab, anchored at which screen x. */
   const [preview, setPreview] = useState<{ id: number; x: number } | null>(null);
   const previewTimer = useRef<number | null>(null);
@@ -454,6 +458,40 @@ export default function BrowserView(props: Props) {
         );
         pushLog("error", "load failed: " + msg);
         return;
+      }
+      /* 74.7 CSP/SRI diagnostics: the rewriter strips CSP meta tags and
+         integrity attributes from proxied documents and reports the
+         counts in meta[lb-diag]. Surface each report once in DevTools
+         as a diagnostic failure entry. */
+      const diagMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-diag"]');
+      if (diagMeta) {
+        const content = diagMeta.content || "";
+        if (lastDiag.current.get(t.id) !== content) {
+          lastDiag.current.set(t.id, content);
+          const m = /csp=(\d+);sri=(\d+)/.exec(content);
+          if (m) {
+            const csp = Number(m[1]) || 0;
+            const sri = Number(m[2]) || 0;
+            if (csp > 0 || sri > 0) {
+              const mk = (kind: string, reason: string, n: number): ResFailEntry => ({
+                id: nextEntryId(),
+                url: redactUrl(t.url || ""),
+                kind,
+                reason,
+                note: n + " stripped by the proxy rewriter (page would otherwise break inside the iframe)",
+                ts: Date.now(),
+              });
+              setDtState((prev) => {
+                const base = prev[t.id] ?? emptyDt();
+                const fails = [...base.fails];
+                if (csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
+                if (sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
+                return { ...prev, [t.id]: { ...base, fails: fails.slice(-200) } };
+              });
+              pushLog("info", "rewrite diag: csp stripped=" + csp + " sri stripped=" + sri);
+            }
+          }
+        }
       }
       if (!path.startsWith("/r/") && !path.startsWith("/lj/")) return;
       const real = decodeRoute(path);
