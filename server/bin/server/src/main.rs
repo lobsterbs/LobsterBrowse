@@ -2731,10 +2731,19 @@ mod anubis_bridge_tests {
             "https://www.startpage.com"
         );
         // Root pages keep working exactly as before the fix.
-        assert_eq!(page_origin("https://www.startpage.com/"), "https://www.startpage.com");
-        assert_eq!(page_origin("https://www.startpage.com"), "https://www.startpage.com");
+        assert_eq!(
+            page_origin("https://www.startpage.com/"),
+            "https://www.startpage.com"
+        );
+        assert_eq!(
+            page_origin("https://www.startpage.com"),
+            "https://www.startpage.com"
+        );
         // Ports survive; bare host without a scheme is passed through.
-        assert_eq!(page_origin("http://host.example:8080/a/b?c=d"), "http://host.example:8080");
+        assert_eq!(
+            page_origin("http://host.example:8080/a/b?c=d"),
+            "http://host.example:8080"
+        );
         assert_eq!(page_origin("host.example/"), "host.example");
     }
 
