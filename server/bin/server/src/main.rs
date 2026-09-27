@@ -1950,15 +1950,24 @@ async fn build_endpoint() -> Response {
     // The Zeolite version is read from the vendored engine worker the
     // deployment actually serves, so it tracks the dist bundle instead
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
+    // The bundle's sha256 goes out too: the zl-builder Docker layer
+    // caches the dist tarball, so a deploy can silently ship an old
+    // engine — the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
-    let zeolite = match tokio::fs::read_to_string("zlsw/sw.js").await {
-        Ok(js) => zeolite_version(&js),
-        Err(_) => "unknown".to_string(),
+    let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
+        Ok(bytes) => {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(&bytes);
+            let hex: String = hash.iter().take(8).map(|b| format!("{b:02x}")).collect();
+            (zeolite_version(&String::from_utf8_lossy(&bytes)), hex)
+        }
+        Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         format!("{} Molt", env!("CARGO_PKG_VERSION")),
         json_escape(&zeolite),
+        json_escape(&zlsw_sha),
         json_escape(&build),
         json_escape(&build_short),
     );
@@ -1972,29 +1981,41 @@ async fn build_endpoint() -> Response {
 
 /// Zeolite version out of the vendored engine worker source. The dist
 /// sw.js keeps its identity as the only quoted "MAJOR.MINOR Substance"
-/// string (e.g. "1.0 Nitride"); scanning for that shape avoids a regex
-/// dependency and minified-variable coupling. "unknown" when absent.
+/// string (e.g. "1.0 Nitride"). Scans quote-to-quote and skips string
+/// bodies instead of trusting quote parity: minified bundles contain
+/// escaped quotes that desync naive split('"') parity (a first cut
+/// reported "unknown" against the real bundle). "unknown" when absent.
 fn zeolite_version(js: &str) -> String {
-    js.split('"')
-        .skip(1)
-        .step_by(2)
-        .find(|s| {
-            let mut halves = s.splitn(2, ' ');
-            let num = halves.next().unwrap_or_default();
-            let name = match halves.next() {
-                Some(n) if !n.is_empty() => n,
-                _ => return false,
-            };
+    let b = js.as_bytes();
+    let mut i = 0;
+    while i + 1 < b.len() {
+        if b[i] != b'"' {
+            i += 1;
+            continue;
+        }
+        let Some(rel) = js[i + 1..].find('"') else { break };
+        let inner = &js[i + 1..i + 1 + rel];
+        let mut halves = inner.splitn(2, ' ');
+        let num = halves.next().unwrap_or_default();
+        if let Some(name) = halves.next() {
             let mut digits = num.split('.');
-            let (maj, min) = (digits.next().unwrap_or_default(), digits.next().unwrap_or_default());
-            digits.next().is_none()
+            let (maj, min) = (
+                digits.next().unwrap_or_default(),
+                digits.next().unwrap_or_default(),
+            );
+            if digits.next().is_none()
                 && !maj.is_empty()
                 && min.len() == 1
-                && maj.bytes().chain(min.bytes()).all(|b| b.is_ascii_digit())
-                && name.bytes().all(|b| b.is_ascii_alphabetic())
-        })
-        .map(str::to_string)
-        .unwrap_or_else(|| "unknown".to_string())
+                && maj.bytes().chain(min.bytes()).all(|x| x.is_ascii_digit())
+                && !name.is_empty()
+                && name.bytes().all(|x| x.is_ascii_alphabetic())
+            {
+                return inner.to_string();
+            }
+        }
+        i += rel + 2;
+    }
+    "unknown".to_string()
 }
 
 /// TLS certificate details for the site info card. The browser never
@@ -2287,6 +2308,15 @@ mod version_tests {
     fn reads_the_bundle_identity() {
         // Shape from the real dist sw.js: `const pt="1.0 Nitride";`
         let js = r#"const fe=[];const pt="1.0 Nitride";console.info("[Zeolite] runtime "+pt);const mt="zeolite-pages-v1";"#;
+        assert_eq!(zeolite_version(js), "1.0 Nitride");
+    }
+
+    #[test]
+    fn escaped_quotes_do_not_desync_the_scan() {
+        // A lone escaped quote inside an earlier string broke the naive
+        // quote-parity scan on the real minified bundle; the quote-to-quote
+        // scan must survive it.
+        let js = r#"const a="he said \"hi\" ok";const pt="1.0 Nitride";"#;
         assert_eq!(zeolite_version(js), "1.0 Nitride");
     }
 
