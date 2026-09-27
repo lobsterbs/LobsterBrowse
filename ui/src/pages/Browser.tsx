@@ -1352,7 +1352,6 @@ export default function BrowserView(props: Props) {
           >
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
           </m3e-icon-button>
-          <m3e-badge for="lb-tabs-pill" size="small">{tabs.length}</m3e-badge>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
           <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
