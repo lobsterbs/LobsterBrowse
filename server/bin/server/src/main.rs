@@ -169,6 +169,24 @@ fn is_challenge_host(host: &str) -> bool {
         .any(|c| h == *c || h.ends_with(&format!(".{c}")))
 }
 
+/// CAPTCHA / anti-bot widget frames (Turnstile, hCaptcha, reCAPTCHA,
+/// Stripe challenges) must stay genuinely cross-origin. Their scripts
+/// validate the frame's own origin, and the embedding page validates
+/// postMessage event.origin against the provider domain. Routing the
+/// frame through the engine makes it same-origin with the proxy, both
+/// checks fail, and the widget errors or spins forever instead of
+/// letting the user solve it. An unrewritten src makes the browser load
+/// the widget directly from the provider, exactly like an unproxied
+/// page, so the human's solve works and only the final form submit
+/// travels through the proxy. This is compatibility (let the challenge
+/// work), never solving: the proof is still done by the provider's own
+/// JS in the user's browser.
+fn is_frame_to_challenge_host(value: &str, page_url: &str) -> bool {
+    resolve_url(page_url, value)
+        .map(|abs| is_challenge_host(&host_of(&abs)))
+        .unwrap_or(false)
+}
+
 /// Firefox User-Agent used for the suggestion providers (several reject
 /// non-browser UAs) and force-applied to the Mozilla add-ons store:
 /// AMO gates downloads on a Firefox client, so on addons.mozilla.org
@@ -689,6 +707,73 @@ fn rewrite_js_imports(js: &str, page_url: &str, suffix: &str, prefix: &str) -> S
 }
 
 #[cfg(test)]
+mod challenge_frame_tests {
+    use super::{is_frame_to_challenge_host, rewrite_html};
+
+    #[test]
+    fn detects_challenge_frame_targets() {
+        assert!(is_frame_to_challenge_host(
+            "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orb",
+            "https://site.example/"
+        ));
+        assert!(is_frame_to_challenge_host(
+            "https://js.stripe.com/v3/elements-inner-card",
+            "https://shop.example/checkout"
+        ));
+        assert!(is_frame_to_challenge_host(
+            "https://new.hcaptcha.com/checksiteconfig",
+            "https://site.example/"
+        ));
+        assert!(!is_frame_to_challenge_host(
+            "https://example.com/embed",
+            "https://site.example/"
+        ));
+        // Relative srcs resolve against the page URL first.
+        assert!(!is_frame_to_challenge_host(
+            "/widget", "https://site.example/"
+        ));
+    }
+
+    #[test]
+    fn challenge_iframes_keep_their_real_src() {
+        let out = rewrite_html(
+            "<iframe src=\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orb\"></iframe>",
+            "https://site.example/",
+            "?lb_ab=1",
+            "/r/",
+        );
+        assert!(
+            out.contains(r#"src="https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orb""#),
+            "challenge iframe must stay cross-origin: {out}"
+        );
+    }
+
+    #[test]
+    fn ordinary_iframes_still_route() {
+        let out = rewrite_html(
+            "<iframe src=\"https://example.com/embed\"></iframe>",
+            "https://site.example/",
+            "?lb_ab=1",
+            "/r/",
+        );
+        assert!(out.contains("src=\"/r/"), "plain iframe must route: {out}");
+    }
+
+    #[test]
+    fn challenge_script_srcs_still_route() {
+        // Only frames are exempt; the widget loader script itself is
+        // served through the engine like any other script.
+        let out = rewrite_html(
+            "<script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js\"></script>",
+            "https://site.example/",
+            "?lb_ab=1",
+            "/r/",
+        );
+        assert!(out.contains("src=\"/r/"), "loader script must route: {out}");
+    }
+}
+
+#[cfg(test)]
 mod js_import_tests {
     use super::rewrite_js_imports;
 
@@ -839,6 +924,10 @@ fn rewrite_css(css: &str, base: &str, suffix: &str, prefix: &str) -> String {
 /// Rewrite URL-bearing attributes inside a single tag.
 /// kind: 0 = plain URL attr, 1 = srcset, 2 = inline style CSS.
 fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
+    // Challenge-widget frames must keep their real cross-origin src (see
+    // is_frame_to_challenge_host); every other URL-bearing attribute on
+    // every tag routes through the engine as before.
+    let is_frame = tag_lower.starts_with("<iframe") || tag_lower.starts_with("<frame");
     let attrs: [(&str, u8); 6] = [
         ("href=", 0),
         ("src=", 0),
@@ -888,7 +977,9 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
             1 => rewrite_srcset(&value, page_url, suffix, prefix),
             2 => rewrite_css(&value, page_url, suffix, prefix),
             _ => {
-                if is_rewritable_url(&value) {
+                if is_rewritable_url(&value)
+                    && !(is_frame && is_frame_to_challenge_host(&value, page_url))
+                {
                     rewrite_url_attr(&value, page_url, suffix, prefix)
                 } else {
                     value.clone()
