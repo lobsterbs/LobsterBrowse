@@ -48,7 +48,7 @@ export default function DownloadsCard(props: {
                   ? (d.size > 0 ? fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
                   : d.status === "done"
                     ? "Complete, saved to your device"
-                    : d.error === "cancelled"
+                    : d.status === "cancelled"
                       ? "Cancelled"
                       : "Failed: " + d.error}
               </div>

@@ -70,7 +70,7 @@ type DlItem = {
   url: string;
   size: number;
   got: number;
-  status: "active" | "done" | "error";
+  status: "active" | "done" | "error" | "cancelled";
   error?: string;
 };
 
@@ -79,7 +79,7 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  /* Last URL each tab was asked to load Ã¢ÂÂ guards the auto-load effect
+  /* Last URL each tab was asked to load — guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
   /* Per-tab navigation generation: every load() bumps it, so results
@@ -155,11 +155,16 @@ export default function BrowserView(props: Props) {
     dlAbort.current.get(id)?.abort();
     dlAbort.current.delete(id);
   };
-  const startDownload = (href: string, name: string) => {
+  const startDownload = (href: string, name: string, sess?: string) => {
     const id = dlSeq.current++;
-    /* Engine-routed hrefs (/r/, /lj/) are fetched as-is; anything
-       else goes through routeUrl so settings and site rules apply. */
-    const target = href.startsWith("/r/") || href.startsWith("/lj/") ? href : routeUrl(settings, rules, href);
+    /* Engine-routed hrefs (/r/, /lj/) are fetched as-is (the session
+       token is already on them); anything else goes through routeUrl
+       so settings, site rules, incognito jar and the session token
+       apply. Incognito downloads used to fall back to the shared jar
+       because the incognito flag never reached this call. */
+    const target = href.startsWith("/r/") || href.startsWith("/lj/")
+      ? href
+      : routeUrl(settings, rules, href, props.incognito, sess);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
@@ -174,6 +179,10 @@ export default function BrowserView(props: Props) {
     (async () => {
       const ac = new AbortController();
       dlAbort.current.set(id, ac);
+      /* Streaming sink state lives outside the try so the catch can
+         discard a partial streamed file. */
+      let writable: FileSystemWritableFileStreamLike | null = null;
+      let streaming = false;
       const fail = (msg: string) => {
         dlAbort.current.delete(id);
         pushLog("error", "download failed " + name + ": " + msg);
@@ -184,35 +193,90 @@ export default function BrowserView(props: Props) {
         if (!res.ok) throw new Error("HTTP " + res.status);
         const size = Number(res.headers.get("content-length")) || 0;
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
+        /* Streaming sink (P0 download architecture): when the File
+           System Access API is available the bytes go straight to a
+           user-chosen file on disk — no Blob, no RAM ceiling. The
+           picker needs transient user activation which the parent UI
+           may not have (the click happened inside the proxied frame),
+           so any picker failure other than the user dismissing the
+           dialog falls back to the capped in-memory Blob path below.
+           A user dismissal is an honest cancel, not a failure. */
+        if (res.body && typeof window.showSaveFilePicker === "function") {
+          try {
+            const handle = await window.showSaveFilePicker({ suggestedName: name.slice(0, 120) });
+            writable = await handle.createWritable();
+            streaming = true;
+          } catch (e) {
+            const en = (e as { name?: string })?.name ?? "";
+            if (en === "AbortError") {
+              /* User dismissed the save dialog: cancelled, no fallback
+                 fetch, no fake failure. */
+              ac.abort();
+              pushLog("info", "download cancelled at save dialog " + name);
+              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
+              return;
+            }
+            writable = null;
+            streaming = false;
+          }
+        }
         const chunks: BlobPart[] = [];
+        let total = 0;
         if (res.body) {
-          /* Streaming sink note: the File System Access API
-             (showSaveFilePicker + writable) is the true streaming
-             sink, but the proxied frame does not enjoy the user-gesture
-             + permission context it needs and Safari lacks it, so the
-             practical sink here is Blob assembly. Each reader chunk is
-             a fresh buffer per the streams spec, so pushing `value`
-             directly avoids the old full-slice copy that doubled peak
-             memory for large downloads. The MAX_DL_BYTES cap below is
-             the honest ceiling of that design: past it we cancel and
-             report instead of exhausting device memory. */
           const reader = res.body.getReader();
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
             if (value) {
-              chunks.push(value);
-              const total = chunks.reduce((n, c) => n + ((c as Uint8Array).byteLength ?? 0), 0);
-              if (total > MAX_DL_BYTES) {
+              if (streaming && writable) {
+                /* Straight to disk: memory use is O(1) regardless of
+                   file size. */
+                await writable.write(value);
+              } else {
+                /* In-memory fallback: each reader chunk is a fresh
+                   buffer per the streams spec, so pushing `value`
+                   directly avoids the old full-slice copy that doubled
+                   peak memory. The MAX_DL_BYTES cap is the honest
+                   ceiling of this design: past it we cancel and report
+                   instead of exhausting device memory. */
+                chunks.push(value);
+              }
+              total += value.byteLength;
+              if (!streaming && total > MAX_DL_BYTES) {
                 ac.abort();
-                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " — cancelled to protect device memory (streamed saving is not available in this browser)");
+                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " — cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
                 return;
               }
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
             }
           }
+          if (streaming && writable) {
+            await writable.close();
+          }
         } else {
           chunks.push(await res.blob());
+        }
+        if (streaming) {
+          /* The file is already on disk; no blob anchor round trip. */
+          dlAbort.current.delete(id);
+          setDownloads((prev) =>
+            prev.map((d) => (d.id === id ? { ...d, size: d.size || total, got: total, status: "done" } : d)),
+          );
+          pushLog("info", "download streamed to disk " + name + " (" + fmtBytes(total) + ")");
+          try {
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              new Notification("LobsterBrowse download complete", { body: name });
+            }
+          } catch {
+            /* notifications unavailable */
+          }
+          if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+            M3eSnackbar.open("Saved " + name, { duration: 4000 });
+          }
+          window.setTimeout(() => {
+            setDownloads((prev) => prev.filter((d) => d.id !== id));
+          }, 4000);
+          return;
         }
         const blob = new Blob(chunks);
         dlAbort.current.delete(id);
@@ -254,11 +318,16 @@ export default function BrowserView(props: Props) {
         }, 4000);
       } catch (err) {
         dlAbort.current.delete(id);
+        if (writable) {
+          /* Discard the partial streamed file instead of leaving a
+             broken half-download on disk. */
+          try { await writable.abort?.(); } catch { /* already closed */ }
+        }
         if (ac.signal.aborted) {
-          /* User cancel or the size-cap abort: an honest "cancelled"
-             state, not a fake failure. */
+          /* User cancel, save-dialog dismissal or the size-cap abort:
+             an honest "cancelled" state, not a fake failure. */
           pushLog("info", "download cancelled " + name);
-          setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: "cancelled" } : d)));
+          setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
           return;
         }
         const msg = err instanceof Error ? err.message : String(err);
@@ -322,6 +391,11 @@ export default function BrowserView(props: Props) {
   });
   const saveExtIncognito = (next: Record<string, boolean>) => {
     setExtIncognito(next);
+    /* Incognito data-flow: while the browser session is incognito, the
+       toggle applies only to this session. Persisting it would leak
+       which extensions the user toggled during incognito into the
+       normal profile's localStorage. */
+    if (props.incognito) return;
     try {
       localStorage.setItem("lobsterbrowse-ext-incognito", JSON.stringify(next));
     } catch {
@@ -455,7 +529,7 @@ export default function BrowserView(props: Props) {
 
   /* ---- Favicon: read from the same-origin frame document, fetch the
      icon through the engine, cache per icon URL. ---- */
-  const loadFavicon = (tabId: number, url: string, doc: Document) => {
+  const loadFavicon = (tabId: number, url: string, doc: Document, sess?: string) => {
     let href = "";
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
@@ -464,7 +538,7 @@ export default function BrowserView(props: Props) {
         href = attr;
       } else {
         try {
-          href = routeUrl(settings, rules, new URL(attr, url).href);
+          href = routeUrl(settings, rules, new URL(attr, url).href, false, sess);
         } catch {
           href = "";
         }
@@ -472,7 +546,7 @@ export default function BrowserView(props: Props) {
     }
     if (!href) {
       try {
-        href = routeUrl(settings, rules, new URL(url).origin + "/favicon.ico");
+        href = routeUrl(settings, rules, new URL(url).origin + "/favicon.ico", false, sess);
       } catch {
         return;
       }
@@ -561,7 +635,7 @@ export default function BrowserView(props: Props) {
     const frame = frames.current.get(tab.id);
     /* 74.9: incognito tabs route through the engine's separate cookie
        jar (lb_inc=1) so their cookies never mix into the shared one. */
-    const href = routeUrl(settings, rules, url, props.incognito);
+    const href = routeUrl(settings, rules, url, props.incognito, tab.sess);
     if (frame) frame.src = href;
     pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
@@ -696,7 +770,7 @@ export default function BrowserView(props: Props) {
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
-          f.src = routeUrl(settings, rules, intended, props.incognito);
+          f.src = routeUrl(settings, rules, intended, props.incognito, t.sess);
         } catch {
           /* cross-origin or gone: nothing to recover */
         }
@@ -714,8 +788,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. AÃ¢ÂÂBÃ¢ÂÂC + back stays AÃ¢ÂÂBÃ¢ÂÂC at
-           index 1, never AÃ¢ÂÂBÃ¢ÂÂCÃ¢ÂÂB. Only a genuinely new URL (pushState,
+           move the index, do not append. AâBâC + back stays AâBâC at
+           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -737,7 +811,7 @@ export default function BrowserView(props: Props) {
         const cur = prev[t.id];
         return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
       });
-      loadFavicon(t.id, real, doc);
+      loadFavicon(t.id, real, doc, t.sess);
       /* LobsterJet prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
@@ -789,7 +863,7 @@ export default function BrowserView(props: Props) {
                 name = "download";
               }
             }
-            startDownload(href, name.slice(0, 120));
+            startDownload(href, name.slice(0, 120), t.sess);
           },
           true,
         );
@@ -934,7 +1008,7 @@ export default function BrowserView(props: Props) {
           }
         })();
         /* Scheme validation: only http(s) navigations. javascript:,
-           data:, blob:, file: and friends are rejected outright Ã¢ÂÂ a
+           data:, blob:, file: and friends are rejected outright — a
            proxied page must not script the browser surface. */
         if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
@@ -1015,7 +1089,7 @@ export default function BrowserView(props: Props) {
        swallow path; nothing here reports FETCH_FAILURE. */
     const ac = new AbortController();
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, draft, ac.signal)
+      fetchSuggestions(settings.engine, draft, ac.signal, active.sess)
         .then((list) => {
           const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
           setTbSugg(items);
@@ -1143,7 +1217,7 @@ export default function BrowserView(props: Props) {
     const tabId = active.id;
     const gen = navGen.current.get(tabId);
     setSiteCert("checking");
-    fetch("/cert?host=" + encodeURIComponent(host))
+    fetch("/cert?host=" + encodeURIComponent(host) + "&lb_sess=" + encodeURIComponent(active.sess))
       .then((r) => r.json() as Promise<{ ok: boolean; issuer?: string; notAfter?: string; days?: number }>)
       .then((d) => {
         if (navGen.current.get(tabId) !== gen) return;
@@ -1274,7 +1348,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} ÃÂ· route {routeUrl(settings, rules, errors[active.id].url)}
+                engine {settings.proxyEngine} Â· route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1288,13 +1362,13 @@ export default function BrowserView(props: Props) {
                       return a;
                     }, {}),
                   )
-                    .map(([k, n]) => n + " ÃÂ " + k)
+                    .map(([k, n]) => n + " Ã " + k)
                     .join(", ")}
                   )
                 </div>
               )}
               {[
-                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " Ã¢ÂÂ " + f.reason + (f.note ? " (" + f.note + ")" : "")),
+                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " — " + f.reason + (f.note ? " (" + f.note + ")" : "")),
                 ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
                 ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
               ].map((line, i) => (

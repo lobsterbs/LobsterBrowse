@@ -9,6 +9,11 @@ export type Tab = {
   /* Navigation stack: stack[idx] is the current URL. */
   stack: string[];
   idx: number;
+  /* Server-side session token: threads onto /r/ routes as lb_sess so
+     /logs returns only this tab's diagnostics. Generated client-side
+     (crypto.randomUUID), never persisted, regenerated on restore —
+     guest pages cannot read it (it lives in UI state, not the page). */
+  sess: string;
 };
 
 export type LogEntry = { ts: number; level: "info" | "warn" | "error"; msg: string };
@@ -61,11 +66,17 @@ export function loadSessionTabs(): Tab[] {
   return tabs.map((t) => {
     const stack = Array.isArray(t.stack) && t.stack.length > 0 ? t.stack.filter((u) => typeof u === "string") : [t.url];
     const idx = typeof t.idx === "number" && t.idx >= 0 && t.idx < stack.length ? t.idx : stack.length - 1;
-    return { ...t, stack, idx };
+    // Fresh session token per restored tab: persisted saves never
+    // contain it, so restored tabs never inherit (or collide with) a
+    // previous run's server-side log ring.
+    const sess = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + String(Date.now());
+    return { id: t.id, url: t.url, title: t.title, stack, idx, sess };
   });
 }
 
 export function saveSessionTabs(tabs: Tab[]) {
+  /* sess is deliberately omitted: the session token is per-run, never
+     persisted, so a restored tab starts a fresh server-side ring. */
   writeJson(TABS_KEY, tabs.map((t) => ({ id: t.id, url: t.url, title: t.title, stack: t.stack, idx: t.idx })));
 }
 

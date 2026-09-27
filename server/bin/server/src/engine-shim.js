@@ -45,7 +45,7 @@
      Sensitive query parameters are redacted before anything leaves
      the page. */
   var redact = function(u){
-    return String(u).replace(/([?&])(token|access_token|api_key|apikey|password|secret|authorization|session)=[^&]*/gi, "$1$2=[redacted]");
+    return String(u).replace(/([?&])(token|access_token|refresh_token|api_key|apikey|password|passwd|pwd|secret|authorization|session|sessionid|session_id|sid|client_secret)=[^&]*/gi, "$1$2=[redacted]");
   };
   var fail = function(kind, info){
     try {
@@ -160,7 +160,16 @@
      directly from the provider, exactly like an unproxied page, so the
      human's solve works; only the final form submit travels through the
      proxy. This is compatibility, never solving. */
-  var CHALLENGE_HOST_RE = /(^|\.)(challenges\.cloudflare\.com|cloudflare\.com|hcaptcha\.com|js\.stripe\.com|www\.google\.com|recaptcha\.net)$/i;
+  /* Single source of truth: main.rs injects
+     window.__LB_CHALLENGE_HOSTS (serialized from the Rust
+     CHALLENGE_HOSTS const) before this script, so the Rust and JS
+     lists cannot drift apart. The hardcoded literal is only a fallback
+     for contexts without the injected list and must mirror the Rust
+     const. See the comment above for why these frames stay
+     cross-origin. */
+  var CHALLENGE_HOSTS_FALLBACK = ["challenges.cloudflare.com","cloudflare.com","js.stripe.com","hcaptcha.com","www.google.com","recaptcha.net"];
+  var CHALLENGE_HOST_LIST = (window.__LB_CHALLENGE_HOSTS && window.__LB_CHALLENGE_HOSTS.length) ? window.__LB_CHALLENGE_HOSTS : CHALLENGE_HOSTS_FALLBACK;
+  var CHALLENGE_HOST_RE = new RegExp("(^|\\.)(" + CHALLENGE_HOST_LIST.map(function(h){ return h.replace(/[.*+?^${}()|[\]\\]/g, "\\  var CHALLENGE_HOST_RE = /(^|\.)(challenges\.cloudflare\.com|cloudflare\.com|hcaptcha\.com|js\.stripe\.com|www\.google\.com|recaptcha\.net)$/i;"); }).join("|") + ")$", "i");
   function chal(u) {
     try { return CHALLENGE_HOST_RE.test(new URL(String(u), PAGE).hostname); }
     catch (e) { return false; }
@@ -221,6 +230,31 @@
   var OWS = window.WebSocket;
   if (OWS) { var WS = function(u, p){
       var t0 = Date.now();
+      /* Foreign ws(s):// sockets must never silently connect: the
+         native WebSocket ignores the proxy and would expose the user's
+         real IP to the target host. There is no WebSocket transport
+         through the engine, so the honest behavior is an immediate,
+         loud failure (thrown SecurityError plus a diagnostic), the
+         same thing a browser does for a blocked scheme. Same-origin
+         sockets (the proxy origin's own, e.g. the Zeolite wisp
+         server) pass through untouched. */
+      var wsUrl = String(u);
+      var wsOrigin = "";
+      var isForeignWS = false;
+      try {
+        var parsed = new URL(wsUrl, location.href);
+        wsOrigin = parsed.origin;
+        isForeignWS = /^wss?:/i.test(parsed.protocol) && parsed.origin !== location.origin;
+      } catch (e) {
+        // Unparseable URL: let the native constructor produce its own
+        // honest SyntaxError below.
+      }
+      if (isForeignWS) {
+        var msg = "LobsterBrowse: direct WebSocket to '" + redact(wsUrl).slice(0, 200) + "' is blocked (would bypass the proxy and expose your IP); proxied WebSocket transport is not supported";
+        fail("websocket", { url: wsUrl, reason: "WEBSOCKET_UNSUPPORTED", note: "foreign-origin WebSocket blocked by LobsterBrowse: " + wsOrigin });
+        try { console.warn(msg); } catch (e) {}
+        throw new DOMException(msg, "SecurityError");
+      }
       var ws;
       try { ws = p !== undefined ? new OWS(u, p) : new OWS(u); }
       catch (e) {
@@ -299,6 +333,10 @@
     if (s.indexOf("/r/") === 0) seg = s.slice(3).split('?')[0].split('#')[0];
     else if (s.indexOf("/lj/") === 0) seg = s.slice(4).split('?')[0].split('#')[0];
     if (seg === null) return s;
+    /* Route segments are bounded (they encode a URL), but a hostile or
+       corrupted path could hand us a huge string; fromCharCode.apply
+       over an unbounded array overflows the call stack. */
+    if (seg.length > 8192) return s;
     var B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     var bytes = [];
     for (var i = 0; i < seg.length; i += 4) {
