@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
+import M3eSelect from "../M3eSelect";
 import { zlSend } from "../zeolite";
 
 export type ConsoleEntry = {
@@ -503,19 +504,19 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
       {dt.page === "console" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
-            <select
-              aria-label="Log level filter"
+            <M3eSelect
+              label="Log level filter"
               value={dt.levelFilter}
-              onChange={(e) => setDt({ levelFilter: e.target.value })}
-              className="lb-select"
-            >
-              <option value="all">All levels</option>
-              <option value="log">log</option>
-              <option value="info">info</option>
-              <option value="warn">warn</option>
-              <option value="error">error</option>
-              <option value="debug">debug</option>
-            </select>
+              options={[
+                ["all", "All levels"],
+                ["log", "log"],
+                ["info", "info"],
+                ["warn", "warn"],
+                ["error", "error"],
+                ["debug", "debug"],
+              ]}
+              onChange={(v) => setDt({ levelFilter: v })}
+            />
             <input
               className="lb-input"
               placeholder="Filter"

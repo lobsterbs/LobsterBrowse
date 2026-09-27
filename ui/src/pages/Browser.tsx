@@ -1362,8 +1362,8 @@ export default function BrowserView(props: Props) {
             {...{ ref: tabsBtnRef }}
           >
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
-            <span className="lb-tabs-count">{tabs.length}</span>
           </m3e-icon-button>
+          <m3e-badge for="lb-tabs-pill" size="small">{tabs.length}</m3e-badge>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
           <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
@@ -1737,27 +1737,21 @@ export default function BrowserView(props: Props) {
               {extDetail.description && <p className="lb-ext-desc">{extDetail.description}</p>}
               <div className="lb-ext-trow">
                 <span className="lb-ext-tlabel">Enabled</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={extDetail.enabled}
-                  className={"lb-ext-switch" + (extDetail.enabled ? " on" : "")}
+                <m3e-switch
+                  checked={extDetail.enabled ? "" : undefined}
+                  icons="selected"
+                  aria-label="Extension enabled"
                   onClick={() => toggleExtEnabled(extDetail.id, !extDetail.enabled)}
-                >
-                  <span className="lb-ext-knob" />
-                </button>
+                />
               </div>
               <div className="lb-ext-trow">
                 <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!!extIncognito[extDetail.id]}
-                  className={"lb-ext-switch" + (extIncognito[extDetail.id] ? " on" : "")}
+                <m3e-switch
+                  checked={extIncognito[extDetail.id] ? "" : undefined}
+                  icons="selected"
+                  aria-label="Allow extension in incognito tabs"
                   onClick={() => toggleExtIncognito(extDetail.id, !extIncognito[extDetail.id])}
-                >
-                  <span className="lb-ext-knob" />
-                </button>
+                />
               </div>
               {(extDetail.permissions.length > 0 || extDetail.hostPermissions.length > 0) && (
                 <div className="lb-ext-perms">

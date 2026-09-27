@@ -817,6 +817,147 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
+/// Next `import` or `from` keyword at a JavaScript identifier
+/// boundary (not part of a longer identifier or a property access).
+fn next_import_kw(js: &str, from: usize) -> Option<(usize, &'static str)> {
+    let bytes = js.as_bytes();
+    let mut best: Option<(usize, &'static str)> = None;
+    for kw in ["import", "from"] {
+        let mut s = from;
+        while let Some(p) = js[s..].find(kw) {
+            let abs = s + p;
+            let boundary = abs == 0
+                || !(bytes[abs - 1].is_ascii_alphanumeric()
+                    || bytes[abs - 1] == b'_'
+                    || bytes[abs - 1] == b'$'
+                    || bytes[abs - 1] == b'.');
+            if boundary {
+                if best.map_or(true, |(p, _)| abs < p) {
+                    best = Some((abs, kw));
+                }
+                break;
+            }
+            s = abs + kw.len();
+        }
+    }
+    best
+}
+
+/// Rewrite import/export specifiers in JavaScript module code.
+///
+/// The browser's module loader resolves root-absolute and relative
+/// specifiers against the DOCUMENT URL, which on the proxy origin is
+/// /lj/<b64> (or /r/<b64>): `import "/cdn/assets/x.js"` in an inline
+/// module therefore points at the proxy origin, 404s, and kills the
+/// whole module graph before any script runs - chatgpt.com boots
+/// exactly this way and surfaces as a resfail on the inline module
+/// with no URL. The injected shim cannot help: module loading happens
+/// below window.fetch. Specifiers are rewritten to the routed form
+/// here, resolved against the upstream page/file URL. The same pass
+/// on served .js bodies keeps nested module imports working.
+///
+/// Only import syntax positions are touched (bare `import "...`,
+/// dynamic `import(...)` and `from "..."`), and only path-like
+/// specifiers (./ ../ / but not //): bare import-map specifiers and
+/// absolute data:/blob:/foreign URLs are left alone. A quoted
+/// path-like string directly after the keyword AND followed by
+/// statement punctuation is required; prose like `from "/db"` inside
+/// template literals is a known rare false positive, and the rewrite
+/// only changes string content, never syntax.
+fn rewrite_js_imports(js: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
+    fn path_like(s: &str) -> bool {
+        (s.starts_with("./") || s.starts_with("../") || (s.starts_with('/') && !s.starts_with("//")))
+            && !s.contains(['"', '\''])
+    }
+    let mut out = String::with_capacity(js.len() + 256);
+    let mut i = 0usize;
+    loop {
+        let Some((kw_pos, kw)) = next_import_kw(js, i) else {
+            out.push_str(&js[i..]);
+            return out;
+        };
+        let kw_end = kw_pos + kw.len();
+        let after = &js[kw_end..];
+        let a = after.as_bytes();
+        let skip_ws = |j: &mut usize| {
+            while *j < a.len() && matches!(a[*j], b' ' | b'\t' | b'\r' | b'\n') {
+                *j += 1;
+            }
+        };
+        let mut j = 0usize;
+        skip_ws(&mut j);
+        // Dynamic import: import(...) - consume the paren.
+        if kw == "import" && j < a.len() && a[j] == b'(' {
+            j += 1;
+            skip_ws(&mut j);
+        }
+        let mut handled = false;
+        if j < a.len() && (a[j] == b'"' || a[j] == b'\'') {
+            let q = a[j] as char;
+            if let Some(rl) = after[j + 1..].find(q) {
+                let spec = &after[j + 1..j + 1 + rl];
+                let close = j + 1 + rl;
+                let mut k = close + 1;
+                skip_ws(&mut k);
+                let stmt_end = k >= a.len() || matches!(a[k], b';' | b')' | b'\n' | b',');
+                if path_like(spec) && stmt_end {
+                    out.push_str(&js[i..kw_end]);
+                    out.push_str(&after[..j + 1]);
+                    out.push_str(&rewrite_url_attr(spec, page_url, suffix, prefix));
+                    out.push(q);
+                    i = kw_end + close + 1;
+                    handled = true;
+                }
+            }
+        }
+        if !handled {
+            out.push_str(&js[i..kw_end]);
+            i = kw_end;
+        }
+    }
+}
+
+#[cfg(test)]
+mod js_import_tests {
+    use super::rewrite_js_imports;
+
+    #[test]
+    fn root_absolute_specifiers_are_routed() {
+        let out = rewrite_js_imports(
+            "import \"/cdn/assets/a.js\";import*as r from\"/cdn/assets/b.js\";",
+            "https://chatgpt.com/",
+            "",
+            "/lj/",
+        );
+        assert!(out.starts_with("import \"/lj/"), "bare import: {out}");
+        assert!(out.contains("from\"/lj/"), "from clause: {out}");
+    }
+
+    #[test]
+    fn dynamic_and_relative_specifiers() {
+        let out = rewrite_js_imports(
+            "const m=await import ( \"./x.js\" );export{a}from\"../y.js\";",
+            "https://chatgpt.com/cdn/entry.js",
+            "",
+            "/lj/",
+        );
+        assert!(out.contains("import ( \"/lj/"), "dynamic: {out}");
+        assert!(out.contains("from\"/lj/"), "export from: {out}");
+    }
+
+    #[test]
+    fn non_import_text_survives() {
+        let js = "const s=\"a from \\\"/db\\\";\";x.import(\"/no.js\");";
+        assert_eq!(rewrite_js_imports(js, "https://a.com/", "", "/lj/"), js);
+    }
+
+    #[test]
+    fn bare_and_absolute_specifiers_untouched() {
+        let js = "import \"lodash\";import \"https://cdn.other.com/x.js\";import \"data:text/js,1\";";
+        assert_eq!(rewrite_js_imports(js, "https://a.com/", "", "/lj/"), js);
+    }
+}
+
 /// srcset="url 2x, url2 1x" ÃÂ¢ÃÂÃÂ rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -1003,15 +1144,34 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
         }
         if tag_lower.starts_with("<script") {
             out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix, prefix));
+            /* type=module bodies: the module loader resolves import
+               specifiers against the document URL (the /lj/ or /r/
+               route), not the upstream site, so an inline module's
+               imports must be rewritten or the app never boots
+               (chatgpt.com's whole entry graph is exactly this). */
+            let is_module = tag_lower.contains("type=\"module\"")
+                || tag_lower.contains("type='module'")
+                || tag_lower.contains("type=module");
             match lower[end + 1..].find("</script") {
                 Some(c) => {
                     let cs = end + 1 + c;
                     let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
-                    out.push_str(&html[end + 1..after_close]);
+                    let body = &html[end + 1..cs];
+                    if is_module {
+                        out.push_str(&rewrite_js_imports(body, page_url, suffix, prefix));
+                    } else {
+                        out.push_str(body);
+                    }
+                    out.push_str(&html[cs..after_close]);
                     i = after_close;
                 }
                 None => {
-                    out.push_str(&html[end + 1..]);
+                    let body = &html[end + 1..];
+                    if is_module {
+                        out.push_str(&rewrite_js_imports(body, page_url, suffix, prefix));
+                    } else {
+                        out.push_str(body);
+                    }
                     break;
                 }
             }
@@ -1748,7 +1908,7 @@ async fn engine_proxy(
                 // which rewrites bytes into U+FFFD and corrupts the
                 // script. Invalid-UTF-8 bodies are served unmodified.
                 match std::str::from_utf8(&bytes) {
-                    Ok(text) => js_antiframe(text).into_bytes(),
+                    Ok(text) => js_antiframe(&rewrite_js_imports(text, &base_url, &suffix, prefix)).into_bytes(),
                     Err(_) => {
                         push_log(
                             &state,
