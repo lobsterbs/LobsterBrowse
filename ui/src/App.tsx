@@ -188,6 +188,16 @@ export default function App() {
     })();
   }, []);
 
+  /* ---- Zeolite adblock: the engine's /rules.json (the migrated
+       ad/tracker host lists) is evaluated client-side in its worker;
+       keep it in sync with the Ad & tracker blocking setting. The
+       worker resets the toggle to enabled on restart, so re-send on
+       boot and on change. Per-site adblock overrides still apply to
+       the server-side engine only (documented gap). ---- */
+  useEffect(() => {
+    void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
+  }, [settings.adblock]);
+
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker
      starts with the pass enabled by default. ---- */
