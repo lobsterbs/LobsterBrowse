@@ -1566,8 +1566,12 @@ async fn engine_proxy(
             // URL, not the one the user typed, or redirected pages
             // rewrite every link against the wrong origin.
             let base_url = resp.url().to_string();
-            if base_url != url {
-                push_log(&state, "info", &format!("engine redirect {} -> {}", url, base_url));
+            // Compare against the fragmentless target: a legacy route
+            // carrying "#symbol" inside the encoded URL used to log a
+            // phantom "redirect" because reqwest strips fragments from
+            // the final URL. There was never a redirect.
+            if base_url != bare_url {
+                push_log(&state, "info", &format!("engine redirect {} -> {}", bare_url, base_url));
             }
             let ct = resp
                 .headers()
@@ -1609,18 +1613,23 @@ async fn engine_proxy(
                     &format!("engine stream {} {} -> {}", method, url, status),
                 );
                 let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+                // Validation/caching headers pass through byte-identical:
+                // the body is upstream's own, so etag/last-modified/cache
+                // -control/expires must travel with it or browser (and SW)
+                // revalidation silently breaks. (Collected before
+                // bytes_stream: that consumes the response.)
+                let mut cache_headers: Vec<(&str, &str)> = Vec::new();
+                for h in ["etag", "last-modified", "cache-control", "expires"] {
+                    if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
+                        cache_headers.push((h, v));
+                    }
+                }
                 let stream = resp.bytes_stream();
                 let mut builder = Response::builder()
                     .status(axum_status)
                     .header(header::CONTENT_TYPE, ct);
-                // Validation/caching headers pass through byte-identical:
-                // the body is upstream's own, so etag/last-modified/cache
-                // -control/expires must travel with it or browser (and SW)
-                // revalidation silently breaks.
-                for h in ["etag", "last-modified", "cache-control", "expires"] {
-                    if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
-                        builder = builder.header(h, v);
-                    }
+                for (h, v) in &cache_headers {
+                    builder = builder.header(*h, *v);
                 }
                 return builder
                     .body(Body::from_stream(stream))
