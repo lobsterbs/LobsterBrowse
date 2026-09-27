@@ -3845,7 +3845,7 @@ mod session_log_tests {
         let ring = &sessions.get("session-a-token-111").unwrap().ring;
         assert_eq!(ring.len(), SESSION_LOG_CAP);
         // Oldest lines were evicted, newest kept.
-        assert!(ring.front().unwrap().contains(&format!("line {50}")));
+        assert!(ring.front().unwrap().contains("line 50"));
         assert!(ring
             .back()
             .unwrap()
