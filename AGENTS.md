@@ -2,6 +2,10 @@
 
 Guidance for AI agents and human contributors. Read this before changing the browser, proxy engine, UI, deployment configuration, or docs.
 
+## Roadmap
+
+`ROADMAP.md` is the authoritative LobsterBrowse roadmap. Read it before undertaking major roadmap work. Do not create duplicate roadmap documents. LobsterBrowse uses chemical element codenames; Zeolite keeps its separate compound/material naming system.
+
 ## Project identity
 LobsterBrowse is an open-source proxy browser built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured DevTools diagnostics, and Zeolite integration.
 Make sites work first, then improve browser-like compatibility. Do not add a headless browser or attempt to become a full Chromium/Firefox replacement.
