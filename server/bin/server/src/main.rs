@@ -1215,6 +1215,23 @@ mod challenge_frame_tests {
         );
         assert!(out.contains("src=\"/r/"), "loader script must route: {out}");
     }
+
+    #[test]
+    fn text_nodes_are_preserved() {
+        // Regression: the scanner used to jump straight to the next
+        // tag and drop every inter-tag text node, so proxied pages
+        // rendered with empty headings, paragraphs and link labels.
+        let out = rewrite_html(
+            "<html><body><h1>Example Domain</h1><p>hello <a href=\"https://x.test/a\">link text</a> tail</p></body></html>",
+            "https://x.test/",
+            "",
+            "/r/",
+        );
+        for expected in ["Example Domain", "hello", "link text", "tail"] {
+            assert!(out.contains(expected), "text node {expected:?} lost: {out}");
+        }
+        assert!(out.contains("href=\"/r/"), "link must still route: {out}");
+    }
 }
 
 #[cfg(test)]
@@ -1463,6 +1480,13 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
             break;
         };
         let start = i + rel;
+        /* Text between tags is content, not filler: it must be emitted.
+        The original loop jumped straight to the next tag and silently
+        dropped every inter-tag text node, so proxied pages rendered
+        with empty <h1>/<p>/<a> bodies. */
+        if rel > 0 {
+            out.push_str(&html[i..start]);
+        }
         let Some(endrel) = lower[start..].find('>') else {
             out.push_str(&html[start..]);
             break;
