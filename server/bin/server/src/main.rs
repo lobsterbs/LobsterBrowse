@@ -802,7 +802,7 @@ fn next_import_kw(js: &str, from: usize) -> Option<(usize, &'static str)> {
                     || bytes[abs - 1] == b'$'
                     || bytes[abs - 1] == b'.');
             if boundary {
-                if best.map_or(true, |(p, _)| abs < p) {
+                if best.is_none_or(|(p, _)| abs < p) {
                     best = Some((abs, kw));
                 }
                 break;
@@ -1470,10 +1470,14 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
     // is_frame_to_challenge_host); every other URL-bearing attribute on
     // every tag routes through the engine as before.
     let is_frame = tag_lower.starts_with("<iframe") || tag_lower.starts_with("<frame");
-    let attrs: [(&str, u8); 6] = [
+    let attrs: [(&str, u8); 7] = [
         ("href=", 0),
         ("src=", 0),
         ("action=", 0),
+        // formaction on <button>/<input> submits to its own URL; leaving
+        // it unrouted let a submitter button navigate straight off the
+        // proxy origin. Same rewriting as action.
+        ("formaction=", 0),
         ("poster=", 0),
         ("srcset=", 1),
         ("style=", 2),
@@ -2048,6 +2052,8 @@ fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
     let direct = pct_enc(url);
     let detail = json_escape(detail);
     let url_js = json_escape(url);
+    let url_json = format!("\"{}\"", url_js);
+    let detail_json = format!("\"{}\"", detail);
     // Standalone page inside the proxied iframe: matches the app's
     // dynamic-color look as closely as a plain page can (prefers the
     // M3 tokens when the parent app set them, falls back to a palette
@@ -2104,8 +2110,8 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
         url_js = url_js,
         direct = direct,
         scramjet = scramjet,
-        url_json = format!("\"{}\"", url_js),
-        detail_json = format!("\"{}\"", detail),
+        url_json = url_json,
+        detail_json = detail_json,
     );
     (
         StatusCode::BAD_GATEWAY,
@@ -2889,7 +2895,7 @@ fn best_crtsh(body: &str, host: &str) -> Option<(String, String)> {
             _ => continue,
         };
         let newer = |slot: &Option<(String, String)>, na: &str| {
-            slot.as_ref().map_or(true, |(cur, _)| na > cur.as_str())
+            slot.as_ref().is_none_or(|(cur, _)| na > cur.as_str())
         };
         if cert_covers_host(rec, host) && newer(&best_covered, &not_after) {
             best_covered = Some((issuer.clone(), not_after.clone()));
@@ -2949,9 +2955,10 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
+    let lb_version = format!("{} Molt", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
-        format!("{} Molt", env!("CARGO_PKG_VERSION")),
+        lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
         json_escape(&build),
@@ -3888,5 +3895,53 @@ mod session_log_tests {
         push_log_sess(&state, Some("bad token!"), "info", "unified");
         assert_eq!(state.logs.lock().unwrap().len(), 1);
         assert!(state.sessions.lock().unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod shim_integrity_tests {
+    use super::*;
+
+    /* engine-shim.js is include_str!'d and never executed as JS by any
+    test, so a splice that parses but breaks semantics ships silently
+    (the pass-2 CHALLENGE_HOST_RE replacement accident: the line parsed,
+    the regex matched nothing, runtime-created captcha frames broke).
+    These assertions pin the exact construction lines the runtime
+    depends on; keep test and shim in sync. */
+    #[test]
+    fn challenge_regex_construction() {
+        assert!(
+            ENGINE_JS.contains(r#"h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|")"#),
+            "CHALLENGE_HOST_RE construction changed; keep this test in sync"
+        );
+        assert_eq!(
+            ENGINE_JS.matches("CHALLENGE_HOST_RE").count(),
+            2,
+            "CHALLENGE_HOST_RE must appear exactly twice (build + use)"
+        );
+    }
+
+    #[test]
+    fn runtime_url_routing_patches_present() {
+        assert!(ENGINE_JS.contains(r#"prop("HTMLAnchorElement", "href");"#));
+        assert!(ENGINE_JS.contains(r#"prop("HTMLFormElement", "action");"#));
+        assert!(ENGINE_JS.contains(r#""formaction""#));
+        assert!(ENGINE_JS.contains(r#"ln === "href" && this.tagName === "BASE""#));
+        assert!(ENGINE_JS.contains("WORKER_UNSUPPORTED"));
+        assert!(ENGINE_JS.contains("WEBSOCKET_UNSUPPORTED"));
+    }
+
+    #[test]
+    fn formaction_is_rewritten() {
+        let tag = r#"<button formaction="https://example.com/submit" type="submit">"#;
+        let out = rewrite_tag(tag, tag, "https://example.com/", "", "/r/");
+        assert!(
+            out.contains("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS9zdWJtaXQ"),
+            "formaction must route through the engine"
+        );
+        assert!(
+            !out.contains("https://example.com/submit"),
+            "the real formaction URL must not survive rewriting"
+        );
     }
 }
