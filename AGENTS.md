@@ -130,6 +130,8 @@ Responses whose HTML contains `id="anubis_challenge"` are served with `Cache-Con
 ## Anubis pass-challenge bridge
 Challenge JS that solves the proof does location.replace() on a ROOT-RELATIVE /.within.website/... URL. Served same-origin that escapes the engine route (the SPA fallback used to answer it with the app shell), so the proof never reached the protected host, no cookie was set, and the challenge reloaded forever. The server now routes /.within.website/*path to anubis_bridge: it decodes the engine route from Anubis's own redir param (or the Referer), fetches the pass-challenge upstream against that route's page (shared cookie jar keeps the Anubis cookie) and 303s the frame back to its engine route.
 
+The redir forwarded upstream is NOT the one the browser sent. The challenge script sets redir to the frame's full engine-route URL on this origin, which upstream Anubis rejects with 400 redirect_domain_not_allowed. Dropping redir is equally fatal: 400 invalid_redirect. anubis_bridge rewrites redir to the decoded upstream page URL (the one redirect target the protected host always accepts) and forwards every other query param verbatim. If pass-challenge ever 400s again, check what redir upstream received first.
+
 ## engine-compat.js integrity
 The compat shim is an IIFE: the file must end with a closing `)();`. The 2026-09-27 extraction dropped that line and every proxied page died with a console SyntaxError "Unexpected end of input" attributed to the page URL. If the shim files are ever regenerated, syntax-check them (node --check or equivalent) in CI-reachable form before deploy.
 
