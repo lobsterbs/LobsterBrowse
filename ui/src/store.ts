@@ -49,19 +49,24 @@ export function addHistory(url: string): string[] {
   return trimmed;
 }
 
-/* ---- Session tabs (persisted so the browser view can restore on reload) ---- */
+/* ---- Session tabs (persisted so the browser view can restore on reload) ----
+   The full per-tab history stack and index are preserved (P0 session
+   restoration): flattening to the current URL used to destroy back/
+   forward history on every reload. Old saves without a valid stack are
+   normalized to a single-entry stack. */
 
 export function loadSessionTabs(): Tab[] {
   const tabs = readJson<Tab[]>(TABS_KEY, []);
   if (!Array.isArray(tabs) || tabs.length === 0) return [];
-  return tabs.map((t) => ({ ...t, stack: [t.url], idx: 0 }));
+  return tabs.map((t) => {
+    const stack = Array.isArray(t.stack) && t.stack.length > 0 ? t.stack.filter((u) => typeof u === "string") : [t.url];
+    const idx = typeof t.idx === "number" && t.idx >= 0 && t.idx < stack.length ? t.idx : stack.length - 1;
+    return { ...t, stack, idx };
+  });
 }
 
 export function saveSessionTabs(tabs: Tab[]) {
-  writeJson(
-    TABS_KEY,
-    tabs.map((t) => ({ id: t.id, url: t.url, title: t.title, stack: [t.url], idx: 0 }))
-  );
+  writeJson(TABS_KEY, tabs.map((t) => ({ id: t.id, url: t.url, title: t.title, stack: t.stack, idx: t.idx })));
 }
 
 /* ---- Client-side technical log ring ---- */

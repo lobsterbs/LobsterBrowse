@@ -122,8 +122,20 @@ RewriteFallback = compatibility escape hatch.
 ## Engine shim layout (2026-09-27 refactor)
 The injected page JavaScript no longer lives inside main.rs as a raw string. It is embedded at compile time:
 - `server/bin/server/src/engine-shim.js` — `ENGINE_JS`, the routing + diagnostics shim. Patch categories are labeled inside it (ENGINE CORE / REWRITE COMPATIBILITY / DIAGNOSTICS / LEGACY COMPAT); read them before deleting a patch. Diagnostics events are buffered and flushed as one `{lb:"batch"}` postMessage every 120ms (or 32 events); the UI message handler accepts both batch and single-event shapes.
-- `server/bin/server/src/engine-compat.js` — `COMPAT_JS`, the sandboxed-frame stubs (service workers, install prompts, notifications).
+- `server/bin/server/src/engine-compat.js` — `COMPAT_JS`, the honest compat layer for guest pages (service workers, notifications, install prompts). Every stub fails immediately and predictably, produces a one-time console diagnostic explaining WHY the real API cannot exist on the proxy origin, and never claims success or hangs (`ready` resolves, `register` rejects). See docs/COMPATIBILITY-AUDIT.md for the full inventory and threat model.
 Never edit a patch away because it looks like a monkey patch; prove the behavior is no longer required first.
+
+## Diagnostic secret sanitization (2026-09-27)
+Two central sanitizers own redaction; call sites must not hand-roll it:
+- `ui/src/sanitize.ts` (`sanitizeUrl`/`sanitizeText`) — applied in Browser.tsx to every console text, net URL/error, resfail URL/note and url-sync log line before it enters DevTools state or the persisted app log.
+- `main.rs` `redact_secrets()` — called inside `push_log`, so the whole `/logs` ring is sanitized at write time. Patterns (secret query params, JWTs, Bearer/basic/labeled credentials) mirror the TS module; keep them in sync. Unit tests: `redact_tests` in main.rs. Deliberately conservative — no email or generic-string redaction.
+The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `"*"`); the UI handler additionally validates origin, matches `e.source` to a known tab frame, and caps/bounds everything (docs/COMPATIBILITY-AUDIT.md §4).
+
+## Downloads (2026-09-27)
+`startDownload` in Browser.tsx uses an AbortController per download: the downloads card's close button on an ACTIVE item cancels the transfer (honest "Cancelled" state), and a 1 GiB in-memory ceiling aborts oversized files instead of exhausting device memory. Blob assembly remains the sink (File System Access API needs a top-level user gesture the proxied frame cannot provide); the cap is the honest ceiling of that design.
+
+## Session restoration (2026-09-27)
+`saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior destroyed back/forward history on reload. Old saves are normalized on load.
 
 ## Module import rewriting
 `rewrite_js_imports` rewrites import/export/dynamic-import specifiers in inline `type=module` bodies and served `.js` files, for `"`, `'` and backtick quoting. Backtick templates containing `${` interpolation or escapes are left alone (runtime-computed, unresolvable server-side). This stays server-side: module loading happens below window.fetch, the shim cannot intercept it. Import maps with relative keys are a known gap.

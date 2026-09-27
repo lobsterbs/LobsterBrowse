@@ -13,9 +13,10 @@
          server-side. They stay until the Zeolite service-worker
          transport owns the whole origin and real-world testing proves
          the injected-shim path unnecessary (RewriteFallback).
-     - legacy/compat: COMPAT_JS (separate) stubs service workers and
-         install prompts for the sandboxed frame; keep, it is honest
-         about unavailability rather than hanging.
+     - legacy/compat: COMPAT_JS (separate) gives proxied pages honest,
+         immediately-failing stubs for service workers, notifications
+         and install prompts (capabilities that cannot work on the
+         proxy origin); it never claims success and never hangs.
      Each patch must keep the fragment rule: fragments are client-side
      and never become part of an encoded request target. */
   var PAGE = window.__lbPageUrl;
@@ -32,7 +33,7 @@
     batchTimer = null;
     if (!batch.length) return;
     var evs = batch; batch = [];
-    try { parent.postMessage({ lb: "batch", data: { events: evs } }, "*"); } catch (e) {}
+    try { parent.postMessage({ lb: "batch", data: { events: evs } }, location.origin); } catch (e) {}
   };
   var send = function(type, data){
     batch.push({ lb: type, data: data });

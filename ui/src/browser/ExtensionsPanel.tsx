@@ -115,6 +115,14 @@ export default function ExtensionsPanel(props: {
               onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
             />
           </div>
+          {/* Honest labeling (P0): this records the user's intent only.
+              The engine has no incognito concept yet, so the grant is
+              NOT enforced; do not present it as a security control. */}
+          <p className="lb-ext-desc">
+            {props.incognito[props.detail.id]
+              ? "Grant recorded, but not enforced yet: the engine does not have incognito tabs."
+              : "Not enforced yet: the engine does not have incognito tabs."}
+          </p>
           {(props.detail.permissions.length > 0 || props.detail.hostPermissions.length > 0) && (
             <div className="lb-ext-perms">
               {[...props.detail.permissions, ...props.detail.hostPermissions].slice(0, 12).map((p) => (
