@@ -884,7 +884,17 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
             }
         };
         out.push_str(&tag[pos..pos + nlen]);
-        out.push_str(&new_value);
+        // Quote preservation: rewritten attributes used to lose their
+        // quotes (b64 targets have no spaces so pages limped along,
+        // but any rewritten value with a space — srcset descriptors,
+        // style — bled into the following markup as bogus attributes).
+        if fc == '"' || fc == '\'' {
+            out.push(fc);
+            out.push_str(&new_value);
+            out.push(fc);
+        } else {
+            out.push_str(&new_value);
+        }
         i = pos + nlen + consumed;
         if i >= tag.len() {
             break;
