@@ -33,7 +33,7 @@ import { pushLog, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
 /* Extracted browser feature panels (ui/src/browser/): all state stays
    in this page; the components are presentational. */
-import { fmtBytes, tabLabel } from "../browser/browserShared";
+import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
 import DownloadsCard from "../browser/DownloadsCard";
 import XpiPrompt from "../browser/XpiPrompt";

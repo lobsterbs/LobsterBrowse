@@ -1262,8 +1262,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp =
-        page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
     if !looks_amp {
         return None;
     }
