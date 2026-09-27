@@ -6,7 +6,10 @@ import { clearLogs, getLogs, pushLog, type LogEntry } from "../store";
 
 type ServerLog = { ts: number; level: string; msg: string };
 
-export default function LogsPage({ onBack }: { onBack: () => void }) {
+/* sess: the active tab's server session token. /logs is
+   session-scoped server-side; it refuses requests without a valid
+   token, so diagnostics from other sessions are never readable here. */
+export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: string | undefined }) {
   const [client, setClient] = useState<LogEntry[]>([]);
   const [server, setServer] = useState<ServerLog[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -31,8 +34,15 @@ export default function LogsPage({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     setClient(getLogs());
     let cancelled = false;
+    /* No active tab means no session token: /logs is session-scoped
+       server-side, so say so instead of showing a confusing 403. */
+    if (!sess) {
+      setServer([]);
+      setErr("No active tab — server logs are scoped to a browsing session.");
+      return () => {};
+    }
     const refresh = () =>
-      fetch("/logs", { cache: "no-store" })
+      fetch("/logs" + (sess ? "?lb_sess=" + encodeURIComponent(sess) : ""), { cache: "no-store" })
         .then((r) => {
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.json();
@@ -52,7 +62,7 @@ export default function LogsPage({ onBack }: { onBack: () => void }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [sess]);
 
   const fmt = (t: number) => new Date(t * 1000).toLocaleTimeString();
 

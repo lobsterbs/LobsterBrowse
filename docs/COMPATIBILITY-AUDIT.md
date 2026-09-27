@@ -48,15 +48,35 @@ redaction; individual call sites no longer remember to redact:
 Deliberately conservative: emails and arbitrary long strings are not
 redacted (they are page content; over-redaction destroys diagnostics).
 
-## 3. Server log isolation (P0)
+## 3. Server log isolation (P0, fixed 2026-09-27 pass 2)
 
-`AppState.logs` is a single bounded (1000-line) ring shared by the
-whole deployment. The deployment model today is a single-user Render
-service; on a shared deployment the ring WOULD be visible to every
-user via `/logs`. Full per-session correlation is a redesign (backlog,
-§4). What is fixed now: every entry is centrally sanitized (§2), so
-cross-user leakage can no longer include session tokens, JWTs or API
-keys carried in URLs/diagnostics. The ring stays bounded.
+`AppState.logs` was a single deployment-wide ring readable by anyone
+who could reach `/logs` — including any proxied guest page, since
+guests run same-origin. That was a cross-session and cross-tab
+diagnostic leak. Fix (per-session correlation, smallest mechanism that
+holds):
+
+- The UI mints a session token per tab (`crypto.randomUUID`, in
+  `store.Tab.sess`, never persisted to localStorage, regenerated on
+  session restore). It threads onto /r/ routes as `lb_sess=` via
+  `proxyParams`/`routeUrl` and onward to every rewritten subresource
+  through the engine's `params_suffix`.
+- Server state: `AppState.sessions: HashMap<String, SessionRing>`
+  beside the global ring. `push_log_sess(state, sess, ...)` puts
+  tagged lines ONLY in that session's ring; untagged lines go to the
+  global ring as before. `/logs` now REQUIRES a valid `lb_sess` and
+  returns only that ring; without a token it answers 403. Suggest,
+  cert and Anubis-bridge diagnostics are session-tagged too.
+- Bounds: per-session ring cap 500 lines; session map cap 128 with
+  LRU eviction; idle sessions expire after 1800 s. Worst-case memory
+  is bounded by construction.
+- Trust: tokens are validated (16–64 chars, `[A-Za-z0-9_-]`). A guest
+  page cannot learn another tab's token (it lives in UI state, not in
+  anything the page can read), cannot forge a malformed token into the
+  map, and an unknown-but-valid token yields an honest empty ring.
+- Tests: `session_log_tests` (token validation, cross-session
+  isolation, tagged-lines-never-global, ring cap, map cap + idle
+  expiry, invalid-token fallback).
 
 ## 4. Guest-origin threat model (P0)
 
@@ -85,10 +105,13 @@ Mitigations in place after this pass:
 - `navigate` messages are scheme-validated (http/https only); the
   toolbar URL state is updated from tab state, not from raw messages.
 
-Known-unmitigated (backlog): a hostile guest can read LB UI state keys
-from localStorage and fetch `/logs`/`/suggest`. Per-session log
-sharding and iframe `srcdoc`/portal-based isolation are the candidate
-redesigns; both break DevTools as written.
+Known-unmitigated (backlog): a hostile guest can still read LB UI
+state keys from localStorage and reach `/healthz`, `/build`,
+`/zlsw/*` etc. — but `/logs` now refuses it (403 without a valid
+session token, and tokens are not page-readable), and `/suggest` logs
+are scoped to the calling tab's ring. Full origin isolation per guest
+remains architectural (iframe `srcdoc`/portal-based isolation would
+break DevTools as written).
 
 ## 5. Honest "still unsupported" list
 
@@ -120,10 +143,12 @@ server rewrite).
 
 P1: form/upload/media/range/compression/redirect compatibility
 suites; `<base>` runtime mutation; window.open return object; guest
-worker script routing; per-session `/logs` correlation; challenge-host
-allowlist generation (Rust↔JS single source).
+worker script routing.
 P2: settings versioned migrations; favicon SSRF hardening; tab
 lifecycle policy; permissions model; downloads page/history.
+(Done in pass 2 and removed from this list: per-session `/logs`
+correlation; challenge-host allowlist single source; download
+streaming; WebSocket proxy-bypass blocking.)
 
 ## 8. Incognito data-flow (P0, fixed 2026-09-27)
 
@@ -156,3 +181,89 @@ test `text_nodes_are_preserved` added. This is exactly the class of
 "looks fine, isn't" breakage the live-verification requirement exists
 to catch; it also invalidates any earlier visual impression that /r/
 HTML pages were serving correctly.
+
+## 10. Fixed in pass 2 (2026-09-27)
+
+- P0 server log isolation: per-session rings, token-gated /logs (see
+  §3).
+- P0 WebSocket proxy bypass: the shim's WebSocket wrapper passed the
+  page's original ws(s):// URL to the native constructor, so proxied
+  pages silently connected straight to foreign hosts (real-IP leak).
+  Foreign-origin ws/wss now fail immediately: thrown SecurityError +
+  WEBSOCKET_UNSUPPORTED diagnostic. Same-origin sockets (the proxy
+  origin's own, e.g. the Zeolite wisp server) pass through.
+- P0 download architecture: downloads now stream to disk via the File
+  System Access API when available (showSaveFilePicker + writable,
+  O(1) memory, cancel discards the partial file); the in-memory Blob
+  path remains as a fallback with the 1 GiB honest ceiling. Incognito
+  downloads now carry lb_inc (they used the shared cookie jar).
+  O(n²) chunk accounting replaced with a running total. "Cancelled"
+  is a first-class state, not a fake error.
+- P0 extension incognito toggle: no longer persisted to localStorage
+  during incognito sessions (was leaking which extensions the user
+  toggled while incognito). Enforcement itself remains unsupported
+  (honest UI); see §5.
+- P1 challenge-host drift: main.rs injects
+  window.__LB_CHALLENGE_HOSTS (serialized from the Rust const) before
+  engine-shim.js; the shim builds its regex from that list (hardcoded
+  fallback retained). One source of truth.
+- engine_proxy now forwards content-type (POST forms/multipart work),
+  range + if-none-match + if-modified-since (media seeking, 304
+  revalidation) from the browser, and passes content-range /
+  accept-ranges through on streamed responses (206 media works).
+  content-length is still NOT forwarded (reqwest auto-decompresses;
+  the length would lie).
+- engine_error_page postMessage targetOrigin "*" → location.origin.
+- Shim redact() key list aligned with sanitize.ts / redact_secrets()
+  (adds pwd/passwd/sessionid/session_id/sid/refresh_token/
+  client_secret).
+- unroute(): fromCharCode.apply over an unbounded route segment could
+  overflow the stack; segments > 8192 chars now pass through
+  unrouted.
+- Repo text corruption: control chars (U+0014) in main.rs comments and
+  double-encoded mojibake in Browser.tsx comments repaired.
+
+Changed mocks/shims (behavior + why):
+- WebSocket wrapper: passthrough → foreign-origin block (honest
+  immediate failure instead of silent proxy bypass).
+- CHALLENGE_HOST_RE: hardcoded → server-injected single source.
+- Download sink: capped-Blob-only → disk streaming when the platform
+  allows, capped Blob otherwise; ceiling documented per path.
+
+## 11. Full-repo ponytail sweep findings (pass 2)
+
+Real bugs fixed: the nine items in §10 plus the /logs leak (§3) and
+the previously reported text-node drop (§9).
+Classified and left alone (intentional or not fixable here):
+- window.open returns null: sites read it as popup-blocked; a fake
+  Window object would be fake success. Honest null + navigate message
+  kept (backlog: return a minimal non-functional marker object? —
+  rejected for now, it would be a lie).
+- /lj/ cookie jar shared between incognito and normal tabs, and /lj/
+  has no session-log correlation (traffic never reaches the server
+  by design): Zeolite-owned, documented, not modified.
+- document.cookie on /r/ pages is the shared proxy-origin jar
+  (cross-site crosstalk possible): architectural, documented in §4;
+  Zeolite virtualizes it on /lj/.
+- <base> stripping is correct for the current architecture (all URLs
+  are rewritten against the page URL); dynamic base mutation remains
+  unsupported.
+- Settings "migrations" are merge-with-defaults; a version field adds
+  nothing until a breaking schema change exists (YAGNI, documented).
+- Tab lifecycle: all tab iframes stay mounted (the tab switcher needs
+  live previews). A freeze/suspend policy is backlog.
+- Same-origin guest execution model: kept (DevTools depends on it);
+  documented threat model in §4 with per-session /logs now closed.
+
+## 12. Tests (pass 2)
+
+Rust (cargo test): existing suites (redact_tests 7,
+rewrite_hardening_tests 5, js_literals, challenge_frame, js_import,
+anubis_bridge, url_fragment, res_id, version, antiframe, suggest)
+plus NEW session_log_tests (6): token validation, session isolation,
+no global-ring leakage of tagged lines, per-ring cap, map cap + idle
+expiry, invalid-token fallback. CI gates: cargo fmt --check, build
+--locked, test, clippy -D warnings; UI: npm run build + tsc.
+Browser-level checks are exercised on the live deploy (see the final
+report): /logs 403 without token, /r/ page text integrity, challenge
+host injection, WS block diagnostics.

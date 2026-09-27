@@ -23,7 +23,15 @@ type View = "home" | "browser" | "settings" | "logs";
 
 let tabSeq = 1;
 function freshTab(url = ""): Tab {
-  return { id: tabSeq++, url, title: "", stack: url ? [url] : [], idx: url ? 0 : -1 };
+  return {
+    id: tabSeq++,
+    url,
+    title: "",
+    stack: url ? [url] : [],
+    idx: url ? 0 : -1,
+    /* Server-side log session token (see store.ts Tab.sess). */
+    sess: crypto.randomUUID(),
+  };
 }
 
 export default function App() {
@@ -349,7 +357,9 @@ export default function App() {
                   onNavigate={(url) => newTab(url)}
                 />
               )}
-              {view === "logs" && <LogsPage onBack={() => setView("home")} />}
+              {view === "logs" && (
+                <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
+              )}
             </div>
           </div>
         </div>

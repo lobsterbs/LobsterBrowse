@@ -184,7 +184,7 @@ export function resolveUa(s: Settings, rules: SiteRule[], domain: string): strin
 
 /* Build the engine option query string for a target URL, applying
    global settings and per-site rules. */
-export function proxyParams(s: Settings, rules: SiteRule[], target: string, incognito = false): string {
+export function proxyParams(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
   let domain = "";
   try {
     domain = new URL(target).hostname;
@@ -206,6 +206,9 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string, inco
      lb_inc routes, so incognito browsing never mixes cookies with the
      normal shared jar. */
   if (incognito) parts.push("lb_inc=1");
+  /* Per-tab session token: server-side /logs is scoped to it, so
+     diagnostics from one tab never leak into another session's view. */
+  if (sess) parts.push("lb_sess=" + encodeURIComponent(sess));
   const ua = resolveUa(s, rules, domain);
   if (ua) parts.push("lb_ua=" + encodeURIComponent(ua));
   return parts.join("&");
@@ -249,9 +252,9 @@ export function engineRoutePrefix(engine: ProxyEngineId): string {
    forwards the route's query string to the target, so no server-side
    option params may ride on them. ScramJet routes through the server
    engine and keeps the lb_ options. */
-export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false): string {
+export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
   if (s.proxyEngine === "lobsterjet") return "/lj/" + b64urlEncode(target);
-  const params = proxyParams(s, rules, target, incognito);
+  const params = proxyParams(s, rules, target, incognito, sess);
   return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
 }
 
@@ -295,11 +298,11 @@ export function looksLikeUrl(s: string): boolean {
    the server's /suggest endpoint (server-side to avoid CORS). Never
    throws; an aborted signal rejects with the AbortError that the
    caller swallows. Public entry: fetchSuggestions, below. */
-export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal): Promise<string[]> {
+export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
   const query = q.trim();
   if (!query) return [];
   try {
-    const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query), { signal });
+    const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query) + (sess ? "&lb_sess=" + encodeURIComponent(sess) : ""), { signal });
     if (!r.ok) return [];
     const data = (await r.json()) as { suggestions?: unknown };
     return Array.isArray(data.suggestions)
@@ -315,6 +318,6 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
    network — DuckDuckGo rate-limits the Render egress — so the server
    retries Brave then Bing before answering empty). One round trip per
    keystroke; the client no longer double-fetches. */
-export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal): Promise<string[]> {
-  return suggestFrom(engine, q, signal);
+export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
+  return suggestFrom(engine, q, signal, sess);
 }

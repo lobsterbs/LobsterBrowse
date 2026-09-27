@@ -49,7 +49,7 @@ export default function TabSwitcherCard(props: {
             <div className="lb-tab-preview">
               {t.url ? (
                 <iframe
-                  src={routeUrl(props.settings, props.rules, t.url)}
+                  src={routeUrl(props.settings, props.rules, t.url, false, t.sess)}
                   title={"Preview of " + tabLabel(t)}
                   loading="lazy"
                   tabIndex={-1}

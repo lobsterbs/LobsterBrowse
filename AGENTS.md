@@ -181,3 +181,15 @@ Zeolite is NOT the server rewriter: its service worker owns /lj/ routes. App.tsx
 
 ## Engine route prefix
 `settings.ts` `engineRoutePrefix(engine)` is the single place that decides `/lj/` vs `/r/`. Do not reintroduce engine ternaries in components.
+
+## Server log session isolation (2026-09-27 pass 2)
+/logs is session-scoped: the UI mints a per-tab token (store.ts Tab.sess, crypto.randomUUID, never persisted, regenerated on restore) and threads it on /r/ routes as lb_sess= (settings.ts proxyParams/routeUrl; the engine carries it onto every rewritten subresource via params_suffix). Server side: AppState.sessions holds one bounded SessionRing (500 lines) per token; push_log_sess writes tagged lines ONLY there; /logs requires a valid lb_sess and answers 403 without one. Map cap 128 with LRU eviction, idle expiry 1800s. Suggest/cert/Anubis diagnostics are tagged too. Tests: session_log_tests in main.rs. Tokens are UI state: guest pages cannot read or forge another session's token.
+
+## WebSocket policy (2026-09-27 pass 2)
+engine-shim.js blocks foreign-origin ws(s):// WebSockets: the native constructor would connect straight to the target host, bypassing the proxy and leaking the user's real IP. Blocked sockets throw a SecurityError immediately and emit a WEBSOCKET_UNSUPPORTED resfail diagnostic; same-origin sockets (proxy origin, e.g. the Zeolite wisp server) pass through. There is no proxied WebSocket transport; do not fake one.
+
+## Challenge-host single source (2026-09-27 pass 2)
+main.rs injects window.__LB_CHALLENGE_HOSTS (serialized from CHALLENGE_HOSTS) into the page head before ENGINE_JS; engine-shim.js builds CHALLENGE_HOST_RE from it (hardcoded fallback retained). Never hand-edit one list without the other; change CHALLENGE_HOSTS in main.rs only.
+
+## Download streaming (2026-09-27 pass 2)
+startDownload streams to disk via the File System Access API when available (showSaveFilePicker + createWritable, O(1) memory; writable.abort() discards the partial file on cancel/error; a dismissed save dialog is an honest "cancelled"). Browsers/contexts without the API fall back to capped in-memory Blob assembly (1 GiB ceiling, the honest limit of that path). Incognito downloads carry lb_inc. "cancelled" is a DlItem status, not a fake error.
