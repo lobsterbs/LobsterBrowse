@@ -9,6 +9,7 @@ import {
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
+import M3eSelect from "../M3eSelect";
 
 type Props = {
   settings: Settings;
@@ -56,18 +57,22 @@ function Row(props: { label: string; icon: string; on: boolean; toggle: () => vo
   );
 }
 
+/* Text input on the M3E form field: the field owns the outline,
+   floating label and focus treatment; the input itself stays native
+   (M3E has no standalone text-field component). */
 function TextInput(props: { label: string; value: string; placeholder?: string; onChange: (v: string) => void }) {
+  const id = "lb-ti-" + props.label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
-    <label className="lb-text-input">
-      <span className="lb-muted">{props.label}</span>
+    <m3e-form-field {...{ class: "lb-text-input" }}>
+      <label slot="label" htmlFor={id}>{props.label}</label>
       <input
-        className="lb-input"
+        id={id}
         type="text"
         value={props.value}
         placeholder={props.placeholder}
         onChange={(e) => props.onChange(e.target.value)}
       />
-    </label>
+    </m3e-form-field>
   );
 }
 
@@ -233,17 +238,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Preset</div>
           {/* Dropdown: the preset list outgrew segmented buttons (seven
               entries wrap badly and never fit the panel). */}
-          <select
-            className="lb-select"
-            aria-label="User-Agent preset"
+          <M3eSelect
+            label="User-Agent preset"
             value={settings.uaPreset}
-            onChange={(e) => onChange({ uaPreset: e.target.value as UaPresetId })}
-          >
-            {(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map((id) => (
-              <option key={id} value={id}>{UA_PRESETS[id].name}</option>
-            ))}
-            <option value="custom">Custom</option>
-          </select>
+            options={[
+              ...(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map(
+                (id) => [id, UA_PRESETS[id].name] as [string, string]
+              ),
+              ["custom", "Custom"],
+            ]}
+            onChange={(v) => onChange({ uaPreset: v as UaPresetId })}
+          />
           {settings.uaPreset === "custom" && settings.uaCustom.trim() && (
             <span className="lb-ua-active">Custom User-Agent active</span>
           )}
@@ -422,12 +427,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               value={ruleDomain}
               onChange={(e) => setRuleDomain(e.target.value)}
             />
-            <select className="lb-select" aria-label="User-Agent for site" value={ruleUa} onChange={(e) => setRuleUa(e.target.value as UaPresetId)}>
-              <option value="server-default">Default UA</option>
-              {(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map((id) => (
-                <option key={id} value={id}>{UA_PRESETS[id].name}</option>
-              ))}
-            </select>
+            <M3eSelect
+              label="User-Agent for site"
+              value={ruleUa}
+              options={[
+                ["server-default", "Default UA"],
+                ...(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map(
+                  (id) => [id, UA_PRESETS[id].name] as [string, string]
+                ),
+              ]}
+              onChange={(v) => setRuleUa(v as UaPresetId)}
+            />
             <m3e-switch checked={ruleAdblock ? "" : undefined} icons="selected" aria-label="Ad blocking for site" onClick={() => setRuleAdblock(!ruleAdblock)} />
             <m3e-button
               onClick={() => {

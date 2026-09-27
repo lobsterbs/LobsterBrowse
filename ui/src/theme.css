@@ -116,14 +116,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   font-family: inherit;
   font-size: 14px;
 }
-.lb-select {
-  padding: var(--md-sys-measurement-space100);
-  border-radius: var(--m3e-shape-sm);
-  border: 1px solid var(--md-sys-color-outline);
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-}
+/* m3e-select owns its own styling; inside dense flex rows (per-site
+   rules, DevTools toolbar) it just must not collapse. */
+.lb-seed-row m3e-select,
+.lb-dt-toolbar m3e-select { flex: 0 1 auto; min-width: 130px; }
 .lb-muted { opacity: 0.65; font-size: 13px; }
 .lb-curl { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.75; }
 
@@ -842,24 +838,10 @@ m3e-nav-rail.lb-rail-hidden {
 /* ---- Compaction batch: toolbar tabs, diagnostics chip, suggest
    loading indicator ---- */
 /* Tab-count button: a real m3e-icon-button (toggle) like its
-   neighbours; the component owns geometry and every state. The host
-   only needs a positioning context for the absolute count badge. */
-#lb-tabs-pill { position: relative; }
-.lb-tabs-count {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
-  font-size: 9px;
-  line-height: 14px;
-  text-align: center;
-  font-variation-settings: "wght" 600;
-}
+   neighbours; the component owns geometry and every state. The count
+   is a real m3e-badge anchored to the button via for=, so the badge
+   geometry and position are the component's too - the hand-rolled
+   absolute badge was pinned to the host corner and clipped wrong. */
 /* Diagnostics chip on the toolbar: appears only with captured load
    failures; opens DevTools on the diagnostics page. */
 .lb-diag-tb-chip {

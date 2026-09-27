@@ -90,6 +90,7 @@ declare module "react" {
         "auto-activate"?: boolean | string;
       };
       "m3e-option": M3eBase & { value?: string; selected?: boolean | string; disabled?: boolean };
+      "m3e-select": M3eBase & { value?: string; multi?: boolean | string; required?: boolean | string; "hide-selection-indicator"?: boolean | string };
       "m3e-skeleton": M3eBase & {
         loaded?: boolean | string;
         shape?: string;
