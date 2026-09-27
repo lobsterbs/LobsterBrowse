@@ -31,8 +31,6 @@ import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
 
-type View = "home" | "browser" | "settings" | "logs";
-
 type Props = {
   settings: Settings;
   rules: SiteRule[];
@@ -46,7 +44,6 @@ type Props = {
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
-  setView: (v: View) => void;
   onOpenLogs: () => void;
 };
 
@@ -183,23 +180,18 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     incognitoBtnRef.current?.toggleAttribute("selected", !!props.incognito);
   }, [props.incognito]);
-  /* Tab card leave animation: stay mounted briefly while the
-     .leaving class plays the exit animation, then unmount. */
-  const [tabsMounted, setTabsMounted] = useState(false);
-  const [tabsLeaving, setTabsLeaving] = useState(false);
-  useEffect(() => {
-    if (tabsOpen) { setTabsMounted(true); setTabsLeaving(false); return; }
-    if (!tabsMounted) return;
-    setTabsLeaving(true);
-    const t = window.setTimeout(() => { setTabsMounted(false); setTabsLeaving(false); }, 200);
-    return () => window.clearTimeout(t);
-  }, [tabsOpen, tabsMounted]);
+  /* The tab switcher card stays mounted all the time (its preview
+     iframes must stay alive or tiles show blank frames, not pages);
+     the .open class animates and gates interaction instead. */
   /* ---- Downloads ---- */
   const [downloads, setDownloads] = useState<DlItem[]>([]);
   const [dlOpen, setDlOpen] = useState(false);
   const dlSeq = useRef(1);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
+  /* A finished .xpi download waiting for the install prompt. The
+     bytes are held here so Install needs no second fetch. */
+  const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
   const startDownload = (href: string, name: string) => {
     const id = dlSeq.current++;
     /* Engine-routed hrefs (/r/, /lj/) are fetched as-is; anything
@@ -241,6 +233,16 @@ export default function BrowserView(props: Props) {
         setDownloads((prev) =>
           prev.map((d) => (d.id === id ? { ...d, size: d.size || blob.size, got: blob.size, status: "done" } : d)),
         );
+        /* XPI packages from the add-ons store: ask before anything
+           happens. Install goes straight into the engine (the same
+           zl:installExt path the Settings import uses); Save file
+           falls back to the normal blob download. */
+        if (/\.xpi$/i.test(name)) {
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          setXpiPrompt({ name, bytes });
+          pushLog("info", "xpi ready: " + name + " (" + fmtBytes(bytes.length) + ")");
+          return;
+        }
         /* Saved on the user's device via a blob anchor click. */
         const objUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -270,6 +272,36 @@ export default function BrowserView(props: Props) {
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
       }
     })();
+  };
+  /* Install a downloaded .xpi into the engine, or save it as a file. */
+  const installXpi = async (p: { name: string; bytes: Uint8Array }) => {
+    setXpiPrompt(null);
+    pushLog("info", "xpi install " + p.name);
+    const rep = await zlSend({ type: "zl:installExt", bytes: p.bytes }, 20000);
+    if (rep && rep.ok) {
+      pushLog("info", "xpi installed " + String(rep.id));
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Extension installed", { duration: 4000 });
+      }
+      loadExtensions();
+    } else {
+      const msg = rep && rep.error ? String(rep.error) : "the engine worker could not be reached";
+      pushLog("error", "xpi install failed: " + msg);
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Install failed: " + msg, { duration: 5000 });
+      }
+    }
+  };
+  const saveXpi = (p: { name: string; bytes: Uint8Array }) => {
+    setXpiPrompt(null);
+    const blob = new Blob([p.bytes.slice().buffer as ArrayBuffer]);
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = p.name;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+    pushLog("info", "xpi saved " + p.name);
   };
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
@@ -611,11 +643,16 @@ export default function BrowserView(props: Props) {
                 nav: navId.current.get(t.id),
                 ts: Date.now(),
               });
+              /* CSP/SRI stripping is EXPECTED proxy behavior on every
+                 rewritten page, not a site failure. The scary FAIL
+                 entries only appear in diagnostic mode; the console
+                 warning always explains the intervention. */
+              const wantFails = settings.diagnostics;
               setDtState((prev) => {
                 const base = prev[t.id] ?? emptyDt();
                 const fails = [...base.fails];
-                if (csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
-                if (sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
+                if (wantFails && csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
+                if (wantFails && sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
                 /* Own the proxy's own interventions in the page console:
                    entries explicitly prefixed as engine-caused, so a
                    broken page is never silently blamed on the site. */
@@ -779,6 +816,7 @@ export default function BrowserView(props: Props) {
   const live = useRef({
     tabs,
     dt,
+    settings,
     incognito: props.incognito,
     onHistory: props.onHistory,
     newTab: props.newTab,
@@ -787,6 +825,7 @@ export default function BrowserView(props: Props) {
   live.current = {
     tabs,
     dt,
+    settings,
     incognito: props.incognito,
     onHistory: props.onHistory,
     newTab: props.newTab,
@@ -825,6 +864,13 @@ export default function BrowserView(props: Props) {
         const level = String(d.level ?? "log");
         const kind: "error" | "warn" | "info" | "debug" | "log" =
           level === "error" ? "error" : level === "warn" ? "warn" : level === "info" ? "info" : level === "debug" ? "debug" : "log";
+        /* Diagnostic mode: every page console message lands in the app
+           log too, with the tab id, so failures are traceable without
+           opening DevTools. */
+        if (L.settings.diagnostics) {
+          pushLog(kind === "error" || kind === "warn" ? "error" : "info",
+            "console[" + tabId + "] " + kind + ": " + cap(d.text, 300));
+        }
         setDt(tabId, {
           console: [...dtBase().console, { id: nextEntryId(), kind, text: cap(d.text, 4000), ts: Number(d.ts ?? Date.now()) }].slice(-500),
         });
@@ -858,6 +904,15 @@ export default function BrowserView(props: Props) {
           nav: navId.current.get(tabId as number),
           ts: Number(d.ts ?? Date.now()) || Date.now(),
         };
+        /* Diagnostic mode: every failure goes to the app log with the
+           full reason and note, not just the DevTools counter. */
+        if (L.settings.diagnostics) {
+          pushLog("error",
+            "resfail[" + tabId + "] " + entry.kind + " " + entry.reason +
+            (entry.status !== undefined ? " HTTP " + entry.status : "") +
+            " " + entry.url +
+            (entry.note ? " (" + entry.note + ")" : ""));
+        }
         setDtState((prev) => {
           const base = prev[tabId as number] ?? emptyDt();
           return { ...prev, [tabId as number]: { ...base, fails: [...base.fails, entry].slice(-200) } };
@@ -1275,8 +1330,8 @@ export default function BrowserView(props: Props) {
         {/* Tab switcher: its own surface while the toolbar slides
             away (.lb-dock.tabs-open). Horizontal row of live preview
             tiles (scriptless engine frames, scaled 0.25), not a list. */}
-        {tabsMounted && (
-          <m3e-card variant="elevated" aria-label="Tab switcher" {...{ class: "lb-tabs-card" + (tabsLeaving ? " leaving" : "") }}>
+        {tabs.length > 0 && (
+          <m3e-card variant="elevated" aria-label="Tab switcher" {...{ class: "lb-tabs-card" + (tabsOpen ? " open" : "") }}>
             <div slot="header" className="lb-site-head">
               <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
               <span>
@@ -1367,9 +1422,6 @@ export default function BrowserView(props: Props) {
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
           <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button aria-label="Home" onClick={() => props.setView("home")}>
-            <m3e-icon name="home" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-icon-button aria-label="Back" onClick={back}>
             <m3e-icon name="arrow_back" aria-hidden={true} />
@@ -1631,6 +1683,31 @@ export default function BrowserView(props: Props) {
                 </div>
               </m3e-card>
             )}
+          {xpiPrompt && (
+            <div className="lb-xpi-overlay" role="dialog" aria-label="Install extension" onClick={() => setXpiPrompt(null)}>
+              <m3e-card variant="elevated" {...{ class: "lb-xpi-card" }} onClick={(e) => e.stopPropagation()}>
+                <div slot="header" className="lb-site-head">
+                  <span className="lb-site-ctitle">Install extension?</span>
+                </div>
+                <div slot="content" className="lb-site-body">
+                  <div className="lb-site-row">{xpiPrompt.name} ({fmtBytes(xpiPrompt.bytes.length)})</div>
+                  <p className="lb-site-note">
+                    Install this add-on into LobsterBrowse? The engine validates the package before anything runs.
+                    You can also save the file and import it later from Settings.
+                  </p>
+                </div>
+                <div slot="actions" className="lb-site-actions">
+                  <m3e-button onClick={() => void installXpi(xpiPrompt)}>
+                    <m3e-icon name="extension" aria-hidden={true} /> Install
+                  </m3e-button>
+                  <m3e-button onClick={() => saveXpi(xpiPrompt)}>
+                    <m3e-icon name="download" aria-hidden={true} /> Save file
+                  </m3e-button>
+                  <m3e-button onClick={() => setXpiPrompt(null)}>Cancel</m3e-button>
+                </div>
+              </m3e-card>
+            </div>
+          )}
           {dlOpen && downloads.length > 0 && (
             <m3e-card variant="elevated" aria-label="Downloads" {...{ class: "lb-dl-card" }}>
               <div slot="header" className="lb-site-head">

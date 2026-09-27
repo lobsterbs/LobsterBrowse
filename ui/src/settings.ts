@@ -91,11 +91,15 @@ export type Settings = {
   prefetchLinks: boolean;
   /* Tuck the toolbar and tab strip when the app is idle. */
   autoHideChrome: boolean;
+  /* Diagnostic mode: log every failed resource/console message
+     verbosely in the app log, and surface expected proxy
+     interventions (CSP/SRI stripping) as failure entries. */
+  diagnostics: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
-  engine: "duckduckgo",
+  engine: "startpage",
   proxyEngine: "lobsterjet",
   adblock: true,
   decentraleyes: true,
@@ -108,6 +112,7 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
+  diagnostics: false,
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -130,6 +135,7 @@ export function loadSettings(): Settings {
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
+      diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -297,14 +303,11 @@ export async function suggestFrom(engine: EngineId, q: string): Promise<string[]
   }
 }
 
-/* Suggestions for the search bars. Some engines are unreachable from
-   the server's network (DuckDuckGo rate-limits the Render egress), so
-   when the selected engine yields nothing the query silently retries
-   against Bing: an empty answer box is worse than a second opinion.
-   Users who picked Bing get exactly one attempt. */
+/* Suggestions for the search bars. The server's /suggest endpoint owns
+   the fallback chain (a provider can be unreachable from the server's
+   network — DuckDuckGo rate-limits the Render egress — so the server
+   retries Brave then Bing before answering empty). One round trip per
+   keystroke; the client no longer double-fetches. */
 export async function fetchSuggestions(engine: EngineId, q: string): Promise<string[]> {
-  const primary = await suggestFrom(engine, q);
-  if (primary.length > 0) return primary;
-  if (engine === "bing") return [];
-  return suggestFrom("bing", q);
+  return suggestFrom(engine, q);
 }

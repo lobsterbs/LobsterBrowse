@@ -299,7 +299,6 @@ export default function App() {
                   onHistory={addHistory}
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
-                  setView={setView}
                   onOpenLogs={() => setView("logs")}
                 />
               )}

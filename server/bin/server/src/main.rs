@@ -95,6 +95,14 @@ const ENGINE_JS: &str = r##"(function(){
         + (t.getAttribute("type") ? ", type " + t.getAttribute("type") : "")
         + (t.getAttribute("integrity") ? ", SRI present" : "")
         + " (element reported a load failure before a resource could be identified)";
+      /* Inline <script type=module> failures (a static import that
+         cannot resolve kills the module and fires error on the inline
+         element with no src). Diagnose instead of shrugging: the
+         first 100 chars of the inline body say which module died. */
+      try {
+        var tc = t.textContent || "";
+        if (tc) note += "; inline body starts: " + String(tc).replace(/\s+/g, " ").slice(0, 100);
+      } catch (er) {}
     }
     fail(kind, { url: u, reason: "RESOURCE_LOAD_FAILURE", note: note });
   }, true);
@@ -461,6 +469,45 @@ const CHALLENGE_HOSTS: &[&str] = &[
 fn is_challenge_host(host: &str) -> bool {
     let h = host.to_ascii_lowercase();
     CHALLENGE_HOSTS.iter().any(|c| h == *c || h.ends_with(&format!(".{c}")))
+}
+
+/// Firefox User-Agent used for the suggestion providers (several reject
+/// non-browser UAs) and force-applied to the Mozilla add-ons store:
+/// AMO gates downloads on a Firefox client, so on addons.mozilla.org
+/// the proxy always spoofs Firefox unless the user set an explicit UA.
+const FIREFOX_UA: &str =
+    "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
+
+fn is_amo_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h == "addons.mozilla.org" || h.ends_with(".addons.mozilla.org")
+}
+
+/// Client-side companion to the AMO UA spoof: the store's JS reads
+/// navigator.userAgent directly, so the header alone is not enough.
+/// Injected into AMO documents right after the engine shim.
+fn amo_spoof_script() -> &'static str {
+    r#"<script>(function(){try{var ua="Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";Object.defineProperty(navigator,"userAgent",{get:function(){return ua;}});Object.defineProperty(navigator,"vendor",{get:function(){return "";}});Object.defineProperty(navigator,"oscpu",{get:function(){return "X11; Linux x86_64";}});}catch(e){}})();</script>"#
+}
+
+/// Insert a raw string right after the opening <head> tag (or prepend
+/// when there is none), keeping the doctype intact.
+fn insert_in_head(html: String, snippet: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let head_end = match lower.find("<head>") {
+        Some(i) => Some(i + "<head>".len()),
+        None => lower
+            .find("<head ")
+            .and_then(|i| lower[i..].find('>').map(|j| i + j + 1)),
+    };
+    match head_end {
+        Some(pos) => {
+            let mut owned = html;
+            owned.insert_str(pos, snippet);
+            owned
+        }
+        None => format!("{}{}", snippet, html),
+    }
 }
 
 /// Strip <script> / <iframe> tags whose src host is blocked.
@@ -1343,21 +1390,7 @@ fn inject_shim(html: String, page_url: &str, suffix: &str, diag: &str) -> String
         ENGINE_JS,
         COMPAT_JS
     );
-    let lower = html.to_ascii_lowercase();
-    let head_end = match lower.find("<head>") {
-        Some(i) => Some(i + "<head>".len()),
-        None => lower
-            .find("<head ")
-            .and_then(|i| lower[i..].find('>').map(|j| i + j + 1)),
-    };
-    match head_end {
-        Some(pos) => {
-            let mut owned = html;
-            owned.insert_str(pos, &pre);
-            owned
-        }
-        None => format!("{}{}", pre, html),
-    }
+    insert_in_head(html, &pre)
 }
 
 /// Full HTML pipeline: ad/tracker stripping, CSP/base/SRI cleanup,
@@ -1419,7 +1452,15 @@ fn rewrite_html_doc(
         }
         return owned;
     }
-    inject_shim(rewritten, page_url, suffix, &diag)
+    let shimmed = inject_shim(rewritten, page_url, suffix, &diag);
+    /* AMO: spoof Firefox both on the wire (engine_proxy applies the
+       header) and in the page (navigator.userAgent), because the
+       add-ons store gates .xpi downloads on a Firefox client. */
+    if is_amo_host(&host_of(page_url)) {
+        insert_in_head(shimmed, amo_spoof_script())
+    } else {
+        shimmed
+    }
 }
 
 /// Engine option query string carried on to every rewritten URL.
@@ -1710,7 +1751,16 @@ async fn engine_proxy(
     let use_incognito = params.get("inc").map(|v| v == "1").unwrap_or(false);
     let client = if use_incognito { &state.incognito_client } else { &state.client };
     let mut req = client.request(method.clone(), &fetch_url);
-    if let Some(ua) = params.get("ua") {
+    /* Effective UA: on AMO the proxy ALWAYS spoofs Firefox (the store
+       refuses .xpi downloads to non-Firefox clients, so a user-preset
+       Chrome UA must not leak there); everywhere else the user's
+       explicit override wins. */
+    let eff_ua = if is_amo_host(&host_of(&fetch_url)) {
+        Some(FIREFOX_UA.to_string())
+    } else {
+        params.get("ua").filter(|ua| !ua.trim().is_empty()).cloned()
+    };
+    if let Some(ua) = eff_ua {
         let cleaned: String = ua
             .chars()
             .filter(|c| c.is_ascii_graphic() || *c == ' ')
@@ -1966,58 +2016,83 @@ async fn suggest_endpoint(
     let q_enc = pct_enc(&q);
     // Honest mapping: providers with a working open suggestion API get
     // their native endpoint; Startpage and Mojeek have none, so they
-    // fall back to DuckDuckGo's endpoint.
-    let provider = match engine.as_str() {
-        "google" => format!("https://suggestqueries.google.com/complete/search?client=firefox&q={}", q_enc),
-        "bing" => format!("https://api.bing.com/osjson.aspx?q={}", q_enc),
-        "brave" => format!("https://search.brave.com/api/suggest?q={}", q_enc),
-        _ => format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc),
+    // fall back to DuckDuckGo's endpoint first.
+    let native = match engine.as_str() {
+        "google" => Some(format!("https://suggestqueries.google.com/complete/search?client=firefox&q={}", q_enc)),
+        "bing" => Some(format!("https://api.bing.com/osjson.aspx?q={}", q_enc)),
+        "brave" => Some(format!("https://search.brave.com/api/suggest?q={}", q_enc)),
+        _ => Some(format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc)),
     };
-    push_log(&state, "info", &format!("suggest {}", q));
-    let body: Result<String, String> = match state
-        .client
-        .get(&provider)
-        // Brave (and some others) reject requests without a browser UA.
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0",
-        )
-        .header("Accept", "*/*")
-        .header("Sec-GPC", "1")
-        .header("DNT", "1")
-        .send()
-        .await
-    {
-        Ok(r) => match r.error_for_status() {
-            Ok(r) => r.text().await.map_err(|e| e.to_string()),
-            Err(e) => Err(e.to_string()),
-        },
-        Err(e) => Err(e.to_string()),
-    };
-    let out = match body {
-        Ok(text) => {
-            let mut list: Vec<String> = Vec::new();
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-                if let Some(arr) = v.as_array() {
-                    if let Some(suggs) = arr.get(1).and_then(|x| x.as_array()) {
-                        for item in suggs.iter().take(8) {
-                            if let Some(t) = item.as_str() {
-                                if !t.is_empty() {
-                                    list.push(json_escape(t));
-                                }
-                            }
+    // Fallback chain, server-side: some providers rate-limit or block
+    // this deployment's datacenter egress (DuckDuckGo does), and an
+    // empty suggestion box is worse than a second opinion. Brave and
+    // Bing both answer from this network with the same osjson shape,
+    // so they are tried (in order) before answering empty.
+    let mut providers: Vec<String> = Vec::new();
+    if let Some(p) = native {
+        providers.push(p);
+    }
+    for fallback in [
+        format!("https://search.brave.com/api/suggest?q={}", q_enc),
+        format!("https://api.bing.com/osjson.aspx?q={}", q_enc),
+    ] {
+        if !providers.contains(&fallback) {
+            providers.push(fallback);
+        }
+    }
+    push_log(&state, "info", &format!("suggest {} {}", engine, q));
+    let mut list: Vec<String> = Vec::new();
+    let mut last_err = String::new();
+    for provider in &providers {
+        match state
+            .client
+            .get(provider)
+            // Brave (and some others) reject requests without a browser UA.
+            .header("User-Agent", FIREFOX_UA)
+            .header("Accept", "*/*")
+            .header("Sec-GPC", "1")
+            .header("DNT", "1")
+            .send()
+            .await
+        {
+            Ok(r) => match r.error_for_status() {
+                Ok(r) => match r.text().await {
+                    Ok(text) => {
+                        list = parse_osjson(&text);
+                        if !list.is_empty() {
+                            break;
                         }
+                    }
+                    Err(e) => last_err = e.to_string(),
+                },
+                Err(e) => last_err = e.to_string(),
+            },
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    if list.is_empty() && !last_err.is_empty() {
+        push_log(&state, "warn", &format!("suggest failed: {}", last_err));
+    }
+    let out = format!("{{\"suggestions\":[{}]}}", list.join(","));
+    ([("content-type", "application/json")], out).into_response()
+}
+
+/* Pull up to 8 non-empty suggestion strings out of an osjson body
+   (["query", ["s1", ...]]). Any other shape yields an empty list. */
+fn parse_osjson(text: &str) -> Vec<String> {
+    let mut list: Vec<String> = Vec::new();
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(suggs) = v.as_array().and_then(|a| a.get(1)).and_then(|x| x.as_array()) {
+            for item in suggs.iter().take(8) {
+                if let Some(t) = item.as_str() {
+                    if !t.is_empty() {
+                        list.push(json_escape(t));
                     }
                 }
             }
-            format!("{{\"suggestions\":[{}]}}", list.join(","))
         }
-        Err(e) => {
-            push_log(&state, "warn", &format!("suggest failed: {}", e));
-            r#"{"suggestions":[]}"#.to_string()
-        }
-    };
-    ([("content-type", "application/json")], out).into_response()
+    }
+    list
 }
 
 /// Recent server-side engine log entries, newest last. JSON array.
@@ -2636,5 +2711,30 @@ mod antiframe_tests {
             js_antiframe("if(top!=self){top.location=location}"),
             "if(self!=self){self.LB_antiframe=location}"
         );
+    }
+}
+
+#[cfg(test)]
+mod suggest_tests {
+    use super::{is_amo_host, parse_osjson};
+
+    #[test]
+    fn osjson_shapes_parse_or_empty() {
+        assert_eq!(
+            parse_osjson(r#"["weather",["weather tomorrow","weather radar"]]"#),
+            vec!["weather tomorrow", "weather radar"]
+        );
+        assert!(parse_osjson(r#"{"suggestions":[]}"#).is_empty());
+        assert!(parse_osjson("not json at all").is_empty());
+        /* Empty strings never make it into the list. */
+        assert_eq!(parse_osjson(r#"["q",["", "a"]]"#), vec!["a"]);
+    }
+
+    #[test]
+    fn amo_host_detection() {
+        assert!(is_amo_host("addons.mozilla.org"));
+        assert!(is_amo_host("Sub.Addons.Mozilla.Org"));
+        assert!(!is_amo_host("mozilla.org"));
+        assert!(!is_amo_host("evil-addons.mozilla.org.example.com"));
     }
 }
