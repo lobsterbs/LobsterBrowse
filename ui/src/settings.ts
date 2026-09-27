@@ -287,12 +287,13 @@ export function looksLikeUrl(s: string): boolean {
 
 /* Engine-queried search suggestions for one engine, fetched through
    the server's /suggest endpoint (server-side to avoid CORS). Never
-   throws. Public entry: fetchSuggestions, below. */
-export async function suggestFrom(engine: EngineId, q: string): Promise<string[]> {
+   throws; an aborted signal rejects with the AbortError that the
+   caller swallows. Public entry: fetchSuggestions, below. */
+export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal): Promise<string[]> {
   const query = q.trim();
   if (!query) return [];
   try {
-    const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query));
+    const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query), { signal });
     if (!r.ok) return [];
     const data = (await r.json()) as { suggestions?: unknown };
     return Array.isArray(data.suggestions)
@@ -308,6 +309,6 @@ export async function suggestFrom(engine: EngineId, q: string): Promise<string[]
    network — DuckDuckGo rate-limits the Render egress — so the server
    retries Brave then Bing before answering empty). One round trip per
    keystroke; the client no longer double-fetches. */
-export async function fetchSuggestions(engine: EngineId, q: string): Promise<string[]> {
-  return suggestFrom(engine, q);
+export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal): Promise<string[]> {
+  return suggestFrom(engine, q, signal);
 }
