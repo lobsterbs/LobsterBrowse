@@ -1,3 +1,4 @@
+/* The in-app proxy browser surface: tabs, frosted floating tab strip,
    bottom hover toolbar, proxied iframes and per-tab DevTools.
 
    Single native engine: every navigation goes to /r/<base64url of the
