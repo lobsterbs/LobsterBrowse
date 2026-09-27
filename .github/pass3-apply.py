@@ -41,7 +41,7 @@ OLD_TAIL = '''    #[test]
 '''
 assert src.endswith(OLD_TAIL), "file tail anchor not found"
 
-NEW_MOD = '''
+NEW_MOD = r'''
 #[cfg(test)]
 mod shim_integrity_tests {
     use super::*;
@@ -56,7 +56,7 @@ mod shim_integrity_tests {
     fn challenge_regex_construction() {
         assert!(
             ENGINE_JS.contains(
-                r#"h.replace(/[.*+?^${}()|[\]\\\\]/g, "\\\\$&"); }).join("|")"#
+                r#"h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|")"#
             ),
             "CHALLENGE_HOST_RE construction changed; keep this test in sync"
         );
