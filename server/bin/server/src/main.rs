@@ -314,6 +314,8 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
         json_escape(&msg)
     );
     let mut sessions = state.sessions.lock().unwrap_or_else(|e| e.into_inner());
+    // Prune AFTER the insert as well: pruning only before would let the
+    // map sit at SESSIONS_CAP + 1 between calls.
     prune_sessions(&mut sessions);
     let ring = sessions.entry(sess.to_string()).or_insert(SessionRing {
         ring: VecDeque::new(),
@@ -324,6 +326,7 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
     }
     ring.ring.push_back(line);
     ring.last_seen = now_secs();
+    prune_sessions(&mut sessions);
 }
 
 /// Hostname of an absolute URL ("" when not absolute).
