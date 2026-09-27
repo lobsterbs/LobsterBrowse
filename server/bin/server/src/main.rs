@@ -11,7 +11,7 @@
 
 use axum::body::{Body, Bytes};
 use axum::extract::{OriginalUri, Path, RawQuery, State};
-use axum::http::{header, HeaderMap, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use axum::Router;
@@ -487,7 +487,7 @@ fn is_amo_host(host: &str) -> bool {
 /// navigator.userAgent directly, so the header alone is not enough.
 /// Injected into AMO documents right after the engine shim.
 fn amo_spoof_script() -> &'static str {
-    r#"<script>(function(){try{var ua="Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";Object.defineProperty(navigator,"userAgent",{get:function(){return ua;}});Object.defineProperty(navigator,"vendor",{get:function(){return "";}});Object.defineProperty(navigator,"oscpu",{get:function(){return "X11; Linux x86_64";}});}catch(e){}})();</script>"#
+    r#"<script>(function(){try{var ua="Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";Object.defineProperty(navigator,"userAgent",{get:function(){return ua;}});Object.defineProperty(navigator,"vendor",{get:function(){return "";}});Object.defineProperty(navigator,"oscpu",{get:function(){return "X11; Linux x86_64";}});Object.defineProperty(navigator,"userAgentData",{get:function(){return undefined;}});window.InstallTrigger={};}catch(e){}})();</script>"#
 }
 
 /// Insert a raw string right after the opening <head> tag (or prepend
@@ -904,8 +904,11 @@ fn next_import_kw(js: &str, from: usize) -> Option<(usize, &'static str)> {
 /// on served .js bodies keeps nested module imports working.
 ///
 /// Only import syntax positions are touched (bare `import "...`,
-/// dynamic `import(...)` and `from "..."`), and only path-like
-/// specifiers (./ ../ / but not //): bare import-map specifiers and
+/// dynamic `import(...)` and `from "..."`, each with ', " or `
+/// quoting), and only path-like specifiers (./ ../ / but not //).
+/// Backtick templates containing `${` interpolation or backslash
+/// escapes are left alone: those specifiers are runtime-computed
+/// and cannot be resolved server-side. Bare import-map specifiers and
 /// absolute data:/blob:/foreign URLs are left alone. A quoted
 /// path-like string directly after the keyword AND followed by
 /// statement punctuation is required; prose like `from "/db"` inside
@@ -939,15 +942,20 @@ fn rewrite_js_imports(js: &str, page_url: &str, suffix: &str, prefix: &str) -> S
             skip_ws(&mut j);
         }
         let mut handled = false;
-        if j < a.len() && (a[j] == b'"' || a[j] == b'\'') {
+        if j < a.len() && (a[j] == b'"' || a[j] == b'\'' || a[j] == b'`') {
             let q = a[j] as char;
             if let Some(rl) = after[j + 1..].find(q) {
                 let spec = &after[j + 1..j + 1 + rl];
+                // Template literals with substitutions cannot be rewritten
+                // (the value only exists at runtime); only plain-literal
+                // templates (the common minifier output for dynamic
+                // imports) are safe. chatgpt.com boots exactly this way.
+                let interpolated = q == '`' && (spec.contains("${") || spec.contains('\\'));
                 let close = j + 1 + rl;
                 let mut k = close + 1;
                 skip_ws(&mut k);
                 let stmt_end = k >= a.len() || matches!(a[k], b';' | b')' | b'\n' | b',');
-                if path_like(spec) && stmt_end {
+                if path_like(spec) && stmt_end && !interpolated {
                     out.push_str(&js[i..kw_end]);
                     out.push_str(&after[..j + 1]);
                     out.push_str(&rewrite_url_attr(spec, page_url, suffix, prefix));
@@ -1001,6 +1009,26 @@ mod js_import_tests {
     #[test]
     fn bare_and_absolute_specifiers_untouched() {
         let js = "import \"lodash\";import \"https://cdn.other.com/x.js\";import \"data:text/js,1\";";
+        assert_eq!(rewrite_js_imports(js, "https://a.com/", "", "/lj/"), js);
+    }
+
+    #[test]
+    fn template_literal_dynamic_imports_are_routed() {
+        // chatgpt.com's entry client lazy-loads chunks exactly this way;
+        // unresolved, ./x.js resolves against /lj/<b64> and 404s.
+        let out = rewrite_js_imports(
+            "const m=()=>import(`./conversation-small-abc.js`);const n=()=>import(`/cdn/assets/root.js`);",
+            "https://chatgpt.com/cdn/assets/entry.js",
+            "",
+            "/lj/",
+        );
+        assert!(out.contains("import(`/lj/"), "template: {out}");
+        assert!(out.contains(".js`);"), "backtick kept: {out}");
+    }
+
+    #[test]
+    fn interpolated_templates_are_left_alone() {
+        let js = "const m=()=>import(`./${name}.js`);";
         assert_eq!(rewrite_js_imports(js, "https://a.com/", "", "/lj/"), js);
     }
 }
@@ -1947,6 +1975,13 @@ async fn engine_proxy(
                         return de_amp_redirect(&route);
                     }
                 }
+                // Anubis anti-bot challenge shells must never be cached:
+                // the Zeolite service worker serves /lj/ navigations
+                // cache-first, so a cached challenge page reloads itself
+                // forever (solve PoW, pass, reload, cache hit, solve...).
+                // The worker honors no-store with TTL 0; everything else
+                // keeps its normal freshness.
+                let is_anubis = text.contains(r#"id="anubis_challenge""#);
                 rewrite_html_doc(&text, &base_url, &params, &suffix, prefix, &state).into_bytes()
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
@@ -1982,7 +2017,14 @@ async fn engine_proxy(
                 ),
             );
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response()
+            let mut resp = (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response();
+            if is_anubis {
+                if let Ok(v) = HeaderValue::from_static("no-store") {
+                    resp.headers_mut().insert(header::CACHE_CONTROL, v);
+                }
+                push_log(&state, "info", &format!("anubis challenge served no-store: {}", url));
+            }
+            resp
         }
         Err(e) => engine_error_page(&url, &e.to_string(), wants_html_page),
     }
