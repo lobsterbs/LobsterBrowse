@@ -706,6 +706,218 @@ fn rewrite_js_imports(js: &str, page_url: &str, suffix: &str, prefix: &str) -> S
     }
 }
 
+/// Vite-built SPAs (chatgpt.com) bake full root-relative asset paths
+/// ("/cdn/assets/_-ilqfat35.js") into ordinary string literals in their
+/// route manifest, then import() them through a variable. The
+/// import-spec pass cannot see those: the spec is not a literal at the
+/// import site. Un-rewritten, they resolve against the proxy origin and
+/// 404, and the router's error handler reloads the page forever.
+///
+/// This pass scans string literals and rewrites URL-like ones. It is a
+/// port of the Zeolite rewriter's js::literals pass, with LB's route
+/// encoder. Conservative by design:
+/// - only literals that point at a static asset (any form: absolute,
+///   protocol-relative, root-relative) are rewritten; plain paths
+///   ("/login") and non-asset URLs stay put so pathname and origin
+///   comparisons (`p === "/login"`, `o === "https://x.com"`) never
+///   break, and the engine shim still routes runtime fetches;
+/// - comments are skipped verbatim;
+/// - literals containing escapes are left untouched (broken JS is worse
+///   than an un-rewritten URL; the engine shim still catches most of
+///   these at request time);
+/// - template literals containing ${...} are skipped (nested quotes).
+fn rewrite_js_literals(js: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
+    rewrite_js_literals_inner(js, page_url, suffix, prefix, true)
+}
+
+fn rewrite_js_literals_inner(
+    js: &str,
+    page_url: &str,
+    suffix: &str,
+    prefix: &str,
+    allow_template: bool,
+) -> String {
+    let mut out = String::with_capacity(js.len() + 64);
+    let b = js.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        // Comments: never rewrite inside them.
+        if c == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
+            match js[i..].find('\n') {
+                Some(nl) => {
+                    out.push_str(&js[i..i + nl]);
+                    i += nl;
+                }
+                None => {
+                    out.push_str(&js[i..]);
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
+            match js[i + 2..].find("*/") {
+                Some(end) => {
+                    out.push_str(&js[i..i + 2 + end + 2]);
+                    i += 2 + end + 2;
+                }
+                None => {
+                    out.push_str(&js[i..]);
+                    break;
+                }
+            }
+            continue;
+        }
+        let is_quote = c == b'"' || c == b'\'' || (allow_template && c == b'`');
+        if is_quote {
+            let q = c as char;
+            if let Some(close) = find_js_literal_end(&js[i + 1..], q) {
+                let inner = &js[i + 1..i + 1 + close];
+                if literal_is_url_like(inner) && !inner.contains('\\') {
+                    let t = inner.trim();
+                    out.push(q);
+                    out.push_str(&rewrite_url_attr(t, page_url, suffix, prefix));
+                    out.push(q);
+                } else {
+                    out.push_str(&js[i..i + 1 + close + 1]);
+                }
+                i += 1 + close + 1;
+                continue;
+            }
+        }
+        let ch_len = utf8_len(c);
+        out.push_str(&js[i..(i + ch_len).min(js.len())]);
+        i += ch_len;
+    }
+    out
+}
+
+fn utf8_len(b: u8) -> usize {
+    if b < 0x80 {
+        1
+    } else if b >> 5 == 0b110 {
+        2
+    } else if b >> 4 == 0b1110 {
+        3
+    } else {
+        4
+    }
+}
+
+fn find_js_literal_end(s: &str, q: char) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => i += 2,
+            c if c == q as u8 => return Some(i),
+            b'$' if q == '`' && i + 1 < b.len() && b[i + 1] == b'{' => return None,
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// URL-like literal: any URL form (absolute http(s)/ws(s), protocol-relative
+/// //host, root-relative path) that points at a static asset (extension
+/// checked after stripping the fragment; rewrite_url_attr preserves the
+/// fragment outside the encoded target). Non-asset URLs are left alone:
+/// hostname comparisons (`o === "https://x.com"`) never break, and the
+/// engine shim already routes runtime fetches.
+fn literal_is_url_like(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() || t.contains(' ') || t.contains('\\') {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    let rooted = lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with('/');
+    if !rooted {
+        return false;
+    }
+    let bare = t.split('#').next().unwrap_or(t);
+    let ext = bare.rsplit('.').next().unwrap_or("");
+    matches!(
+        ext,
+        "js"
+            | "mjs"
+            | "css"
+            | "json"
+            | "map"
+            | "svg"
+            | "png"
+            | "jpg"
+            | "jpeg"
+            | "webp"
+            | "gif"
+            | "ico"
+            | "woff"
+            | "woff2"
+            | "ttf"
+            | "otf"
+            | "wasm"
+            | "mp4"
+            | "webm"
+            | "vtt"
+    ) && bare.len() > ext.len() + 2
+}
+
+#[cfg(test)]
+mod js_literals_tests {
+    use super::rewrite_js_literals;
+
+    const PAGE: &str = "https://chatgpt.com/cdn/assets/manifest.js";
+
+    #[test]
+    fn rewrites_vite_asset_literals() {
+        let js = r#"var m={"/app":"/cdn/assets/_-ilqfat35.js"};import(m["/app"])"#;
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(!out.contains("/cdn/assets/_-ilqfat35.js\""), "{}", out);
+        assert!(out.contains("/lj/"), "{}", out);
+    }
+
+    #[test]
+    fn rewrites_plain_asset_literal_and_keeps_fragment() {
+        let js = r#"var css="/cdn/assets/root-kdmspc1p.css#zVzKbplPkm";"#;
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(out.contains("#zVzKbplPkm\""), "{}", out);
+        assert!(!out.contains("/cdn/assets/root-kdmspc1p.css"), "{}", out);
+    }
+
+    #[test]
+    fn leaves_plain_paths_and_comments_alone() {
+        let js = "// \"/cdn/assets/keep.js\"\nvar p=\"/login\";if(p===\"/login\")go();";
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(out.contains("/cdn/assets/keep.js"), "{}", out);
+        assert!(out.contains("\"/login\""), "{}", out);
+    }
+
+    #[test]
+    fn rewrites_scheme_absolute_and_protocol_relative() {
+        let js = r#"var a="https://example.com/x.js";var b='//cdn.example.net/y.css';"#;
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(!out.contains("https://example.com/x.js"), "{}", out);
+        assert!(!out.contains("//cdn.example.net/y.css"), "{}", out);
+    }
+
+    #[test]
+    fn leaves_non_asset_urls_alone() {
+        let js = r#"var a="https://chatgpt.com/ces/v1/rgstr";var o="https://chatgpt.com";"#;
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(out.contains("https://chatgpt.com/ces/v1/rgstr"), "{}", out);
+        assert!(out.contains(r#""https://chatgpt.com""#), "{}", out);
+    }
+
+    #[test]
+    fn skips_escaped_and_interpolated_literals() {
+        let js = r#"var a="https:\/\/escaped.example/x.js";var b=`/cdn/assets/${n}.js`;"#;
+        let out = rewrite_js_literals(js, PAGE, "", "/lj/");
+        assert!(out.contains("https:\\/\\/escaped.example/x.js"), "{}", out);
+        assert!(out.contains("/cdn/assets/${n}.js"), "{}", out);
+    }
+}
 #[cfg(test)]
 mod challenge_frame_tests {
     use super::{is_frame_to_challenge_host, rewrite_html};
@@ -1061,7 +1273,12 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
                         .unwrap_or(html.len());
                     let body = &html[end + 1..cs];
                     if is_module {
-                        out.push_str(&rewrite_js_imports(body, page_url, suffix, prefix));
+                        out.push_str(&rewrite_js_literals(
+                            &rewrite_js_imports(body, page_url, suffix, prefix),
+                            page_url,
+                            suffix,
+                            prefix,
+                        ));
                     } else {
                         out.push_str(body);
                     }
@@ -1071,7 +1288,12 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
                 None => {
                     let body = &html[end + 1..];
                     if is_module {
-                        out.push_str(&rewrite_js_imports(body, page_url, suffix, prefix));
+                        out.push_str(&rewrite_js_literals(
+                            &rewrite_js_imports(body, page_url, suffix, prefix),
+                            page_url,
+                            suffix,
+                            prefix,
+                        ));
                     } else {
                         out.push_str(body);
                     }
@@ -1878,7 +2100,12 @@ async fn engine_proxy(
                 // which rewrites bytes into U+FFFD and corrupts the
                 // script. Invalid-UTF-8 bodies are served unmodified.
                 match std::str::from_utf8(&bytes) {
-                    Ok(text) => js_antiframe(&rewrite_js_imports(text, &base_url, &suffix, prefix))
+                    Ok(text) => js_antiframe(&rewrite_js_literals(
+                        &rewrite_js_imports(text, &base_url, &suffix, prefix),
+                        &base_url,
+                        &suffix,
+                        prefix,
+                    ))
                         .into_bytes(),
                     Err(_) => {
                         push_log(

@@ -148,6 +148,9 @@ Also: upstream CSP/X-Frame-Options headers never reach the browser (engine_proxy
 - `zeolite-server` is pinned by `rev` in `server/bin/server/Cargo.toml` (not a branch). The Dockerfile pins `ARG ZEOLITE_COMMIT` (immutable Zeolite dist revision) instead of `refs/heads/dist`. To update either: bump the rev/ARG, run the `generate-rust-lockfile` workflow (or push under `server/`), commit the refreshed `server/Cargo.lock`, and deploy with `clearCache: true`.
 - `.github/workflows/rustfmt-fix.yml` (manual/one-shot) runs `cargo fmt` and commits; do not use it to bypass the fmt gate habitually.
 
+## JS string-literal asset rewriting
+Vite-built SPAs (chatgpt.com) bake full root-relative asset paths ("/cdn/assets/x.js") into ordinary string literals in their route manifest and import() them through a variable, so the import-spec pass cannot see them. rewrite_js_literals scans string literals in inline module script bodies and served .js files (after rewrite_js_imports, before js_antiframe) and routes any literal that points at a static asset (absolute, protocol-relative, or root-relative; extension-gated) through the engine. Non-asset literals are left alone on purpose: pathname/origin comparisons and API endpoints must never be rewritten server-side, and the engine shim handles runtime fetches. Ported from Zeolite rewriter js::literals.
+
 ## Browser feature panels
 `ui/src/browser/` holds the presentational panels split out of `pages/Browser.tsx`: `TabSwitcherCard`, `DownloadsCard`, `XpiPrompt`, `ExtensionsPanel`, plus `browserShared.ts` (tabLabel, dlIconFor, fmtBytes, DL_FILE_RE). All state stays in the browser page lifecycle; the panels take explicit props and do not own state or effects. Keep new panels there, not inside Browser.tsx.
 
