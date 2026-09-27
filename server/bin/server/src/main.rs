@@ -1981,39 +1981,48 @@ async fn build_endpoint() -> Response {
 
 /// Zeolite version out of the vendored engine worker source. The dist
 /// sw.js keeps its identity as the only quoted "MAJOR.MINOR Substance"
-/// string (e.g. "1.0 Nitride"). Scans quote-to-quote and skips string
-/// bodies instead of trusting quote parity: minified bundles contain
-/// escaped quotes that desync naive split('"') parity (a first cut
-/// reported "unknown" against the real bundle). "unknown" when absent.
+/// string (e.g. "1.0 Nitride"). The scan anchors the shape check at
+/// every quote: pairing quotes (split parity or quote-to-quote
+/// skipping) desyncs on real minified bundles, whose escaped and
+/// unpaired quotes made both earlier cuts report "unknown" against a
+/// file that contains the version. "unknown" when absent, never
+/// invented.
 fn zeolite_version(js: &str) -> String {
     let b = js.as_bytes();
     let mut i = 0;
-    while i + 1 < b.len() {
+    while i + 4 < b.len() {
         if b[i] != b'"' {
             i += 1;
             continue;
         }
-        let Some(rel) = js[i + 1..].find('"') else { break };
-        let inner = &js[i + 1..i + 1 + rel];
-        let mut halves = inner.splitn(2, ' ');
-        let num = halves.next().unwrap_or_default();
-        if let Some(name) = halves.next() {
-            let mut digits = num.split('.');
-            let (maj, min) = (
-                digits.next().unwrap_or_default(),
-                digits.next().unwrap_or_default(),
-            );
-            if digits.next().is_none()
-                && !maj.is_empty()
-                && min.len() == 1
-                && maj.bytes().chain(min.bytes()).all(|x| x.is_ascii_digit())
-                && !name.is_empty()
-                && name.bytes().all(|x| x.is_ascii_alphabetic())
-            {
-                return inner.to_string();
-            }
+        let mut p = i + 1;
+        let start_num = p;
+        while p < b.len() && b[p].is_ascii_digit() {
+            p += 1;
         }
-        i += rel + 2;
+        if p == start_num || p >= b.len() || b[p] != b'.' {
+            i += 1;
+            continue;
+        }
+        p += 1;
+        let start_min = p;
+        while p < b.len() && b[p].is_ascii_digit() {
+            p += 1;
+        }
+        if p == start_min || p >= b.len() || b[p] != b' ' {
+            i += 1;
+            continue;
+        }
+        p += 1;
+        let start_name = p;
+        while p < b.len() && b[p].is_ascii_alphabetic() {
+            p += 1;
+        }
+        if p == start_name || p >= b.len() || b[p] != b'"' {
+            i += 1;
+            continue;
+        }
+        return js[i + 1..p].to_string();
     }
     "unknown".to_string()
 }
@@ -2312,12 +2321,14 @@ mod version_tests {
     }
 
     #[test]
-    fn escaped_quotes_do_not_desync_the_scan() {
-        // A lone escaped quote inside an earlier string broke the naive
-        // quote-parity scan on the real minified bundle; the quote-to-quote
-        // scan must survive it.
-        let js = r#"const a="he said \"hi\" ok";const pt="1.0 Nitride";"#;
+    fn unpaired_and_escaped_quotes_do_not_desync_the_scan() {
+        // Real minified bundles carry escaped and unpaired quotes; both
+        // quote-pairing scans skipped past the version on the actual
+        // dist bundle and reported unknown.
+        let js = r#"const a="he said \"hi\" ok;const b="1.0 Nitride";"#;
         assert_eq!(zeolite_version(js), "1.0 Nitride");
+        // Multi-digit minor must still parse (a future "1.10 Fullerene").
+        assert_eq!(zeolite_version("x=\"1.10 Fullerene\";"), "1.10 Fullerene");
     }
 
     #[test]
