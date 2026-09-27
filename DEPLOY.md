@@ -11,6 +11,17 @@
   - `DATABASE_URL` — Neon Postgres connection string (used by the upcoming sessions crate).
 - Health check: `GET /healthz`.
 
+## Zeolite engine pin
+
+The engine bundle served at `/zlsw/` comes from the `dist` branch of
+lobsterbs/Zeolite at the `ZEOLITE_COMMIT` pinned in the Dockerfile; the
+Rust wisp handler comes from the zeolite-server git rev pinned in
+`server/bin/server/Cargo.toml`. The two must move together: bump both,
+let the generate-rust-lockfile workflow commit the new `server/Cargo.lock`,
+then trigger a Render deploy with a cleared build cache. Note that the
+lockfile workflow's own commit does not run CI; the next push or a
+manual re-run is what proves the pair green.
+
 ## UI (Render static site)
 
 - Build: `cd ui && npm ci && npm run build`
