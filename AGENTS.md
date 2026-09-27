@@ -62,7 +62,7 @@ Every engine_proxy fetch carries a bounded `RES-XXXXXX` correlation id in the `/
 When NativeTransit is active, the network view should show NativeTransit vs RewriteFallback and the fallback reason.
 
 ## UI rules
-- No hamburger menu.
+- No hamburger menu. No toolbar Home button (removed by request, 2026-09-27).
 - Do not override M3E nav-rail width/overflow.
 - Tabs shrink at existing thresholds instead of becoming horizontally scrollable.
 - Preserve existing tab close/switch animations.
@@ -71,6 +71,18 @@ When NativeTransit is active, the network view should show NativeTransit vs Rewr
 - Bookmarks and the old nav-rail badge are intentionally removed.
 - Settings are localStorage-backed and migration-safe.
 - Check `ui/src/m3e.d.ts` before adding M3E elements and follow existing custom-element ref/class patterns.
+- The tab switcher card is ALWAYS mounted; the `.open` class animates and gates interaction. Unmounting it destroys the preview iframes, which is why previews used to show blank tiles.
+- M3E snackbars are repositioned to the top of the screen via document-level CSS (`m3e-snackbar`); the bottom slot belongs to the dock toolbar.
+- The site info (lock) card content rows carry their own padding inside the m3e-card surface; the card itself is `overflow: hidden`.
+
+## Search suggestions
+`/suggest` owns the fallback chain server-side: the engine's native provider is tried first, then Brave, then Bing (several providers block or rate-limit the deployment's datacenter egress, DuckDuckGo among them). The client makes exactly one request per keystroke; do not reintroduce client-side double-fetch fallbacks. Startpage and Mojeek have no open suggest API and honestly fall back to the chain.
+
+## Mozilla add-ons store
+On `addons.mozilla.org` the proxy ALWAYS spoofs Firefox: the request header is forced in `engine_proxy` (user UA presets are ignored there, the store gates .xpi downloads on a Firefox client) and `navigator.userAgent` is patched client-side via `amo_spoof_script()`. Finished `.xpi` downloads raise an install prompt in the UI (Install into the engine via `zl:installExt`, Save file, Cancel).
+
+## Diagnostic mode
+Settings > Advanced has a Diagnostic mode toggle (`settings.diagnostics`): when on, every page console message and resfail is pushed to the app log with the tab id, and expected proxy interventions (CSP/SRI stripping) appear as DevTools failure entries. When off, CSP/SRI stripping is only a console warning, because stripping is expected behavior on every rewritten page, not a site failure.
 
 ## Legacy /lj worker
 `ui/public/lobsterjet.js` is the browser cache/prefetch layer retained in LobsterBrowse. It is not the standalone Zeolite engine. Do not confuse the two.

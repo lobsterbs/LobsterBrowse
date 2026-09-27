@@ -395,6 +395,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-divider />
         <div className="lb-setting-group">
           <div className="lb-setting-label">Technical logs</div>
+          <m3e-list>
+            <Row label="Diagnostic mode (log every failure verbosely)" icon="bug_report" on={settings.diagnostics} toggle={() => onChange({ diagnostics: !settings.diagnostics })} />
+          </m3e-list>
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            While on, every failed resource, page console message and proxy intervention (CSP/SRI
+            stripping) is logged in full to the app log and DevTools. Expect noise: that is the point.
+          </p>
           <m3e-button onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
           </m3e-button>

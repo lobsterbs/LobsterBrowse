@@ -736,11 +736,18 @@ m3e-nav-rail.lb-rail-hidden {
   width: 320px;
   max-width: calc(100vw - 32px);
   z-index: 45;
+  border-radius: var(--m3e-shape-lg);
+  overflow: hidden;
+  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
-.lb-site-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; }
+/* The card's slotted rows need their own padding: the m3e-card
+   surface has none, and unpadded rows (especially the two long
+   action buttons) previously escaped the card outline entirely. */
+.lb-site-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); box-sizing: border-box; }
 .lb-site-ctitle { font-variation-settings: "wght" 500; font-size: 13px; }
-.lb-site-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); width: 100%; }
+.lb-site-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); width: 100%; padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150); box-sizing: border-box; }
 .lb-site-row { font-size: 13px; word-break: break-all; }
+.lb-site-actions { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75); justify-content: flex-end; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200); box-sizing: border-box; }
 .lb-site-cookies {
   max-height: 130px;
   overflow: auto;
@@ -805,6 +812,9 @@ m3e-nav-rail.lb-rail-hidden {
    identifiers, not prose. */
 .lb-build {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
   flex-wrap: wrap;
   gap: var(--md-sys-measurement-space100);
 }
@@ -872,6 +882,20 @@ m3e-nav-rail.lb-rail-hidden {
   width: min(640px, calc(100vw - 24px));
   z-index: 45;
   border-radius: var(--m3e-shape-lg);
+  /* Always mounted (preview iframes must stay alive between opens or
+     tiles show blank frames, not pages); visibility + pointer-events
+     gate interaction while closed. */
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(14px) scale(0.98);
+  transition: opacity 200ms ease, transform 200ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+}
+.lb-tabs-card.open {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(-50%);
   animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 .lb-tabs-row {
@@ -958,13 +982,8 @@ m3e-nav-rail.lb-rail-hidden {
   from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
-.lb-tabs-card.leaving {
-  animation: lb-card-out 200ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)) forwards;
-}
-@keyframes lb-card-out {
-  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-  to { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
-}
+/* (Exit animation is the .open transition above; the leaving class
+   and its keyframes were removed with the unmount-on-close logic.) */
 /* Tab-count icon: inline SVG (same self-hosted Material Symbols route
    as the lock and incognito icons), so it never depends on the icon
    font being loaded to be visible. */
@@ -1027,11 +1046,19 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
 .lb-dl-meta { font-size: 11px; opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-tabs-card, .lb-dl-card { animation: none; }
+  .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
 }
 
 /* Copied-to-clipboard toast (Logs): M3E-styled transient snackbar. */
+/* All M3E snackbars open at the TOP of the screen: the bottom slot is
+   owned by the dock toolbar, and stacking the two on top of each other
+   made both unreadable. Document-level CSS wins over the component's
+   :host rules, so no library patch is needed. */
+m3e-snackbar {
+  top: var(--md-sys-measurement-space200, 16px) !important;
+  transform-origin: top !important;
+}
 .lb-toast {
   position: fixed;
   left: 50%;
@@ -1052,4 +1079,26 @@ m3e-nav-rail.lb-rail-hidden {
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-toast { animation: none; }
+}
+
+/* XPI install prompt: fixed centered overlay. m3e-dialog is not wired
+   anywhere else in the app; a plain overlay card avoids guessing the
+   component's open/close API, reusing the site-card row paddings. */
+.lb-xpi-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+.lb-xpi-card {
+  width: min(400px, calc(100vw - 32px));
+  border-radius: var(--m3e-shape-lg);
+  overflow: hidden;
+  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-xpi-card { animation: none; }
 }
