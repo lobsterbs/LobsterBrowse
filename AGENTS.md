@@ -24,6 +24,9 @@ Make sites work first, then improve browser-like compatibility. Do not add a hea
 Redirects are followed and relative URLs are resolved against the final document URL. Non-rewritable content should stream.
 Do not remove this path while NativeTransit is being developed.
 
+## URL fragments
+Fragments are client-side only (SVG sprite symbol selection, in-page anchors). They must never become part of the encoded request target, a cache key, an upstream request identity or a fallback decision. The rewriter strips the fragment before encoding and re-attaches it after the route (`/lj/<b64>?lb_...#symbol`); the engine defensively strips fragments from decoded targets too. One sprite file stays one network identity however many `#symbol` references the page makes. Element-level resource failures have no observable HTTP status: diagnostics report `unknown`, never a fabricated `0`.
+
 ## Zeolite
 Zeolite is a separate reusable engine repository. LobsterBrowse consumes its published browser bundle and must not make Zeolite depend on the UI.
 Always check Zeolite's actual compatibility implementation before claiming browser or extension API support.

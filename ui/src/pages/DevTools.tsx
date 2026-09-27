@@ -643,13 +643,19 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
                   <summary className="lb-net-summary">
                     <span className="lb-net-status lb-bad">FAIL</span>
                     <span className="lb-net-method">{f.kind}</span>
-                    <span className="lb-net-url">{f.url || "(no URL)"}</span>
+                    <span className="lb-net-url">{f.url || "unknown resource"}</span>
                     {f.status !== undefined && f.status !== 0 && <span className="lb-net-dur">{f.status}</span>}
                   </summary>
                   <div className="lb-net-detail">
-                    <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
                     <div>Resource type: {f.kind}</div>
-                    {f.status !== undefined && <div>HTTP status: {f.status}</div>}
+                    <div>Resource URL: {f.url || "unknown (element failed before a URL could be identified)"}</div>
+                    <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
+                    {/* Honest status: element-level load failures have no
+                        observable HTTP status; show unknown instead of a
+                        fabricated 0 that reads like a browser network
+                        error. */}
+                    <div>HTTP status: {f.status !== undefined ? f.status : "unknown"}</div>
+                    <div>Transport: server rewrite engine (/r/ or /lj/)</div>
                     {f.nav && <div>Navigation: {f.nav}</div>}
                     {f.note && <div>Note: {f.note}</div>}
                     <div>Time: {ts(f.ts)}</div>

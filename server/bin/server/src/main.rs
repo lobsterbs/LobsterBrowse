@@ -43,8 +43,14 @@ const ENGINE_JS: &str = r##"(function(){
   var fail = function(kind, info){
     try {
       info = info || {};
-      send("resfail", { kind: kind, url: redact(info.url || ""), reason: info.reason || "UNKNOWN",
-        status: info.status || 0, note: String(info.note || "").slice(0, 400), ts: Date.now() });
+      /* Status is only reported when it was actually observed. Element
+         load failures have no HTTP status the page can read, so the
+         report carries none instead of a fabricated 0 that reads like
+         a browser network error. */
+      var payload = { kind: kind, url: redact(info.url || ""), reason: info.reason || "UNKNOWN",
+        note: String(info.note || "").slice(0, 400), ts: Date.now() };
+      if (info.status !== undefined && info.status !== null) payload.status = info.status;
+      send("resfail", payload);
     } catch (e) {}
   };
   /* Resource load failures fire a capture-phase error event on the
@@ -58,7 +64,20 @@ const ENGINE_JS: &str = r##"(function(){
       : tag === "LINK" ? ((t.rel && String(t.rel).toLowerCase().indexOf("stylesheet") >= 0) ? "css" : "link")
       : tag === "IFRAME" ? "iframe"
       : (tag === "VIDEO" || tag === "AUDIO") ? "media" : "resource";
-    fail(kind, { url: (t.src || t.href || t.data || ""), reason: "RESOURCE_LOAD_FAILURE" });
+    /* Keep the real resource identity: src, then href, then currentSrc
+       (images/media resolve late), then data. A failing element with NO
+       resolvable URL is reported with an honest note instead of an
+       empty string the diagnostics render as "(no URL)". */
+    var u = t.src || t.href || t.data || "";
+    if (!u) { try { u = t.currentSrc || ""; } catch (er) {} }
+    var note = "";
+    if (!u) {
+      note = "no URL on the failing element; tag <" + tag.toLowerCase() + ">"
+        + (t.getAttribute("type") ? ", type " + t.getAttribute("type") : "")
+        + (t.getAttribute("integrity") ? ", SRI present" : "")
+        + " (element reported a load failure before a resource could be identified)";
+    }
+    fail(kind, { url: u, reason: "RESOURCE_LOAD_FAILURE", note: note });
   }, true);
   var fmt = function(a){ if (typeof a === "string") return a;
     try { return JSON.stringify(a, null, 1); } catch (e) { return String(a); } };
@@ -104,7 +123,15 @@ const ENGINE_JS: &str = r##"(function(){
     try { abs = new URL(s, PAGE).href; } catch (e) { return s; }
     if (abs.indexOf(location.origin) === 0) return s;
     if (!/^https?:/i.test(abs)) return s;
-    return PREFIX + b64u(abs) + PARAMS;
+    /* Fragments are client-side only (SVG sprite symbols, anchors).
+       They must not become part of the encoded request target: every
+       "#symbol" variant of one sprite is the same network resource.
+       Re-attached after the route so <use href="...#icon"> still
+       selects its symbol. */
+    var frag = "";
+    var hi = abs.indexOf("#");
+    if (hi >= 0) { frag = abs.slice(hi); abs = abs.slice(0, hi); }
+    return PREFIX + b64u(abs) + PARAMS + frag;
   }
   window.__lbRoute = route;
   var of = window.fetch;
@@ -705,7 +732,22 @@ fn is_rewritable_url(v: &str) -> bool {
 
 fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     match resolve_url(page_url, value) {
-        Some(abs) => format!("{}{}{}", prefix, b64url_encode(abs.as_bytes()), suffix),
+        Some(abs) => {
+            // Fragments are client-side only (SVG sprite symbols, in-page
+            // anchors). They must never become part of the encoded request
+            // target: the server would treat every "#symbol" variant of one
+            // sprite as a distinct resource (distinct upstream fetch, cache
+            // key, redirect log). The fragment is re-attached AFTER the
+            // route so the browser keeps its fragment semantics (SVG <use>
+            // symbol selection) while the network identity stays the
+            // fragmentless URL. The browser never sends a fragment to the
+            // server, so the two sides finally agree on resource identity.
+            let (bare, frag) = match abs.split_once('#') {
+                Some((b, f)) => (b, format!("#{}", f)),
+                None => (abs.as_str(), String::new()),
+            };
+            format!("{}{}{}{}", prefix, b64url_encode(bare.as_bytes()), suffix, frag)
+        }
         None => value.to_string(),
     }
 }
@@ -1392,11 +1434,15 @@ async fn engine_proxy(
             params.insert(k.to_string(), v);
         }
     }
+    // Defensive fragment strip: fragments are client-side only. Legacy
+    // routes (and older clients) can still carry one inside the encoded
+    // target; it must never reach the upstream request identity.
+    let bare_url = url.split('#').next().unwrap_or("").to_string();
     let fetch_url = if page_query.is_empty() {
-        url.clone()
+        bare_url.clone()
     } else {
-        let sep = if url.contains('?') { '&' } else { '?' };
-        format!("{}{}{}", url, sep, page_query.join("&"))
+        let sep = if bare_url.contains('?') { '&' } else { '?' };
+        format!("{}{}{}", bare_url, sep, page_query.join("&"))
     };
     /* 74.3: only navigations get the interactive HTML error card.
        The browser sets sec-fetch-dest on same-origin subresource
@@ -1564,13 +1610,36 @@ async fn engine_proxy(
                 );
                 let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
                 let stream = resp.bytes_stream();
-                return Response::builder()
+                let mut builder = Response::builder()
                     .status(axum_status)
-                    .header(header::CONTENT_TYPE, ct)
+                    .header(header::CONTENT_TYPE, ct);
+                // Validation/caching headers pass through byte-identical:
+                // the body is upstream's own, so etag/last-modified/cache
+                // -control/expires must travel with it or browser (and SW)
+                // revalidation silently breaks.
+                for h in ["etag", "last-modified", "cache-control", "expires"] {
+                    if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
+                        builder = builder.header(h, v);
+                    }
+                }
+                return builder
                     .body(Body::from_stream(stream))
                     .unwrap_or_else(|_| (StatusCode::BAD_GATEWAY, "stream error").into_response());
             }
-            let bytes = resp.bytes().await.unwrap_or_default();
+            // Body read failure must NOT become a silent empty 200: an
+            // empty JS/CSS body served as success is exactly how pages
+            // break with the server log claiming everything was fine.
+            let bytes = match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    push_log(
+                        &state,
+                        "warn",
+                        &format!("engine body read failed {} -> {}: {}", url, status, e),
+                    );
+                    return engine_error_page(&url, &format!("upstream body read failed: {}", e), wants_html_page);
+                }
+            };
             let out: Vec<u8> = if is_html {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 // De-AMP: an AMP variant page redirects itself to its
@@ -1588,8 +1657,22 @@ async fn engine_proxy(
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 rewrite_css(&text, &base_url, &suffix, prefix).into_bytes()
             } else if is_js {
-                let text = String::from_utf8_lossy(&bytes).into_owned();
-                js_antiframe(&text).into_bytes()
+                // The antiframe pass is best-effort hardening, never a
+                // correctness requirement. Non-UTF-8 JS (latin1 string
+                // literals are legal) used to go through from_utf8_lossy,
+                // which rewrites bytes into U+FFFD and corrupts the
+                // script. Invalid-UTF-8 bodies are served unmodified.
+                match std::str::from_utf8(&bytes) {
+                    Ok(text) => js_antiframe(text).into_bytes(),
+                    Err(_) => {
+                        push_log(
+                            &state,
+                            "info",
+                            &format!("engine js non-utf8 served unmodified: {}", url),
+                        );
+                        bytes.to_vec()
+                    }
+                }
             } else if compress_img {
                 compress_jpeg(&bytes).unwrap_or_else(|| bytes.to_vec())
             } else {
@@ -2086,6 +2169,58 @@ async fn zl_sw_js() -> Response {
             .body(Body::from(bytes))
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+#[cfg(test)]
+mod url_fragment_tests {
+    use super::{b64url_decode, rewrite_tag, rewrite_url_attr};
+
+    /// SVG sprite symbols: the fragment selects the symbol client-side,
+    /// it must never become part of the encoded request target. One
+    /// sprite file = one network identity, however many "#symbol"
+    /// references the page makes.
+    #[test]
+    fn fragment_stays_out_of_the_route_target() {
+        let out = rewrite_url_attr(
+            "https://chatgpt.com/cdn/assets/sprites-shell-f705d3e2.svg#sidebar",
+            "https://chatgpt.com/",
+            "?lb_ab=1",
+            "/lj/",
+        );
+        assert!(out.starts_with("/lj/"));
+        assert!(out.ends_with("#sidebar"));
+        let seg = out
+            .strip_prefix("/lj/")
+            .unwrap()
+            .split('?')
+            .next()
+            .unwrap()
+            .split('#')
+            .next()
+            .unwrap();
+        let decoded = String::from_utf8(b64url_decode(seg).unwrap()).unwrap();
+        assert_eq!(decoded, "https://chatgpt.com/cdn/assets/sprites-shell-f705d3e2.svg");
+    }
+
+    #[test]
+    fn fragmentless_urls_keep_their_shape() {
+        let out = rewrite_url_attr("https://example.com/app.js", "https://example.com/", "", "/lj/");
+        let seg = out.strip_prefix("/lj/").unwrap();
+        let decoded = String::from_utf8(b64url_decode(seg).unwrap()).unwrap();
+        assert_eq!(decoded, "https://example.com/app.js");
+        assert!(!out.contains('#'));
+    }
+
+    /// Full <use> tag: href rewritten, fragment preserved for the
+    /// browser's symbol selection.
+    #[test]
+    fn svg_use_tag_keeps_the_fragment_after_the_route() {
+        let tag = r#"<use href="/cdn/assets/sprites.svg#voice-regular-24">"#;
+        let out = rewrite_tag(tag, tag.to_ascii_lowercase(), "https://chatgpt.com/", "?lb_ab=1", "/lj/");
+        assert!(out.starts_with(r#"<use href="/lj/"#));
+        assert!(out.ends_with("#voice-regular-24\">"));
+        assert!(out.contains("?lb_ab=1#voice-regular-24"));
     }
 }
 
