@@ -8,3 +8,4 @@
   try { Object.defineProperty(Navigator.prototype, "serviceWorker", { get: function(){ return sw; }, configurable: true }); } catch (e) {}
   try { if (window.Notification) { Notification.permission = "denied"; Notification.requestPermission = function(){ return Promise.resolve("denied"); }; } } catch (e) {}
   window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); });
+})();

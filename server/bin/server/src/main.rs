@@ -2379,6 +2379,14 @@ async fn main() {
         // fallback (see extension_route_not_found).
         .route("/zl-ext/*path", any(extension_route_not_found))
         .route("/zl-cs/*path", any(extension_route_not_found))
+        // Anubis challenge bridge: challenge JS solves the proof and then
+        // location.replace()s a root-relative pass-challenge URL, which on
+        // this origin escapes the engine route and used to hit the SPA
+        // fallback — the proof never reached the protected host, no cookie
+        // was set, and the challenge reloaded forever. The bridge proxies
+        // the pass-challenge upstream (the shared jar keeps the Anubis
+        // cookie) and bounces the frame back to its engine route.
+        .route("/.within.website/*path", any(anubis_bridge))
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
@@ -2406,6 +2414,165 @@ async fn main() {
         .await
         .expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// Percent-decode a query component (redir arrives encodeURIComponent'd).
+fn pct_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            let hex = |c: u8| -> Option<u8> {
+                match c {
+                    b'0'..=b'9' => Some(c - b'0'),
+                    b'a'..=b'f' => Some(c - b'a' + 10),
+                    b'A'..=b'F' => Some(c - b'A' + 10),
+                    _ => None,
+                }
+            };
+            if let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The engine route ("/lj/..." or "/r/...") inside a URL or path string,
+/// if any. The Anubis challenge script sets its `redir` param to the
+/// frame's full engine-route URL, so this recovers where to go back.
+fn engine_route_in(s: &str) -> Option<String> {
+    let i = s.find("/lj/").or_else(|| s.find("/r/"))?;
+    Some(s[i..].to_string())
+}
+
+/// Anubis pass-challenge bridge (see the route registration). The proof
+/// must reach the protected host for Anubis to set its cookie, and the
+/// frame must land back on its engine route; both happen here. The
+/// upstream response body is irrelevant (reqwest follows Anubis's own
+/// redirect chain and the jar records the Set-Cookie) — only the fetch
+/// and the bounce-back matter.
+async fn anubis_bridge(
+    State(state): State<Arc<AppState>>,
+    OriginalUri(uri): OriginalUri,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let mut params: Vec<(String, String)> = Vec::new();
+    if let Some(rq) = raw.as_deref() {
+        for part in rq.split('&') {
+            if part.is_empty() {
+                continue;
+            }
+            let (k, v) = match part.find('=') {
+                Some(p) => (&part[..p], &part[p + 1..]),
+                None => (part, ""),
+            };
+            params.push((k.to_string(), pct_decode(v)));
+        }
+    }
+    let mut back = params
+        .iter()
+        .find(|(k, _)| k == "redir")
+        .map(|(_, v)| v.clone())
+        .and_then(|v| engine_route_in(&v));
+    if back.is_none() {
+        if let Some(r) = headers.get(header::REFERER).and_then(|v| v.to_str().ok()) {
+            back = engine_route_in(r);
+        }
+    }
+    let Some(back) = back else {
+        push_log(
+            &state,
+            "warn",
+            "anubis bridge: no engine route in redir or referer",
+        );
+        return (StatusCode::NOT_FOUND, "no engine route to return to").into_response();
+    };
+    let route_target = back
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches("/lj/")
+        .trim_start_matches("/r/")
+        .to_string();
+    let page = b64url_decode(&route_target).and_then(|b| String::from_utf8(b).ok());
+    let Some(page) = page else {
+        push_log(&state, "warn", "anubis bridge: undecodable route target");
+        return (StatusCode::NOT_FOUND, "undecodable route target").into_response();
+    };
+    // Forward the original query minus `redir` (Anubis would reject a
+    // foreign-origin redirect target anyway; the browser is bounced back
+    // to the engine route below). Raw parts keep their encoding intact.
+    let mut q = String::new();
+    if let Some(rq) = raw.as_deref() {
+        for part in rq.split('&') {
+            if part.is_empty() || part.starts_with("redir=") {
+                continue;
+            }
+            if !q.is_empty() {
+                q.push('&');
+            }
+            q.push_str(part);
+        }
+    }
+    let url = if q.is_empty() {
+        format!("{}{}", page.trim_end_matches('/'), uri.path())
+    } else {
+        format!("{}{}?{}", page.trim_end_matches('/'), uri.path(), q)
+    };
+    let client = if back.contains("lb_inc=1") {
+        &state.incognito_client
+    } else {
+        &state.client
+    };
+    match client.get(&url).send().await {
+        Ok(_) => push_log(
+            &state,
+            "info",
+            &format!("anubis bridged {} -> {}", uri.path(), back),
+        ),
+        Err(e) => push_log(
+            &state,
+            "warn",
+            &format!("anubis bridge upstream failed: {}", e),
+        ),
+    }
+    (
+        StatusCode::SEE_OTHER,
+        [(header::LOCATION, back.as_str())],
+    )
+        .into_response()
+}
+
+#[cfg(test)]
+mod anubis_bridge_tests {
+    use super::{engine_route_in, pct_decode};
+
+    #[test]
+    fn finds_engine_routes() {
+        assert_eq!(
+            engine_route_in("https://x.example/lj/aHR0cHM6?lb_ab=1"),
+            Some("/lj/aHR0cHM6?lb_ab=1".to_string())
+        );
+        assert_eq!(engine_route_in("/r/abc"), Some("/r/abc".to_string()));
+        assert_eq!(engine_route_in("https://plain.example/"), None);
+    }
+
+    #[test]
+    fn decodes_redir_values() {
+        assert_eq!(
+            pct_decode("https%3A%2F%2Fx.example%2Flj%2FaHR0"),
+            "https://x.example/lj/aHR0"
+        );
+        assert_eq!(pct_decode("plain"), "plain");
+        assert_eq!(pct_decode("100%"), "100%");
+    }
 }
 
 /// Extension asset/content-script routes (/zl-ext/, /zl-cs/) are served

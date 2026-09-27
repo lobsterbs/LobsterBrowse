@@ -127,6 +127,12 @@ Never edit a patch away because it looks like a monkey patch; prove the behavior
 ## Anubis challenges (Startpage incident)
 Responses whose HTML contains `id="anubis_challenge"` are served with `Cache-Control: no-store`: the Zeolite service worker serves /lj/ cache-first and a cached challenge page reloads itself forever. The worker honors no-store with TTL 0. Keep this for any interstitial/challenge page.
 
+## Anubis pass-challenge bridge
+Challenge JS that solves the proof does location.replace() on a ROOT-RELATIVE /.within.website/... URL. Served same-origin that escapes the engine route (the SPA fallback used to answer it with the app shell), so the proof never reached the protected host, no cookie was set, and the challenge reloaded forever. The server now routes /.within.website/*path to anubis_bridge: it decodes the engine route from Anubis's own redir param (or the Referer), fetches the pass-challenge upstream against that route's page (shared cookie jar keeps the Anubis cookie) and 303s the frame back to its engine route.
+
+## engine-compat.js integrity
+The compat shim is an IIFE: the file must end with a closing `)();`. The 2026-09-27 extraction dropped that line and every proxied page died with a console SyntaxError "Unexpected end of input" attributed to the page URL. If the shim files are ever regenerated, syntax-check them (node --check or equivalent) in CI-reachable form before deploy.
+
 ## Reproducible builds
 - `server/Cargo.lock` is committed. CI runs `cargo build/test/clippy --locked` and `cargo fmt --all --check`; the ui job runs `npm ci`. Never add `|| cargo build` style fallbacks or swap `npm ci` for `npm install`.
 - `zeolite-server` is pinned by `rev` in `server/bin/server/Cargo.toml` (not a branch). The Dockerfile pins `ARG ZEOLITE_COMMIT` (immutable Zeolite dist revision) instead of `refs/heads/dist`. To update either: bump the rev/ARG, run the `generate-rust-lockfile` workflow (or push under `server/`), commit the refreshed `server/Cargo.lock`, and deploy with `clearCache: true`.
