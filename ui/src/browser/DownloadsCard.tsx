@@ -17,6 +17,7 @@ export default function DownloadsCard(props: {
   downloads: DlItem[];
   onClose: () => void;
   onRemove: (id: number) => void;
+  onCancel: (id: number) => void;
 }) {
   return (
     <m3e-card variant="elevated" aria-label="Downloads" {...{ class: "lb-dl-card" }}>
@@ -47,15 +48,26 @@ export default function DownloadsCard(props: {
                   ? (d.size > 0 ? fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
                   : d.status === "done"
                     ? "Complete, saved to your device"
-                    : "Failed: " + d.error}
+                    : d.error === "cancelled"
+                      ? "Cancelled"
+                      : "Failed: " + d.error}
               </div>
             </div>
-            <m3e-icon-button
-              aria-label={"Remove " + d.name + " from the list"}
-              onClick={() => props.onRemove(d.id)}
-            >
-              <m3e-icon name="close" aria-hidden={true} />
-            </m3e-icon-button>
+            {d.status === "active" ? (
+              <m3e-icon-button
+                aria-label={"Cancel " + d.name}
+                onClick={() => props.onCancel(d.id)}
+              >
+                <m3e-icon name="close" aria-hidden={true} />
+              </m3e-icon-button>
+            ) : (
+              <m3e-icon-button
+                aria-label={"Remove " + d.name + " from the list"}
+                onClick={() => props.onRemove(d.id)}
+              >
+                <m3e-icon name="close" aria-hidden={true} />
+              </m3e-icon-button>
+            )}
           </div>
         ))}
       </div>

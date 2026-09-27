@@ -124,18 +124,116 @@ fn json_escape(s: &str) -> String {
         .replace('\r', "")
 }
 
+
+/// Central sanitizer for the /logs ring: proxied URLs and page-derived
+/// diagnostics routinely carry session tokens, API keys and JWTs, and
+/// the log ring is readable by anyone who can reach the deployment.
+/// Every push_log message passes through here, so no call site has to
+/// remember to redact. Mirrors ui/src/sanitize.ts — keep the patterns
+/// in sync. Deliberately conservative: over-redaction destroys the
+/// diagnostic value of the log.
+fn redact_secrets(s: &str) -> String {
+    const SECRET_KEYS: &[&str] = &[
+        "token", "access_token", "refresh_token", "api_key", "apikey", "password", "passwd",
+        "pwd", "secret", "authorization", "session", "sessionid", "session_id", "sid",
+        "client_secret",
+    ];
+    let is_val_char =
+        |c: char| !c.is_whitespace() && c != '&' && c != '"' && c != '\'' && c != '<' && c != '>';
+    let mut out = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        // Secret-bearing query parameters: "?key=value" / "&key=value".
+        if (c == '?' || c == '&') && i + 1 < chars.len() {
+            let mut j = i + 1;
+            while j < chars.len() && (chars[j].is_ascii_alphanumeric() || chars[j] == '_') {
+                j += 1;
+            }
+            let key_raw: String = chars[i + 1..j].iter().collect();
+            let key = key_raw.to_ascii_lowercase();
+            if chars.get(j) == Some(&'=') && SECRET_KEYS.contains(&key.as_str()) {
+                let mut v = j + 1;
+                while v < chars.len() && is_val_char(chars[v]) {
+                    v += 1;
+                }
+                out.push(c);
+                out.push_str(&key_raw);
+                out.push_str("=[redacted]");
+                i = v;
+                continue;
+            }
+        }
+        // JWT-shaped base64url runs: eyJxxx.yyy.zzz (exactly two dots).
+        if c == 'e' && chars.len() >= i + 20 && chars[i..].starts_with(&['e', 'y', 'J']) {
+            let mut end = i;
+            while end < chars.len()
+                && (chars[end].is_ascii_alphanumeric() || chars[end] == '_' || chars[end] == '-'
+                    || chars[end] == '.')
+            {
+                end += 1;
+            }
+            let run: String = chars[i..end].iter().collect();
+            let parts: Vec<&str> = run.split('.').collect();
+            if parts.len() == 3 && parts.iter().all(|p| !p.is_empty()) && run.len() >= 20 {
+                out.push_str("[redacted-jwt]");
+                i = end;
+                continue;
+            }
+        }
+        // Labeled credentials in free text: "Bearer x", "apikey: x".
+        let lower_ctx: String = chars[i..(i + 12).min(chars.len())]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
+        let mut matched = 0usize;
+        for pat in [
+            "bearer ",
+            "basic ",
+            "apikey:",
+            "api_key:",
+            "api-key:",
+            "password:",
+            "secret:",
+        ] {
+            if lower_ctx.starts_with(pat) {
+                matched = pat.chars().count();
+                break;
+            }
+        }
+        if matched > 0 {
+            out.push_str(&chars[i..i + matched].iter().collect::<String>());
+            let mut v = i + matched;
+            while v < chars.len() && is_val_char(chars[v]) {
+                v += 1;
+            }
+            if v > i + matched {
+                out.push_str("[redacted]");
+            }
+            i = v;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 fn push_log(state: &AppState, level: &str, msg: &str) {
+    let msg = redact_secrets(msg);
     let line = format!(
         "{{\"ts\":{},\"level\":\"{}\",\"msg\":\"{}\"}}",
         now_secs(),
         json_escape(level),
-        json_escape(msg)
+        json_escape(&msg)
     );
     let mut logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
     if logs.len() >= 1000 {
         logs.pop_front();
     }
     logs.push_back(line);
+}
 }
 
 /// Hostname of an absolute URL ("" when not absolute).
@@ -871,6 +969,108 @@ fn literal_is_url_like(s: &str) -> bool {
 }
 
 #[cfg(test)]
+mod redact_tests {
+    use super::redact_secrets;
+
+    #[test]
+    fn redacts_secret_query_params() {
+        let out = redact_secrets("engine GET https://x.test/login?session=abc123&ok=1");
+        assert!(out.contains("session=[redacted]"), "{out}");
+        assert!(out.contains("ok=1"), "{out}");
+        assert!(!out.contains("abc123"), "{out}");
+    }
+
+    #[test]
+    fn redacts_multiple_secret_params_case_insensitively() {
+        let out = redact_secrets("?TOKEN=a&Access_Token=b&SID=c&client_secret=d&keep=e");
+        assert!(out.contains("TOKEN=[redacted]"), "{out}");
+        assert!(out.contains("Access_Token=[redacted]"), "{out}");
+        assert!(out.contains("SID=[redacted]"), "{out}");
+        assert!(out.contains("client_secret=[redacted]"), "{out}");
+        assert!(out.contains("keep=e"), "{out}");
+    }
+
+    #[test]
+    fn leaves_benign_params_alone() {
+        let out = redact_secrets("?q=search&format=json&res=follow&sidewalk=1");
+        assert_eq!(out, "?q=search&format=json&res=follow&sidewalk=1");
+    }
+
+    #[test]
+    fn redacts_jwts() {
+        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV";
+        let out = redact_secrets(&format!("auth failed near {jwt} end"));
+        assert!(out.contains("[redacted-jwt]"), "{out}");
+        assert!(!out.contains("eyJhbGciOiJIUzI1NiJ9"), "{out}");
+    }
+
+    #[test]
+    fn does_not_redact_ordinary_eyj_words() {
+        // Two dots but not JWT-shaped (empty segment / too short).
+        let out = redact_secrets("eyja..b and eyJx.y.z stay");
+        assert!(out.contains("eyja..b"), "{out}");
+    }
+
+    #[test]
+    fn redacts_labeled_credentials() {
+        let out = redact_secrets("upstream said 401 for Bearer abcdef1234567890");
+        assert!(out.contains("Bearer [redacted]"), "{out}");
+        let out2 = redact_secrets("config password:hunter2 leaked");
+        assert!(out2.contains("password:[redacted]"), "{out2}");
+    }
+
+    #[test]
+    fn non_secret_values_survive() {
+        let out = redact_secrets("engine done GET https://x.test/page -> 200 (12 ms, 3 B)");
+        assert_eq!(out, "engine done GET https://x.test/page -> 200 (12 ms, 3 B)");
+    }
+}
+
+#[cfg(test)]
+mod rewrite_hardening_tests {
+    use super::*;
+
+    #[test]
+    fn base_tags_stripped_regardless_of_case_and_whitespace() {
+        let html = "<HTML><HEAD><BASE href='https://cdn.test/x/'><base\thref=\"https://y.test/\"></HEAD><BODY>hi</BODY></HTML>";
+        let out = strip_base_tags(html);
+        assert!(!out.to_ascii_lowercase().contains("<base"), "{out}");
+        assert!(out.contains("hi"), "{out}");
+    }
+
+    #[test]
+    fn base_sounding_words_are_not_stripped() {
+        let html = "<p>baseball is <b>based</b> on tags</p>";
+        assert_eq!(strip_base_tags(html), html);
+    }
+
+    #[test]
+    fn csp_meta_stripped_uppercase() {
+        let html = r#"<HEAD><META HTTP-EQUIV="Content-Security-Policy" content="default-src 'self'"><TITLE>t</TITLE></HEAD>"#;
+        let (out, n) = strip_csp_meta(html);
+        assert_eq!(n, 1);
+        assert!(!out.contains("Content-Security-Policy"), "{out}");
+        assert!(out.contains("t"), "{out}");
+    }
+
+    #[test]
+    fn integrity_stripped_uppercase_and_unquoted() {
+        let (out, n) = strip_integrity(r#"<script src="a.js" INTEGRITY="sha384-xyz"></script>"#);
+        assert_eq!(n, 1);
+        assert!(!out.to_ascii_lowercase().contains("integrity"), "{out}");
+        assert!(out.contains("a.js"), "{out}");
+    }
+
+    #[test]
+    fn ordinary_meta_tags_survive() {
+        let html = r#"<meta name="viewport" content="width=device-width">"#;
+        let (out, n) = strip_csp_meta(html);
+        assert_eq!(n, 0);
+        assert_eq!(out, html);
+    }
+}
+
+#[cfg(test)]
 mod js_literals_tests {
     use super::rewrite_js_literals;
 
@@ -1069,7 +1269,7 @@ mod js_import_tests {
     }
 }
 
-/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -1217,8 +1417,8 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
         out.push_str(&tag[pos..pos + nlen]);
         // Quote preservation: rewritten attributes used to lose their
         // quotes (b64 targets have no spaces so pages limped along,
-        // but any rewritten value with a space — srcset descriptors,
-        // style — bled into the following markup as bogus attributes).
+        // but any rewritten value with a space  srcset descriptors,
+        // style  bled into the following markup as bogus attributes).
         if fc == '"' || fc == '\'' {
             out.push(fc);
             out.push_str(&new_value);
@@ -1591,7 +1791,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
     if !looks_amp {
         return None;
     }
@@ -2020,7 +2220,7 @@ async fn engine_proxy(
             let is_html = ct.contains("html");
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
-            // inside the proxied iframe forever — the challenge scripts
+            // inside the proxied iframe forever  the challenge scripts
             // never pass through our shim, so the loop cannot be solved.
             // Instead of serving that hostile page, render our own
             // honest error card telling the user the site rate-limited
@@ -2506,7 +2706,7 @@ async fn build_endpoint() -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine — the hash makes that detectable from the outside.
+    // engine  the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -2740,7 +2940,7 @@ async fn main() {
         // Zeolite is the client-side engine: its service worker owns /lj/
         // routes (interception, native wisp transport, in-worker document
         // rewriting). A /lj/ request only reaches the server when no
-        // worker controls the page — answer with the honest load-error
+        // worker controls the page  answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
@@ -2769,7 +2969,7 @@ async fn main() {
         // Anubis challenge bridge: challenge JS solves the proof and then
         // location.replace()s a root-relative pass-challenge URL, which on
         // this origin escapes the engine route and used to hit the SPA
-        // fallback — the proof never reached the protected host, no cookie
+        // fallback  the proof never reached the protected host, no cookie
         // was set, and the challenge reloaded forever. The bridge proxies
         // the pass-challenge upstream with redir rewritten to the upstream
         // page (the challenge script's own redir points at this proxy's
@@ -2855,7 +3055,7 @@ fn pct_encode(s: &str) -> String {
 /// only worked for pages at the host root (the trailing slash got
 /// trimmed and the concatenation accidentally produced the right URL);
 /// on a deep page like https://host/sp/search?query=x it produced
-/// ".../search?query=x/.within.website/..." — the protected host answered
+/// ".../search?query=x/.within.website/..."  the protected host answered
 /// 200 with a fresh challenge page, no cookie was ever set, and the
 /// frame reloaded the challenge forever. Only the origin is kept.
 fn page_origin(page: &str) -> String {
@@ -2905,7 +3105,7 @@ fn engine_route_in(s: &str) -> Option<String> {
 /// must reach the protected host for Anubis to set its cookie, and the
 /// frame must land back on its engine route; both happen here. The
 /// upstream response body is irrelevant (reqwest follows Anubis's own
-/// redirect chain and the jar records the Set-Cookie) — only the fetch
+/// redirect chain and the jar records the Set-Cookie)  only the fetch
 /// and the bounce-back matter.
 async fn anubis_bridge(
     State(state): State<Arc<AppState>>,
@@ -3078,7 +3278,7 @@ mod anubis_bridge_tests {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME — a silent lie about the resource).
+/// 200 and a text/html MIME  a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences

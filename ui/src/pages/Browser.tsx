@@ -30,6 +30,10 @@ import {
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
+/* Central diagnostics sanitizer: every untrusted page string that
+   enters DevTools state or the app log passes through these (P0
+   secret-leak fix). Replaces the old local redactUrl. */
+import { sanitizeText, sanitizeUrl } from "../sanitize";
 import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
 /* Extracted browser feature panels (ui/src/browser/): all state stays
    in this page; the components are presentational. */
@@ -54,15 +58,6 @@ type Props = {
   onIncognitoChange: (v: boolean) => void;
   onOpenLogs: () => void;
 };
-
-/* Redact obviously sensitive query parameters before a URL enters any
-   diagnostic surface (DevTools, error page, logs). */
-function redactUrl(u: string): string {
-  return String(u).replace(
-    /([?&])(token|access_token|api_key|apikey|password|secret|authorization|session)=[^&]*/gi,
-    "$1$2=[redacted]",
-  );
-}
 
 /* ---- Downloads (UI-side manager) ----
    Proxied pages fetch through the engine, so every download is
@@ -148,6 +143,18 @@ export default function BrowserView(props: Props) {
   /* A finished .xpi download waiting for the install prompt. The
      bytes are held here so Install needs no second fetch. */
   const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  /* Cancellation: every active download owns an AbortController. The
+     practical sink on every browser here is still in-memory Blob
+     assembly (the File System Access API needs a user gesture in the
+     top-level context the proxied frame cannot provide), so an explicit
+     size cap plus a cancel button bounds memory honestly instead of
+     pretending we stream to disk. */
+  const dlAbort = useRef<Map<number, AbortController>>(new Map());
+  const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
+  const cancelDownload = (id: number) => {
+    dlAbort.current.get(id)?.abort();
+    dlAbort.current.delete(id);
+  };
   const startDownload = (href: string, name: string) => {
     const id = dlSeq.current++;
     /* Engine-routed hrefs (/r/, /lj/) are fetched as-is; anything
@@ -165,8 +172,15 @@ export default function BrowserView(props: Props) {
       /* notifications unavailable */
     }
     (async () => {
+      const ac = new AbortController();
+      dlAbort.current.set(id, ac);
+      const fail = (msg: string) => {
+        dlAbort.current.delete(id);
+        pushLog("error", "download failed " + name + ": " + msg);
+        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
+      };
       try {
-        const res = await fetch(target);
+        const res = await fetch(target, { signal: ac.signal });
         if (!res.ok) throw new Error("HTTP " + res.status);
         const size = Number(res.headers.get("content-length")) || 0;
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
@@ -179,20 +193,29 @@ export default function BrowserView(props: Props) {
              practical sink here is Blob assembly. Each reader chunk is
              a fresh buffer per the streams spec, so pushing `value`
              directly avoids the old full-slice copy that doubled peak
-             memory for large downloads. */
+             memory for large downloads. The MAX_DL_BYTES cap below is
+             the honest ceiling of that design: past it we cancel and
+             report instead of exhausting device memory. */
           const reader = res.body.getReader();
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
             if (value) {
               chunks.push(value);
-              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: d.got + value.byteLength } : d)));
+              const total = chunks.reduce((n, c) => n + ((c as Uint8Array).byteLength ?? 0), 0);
+              if (total > MAX_DL_BYTES) {
+                ac.abort();
+                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " — cancelled to protect device memory (streamed saving is not available in this browser)");
+                return;
+              }
+              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
             }
           }
         } else {
           chunks.push(await res.blob());
         }
         const blob = new Blob(chunks);
+        dlAbort.current.delete(id);
         setDownloads((prev) =>
           prev.map((d) => (d.id === id ? { ...d, size: d.size || blob.size, got: blob.size, status: "done" } : d)),
         );
@@ -230,6 +253,14 @@ export default function BrowserView(props: Props) {
           setDownloads((prev) => prev.filter((d) => d.id !== id));
         }, 4000);
       } catch (err) {
+        dlAbort.current.delete(id);
+        if (ac.signal.aborted) {
+          /* User cancel or the size-cap abort: an honest "cancelled"
+             state, not a fake failure. */
+          pushLog("info", "download cancelled " + name);
+          setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: "cancelled" } : d)));
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         pushLog("error", "download failed " + name + ": " + msg);
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
@@ -598,7 +629,7 @@ export default function BrowserView(props: Props) {
             if (csp > 0 || sri > 0) {
               const mk = (kind: string, reason: string, n: number): ResFailEntry => ({
                 id: nextEntryId(),
-                url: redactUrl(t.url || ""),
+                url: sanitizeUrl(t.url || ""),
                 kind,
                 reason,
                 status: 0,
@@ -698,7 +729,7 @@ export default function BrowserView(props: Props) {
           if (!props.incognito) props.onHistory(real);
         }
         props.updateTab(t.id, patch);
-        pushLog("info", "url sync " + real);
+        pushLog("info", "url sync " + sanitizeUrl(real));
       }
       const title = (doc.title || "").trim();
       if (title && title !== t.title) props.updateTab(t.id, { title });
@@ -836,10 +867,10 @@ export default function BrowserView(props: Props) {
            opening DevTools. */
         if (L.settings.diagnostics) {
           pushLog(kind === "error" || kind === "warn" ? "error" : "info",
-            "console[" + tabId + "] " + kind + ": " + cap(d.text, 300));
+            "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
         }
         setDt(tabId, {
-          console: [...dtBase().console, { id: nextEntryId(), kind, text: cap(d.text, 4000), ts: Number(d.ts ?? Date.now()) }].slice(-500),
+          console: [...dtBase().console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
         });
       } else if (ev.lb === "net") {
         setDt(tabId, {
@@ -847,12 +878,12 @@ export default function BrowserView(props: Props) {
             ...dtBase().net,
             {
               id: nextEntryId(),
-              url: cap(d.url, 2000),
+              url: sanitizeUrl(cap(d.url, 2000)),
               method: cap(d.method, 10) || "GET",
               status: Number(d.status ?? 0),
               ok: d.ok === undefined ? undefined : Boolean(d.ok),
               dur: d.dur === undefined ? undefined : Number(d.dur),
-              error: d.error === undefined ? undefined : cap(d.error, 500),
+              error: d.error === undefined ? undefined : sanitizeText(cap(d.error, 500)),
               ts: Number(d.ts ?? Date.now()),
             },
           ].slice(-500),
@@ -861,11 +892,11 @@ export default function BrowserView(props: Props) {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
           id: nextEntryId(),
-          url: redactUrl(cap(d.url, 2000)),
+          url: sanitizeUrl(cap(d.url, 2000)),
           kind: cap(d.kind, 40) || "unknown",
           reason: cap(d.reason, 60) || "UNKNOWN",
           status: d.status === undefined ? undefined : Number(d.status) || 0,
-          note: d.note === undefined ? undefined : cap(d.note, 400),
+          note: d.note === undefined ? undefined : sanitizeText(cap(d.note, 400)),
           /* 74.4 failure chain: which navigation this failure belongs
              to, same NAV-XXXX id the error page shows. */
           nav: navId.current.get(tabId as number),
@@ -934,7 +965,7 @@ export default function BrowserView(props: Props) {
             if (!L.incognito) L.onHistory(real);
           }
           L.updateTab(tabId, patch);
-          pushLog("info", "url sync " + real);
+          pushLog("info", "url sync " + sanitizeUrl(real));
         }
         setStatus((prev) => {
           const cur = prev[tabId as number];
@@ -1630,6 +1661,7 @@ export default function BrowserView(props: Props) {
               downloads={downloads}
               onClose={() => setDlOpen(false)}
               onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
+              onCancel={cancelDownload}
             />
           )}
         </div>
