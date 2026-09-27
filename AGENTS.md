@@ -115,3 +115,25 @@ LobsterBrowse = host application + browser UI.
 Zeolite = reusable interception/transport engine.
 Wisp = transport foundation.
 RewriteFallback = compatibility escape hatch.
+## Engine shim layout (2026-09-27 refactor)
+The injected page JavaScript no longer lives inside main.rs as a raw string. It is embedded at compile time:
+- `server/bin/server/src/engine-shim.js` — `ENGINE_JS`, the routing + diagnostics shim. Patch categories are labeled inside it (ENGINE CORE / REWRITE COMPATIBILITY / DIAGNOSTICS / LEGACY COMPAT); read them before deleting a patch. Diagnostics events are buffered and flushed as one `{lb:"batch"}` postMessage every 120ms (or 32 events); the UI message handler accepts both batch and single-event shapes.
+- `server/bin/server/src/engine-compat.js` — `COMPAT_JS`, the sandboxed-frame stubs (service workers, install prompts, notifications).
+Never edit a patch away because it looks like a monkey patch; prove the behavior is no longer required first.
+
+## Module import rewriting
+`rewrite_js_imports` rewrites import/export/dynamic-import specifiers in inline `type=module` bodies and served `.js` files, for `"`, `'` and backtick quoting. Backtick templates containing `${` interpolation or escapes are left alone (runtime-computed, unresolvable server-side). This stays server-side: module loading happens below window.fetch, the shim cannot intercept it. Import maps with relative keys are a known gap.
+
+## Anubis challenges (Startpage incident)
+Responses whose HTML contains `id="anubis_challenge"` are served with `Cache-Control: no-store`: the Zeolite service worker serves /lj/ cache-first and a cached challenge page reloads itself forever. The worker honors no-store with TTL 0. Keep this for any interstitial/challenge page.
+
+## Reproducible builds
+- `server/Cargo.lock` is committed. CI runs `cargo build/test/clippy --locked` and `cargo fmt --all --check`; the ui job runs `npm ci`. Never add `|| cargo build` style fallbacks or swap `npm ci` for `npm install`.
+- `zeolite-server` is pinned by `rev` in `server/bin/server/Cargo.toml` (not a branch). The Dockerfile pins `ARG ZEOLITE_COMMIT` (immutable Zeolite dist revision) instead of `refs/heads/dist`. To update either: bump the rev/ARG, run the `generate-rust-lockfile` workflow (or push under `server/`), commit the refreshed `server/Cargo.lock`, and deploy with `clearCache: true`.
+- `.github/workflows/rustfmt-fix.yml` (manual/one-shot) runs `cargo fmt` and commits; do not use it to bypass the fmt gate habitually.
+
+## Browser feature panels
+`ui/src/browser/` holds the presentational panels split out of `pages/Browser.tsx`: `TabSwitcherCard`, `DownloadsCard`, `XpiPrompt`, `ExtensionsPanel`, plus `browserShared.ts` (tabLabel, dlIconFor, fmtBytes, DL_FILE_RE). All state stays in the browser page lifecycle; the panels take explicit props and do not own state or effects. Keep new panels there, not inside Browser.tsx.
+
+## Engine route prefix
+`settings.ts` `engineRoutePrefix(engine)` is the single place that decides `/lj/` vs `/r/`. Do not reintroduce engine ternaries in components.
