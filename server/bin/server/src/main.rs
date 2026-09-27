@@ -17,6 +17,7 @@ use axum::routing::{any, get};
 use axum::Router;
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tower_http::cors::CorsLayer;
@@ -30,6 +31,24 @@ use tracing::info;
 /// the parent UI window (same origin) via postMessage.
 const ENGINE_JS: &str = r##"(function(){
   if (window.__lbHook) return; window.__lbHook = true;
+  /* Patch classification (audit, do not delete patches wholesale):
+     - required for proxy operation (any transport):
+         route()/b64u/unroute, PREFIX detection, click/new-tab guard,
+         history pushState/replaceState routing + nav reporting,
+         window.open interception, console/error reporting, resfail.
+     - required for the server-rewritten (ScramJet /r and /lj) path:
+         fetch/XHR routing, element src/href/poster property setters
+         (HTMLImage/Script/IFrame/Media/Source/Link), setAttribute
+         routing. These exist because the page's runtime-assigned URLs
+         must reach the engine route; static markup is rewritten
+         server-side. They stay until the Zeolite service-worker
+         transport owns the whole origin and real-world testing proves
+         the injected-shim path unnecessary (RewriteFallback).
+     - legacy/compat: COMPAT_JS (separate) stubs service workers and
+         install prompts for the sandboxed frame; keep, it is honest
+         about unavailability rather than hanging.
+     Each patch must keep the fragment rule: fragments are client-side
+     and never become part of an encoded request target. */
   var PAGE = window.__lbPageUrl;
   var PARAMS = window.__lbParams || "";
   var send = function(type, data){ try { parent.postMessage({ lb: type, data: data }, "*"); } catch (e) {} };
@@ -175,15 +194,38 @@ const ENGINE_JS: &str = r##"(function(){
       return ox.apply(this, arguments); }; }
   var OWS = window.WebSocket;
   if (OWS) { var WS = function(u, p){
-      send("net", { url: String(u), method: "WS", status: 101, ts: Date.now() });
+      var t0 = Date.now();
       var ws;
       try { ws = p !== undefined ? new OWS(u, p) : new OWS(u); }
       catch (e) {
-        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE", note: String(e).slice(0, 200) });
+        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE", note: "constructor threw: " + String(e).slice(0, 180) });
         throw e;
       }
-      ws.addEventListener("close", function(){ send("net", { url: String(u), method: "WS", status: 1006, ts: Date.now() });
-        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE" }); });
+      /* A closing WebSocket is NOT automatically a failure: servers and
+         clients close sockets normally all the time. Report the close
+         facts (code, reason, wasClean, duration) and only raise a
+         failure for abnormal closes: an unclean shutdown, code 1006
+         (abnormal closure / never established), or a transport error. */
+      var failed = false;
+      ws.addEventListener("open", function(){
+        send("net", { url: String(u), method: "WS", status: 101, dur: Date.now() - t0, ts: Date.now() });
+      });
+      ws.addEventListener("error", function(){
+        failed = true;
+        fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE", note: "transport error before close" });
+      });
+      ws.addEventListener("close", function(ev){
+        var code = (ev && ev.code) || 0;
+        var clean = !!(ev && ev.wasClean);
+        send("net", { url: String(u), method: "WS", status: code, dur: Date.now() - t0,
+          close: { code: code, reason: String((ev && ev.reason) || "").slice(0, 200), wasClean: clean }, ts: Date.now() });
+        var abnormal = !clean || code === 1006;
+        if (abnormal && !failed) {
+          failed = true;
+          fail("websocket", { url: String(u), reason: "WEBSOCKET_FAILURE", status: code,
+            note: "abnormal close (code " + code + ", clean: " + clean + ")" });
+        }
+      });
       return ws; };
     WS.prototype = OWS.prototype; window.WebSocket = WS; }
   function prop(clazz, name) {
@@ -340,6 +382,10 @@ struct AppState {
     incognito_client: reqwest::Client,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     logs: Mutex<VecDeque<String>>,
+    /// Monotonic engine request counter for RES-XXXXXX correlation ids.
+    /// Every proxied subresource gets one so a browser-side resource
+    /// failure can be matched to its server-side fetch by URL + time.
+    res_ids: AtomicU64,
     ads: adblock::FilterSet,
     trackers: adblock::FilterSet,
 }
@@ -349,6 +395,15 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// RES-XXXXXX correlation id for engine requests. Bounded width (the
+/// counter wraps at a million), one per proxied resource fetch, so a
+/// browser-side resource failure can be traced to its server-side log
+/// lines by URL + timestamp even when the page cannot know the id.
+fn next_res_id(counter: &AtomicU64) -> String {
+    let n = counter.fetch_add(1, Ordering::Relaxed) % 1_000_000;
+    format!("RES-{n:06}")
 }
 
 fn json_escape(s: &str) -> String {
@@ -752,7 +807,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" Ã¢ÂÂ rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -886,8 +941,8 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
         out.push_str(&tag[pos..pos + nlen]);
         // Quote preservation: rewritten attributes used to lose their
         // quotes (b64 targets have no spaces so pages limped along,
-        // but any rewritten value with a space — srcset descriptors,
-        // style — bled into the following markup as bogus attributes).
+        // but any rewritten value with a space â srcset descriptors,
+        // style â bled into the following markup as bogus attributes).
         if fc == '"' || fc == '\'' {
             out.push(fc);
             out.push_str(&new_value);
@@ -1228,7 +1283,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("Ã¢ÂÂ¡");
     if !looks_amp {
         return None;
     }
@@ -1408,6 +1463,7 @@ async fn engine_proxy(
     body: Option<Bytes>,
 ) -> Response {
     let started = Instant::now();
+    let res_id = next_res_id(&state.res_ids);
     let Some(decoded) = b64url_decode(&target) else {
         return (StatusCode::BAD_REQUEST, "bad route").into_response();
     };
@@ -1475,7 +1531,7 @@ async fn engine_proxy(
        service worker's cache intercepts them; ScramJet entries stay
        on /r/. */
     let prefix = if uri.path().starts_with("/lj/") { "/lj/" } else { "/r/" };
-    push_log(&state, "info", &format!("engine {} {}", method, url));
+    push_log(&state, "info", &format!("engine {} {} {}", res_id, method, url));
 
     /* 74.9 engine-side incognito enforcement: lb_inc=1 requests use a
        separate client with its own cookie jar, so incognito cookies
@@ -1581,7 +1637,7 @@ async fn engine_proxy(
             // phantom "redirect" because reqwest strips fragments from
             // the final URL. There was never a redirect.
             if base_url != bare_url {
-                push_log(&state, "info", &format!("engine redirect {} -> {}", bare_url, base_url));
+                push_log(&state, "info", &format!("engine redirect {} {} -> {}", res_id, bare_url, base_url));
             }
             let ct = resp
                 .headers()
@@ -1592,7 +1648,7 @@ async fn engine_proxy(
             let is_html = ct.contains("html");
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
-            // inside the proxied iframe forever — the challenge scripts
+            // inside the proxied iframe forever â the challenge scripts
             // never pass through our shim, so the loop cannot be solved.
             // Instead of serving that hostile page, render our own
             // honest error card telling the user the site rate-limited
@@ -1620,7 +1676,7 @@ async fn engine_proxy(
                 push_log(
                     &state,
                     "info",
-                    &format!("engine stream {} {} -> {}", method, url, status),
+                    &format!("engine stream {} {} {} -> {} ({})", res_id, method, url, status, ct),
                 );
                 let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
                 // Validation/caching headers pass through byte-identical:
@@ -1654,7 +1710,7 @@ async fn engine_proxy(
                     push_log(
                         &state,
                         "warn",
-                        &format!("engine body read failed {} -> {}: {}", url, status, e),
+                        &format!("engine body read failed {} {} -> {}: {}", res_id, url, status, e),
                     );
                     return engine_error_page(&url, &format!("upstream body read failed: {}", e), wants_html_page);
                 }
@@ -1700,7 +1756,10 @@ async fn engine_proxy(
             push_log(
                 &state,
                 "info",
-                &format!("engine done {} {} -> {} ({} ms)", method, url, status, started.elapsed().as_millis()),
+                &format!(
+                    "engine done {} {} {} -> {} ({} ms, {} B, {})",
+                    res_id, method, url, status, started.elapsed().as_millis(), out.len(), ct
+                ),
             );
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response()
@@ -1952,7 +2011,7 @@ async fn build_endpoint() -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine — the hash makes that detectable from the outside.
+    // engine â the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -2144,6 +2203,7 @@ async fn main() {
         client,
         incognito_client,
         logs: Mutex::new(VecDeque::new()),
+        res_ids: AtomicU64::new(0),
         ads: load_filters("adblock-extra.txt", AD_HOSTS),
         trackers: load_filters("tracker-extra.txt", TRACKER_HOSTS),
     });
@@ -2223,7 +2283,7 @@ async fn main() {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME — a silent lie about the resource).
+/// 200 and a text/html MIME â a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences
@@ -2306,6 +2366,27 @@ mod url_fragment_tests {
         assert!(out.starts_with(r#"<use href="/lj/"#));
         assert!(out.ends_with("#voice-regular-24\">"));
         assert!(out.contains("?lb_ab=1#voice-regular-24"));
+    }
+}
+
+#[cfg(test)]
+mod res_id_tests {
+    use super::next_res_id;
+    use std::sync::atomic::AtomicU64;
+
+    #[test]
+    fn ids_are_six_digits_and_monotonic() {
+        let c = AtomicU64::new(0);
+        assert_eq!(next_res_id(&c), "RES-000000");
+        assert_eq!(next_res_id(&c), "RES-000001");
+        assert_eq!(next_res_id(&c), "RES-000002");
+    }
+
+    #[test]
+    fn ids_wrap_at_a_million_keeping_the_bounded_width() {
+        let c = AtomicU64::new(999_999);
+        assert_eq!(next_res_id(&c), "RES-999999");
+        assert_eq!(next_res_id(&c), "RES-000000");
     }
 }
 
