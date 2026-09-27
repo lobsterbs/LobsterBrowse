@@ -1963,6 +1963,7 @@ async fn engine_proxy(
                     return engine_error_page(&url, &format!("upstream body read failed: {}", e), wants_html_page);
                 }
             };
+            let mut is_anubis = false;
             let out: Vec<u8> = if is_html {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 // De-AMP: an AMP variant page redirects itself to its
@@ -1981,7 +1982,7 @@ async fn engine_proxy(
                 // forever (solve PoW, pass, reload, cache hit, solve...).
                 // The worker honors no-store with TTL 0; everything else
                 // keeps its normal freshness.
-                let is_anubis = text.contains(r#"id="anubis_challenge""#);
+                is_anubis = text.contains(r#"id="anubis_challenge""#);
                 rewrite_html_doc(&text, &base_url, &params, &suffix, prefix, &state).into_bytes()
             } else if is_css {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
@@ -2019,9 +2020,10 @@ async fn engine_proxy(
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let mut resp = (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response();
             if is_anubis {
-                if let Ok(v) = HeaderValue::from_static("no-store") {
-                    resp.headers_mut().insert(header::CACHE_CONTROL, v);
-                }
+                resp.headers_mut().insert(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("no-store"),
+                );
                 push_log(&state, "info", &format!("anubis challenge served no-store: {}", url));
             }
             resp
