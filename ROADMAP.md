@@ -424,6 +424,43 @@ README, AGENTS.md, architecture documentation and DevTools documentation must ag
 
 ---
 
+# Phase: Zeolite Integration — Deferred
+
+Status: **planned, not started.** None of the items below are
+implemented. Zeolite is currently under heavy development and its
+APIs and behavior may change; LobsterBrowse stays pinned to the
+currently working Zeolite version and does not chase moving Zeolite
+internals. Start this phase only after Zeolite's current development
+cycle has stabilized and its 2.x contract is final.
+
+Planned work:
+
+- Validate LobsterBrowse against the final Zeolite 2.x contract.
+- Re-test the complete browser → worker → Zeolite → Wisp path.
+- Implement proper proxied WebSockets when the final Zeolite
+  transport/API is ready (today foreign-origin sockets fail loudly
+  with WEBSOCKET_UNSUPPORTED; that stays the behavior until then).
+- Decide which Zeolite interception capabilities should be exposed
+  by LobsterBrowse.
+- Session export/import integration.
+- Network inspector integration.
+- Recording/replay integration.
+- Fingerprint profile integration.
+- Useful download integration.
+- Tracing/diagnostics integration.
+- Worker/service-worker integration where appropriate (today guest
+  workers from foreign-origin script URLs are blocked loudly; in-worker
+  subresource routing is engine-owned).
+- Engine switching and teardown validation.
+- Re-run the compatibility/security audit after integration.
+
+These are future planned features, not current failures. Until this
+phase starts, LobsterBrowse must remain stable against the pinned
+Zeolite revision, and anything that cannot be implemented without the
+evolving Zeolite codebase is deferred here rather than shimmed.
+
+---
+
 # Roadmap rules
 
 ## This file is authoritative

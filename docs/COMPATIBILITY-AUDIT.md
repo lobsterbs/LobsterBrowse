@@ -119,10 +119,17 @@ break DevTools as written).
   Zeolite root-scope worker). Deterministic failure + diagnostic.
 - Guest notifications (permission belongs to the proxy origin).
 - PWA install prompts for guest sites (prompt belongs to the host).
-- Guest Web Workers: NOT stubbed; they run, but their scripts route
-  through the engine only if created from a rewritten URL — a worker
-  created from an absolute origin URL escapes the proxy. Unchanged;
-  needs a worker-script proxy route (backlog).
+- Guest Web Workers: workers created from same-origin (rewritten),
+  blob: or data: URLs run unchanged. A worker whose script URL is a
+  foreign origin is now blocked loudly (SecurityError +
+  WORKER_UNSUPPORTED diagnostic): the script fetch itself would
+  bypass the proxy and expose the real IP, exactly like a foreign
+  WebSocket. In-worker subresource routing (a same-origin worker
+  fetching foreign modules) remains engine-owned and deferred.
+- Dynamic `<base>` mutation: a runtime-assigned base href is dropped
+  with a one-time diagnostic (property setter and setAttribute). The
+  server resolves every URL against the real page URL, so a surviving
+  base would re-anchor unrouted URLs; the element stays inert.
 - Full back/forward history through OAuth popup flows and
   `window.open` return values (returns `null`).
 - Zeolite-mode incognito: `/lj/` tabs share the engine cookie jar
@@ -142,13 +149,19 @@ server rewrite).
 ## 7. Remaining backlog (ranked, not done in this pass)
 
 P1: form/upload/media/range/compression/redirect compatibility
-suites; `<base>` runtime mutation; window.open return object; guest
-worker script routing.
-P2: settings versioned migrations; favicon SSRF hardening; tab
-lifecycle policy; permissions model; downloads page/history.
-(Done in pass 2 and removed from this list: per-session `/logs`
-correlation; challenge-host allowlist single source; download
-streaming; WebSocket proxy-bypass blocking.)
+suites; window.open return object; runtime `srcset` assignment
+routing (rare; server rewrites static srcset).
+P2: settings versioned migrations; tab lifecycle policy; permissions
+model; downloads page/history; accessibility sweep of the M3E UI.
+(Done in pass 2: per-session `/logs` correlation; challenge-host
+allowlist single source; download streaming; WebSocket proxy-bypass
+blocking. Done in pass 3 and removed: `<base>` runtime mutation;
+guest worker script routing; anchor/form runtime property bypass.)
+Zeolite-dependent deferred work (proxied WebSocket transport,
+in-worker subresource routing, session export, inspector, recording,
+fingerprint profiles, tracing, engine switching) is planned in
+ROADMAP.md "Phase: Zeolite Integration — Deferred"; it is future
+planned work, not implemented.
 
 ## 8. Incognito data-flow (P0, fixed 2026-09-27)
 
@@ -246,8 +259,9 @@ Classified and left alone (intentional or not fixable here):
   (cross-site crosstalk possible): architectural, documented in §4;
   Zeolite virtualizes it on /lj/.
 - <base> stripping is correct for the current architecture (all URLs
-  are rewritten against the page URL); dynamic base mutation remains
-  unsupported.
+  are rewritten against the page URL); runtime base mutation is now
+  dropped with a diagnostic instead of silently re-anchoring URLs
+  (pass 3, see §13).
 - Settings "migrations" are merge-with-defaults; a version field adds
   nothing until a breaking schema change exists (YAGNI, documented).
 - Tab lifecycle: all tab iframes stay mounted (the tab switcher needs
@@ -267,3 +281,34 @@ expiry, invalid-token fallback. CI gates: cargo fmt --check, build
 Browser-level checks are exercised on the live deploy (see the final
 report): /logs 403 without token, /r/ page text integrity, challenge
 host injection, WS block diagnostics.
+
+## 13. Fixed in pass 3 (2026-09-27)
+
+- CHALLENGE_HOST_RE construction was semantically dead on main: a
+  pass-2 splice had inlined the deleted fallback literal into the
+  hostname-escaping replace() replacement string. The line parsed,
+  so nothing failed loudly, but the built regex could never match
+  and every runtime-created challenge iframe (reCAPTCHA/Turnstile/
+  hCaptcha render their frames via JS) was routed through the engine,
+  breaking the widgets. Fixed to the intended `"\\Browser-level checks are exercised on the live deploy (see the final
+report): /logs 403 without token, /r/ page text integrity, challenge
+host injection, WS block diagnostics."` escape; a Rust
+  regression test (`challenge_regex_construction`) now guards the
+  line. This is the second "parses fine, matches nothing" splice bug
+  found by reading bytes, and it was invisible to CI because
+  engine-shim.js is include_str!'d, never executed as JS by tests.
+- Runtime property assignment bypass: `a.href = u` and
+  `form.action = u` (and `setAttribute("formaction")` on submit
+  buttons) were NOT routed — only image/script/iframe/media/source/
+  link setters were. A runtime-assigned real URL navigated the tab
+  straight off the proxy origin (same bypass class as the WebSocket
+  hole). HTMLAnchorElement.href, HTMLFormElement.action and the
+  formaction attribute now route through the engine.
+- `<base>` runtime mutation: dropped with a one-time diagnostic
+  (property setter + setAttribute). See §5.
+- Foreign-origin Worker/SharedWorker script URLs: blocked loudly
+  (SecurityError + WORKER_UNSUPPORTED), matching the WebSocket
+  policy; same-origin/blob/data workers unchanged. See §5.
+- ROADMAP.md gained the "Phase: Zeolite Integration — Deferred"
+  section listing all future Zeolite-coupled work as planned, not
+  implemented.

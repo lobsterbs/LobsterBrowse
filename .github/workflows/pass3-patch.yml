@@ -1,0 +1,43 @@
+name: pass3 patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect or apply"
+        required: true
+        default: "inspect"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect
+        if: ${{ inputs.mode == 'inspect' }}
+        run: |
+          cd server/bin/server/src
+          echo ----INCLUDES
+          grep -n 'include_str' main.rs
+          echo ----TESTMODS
+          grep -n 'mod \|cfg(test)' main.rs
+          echo ----TAIL
+          tail -c 4500 main.rs
+          echo ----FAVICON
+          grep -n -i 'favicon' main.rs || echo none
+          echo ----FORMACTION
+          grep -n 'formaction' main.rs || echo none
+          grep -n '"action"' main.rs | head -8
+          echo ----REWRITEFNS
+          grep -n 'fn rewrite_url_attr\|fn rewrite_tag\|fn rewrite_srcset\|fn rewrite_css\|fn strip_base_tags' main.rs
+          echo ----CHALLENGE
+          grep -n 'CHALLENGE_HOSTS' main.rs | head -20
+          echo ----SHIMCHECK
+          grep -c 'CHALLENGE_HOST_RE' engine-shim.js
+          grep -n 'replace(/\[\.\*\+?\^.\${}()|' engine-shim.js || true
+      - name: Report
+        if: ${{ inputs.mode == 'apply' }}
+        run: echo "apply mode placeholder"
