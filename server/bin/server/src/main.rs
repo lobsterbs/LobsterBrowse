@@ -2543,11 +2543,7 @@ async fn anubis_bridge(
             &format!("anubis bridge upstream failed: {}", e),
         ),
     }
-    (
-        StatusCode::SEE_OTHER,
-        [(header::LOCATION, back.as_str())],
-    )
-        .into_response()
+    (StatusCode::SEE_OTHER, [(header::LOCATION, back.as_str())]).into_response()
 }
 
 #[cfg(test)]
