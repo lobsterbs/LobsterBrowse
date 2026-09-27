@@ -1,4 +1,3 @@
-//! LobsterBrowse native engine + wisp server entrypoint.
 //!
 //! Routes HTTP traffic normally and upgrades /wisp/ (configurable path)
 //! to the Wisp protocol. The /r/* route is the native rewriting engine:
@@ -155,12 +154,17 @@ const ENGINE_JS: &str = r##"(function(){
   window.__lbRoute = route;
   var of = window.fetch;
   if (of) { window.fetch = function(input, init){
-    var url0 = (typeof input === "string") ? input : ((input && input.url) || "");
+    /* url0 must survive every input shape: string, Request (url) and
+       URL objects (href). Passing a URL object through unrouted used
+       to escape the proxy and surface as "unknown resource". */
+    var url0 = (typeof input === "string") ? input
+             : ((input && input.url) || (input && input.href) || "");
     var method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
     var t0 = Date.now();
     var routed = input;
     try {
       if (typeof input === "string") routed = route(input);
+      else if (input && input.href) routed = route(input.href);
       else if (input && input.url) routed = new Request(route(input.url), input);
     } catch (e) {}
     return of.call(window, routed, init).then(function(resp){
@@ -178,8 +182,13 @@ const ENGINE_JS: &str = r##"(function(){
         }
       }
       return resp; }, function(err){
-      send("net", { url: String(url0), method: method, status: 0, error: String(err), dur: Date.now() - t0, ts: Date.now() });
-      fail("fetch", { url: String(url0), reason: "FETCH_FAILURE", note: String(err).slice(0, 200) });
+      /* A page aborting its own request (autocomplete debounce,
+         superseded searches) is a normal pattern, not a load failure.
+         Report it on the net channel with an abort marker, never as a
+         resfail. */
+      var aborted = !!(err && (err.name === "AbortError" || String(err).indexOf("AbortError") >= 0));
+      send("net", { url: String(url0), method: method, status: 0, aborted: aborted, error: String(err), dur: Date.now() - t0, ts: Date.now() });
+      if (!aborted) fail("fetch", { url: String(url0), reason: "FETCH_FAILURE", note: String(err).slice(0, 200) });
       throw err; }); }; }
   if (window.XMLHttpRequest && XMLHttpRequest.prototype.open) {
     var ox = XMLHttpRequest.prototype.open;
@@ -807,7 +816,7 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
     }
 }
 
-/// srcset="url 2x, url2 1x" Ã¢ÂÂ rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" ÃÂ¢ÃÂÃÂ rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -941,8 +950,8 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
         out.push_str(&tag[pos..pos + nlen]);
         // Quote preservation: rewritten attributes used to lose their
         // quotes (b64 targets have no spaces so pages limped along,
-        // but any rewritten value with a space â srcset descriptors,
-        // style â bled into the following markup as bogus attributes).
+        // but any rewritten value with a space Ã¢ÂÂ srcset descriptors,
+        // style Ã¢ÂÂ bled into the following markup as bogus attributes).
         if fc == '"' || fc == '\'' {
             out.push(fc);
             out.push_str(&new_value);
@@ -1283,7 +1292,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("Ã¢ÂÂ¡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("ÃÂ¢ÃÂÃÂ¡");
     if !looks_amp {
         return None;
     }
@@ -1648,7 +1657,7 @@ async fn engine_proxy(
             let is_html = ct.contains("html");
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
-            // inside the proxied iframe forever â the challenge scripts
+            // inside the proxied iframe forever Ã¢ÂÂ the challenge scripts
             // never pass through our shim, so the loop cannot be solved.
             // Instead of serving that hostile page, render our own
             // honest error card telling the user the site rate-limited
@@ -2011,7 +2020,7 @@ async fn build_endpoint() -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine â the hash makes that detectable from the outside.
+    // engine Ã¢ÂÂ the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -2283,7 +2292,7 @@ async fn main() {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME â a silent lie about the resource).
+/// 200 and a text/html MIME Ã¢ÂÂ a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences

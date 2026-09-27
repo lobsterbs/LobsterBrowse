@@ -1,4 +1,3 @@
-/* LobsterBrowse theme. Token prefix per M3E docs: --md-sys-color-*.
    The <m3e-theme color="#hex"> element generates the full palette from a
    seed at runtime (dynamic color); these are only the baseline fallbacks.
    Typography: Google Sans Flex via the Google Fonts CDN; Material Symbols
@@ -42,7 +41,7 @@ m3e-app-bar {
    overflow) once collapsed the rail to an invisible sliver. */
 m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
-m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1); }
+m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0.2, 0, 0, 1), color 250ms cubic-bezier(0.2, 0, 0, 1), transform 250ms cubic-bezier(0.2, 0, 0, 1), opacity 250ms cubic-bezier(0.2, 0, 0, 1); }
 
 .lb-shell { display: flex; min-height: 100vh; }
 .lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
@@ -109,7 +108,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   flex: 1;
   min-width: 0;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
-  border-radius: 12px;
+  border-radius: var(--m3e-shape-sm);
   border: 1px solid var(--md-sys-color-outline);
   background: transparent;
   color: inherit;
@@ -118,7 +117,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 }
 .lb-select {
   padding: var(--md-sys-measurement-space100);
-  border-radius: 12px;
+  border-radius: var(--m3e-shape-sm);
   border: 1px solid var(--md-sys-color-outline);
   background: transparent;
   color: inherit;
@@ -137,7 +136,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   z-index: 40;
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline);
-  border-radius: 16px;
+  border-radius: var(--m3e-shape-md);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   text-align: left;
@@ -198,7 +197,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
   transition: opacity 300ms ease, transform 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), gap 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 /* Same retract logic as the bottom dock: after the shared idle timer
@@ -260,32 +259,11 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
-/* Incognito toggle: a 40x40 icon button inside the toolbar, matching
-   the m3e-icon-button geometry and (since the toolbar polish pass) its
-   borderless container-family treatment. Off = quiet icon; on = dark
-   hat-on state that cannot be missed. The domino mask is an inline
-   SVG (the glyph does not exist in the self-hosted Material Symbols
-   font); the icon span constrains it to 24px — without it the raw
-   SVG defaults to 300x150 and the button becomes massive. */
-.lb-incognito {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 999px;
-  /* Same family as the toolbar's m3e-icon-buttons: no visible outline
-     container. The 1px transparent border keeps the geometry stable
-     without painting a box the icon buttons do not have. */
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 180ms var(--m3e-spring), color 180ms ease, border-color 180ms ease;
-}
+/* Incognito toolbar toggle (inline SVG glyph: the domino mask is an
+   inline SVG because the glyph is missing from the
+   Material Symbols font); the icon span constrains it to 24px. The
+   button itself is a real m3e-icon-button (toggle) like its toolbar
+   neighbours; the component owns geometry and all states. */
 .lb-incognito-ic {
   display: block;
   width: 24px;
@@ -307,23 +285,13 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
 .lb-incognito-ic svg rect {
   fill: currentColor;
 }
-.lb-incognito:hover {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
-  color: var(--md-sys-color-on-surface);
-}
-.lb-incognito.on {
-  background: var(--md-sys-color-inverse-surface, #2a2a2a);
-  color: var(--md-sys-color-inverse-on-surface, #f5f5f5);
-  border-color: transparent;
-  font-variation-settings: "wght" 600;
-}
 
 /* Pages fill the whole browser area; the frosted tab strip floats
    above the rendered site. */
 .lb-pages {
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: var(--m3e-shape-md);
   overflow: hidden;
   background: var(--md-sys-color-surface);
 }
@@ -478,7 +446,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   z-index: 40;
   background: var(--md-sys-color-surface, #fef7ff);
   border: 1px solid var(--md-sys-color-outline, #79747e);
-  border-radius: 16px;
+  border-radius: var(--m3e-shape-md);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   text-align: left;
@@ -513,7 +481,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   width: min(480px, calc(100% - var(--md-sys-measurement-space200)));
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
   border: 1px solid var(--md-sys-color-outline-variant, var(--md-sys-color-outline));
-  border-radius: 16px;
+  border-radius: var(--m3e-shape-md);
   z-index: 9;
   display: flex;
   flex-direction: column;
@@ -581,7 +549,7 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
   max-height: 320px;
   overflow: auto;
   border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 12px;
+  border-radius: var(--m3e-shape-sm);
   padding: var(--md-sys-measurement-space100);
 }
 .lb-log-line { padding: var(--md-sys-measurement-space25) 0; word-break: break-word; }
@@ -608,8 +576,16 @@ m3e-nav-rail m3e-icon-button { transition: all 250ms cubic-bezier(0.2, 0, 0, 1);
    Baseline tokens above stay untouched. */
 :root {
   --m3e-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  /* Shape hierarchy. M3E ships no shape tokens, so this small scale is
+     the app's foundation: xl = hero floating surfaces (tab strip),
+     lg = prominent cards/docks, md = panels and pages, sm = controls
+     and nested tiles, xs = small chips/thumbnails. 999px stays reserved
+     for genuine pills. */
   --m3e-shape-xl: 28px;
   --m3e-shape-lg: 20px;
+  --m3e-shape-md: 16px;
+  --m3e-shape-sm: 12px;
+  --m3e-shape-xs: 8px;
 }
 
 /* Expressive display type: heavier weight axis, wider width axis. */
@@ -690,7 +666,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   z-index: 40;
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline);
-  border-radius: 16px;
+  border-radius: var(--m3e-shape-md);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   text-align: left;
@@ -772,7 +748,7 @@ m3e-nav-rail.lb-rail-hidden {
   max-height: 130px;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 40%, transparent);
-  border-radius: 10px;
+  border-radius: var(--m3e-shape-sm);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
 }
 .lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }
@@ -864,47 +840,10 @@ m3e-nav-rail.lb-rail-hidden {
 
 /* ---- Compaction batch: toolbar tabs, diagnostics chip, suggest
    loading indicator ---- */
-/* Tab-count button: same geometry as the incognito toggle, with a
-   tiny count badge in the corner. */
-.lb-tabs-btn {
-  position: relative;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 999px;
-  /* No visible container: this is a toolbar icon button like its
-     m3e-icon-button neighbours, not a boxed control. The transparent
-     1px border only keeps the geometry identical. */
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 180ms var(--m3e-spring), color 180ms ease, border-color 180ms ease;
-}
-/* Pressed and focus states match the M3 state-layer treatment the
-   icon buttons use; the focus ring stays visible for keyboard users. */
-.lb-tabs-btn:active,
-.lb-incognito:active {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 16%, transparent);
-}
-.lb-tabs-btn.on:active,
-.lb-incognito.on:active {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 24%, transparent);
-}
-.lb-tabs-btn:focus-visible,
-.lb-incognito:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
-}
-.lb-tabs-btn.on {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
-  color: var(--md-sys-color-primary);
-}
+/* Tab-count button: a real m3e-icon-button (toggle) like its
+   neighbours; the component owns geometry and every state. The host
+   only needs a positioning context for the absolute count badge. */
+#lb-tabs-pill { position: relative; }
 .lb-tabs-count {
   position: absolute;
   right: 0;
@@ -949,7 +888,7 @@ m3e-nav-rail.lb-rail-hidden {
   transform: translateX(-50%);
   width: min(640px, calc(100vw - 24px));
   z-index: 45;
-  border-radius: 20px;
+  border-radius: var(--m3e-shape-lg);
   animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 .lb-tabs-row {
@@ -969,7 +908,7 @@ m3e-nav-rail.lb-rail-hidden {
   gap: var(--md-sys-measurement-space50);
   width: 164px;
   padding: var(--md-sys-measurement-space50);
-  border-radius: 12px;
+  border-radius: var(--m3e-shape-sm);
   cursor: pointer;
   transition: background 160ms ease, transform 160ms var(--m3e-spring), opacity 240ms ease;
 }
@@ -987,7 +926,7 @@ m3e-nav-rail.lb-rail-hidden {
   position: relative;
   width: 148px;
   height: 88px;
-  border-radius: 8px;
+  border-radius: var(--m3e-shape-xs);
   overflow: hidden;
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
 }
