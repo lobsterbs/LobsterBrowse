@@ -156,11 +156,9 @@ export default function BrowserView(props: Props) {
      bytes are held here so Install needs no second fetch. */
   const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
   /* Cancellation: every active download owns an AbortController. The
-     practical sink on every browser here is still in-memory Blob
-     assembly (the File System Access API needs a user gesture in the
-     top-level context the proxied frame cannot provide), so an explicit
-     size cap plus a cancel button bounds memory honestly instead of
-     pretending we stream to disk. */
+     sink is disk streaming via the File System Access API when the
+     context allows it, and capped in-memory Blob assembly otherwise;
+     both paths honor the cancel button. */
   const dlAbort = useRef<Map<number, AbortController>>(new Map());
   const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
