@@ -40,7 +40,6 @@ use tracing::info;
 /// network/error reporting) and LEGACY COMPAT (kept for known sites).
 const ENGINE_JS: &str = include_str!("engine-shim.js");
 
-
 /// Compatibility layer for proxied pages running inside a sandboxed
 /// same-origin frame: service workers, install prompts and push
 /// notifications either hang or misfire there, so stub them out.
@@ -757,7 +756,7 @@ mod js_import_tests {
     }
 }
 
-/// srcset="url 2x, url2 1x" Ã¢ÂÂ rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -899,8 +898,8 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
         out.push_str(&tag[pos..pos + nlen]);
         // Quote preservation: rewritten attributes used to lose their
         // quotes (b64 targets have no spaces so pages limped along,
-        // but any rewritten value with a space â srcset descriptors,
-        // style â bled into the following markup as bogus attributes).
+        // but any rewritten value with a space — srcset descriptors,
+        // style — bled into the following markup as bogus attributes).
         if fc == '"' || fc == '\'' {
             out.push(fc);
             out.push_str(&new_value);
@@ -1264,7 +1263,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
     let looks_amp =
-        page_url.contains("/amp") || html.contains("<html amp") || html.contains("Ã¢ÂÂ¡");
+        page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
     if !looks_amp {
         return None;
     }
@@ -1675,7 +1674,7 @@ async fn engine_proxy(
             let is_html = ct.contains("html");
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
-            // inside the proxied iframe forever â the challenge scripts
+            // inside the proxied iframe forever — the challenge scripts
             // never pass through our shim, so the loop cannot be solved.
             // Instead of serving that hostile page, render our own
             // honest error card telling the user the site rate-limited
@@ -2123,7 +2122,7 @@ async fn build_endpoint() -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine â the hash makes that detectable from the outside.
+    // engine — the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -2415,7 +2414,7 @@ async fn main() {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME â a silent lie about the resource).
+/// 200 and a text/html MIME — a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences
