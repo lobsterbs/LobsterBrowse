@@ -1,3 +1,4 @@
+//! LobsterBrowse native engine + wisp server entrypoint.
 //!
 //! Routes HTTP traffic normally and upgrades /wisp/ (configurable path)
 //! to the Wisp protocol. The /r/* route is the native rewriting engine:
