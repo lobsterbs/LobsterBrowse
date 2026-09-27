@@ -60,6 +60,12 @@ NEW_NEWER = r'''            slot.as_ref().is_none_or(|(cur, _)| na > cur.as_str(
 assert src.count(OLD_NEWER) == 1, "map_or anchor not found exactly once"
 src = src.replace(OLD_NEWER, NEW_NEWER)
 
+# --- clippy: map_or(true, ...) #2 (line ~805) ---
+OLD_NEWER2 = 'if best.map_or(true, |(p, _)| abs < p) {'
+NEW_NEWER2 = 'if best.is_none_or(|(p, _)| abs < p) {'
+assert src.count(OLD_NEWER2) == 1, "map_or #2 anchor not found exactly once"
+src = src.replace(OLD_NEWER2, NEW_NEWER2)
+
 # --- clippy: format! nested in format! args (/build endpoint) ---
 OLD_BUILD = r'''    let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
