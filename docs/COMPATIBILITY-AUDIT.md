@@ -141,3 +141,18 @@ What deliberately survives incognito (documented): server-side
 `/logs` ring (shared, sanitized, per-deployment), the ScramJet
 incognito cookie jar in RAM until restart, Zeolite `/lj/` cookie jar
 (documented gap: shared with normal tabs).
+
+## 9. rewrite_html dropped all text nodes (P0, fixed 2026-09-27)
+
+Found during live verification of deploy e8e64f2: /r/ pages rendered
+with empty bodies — `<h1></h1><p></p>`, empty link labels, empty
+`<title>` — while tags, attributes and injected scripts survived.
+Root cause (present since before this task's baseline): the
+`rewrite_html` scanner loop jumped straight to the next `<` and never
+emitted the bytes between `i` and the tag start, so every inter-tag
+text node was silently discarded on both /r/ and /lj/. Fix: emit
+`html[i..start]` when a tag is found after non-empty text. Regression
+test `text_nodes_are_preserved` added. This is exactly the class of
+"looks fine, isn't" breakage the live-verification requirement exists
+to catch; it also invalidates any earlier visual impression that /r/
+HTML pages were serving correctly.
