@@ -2087,7 +2087,9 @@ async fn engine_proxy(
                                     "info",
                                     &format!(
                                         "engine body retry ok {} {} ({} bytes)",
-                                        res_id, url, b2.len()
+                                        res_id,
+                                        url,
+                                        b2.len()
                                     ),
                                 );
                                 b2
