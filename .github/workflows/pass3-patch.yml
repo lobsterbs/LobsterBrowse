@@ -1,12 +1,10 @@
 name: pass3 patch
 
 on:
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "inspect or apply"
-        required: true
-        default: "inspect"
+  push:
+    paths:
+      - ".github/workflows/pass3-patch.yml"
+      - ".github/pass3-mode"
 
 permissions:
   contents: write
@@ -16,8 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Mode
+        id: mode
+        run: echo "mode=$(cat .github/pass3-mode 2>/dev/null || echo inspect)" >> "$GITHUB_OUTPUT"
       - name: Inspect
-        if: ${{ inputs.mode == 'inspect' }}
+        if: steps.mode.outputs.mode == 'inspect'
         run: |
           cd server/bin/server/src
           echo ----INCLUDES
@@ -35,9 +36,23 @@ jobs:
           grep -n 'fn rewrite_url_attr\|fn rewrite_tag\|fn rewrite_srcset\|fn rewrite_css\|fn strip_base_tags' main.rs
           echo ----CHALLENGE
           grep -n 'CHALLENGE_HOSTS' main.rs | head -20
-          echo ----SHIMCHECK
-          grep -c 'CHALLENGE_HOST_RE' engine-shim.js
-          grep -n 'replace(/\[\.\*\+?\^.\${}()|' engine-shim.js || true
-      - name: Report
-        if: ${{ inputs.mode == 'apply' }}
-        run: echo "apply mode placeholder"
+      - name: Apply
+        if: steps.mode.outputs.mode == 'apply'
+        run: |
+          cd server/bin/server/src
+          python3 /home/runner/work/LobsterBrowse/LobsterBrowse/.github/pass3-apply.py
+      - name: Verify
+        if: steps.mode.outputs.mode == 'apply'
+        working-directory: server
+        run: |
+          cargo fmt --all
+          cargo build --locked
+          cargo test --locked
+          cargo clippy --locked -- -D warnings
+      - name: Commit
+        if: steps.mode.outputs.mode == 'apply'
+        run: |
+          git config user.name "lobster-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add server .github/pass3-mode
+          git diff --cached --quiet || (git commit -m "fix(server): pass-3 main.rs patches (challenge regex test)" && git push)
