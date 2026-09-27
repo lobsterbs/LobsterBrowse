@@ -18,6 +18,7 @@ import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?ra
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
 import {
   decodeRoute,
+  engineRoutePrefix,
   ENGINES,
   fetchSuggestions,
   looksLikeUrl,
@@ -30,6 +31,13 @@ import {
 import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
+/* Extracted browser feature panels (ui/src/browser/): all state stays
+   in this page; the components are presentational. */
+import { fmtBytes, tabLabel } from "../browser/browserShared";
+import TabSwitcherCard from "../browser/TabSwitcherCard";
+import DownloadsCard from "../browser/DownloadsCard";
+import XpiPrompt from "../browser/XpiPrompt";
+import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
 
 type Props = {
   settings: Settings;
@@ -46,17 +54,6 @@ type Props = {
   onIncognitoChange: (v: boolean) => void;
   onOpenLogs: () => void;
 };
-
-/* Short label for a tab: its real title, or the bare hostname. */
-function tabLabel(t: Tab): string {
-  if (t.title) return t.title;
-  if (!t.url) return "New tab";
-  try {
-    return new URL(t.url).hostname.replace(/^www\./, "");
-  } catch {
-    return t.url;
-  }
-}
 
 /* Redact obviously sensitive query parameters before a URL enters any
    diagnostic surface (DevTools, error page, logs). */
@@ -80,47 +77,6 @@ type DlItem = {
   got: number;
   status: "active" | "done" | "error";
   error?: string;
-};
-const DL_FILE_RE = /\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar|exe|msi|dmg|pkg|deb|rpm|apk|iso|mp3|flac|wav|ogg|m4a|mp4|mkv|webm|mov|avi|pdf|epub|doc|docx|xls|xlsx|ppt|pptx|csv|json|txt)([?#].*)?$/i;
-function dlIconFor(name: string): string {
-  const n = name.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/.test(n)) return "image";
-  if (/\.(mp3|flac|wav|ogg|m4a)$/.test(n)) return "audio_file";
-  if (/\.(mp4|mkv|webm|mov|avi)$/.test(n)) return "video_file";
-  if (/\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar)$/.test(n)) return "folder_zip";
-  return "draft";
-}
-function fmtBytes(n: number): string {
-  if (!n || n < 0) return "0 B";
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB";
-  return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-}
-
-/* Installed-extension summary from the engine control plane. */
-type ExtInfo = {
-  id: string;
-  name: string;
-  version: string;
-  state: string;
-  enabled: boolean;
-  lastError: string | null;
-};
-
-/* Full detail surface from zl:extInfo (one extension). */
-type ExtDetail = {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  state: string;
-  enabled: boolean;
-  lastError: string | null;
-  permissions: string[];
-  hostPermissions: string[];
-  contentScripts: number;
-  optionsPath: string | null;
 };
 
 export default function BrowserView(props: Props) {
@@ -755,7 +711,7 @@ export default function BrowserView(props: Props) {
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
         wiredDocs.current.add(doc);
-        const prefix = settings.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";
+        const prefix = engineRoutePrefix(settings.proxyEngine);
         const prefetch = (el: EventTarget | null) => {
           const target = el as Element | null;
           const a = target && target.closest ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
@@ -848,26 +804,30 @@ export default function BrowserView(props: Props) {
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
       if (!data || typeof data.lb !== "string" || data.lb.length > 32) return;
-      if (data.data !== undefined && typeof data.data !== "object") return;
+      const process = (
+        ev: { lb?: string; data?: Record<string, unknown> },
+        source: MessageEventSource | null,
+      ) => {
+      if (ev.data !== undefined && typeof ev.data !== "object") return;
       const L = live.current;
       let tabId: number | null = null;
       let tab: Tab | undefined;
       for (const t of L.tabs) {
         const f = frames.current.get(t.id);
-        if (f && e.source === f.contentWindow) {
+        if (f && source === f.contentWindow) {
           tabId = t.id;
           tab = t;
           break;
         }
       }
       if (tabId === null || !tab) return;
-      const d = data.data ?? {};
+      const d = ev.data ?? {};
       const dtBase = () => L.dt[tabId as number] ?? emptyDt();
       /* Maximum string lengths: a hostile or broken page must not be
          able to stuff megabytes into DevTools state. */
       const cap = (v: unknown, n: number) => String(v ?? "").slice(0, n);
 
-      if (data.lb === "console") {
+      if (ev.lb === "console") {
         const level = String(d.level ?? "log");
         const kind: "error" | "warn" | "info" | "debug" | "log" =
           level === "error" ? "error" : level === "warn" ? "warn" : level === "info" ? "info" : level === "debug" ? "debug" : "log";
@@ -881,7 +841,7 @@ export default function BrowserView(props: Props) {
         setDt(tabId, {
           console: [...dtBase().console, { id: nextEntryId(), kind, text: cap(d.text, 4000), ts: Number(d.ts ?? Date.now()) }].slice(-500),
         });
-      } else if (data.lb === "net") {
+      } else if (ev.lb === "net") {
         setDt(tabId, {
           net: [
             ...dtBase().net,
@@ -897,7 +857,7 @@ export default function BrowserView(props: Props) {
             },
           ].slice(-500),
         });
-      } else if (data.lb === "resfail") {
+      } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
           id: nextEntryId(),
@@ -924,7 +884,7 @@ export default function BrowserView(props: Props) {
           const base = prev[tabId as number] ?? emptyDt();
           return { ...prev, [tabId as number]: { ...base, fails: [...base.fails, entry].slice(-200) } };
         });
-      } else if (data.lb === "ready") {
+      } else if (ev.lb === "ready") {
         /* Stale-navigation guard: a ready that arrives after a newer
            load() started must not update the tab (title/status). */
         if (lastNav.current.get(tabId) !== tab.url) return;
@@ -932,7 +892,7 @@ export default function BrowserView(props: Props) {
         if (title) L.updateTab(tabId, { title });
         setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
         if (tab.url && !L.incognito) L.onHistory(tab.url);
-      } else if (data.lb === "navigate") {
+      } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
         if (!href) return;
         const abs = (() => {
@@ -951,7 +911,7 @@ export default function BrowserView(props: Props) {
         } else {
           loadRef.current(tab, abs, { push: true });
         }
-      } else if (data.lb === "nav") {
+      } else if (ev.lb === "nav") {
         /* Event-driven SPA navigation (74.6): the page hook reports
            pushState/replaceState/popstate/hashchange the instant they
            happen, so the toolbar and tab stack update without waiting
@@ -982,6 +942,22 @@ export default function BrowserView(props: Props) {
         });
       }
       /* Unknown data.lb values are ignored by design. */
+      };
+      /* Single events keep the original shape; the shim's batched
+         diagnostics arrive as {lb:"batch", data:{events:[...]}} so a
+         busy page costs one React update per flush window, not one per
+         console line. Batch size is capped defensively. */
+      if (data.lb === "batch") {
+        const evs = (data.data as { events?: unknown } | undefined)?.events;
+        if (!Array.isArray(evs)) return;
+        for (const item of evs.slice(0, 100)) {
+          if (item && typeof item === "object" && typeof (item as { lb?: unknown }).lb === "string") {
+            process(item as { lb?: string; data?: Record<string, unknown> }, e.source);
+          }
+        }
+      } else {
+        process(data, e.source);
+      }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
@@ -1341,75 +1317,21 @@ export default function BrowserView(props: Props) {
       >
         {/* Tab switcher: its own surface while the toolbar slides
             away (.lb-dock.tabs-open). Horizontal row of live preview
-            tiles (scriptless engine frames, scaled 0.25), not a list. */}
-        {tabs.length > 0 && (
-          <m3e-card variant="elevated" aria-label="Tab switcher" {...{ class: "lb-tabs-card" + (tabsOpen ? " open" : "") }}>
-            <div slot="header" className="lb-site-head">
-              <span className="lb-site-ctitle">Tabs ({tabs.length})</span>
-              <span>
-                <m3e-icon-button aria-label="New tab" onClick={() => { props.newTab(); setTabsOpen(false); }}>
-                  <m3e-icon name="add" aria-hidden={true} />
-                </m3e-icon-button>
-                <m3e-icon-button aria-label="Close tab switcher" onClick={() => setTabsOpen(false)}>
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </span>
-            </div>
-            <div slot="content" className="lb-tabs-row">
-              {tabs.map((t) => (
-                <div
-                  key={t.id}
-                  role="button"
-                  tabIndex={0}
-                  className={"lb-tabs-tile" + (t.id === active.id ? " active" : "") + (closingIds.includes(t.id) ? " closing" : "")}
-                  aria-label={"Switch to " + tabLabel(t)}
-                  onClick={() => {
-                    props.setActiveId(t.id);
-                    setTabsOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      props.setActiveId(t.id);
-                      setTabsOpen(false);
-                    }
-                  }}
-                >
-                  <div className="lb-tab-preview">
-                    {t.url ? (
-                      <iframe
-                        src={routeUrl(settings, rules, t.url)}
-                        title={"Preview of " + tabLabel(t)}
-                        loading="lazy"
-                        tabIndex={-1}
-                      />
-                    ) : (
-                      <div className="lb-tab-empty">
-                        <m3e-icon name="public" aria-hidden={true} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="lb-tabs-tile-head">
-                    {icons[t.id] ? (
-                      <img className="lb-tab-favicon" src={icons[t.id]} alt="" />
-                    ) : (
-                      <m3e-icon name="public" aria-hidden={true} />
-                    )}
-                    <span className="lb-tabs-title">{tabLabel(t)}</span>
-                    <m3e-icon
-                      name="close"
-                      aria-hidden={true}
-                      className="lb-tab-close"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTabSmooth(t.id);
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </m3e-card>
-        )}
+            tiles (scriptless engine frames, scaled 0.25), not a list.
+            Extracted to browser/TabSwitcherCard; state stays here. */}
+        <TabSwitcherCard
+          tabs={tabs}
+          activeId={active.id}
+          closingIds={closingIds}
+          icons={icons}
+          open={tabsOpen}
+          settings={settings}
+          rules={rules}
+          onNewTab={() => { props.newTab(); setTabsOpen(false); }}
+          onClose={() => setTabsOpen(false)}
+          onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
+          onCloseTab={closeTabSmooth}
+        />
         <div className="lb-dock-pill">
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
@@ -1696,173 +1618,40 @@ export default function BrowserView(props: Props) {
               </m3e-card>
             )}
           {xpiPrompt && (
-            <div className="lb-xpi-overlay" role="dialog" aria-label="Install extension" onClick={() => setXpiPrompt(null)}>
-              <m3e-card variant="elevated" {...{ class: "lb-xpi-card" }} onClick={(e) => e.stopPropagation()}>
-                <div slot="header" className="lb-site-head">
-                  <span className="lb-site-ctitle">Install extension?</span>
-                </div>
-                <div slot="content" className="lb-site-body">
-                  <div className="lb-site-row">{xpiPrompt.name} ({fmtBytes(xpiPrompt.bytes.length)})</div>
-                  <p className="lb-site-note">
-                    Install this add-on into LobsterBrowse? The engine validates the package before anything runs.
-                    You can also save the file and import it later from Settings.
-                  </p>
-                </div>
-                <div slot="actions" className="lb-site-actions">
-                  <m3e-button onClick={() => void installXpi(xpiPrompt)}>
-                    <m3e-icon name="extension" aria-hidden={true} /> Install
-                  </m3e-button>
-                  <m3e-button onClick={() => saveXpi(xpiPrompt)}>
-                    <m3e-icon name="download" aria-hidden={true} /> Save file
-                  </m3e-button>
-                  <m3e-button onClick={() => setXpiPrompt(null)}>Cancel</m3e-button>
-                </div>
-              </m3e-card>
-            </div>
+            <XpiPrompt
+              name={xpiPrompt.name}
+              bytes={xpiPrompt.bytes}
+              onInstall={() => void installXpi(xpiPrompt)}
+              onSave={() => saveXpi(xpiPrompt)}
+              onCancel={() => setXpiPrompt(null)}
+            />
           )}
           {dlOpen && downloads.length > 0 && (
-            <m3e-card variant="elevated" aria-label="Downloads" {...{ class: "lb-dl-card" }}>
-              <div slot="header" className="lb-site-head">
-                <span className="lb-site-ctitle">Downloads ({downloads.length})</span>
-                <m3e-icon-button aria-label="Close downloads" onClick={() => setDlOpen(false)}>
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </div>
-              <div slot="content" className="lb-dl-list">
-                {downloads.map((d) => (
-                  <div key={d.id} className="lb-dl-item">
-                    <m3e-icon name={dlIconFor(d.name)} aria-hidden={true} />
-                    <div className="lb-dl-body">
-                      <div className="lb-dl-name" title={d.name}>{d.name}</div>
-                      {d.status === "active" && (
-                        <div className="lb-dl-progress">
-                          <m3e-linear-progress-indicator
-                            aria-label={"Downloading " + d.name}
-                            value={d.size > 0 ? String(Math.round((d.got / d.size) * 100)) : undefined}
-                            max="100"
-                            mode={d.size > 0 ? undefined : "indeterminate"}
-                          />
-                        </div>
-                      )}
-                      <div className="lb-dl-meta">
-                        {d.status === "active"
-                          ? (d.size > 0 ? fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
-                          : d.status === "done"
-                            ? "Complete, saved to your device"
-                            : "Failed: " + d.error}
-                      </div>
-                    </div>
-                    <m3e-icon-button
-                      aria-label={"Remove " + d.name + " from the list"}
-                      onClick={() => setDownloads((prev) => prev.filter((x) => x.id !== d.id))}
-                    >
-                      <m3e-icon name="close" aria-hidden={true} />
-                    </m3e-icon-button>
-                  </div>
-                ))}
-              </div>
-            </m3e-card>
+            <DownloadsCard
+              downloads={downloads}
+              onClose={() => setDlOpen(false)}
+              onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
+            />
           )}
         </div>
       </div>
 
       {extPanelOpen && (
-        <div className="lb-ext-panel" role="dialog" aria-label="Extensions">
-          <div className="lb-ext-head">
-            <span className="lb-ext-title">Extensions</span>
-            <span>
-              <m3e-icon-button aria-label="Refresh extensions" onClick={() => loadExtensions()}>
-                <m3e-icon name="refresh" aria-hidden={true} />
-              </m3e-icon-button>
-              <m3e-icon-button aria-label="Close extensions" onClick={() => setExtPanelOpen(false)}>
-                <m3e-icon name="close" aria-hidden={true} />
-              </m3e-icon-button>
-            </span>
-          </div>
-          {extList === null ? (
-            <p className="lb-ext-note">
-              {extBusy
-                ? "Querying the engine service worker..."
-                : extError
-                  ? "Engine extensions unavailable: " + extError
-                  : "Engine extensions unavailable. No Zeolite service worker on this origin."}
-            </p>
-          ) : extList.length === 0 ? (
-            <p className="lb-ext-note">No extensions installed.</p>
-          ) : (
-            <div className="lb-ext-list">
-              {extList.map((e) => (
-                <div
-                  key={e.id}
-                  className={"lb-ext-item" + (extDetail && extDetail.id === e.id ? " sel" : "")}
-                  title={e.lastError ?? ""}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openExtDetail(e.id)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === "Enter" || ev.key === " ") openExtDetail(e.id);
-                  }}
-                >
-                  <span className="lb-ext-name">{e.name}</span>
-                  <span className="lb-ext-ver">{e.version}</span>
-                  <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
-                    {e.enabled ? e.state : "disabled"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {extDetailError && <p className="lb-ext-err">{extDetailError}</p>}
-          {extDetail && (
-            <div className="lb-ext-detail">
-              <div className="lb-ext-dhead">
-                <span className="lb-ext-dname">
-                  {extDetail.name} <span className="lb-ext-ver">{extDetail.version}</span>
-                </span>
-                <m3e-icon-button aria-label="Close extension details" onClick={() => setExtDetail(null)}>
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </div>
-              {extDetail.description && <p className="lb-ext-desc">{extDetail.description}</p>}
-              <div className="lb-ext-trow">
-                <span className="lb-ext-tlabel">Enabled</span>
-                <m3e-switch
-                  checked={extDetail.enabled ? "" : undefined}
-                  icons="selected"
-                  aria-label="Extension enabled"
-                  onClick={() => toggleExtEnabled(extDetail.id, !extDetail.enabled)}
-                />
-              </div>
-              <div className="lb-ext-trow">
-                <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-                <m3e-switch
-                  checked={extIncognito[extDetail.id] ? "" : undefined}
-                  icons="selected"
-                  aria-label="Allow extension in incognito tabs"
-                  onClick={() => toggleExtIncognito(extDetail.id, !extIncognito[extDetail.id])}
-                />
-              </div>
-              {(extDetail.permissions.length > 0 || extDetail.hostPermissions.length > 0) && (
-                <div className="lb-ext-perms">
-                  {[...extDetail.permissions, ...extDetail.hostPermissions].slice(0, 12).map((p) => (
-                    <code key={p}>{p}</code>
-                  ))}
-                </div>
-              )}
-              {extDetail.contentScripts > 0 && (
-                <p className="lb-ext-desc">
-                  {extDetail.contentScripts} content script{extDetail.contentScripts === 1 ? "" : "s"} registered.
-                </p>
-              )}
-              {extDetail.optionsPath && (
-                <m3e-button onClick={() => openExtOptions(extDetail)} {...{ class: "lb-ext-optbtn" }}>
-                  <m3e-icon name="settings" aria-hidden={true} /> Open options page
-                </m3e-button>
-              )}
-              {extDetail.lastError && <p className="lb-ext-err">{extDetail.lastError}</p>}
-            </div>
-          )}
-        </div>
+        <ExtensionsPanel
+          list={extList}
+          busy={extBusy}
+          error={extError}
+          detail={extDetail}
+          detailError={extDetailError}
+          incognito={extIncognito}
+          onRefresh={() => loadExtensions()}
+          onClose={() => setExtPanelOpen(false)}
+          onOpenDetail={openExtDetail}
+          onCloseDetail={() => setExtDetail(null)}
+          onToggleEnabled={toggleExtEnabled}
+          onToggleIncognito={toggleExtIncognito}
+          onOpenOptions={openExtOptions}
+        />
       )}
     </section>
   );

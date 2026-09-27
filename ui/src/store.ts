@@ -79,10 +79,31 @@ function persistLogs() {
   writeJson(LOGS_KEY, logRing);
 }
 
+/* Persistence debounce: a busy page can push dozens of log entries per
+   second (diagnostic mode logs every console line); serializing the
+   ring on every push is a synchronous main-thread JSON.stringify per
+   event. Writes now coalesce into one write at most every 500ms, with
+   an immediate flush on clear and a best-effort flush at pagehide so
+   the tail is not lost. */
+let persistTimer: number | null = null;
+const flushLogs = () => {
+  if (persistTimer !== null) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  persistLogs();
+};
+try {
+  window.addEventListener("pagehide", flushLogs);
+} catch {
+  /* no window; persist immediately instead */
+}
 export function pushLog(level: LogEntry["level"], msg: string) {
   logRing.push({ ts: Date.now(), level, msg });
   if (logRing.length > LOG_LIMIT) logRing.shift();
-  persistLogs();
+  if (persistTimer === null) {
+    persistTimer = window.setTimeout(flushLogs, 500);
+  }
 }
 
 export function getLogs(): LogEntry[] {
@@ -91,7 +112,7 @@ export function getLogs(): LogEntry[] {
 
 export function clearLogs() {
   logRing.length = 0;
-  persistLogs();
+  flushLogs();
 }
 
 /* ---- Wipe everything ---- */
