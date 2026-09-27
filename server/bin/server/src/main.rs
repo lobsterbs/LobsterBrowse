@@ -2550,11 +2550,7 @@ async fn anubis_bridge(
                 "info",
                 &format!(
                     "anubis pass-challenge upstream {} final {} cookies {} body [{}] -> {}",
-                    status,
-                    final_url,
-                    sc,
-                    body_snip,
-                    back
+                    status, final_url, sc, body_snip, back
                 ),
             );
         }
