@@ -124,7 +124,6 @@ fn json_escape(s: &str) -> String {
         .replace('\r', "")
 }
 
-
 /// Central sanitizer for the /logs ring: proxied URLs and page-derived
 /// diagnostics routinely carry session tokens, API keys and JWTs, and
 /// the log ring is readable by anyone who can reach the deployment.
@@ -233,7 +232,6 @@ fn push_log(state: &AppState, level: &str, msg: &str) {
         logs.pop_front();
     }
     logs.push_back(line);
-}
 }
 
 /// Hostname of an absolute URL ("" when not absolute).
