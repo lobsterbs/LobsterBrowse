@@ -193,3 +193,15 @@ main.rs injects window.__LB_CHALLENGE_HOSTS (serialized from CHALLENGE_HOSTS) in
 
 ## Download streaming (2026-09-27 pass 2)
 startDownload streams to disk via the File System Access API when available (showSaveFilePicker + createWritable, O(1) memory; writable.abort() discards the partial file on cancel/error; a dismissed save dialog is an honest "cancelled"). Browsers/contexts without the API fall back to capped in-memory Blob assembly (1 GiB ceiling, the honest limit of that path). Incognito downloads carry lb_inc. "cancelled" is a DlItem status, not a fake error.
+
+## Challenge-host regex construction (2026-09-27 pass 3)
+The CHALLENGE_HOST_RE build line in engine-shim.js escaped hostnames with replace(/[.*+?^${}()|[\]\\]/g, "\\$&"). A pass-2 splice once replaced that "\\$&" with the deleted fallback literal text: the line still parsed, but the regex matched nothing and runtime-created captcha frames (reCAPTCHA etc. create their iframes via JS) were routed through the engine and broke silently. The challenge_regex_construction test in main.rs asserts the exact construction line; keep test and line in sync. engine-shim.js is include_str!'d and never executed as JS by CI — only this byte-level test and live browser verification cover it.
+
+## Runtime URL property routing (2026-09-27 pass 3)
+engine-shim.js routes runtime property assignments through the same prop() wrapper as the element setters: HTMLAnchorElement.href, HTMLFormElement.action (and the formaction attribute via setAttribute). A runtime-assigned real URL navigated the tab straight off the proxy origin before. Anything that assigns a URL at runtime must go through route(); if a new element class appears (e.g. srcset, which needs list-aware routing), add it there rather than ad-hoc.
+
+## Base-tag mutation policy (2026-09-27 pass 3)
+Runtime <base href> mutation (property setter or setAttribute) is dropped with a one-time diagnostic. The server resolves every URL against the real page URL, so a surviving base would re-anchor unrouted URLs; the element stays inert. Do not "support" base by routing its href — a routed base re-anchors differently and is worse.
+
+## Guest worker policy (2026-09-27 pass 3)
+Worker/SharedWorker with a foreign-origin script URL throw a SecurityError plus a WORKER_UNSUPPORTED resfail, mirroring the WebSocket policy: the script fetch itself would bypass the proxy (real-IP request), and in-worker subresources are unshimmed by design. Same-origin (rewritten), blob: and data: workers run unchanged. In-worker subresource routing is Zeolite-owned (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from the shim.

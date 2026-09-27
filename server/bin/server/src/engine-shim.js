@@ -169,7 +169,12 @@
      cross-origin. */
   var CHALLENGE_HOSTS_FALLBACK = ["challenges.cloudflare.com","cloudflare.com","js.stripe.com","hcaptcha.com","www.google.com","recaptcha.net"];
   var CHALLENGE_HOST_LIST = (window.__LB_CHALLENGE_HOSTS && window.__LB_CHALLENGE_HOSTS.length) ? window.__LB_CHALLENGE_HOSTS : CHALLENGE_HOSTS_FALLBACK;
-  var CHALLENGE_HOST_RE = new RegExp("(^|\\.)(" + CHALLENGE_HOST_LIST.map(function(h){ return h.replace(/[.*+?^${}()|[\]\\]/g, "\\  var CHALLENGE_HOST_RE = /(^|\.)(challenges\.cloudflare\.com|cloudflare\.com|hcaptcha\.com|js\.stripe\.com|www\.google\.com|recaptcha\.net)$/i;"); }).join("|") + ")$", "i");
+  /* ponytail: the replacement must be "\\$&" (escape every regex
+     special in a hostname). A pass-2 splice once inlined the deleted
+     fallback literal here instead; it parsed fine but matched nothing,
+     so runtime-created captcha frames were routed through the engine
+     and broke. The challenge_regex_construction Rust test guards it. */
+  var CHALLENGE_HOST_RE = new RegExp("(^|\\.)(" + CHALLENGE_HOST_LIST.map(function(h){ return h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|") + ")$", "i");
   function chal(u) {
     try { return CHALLENGE_HOST_RE.test(new URL(String(u), PAGE).hostname); }
     catch (e) { return false; }
@@ -288,6 +293,37 @@
       });
       return ws; };
     WS.prototype = OWS.prototype; window.WebSocket = WS; }
+  /* Guest workers from a foreign origin: the script fetch itself
+     would bypass the proxy (real-IP request to the target host), and
+     once running the worker's own subresource fetches are unshimmed
+     by design. Same policy as foreign WebSockets: immediate, loud
+     failure. Workers from same-origin/blob/data URLs (the rewritten,
+     proxied case) run unchanged. In-worker subresource routing is
+     engine-owned and documented as deferred work. */
+  var OW = window.Worker;
+  if (OW) { var WK = function(u, o){
+      var foreign = false;
+      try { var pu = new URL(String(u), location.href); foreign = /^https?:/i.test(pu.protocol) && pu.origin !== location.origin; } catch (e) {}
+      if (foreign) {
+        var wmsg = "LobsterBrowse: worker script from '" + redact(String(u)).slice(0, 200) + "' is blocked (the script fetch would bypass the proxy and expose your IP); guest worker transport is not supported";
+        fail("worker", { url: String(u), reason: "WORKER_UNSUPPORTED", note: "foreign-origin Worker blocked by LobsterBrowse" });
+        try { console.warn(wmsg); } catch (e) {}
+        throw new DOMException(wmsg, "SecurityError");
+      }
+      return o !== undefined ? new OW(u, o) : new OW(u); };
+    WK.prototype = OW.prototype; window.Worker = WK; }
+  var OSW = window.SharedWorker;
+  if (OSW) { var SWK = function(u, o){
+      var foreign2 = false;
+      try { var pu2 = new URL(String(u), location.href); foreign2 = /^https?:/i.test(pu2.protocol) && pu2.origin !== location.origin; } catch (e) {}
+      if (foreign2) {
+        var wmsg2 = "LobsterBrowse: shared worker script from '" + redact(String(u)).slice(0, 200) + "' is blocked (would bypass the proxy); guest worker transport is not supported";
+        fail("worker", { url: String(u), reason: "WORKER_UNSUPPORTED", note: "foreign-origin SharedWorker blocked by LobsterBrowse" });
+        try { console.warn(wmsg2); } catch (e) {}
+        throw new DOMException(wmsg2, "SecurityError");
+      }
+      return o !== undefined ? new OSW(u, o) : new OSW(u); };
+    SWK.prototype = OSW.prototype; window.SharedWorker = SWK; }
   function prop(clazz, name, keepCrossOrigin) {
     try {
       var proto = window[clazz] && window[clazz].prototype;
@@ -312,15 +348,40 @@
   prop("HTMLMediaElement", "poster");
   prop("HTMLSourceElement", "src");
   prop("HTMLLinkElement", "href");
+  /* Runtime href/action assignment on anchors and forms is as much a
+     proxy bypass as src on images: a runtime-assigned real URL would
+     navigate the tab straight off the proxy origin. Routed like every
+     other element URL (formaction rides along via setAttribute). */
+  prop("HTMLAnchorElement", "href");
+  prop("HTMLFormElement", "action");
+  var baseNoted = false;
+  var baseNote = function(v){
+    if (baseNoted) return; baseNoted = true;
+    send("console", { level: "info",
+      text: "[lb] runtime <base href> mutation dropped (incompatible with URL rewriting): " + String(v).slice(0, 120), ts: Date.now() });
+  };
+  try {
+    var bproto = window.HTMLBaseElement && window.HTMLBaseElement.prototype;
+    var bdesc = bproto && Object.getOwnPropertyDescriptor(bproto, "href");
+    if (bdesc && bdesc.set && bdesc.get) Object.defineProperty(bproto, "href", {
+      get: bdesc.get, set: function(v){ baseNote(v); }, configurable: true });
+  } catch (e) {}
   var sa = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function(n, v) {
     try {
       var ln = String(n).toLowerCase();
       /* Challenge widget frames keep their real cross-origin src (see
          chal()); every other URL attribute routes as before. */
+      /* A runtime <base href> would re-anchor every URL we do NOT
+         route (they would resolve against the proxy origin path or a
+         foreign origin); dropped with a one-time diagnostic, the
+         element stays inert (server markup already strips base). */
+      if (ln === "href" && this.tagName === "BASE" && typeof v === "string" && v) {
+        baseNote(v); return;
+      }
       if (ln === "src" && this.tagName === "IFRAME" && typeof v === "string" && v && chal(v)) {
         chalNote(v);
-      } else if ((ln === "href" || ln === "src" || ln === "action" || ln === "poster") && typeof v === "string" && v) {
+      } else if ((ln === "href" || ln === "src" || ln === "action" || ln === "formaction" || ln === "poster") && typeof v === "string" && v) {
         v = route(v);
       }
     } catch (e) {}
