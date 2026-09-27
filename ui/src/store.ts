@@ -72,6 +72,19 @@ export function saveSessionTabs(tabs: Tab[]) {
 /* ---- Client-side technical log ring ---- */
 
 const LOGS_KEY = "lobsterbrowse-logs";
+/* Incognito mode (P0 data-flow): page diagnostics (console lines,
+   resfail entries) reach pushLog while an incognito session is
+   active. They stay in the in-memory ring so DevTools/Logs work, but
+   they are NEVER written to localStorage — the persisted log used to
+   leak incognito browsing activity into the normal profile. */
+let incognitoMode = false;
+export function setIncognitoLogging(on: boolean) {
+  incognitoMode = on;
+  if (on && persistTimer !== null) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+}
 /* Restored from localStorage at startup: the old in-memory ring was
    wiped on every reload, which is why the Logs page showed "No client
    log entries yet" right after a hard refresh. */
@@ -81,6 +94,7 @@ let logRing: LogEntry[] = readJson<LogEntry[]>(LOGS_KEY, []).filter(
 const LOG_LIMIT = 300;
 
 function persistLogs() {
+  if (incognitoMode) return;
   writeJson(LOGS_KEY, logRing);
 }
 
@@ -106,7 +120,7 @@ try {
 export function pushLog(level: LogEntry["level"], msg: string) {
   logRing.push({ ts: Date.now(), level, msg });
   if (logRing.length > LOG_LIMIT) logRing.shift();
-  if (persistTimer === null) {
+  if (persistTimer === null && !incognitoMode) {
     persistTimer = window.setTimeout(flushLogs, 500);
   }
 }

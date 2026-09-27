@@ -40,6 +40,12 @@ export default function App() {
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
+  /* P0 data-flow: while incognito is on, the technical log ring stays
+     in memory only — page diagnostics must not be persisted into the
+     normal profile's localStorage. */
+  useEffect(() => {
+    store.setIncognitoLogging(incognito);
+  }, [incognito]);
   /* Announce incognito flips with a real M3E snackbar, so the mode is
      obvious even if the tab strip is tucked away. */
   const firstIncognitoRun = useRef(true);
