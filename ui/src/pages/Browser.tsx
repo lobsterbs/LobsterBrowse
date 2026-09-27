@@ -1,4 +1,3 @@
-/* The in-app proxy browser surface: tabs, frosted floating tab strip,
    bottom hover toolbar, proxied iframes and per-tab DevTools.
 
    Single native engine: every navigation goes to /r/<base64url of the
@@ -131,7 +130,7 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  /* Last URL each tab was asked to load â guards the auto-load effect
+  /* Last URL each tab was asked to load Ã¢ÂÂ guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
   /* Per-tab navigation generation: every load() bumps it, so results
@@ -171,6 +170,18 @@ export default function BrowserView(props: Props) {
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
+  /* Tab button and incognito toggle are real m3e-icon-buttons with
+     toggle semantics; React 18 cannot set boolean custom-element
+     attributes correctly, so the selected attribute is managed from a
+     ref effect instead of JSX props. */
+  const tabsBtnRef = useRef<HTMLElement | null>(null);
+  const incognitoBtnRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    tabsBtnRef.current?.toggleAttribute("selected", tabsOpen);
+  }, [tabsOpen]);
+  useEffect(() => {
+    incognitoBtnRef.current?.toggleAttribute("selected", !!props.incognito);
+  }, [props.incognito]);
   /* Tab card leave animation: stay mounted briefly while the
      .leaving class plays the exit animation, then unmount. */
   const [tabsMounted, setTabsMounted] = useState(false);
@@ -628,7 +639,7 @@ export default function BrowserView(props: Props) {
       /* Escaped-navigation recovery: challenge pages (Anubis etc.) get
          no shim on their intermediate hosts, so their JS sometimes
          "solves" the challenge by navigating the frame to a bare app
-         path, which the SPA fallback answers with index.html — the
+         path, which the SPA fallback answers with index.html â the
          user sees our app shell pretending to be the site. Detect a
          frame sitting on a non-route app path while the tab has a real
          URL, reconstruct the intended target and reload it through the
@@ -671,8 +682,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. AâBâC + back stays AâBâC at
-           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
+           move the index, do not append. AÃ¢ÂÂBÃ¢ÂÂC + back stays AÃ¢ÂÂBÃ¢ÂÂC at
+           index 1, never AÃ¢ÂÂBÃ¢ÂÂCÃ¢ÂÂB. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -869,7 +880,7 @@ export default function BrowserView(props: Props) {
           }
         })();
         /* Scheme validation: only http(s) navigations. javascript:,
-           data:, blob:, file: and friends are rejected outright â a
+           data:, blob:, file: and friends are rejected outright Ã¢ÂÂ a
            proxied page must not script the browser surface. */
         if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
@@ -1188,7 +1199,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} Â· route {routeUrl(settings, rules, errors[active.id].url)}
+                engine {settings.proxyEngine} ÃÂ· route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1202,13 +1213,13 @@ export default function BrowserView(props: Props) {
                       return a;
                     }, {}),
                   )
-                    .map(([k, n]) => n + " Ã " + k)
+                    .map(([k, n]) => n + " ÃÂ " + k)
                     .join(", ")}
                   )
                 </div>
               )}
               {[
-                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " â " + f.reason + (f.note ? " (" + f.note + ")" : "")),
+                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " Ã¢ÂÂ " + f.reason + (f.note ? " (" + f.note + ")" : "")),
                 ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
                 ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
               ].map((line, i) => (
@@ -1335,22 +1346,23 @@ export default function BrowserView(props: Props) {
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
-              as the site info card). */}
-          <button
-            type="button"
+              as the site info card). Real m3e-icon-button with toggle
+              semantics: geometry, hover/pressed/focus/selected states
+              come from the component like every other toolbar control. */}
+          <m3e-icon-button
             id="lb-tabs-pill"
-            className={"lb-tabs-btn" + (tabsOpen ? " on" : "")}
-            aria-pressed={tabsOpen}
+            toggle
             aria-label={"Open tab list (" + tabs.length + " tabs)"}
             onClick={() => {
               setTabsOpen((v) => !v);
               setSiteInfoOpen(false);
               setDlOpen(false);
             }}
+            {...{ ref: tabsBtnRef }}
           >
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
             <span className="lb-tabs-count">{tabs.length}</span>
-          </button>
+          </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
           <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
@@ -1488,7 +1500,7 @@ export default function BrowserView(props: Props) {
               type="button"
               className="lb-diag-tb-chip"
               aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures — open diagnostics"}
+              title={activeDt.fails.length + " load failures â open diagnostics"}
               onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
             >
               <m3e-icon name="warning" aria-hidden={true} />
@@ -1537,16 +1549,21 @@ export default function BrowserView(props: Props) {
               incognito tab (App.tsx); toggling off closes it and
               restores the session. The domino mask is an inline SVG
               (no font glyph exists), sized by CSS. */}
-          <button
-            type="button"
+          {/* Incognito: the same m3e-icon-button primitive as every
+              other toolbar control, with toggle semantics for the
+              on/off state (selected attribute via the ref effect —
+              React 18 mangles boolean custom-element attributes). The
+              domino mask is an inline SVG: the glyph is missing from
+              the self-hosted Material Symbols font. */}
+          <m3e-icon-button
             id="lb-incognito-pill"
-            className={"lb-incognito" + (props.incognito ? " on" : "")}
-            aria-pressed={props.incognito}
+            toggle
             aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
             onClick={() => props.onIncognitoChange(!props.incognito)}
+            {...{ ref: incognitoBtnRef }}
           >
-            <span className="lb-incognito-ic" dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
-          </button>
+            <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
+          </m3e-icon-button>
           <m3e-tooltip for="lb-incognito-pill" position="above">
             {props.incognito
               ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
