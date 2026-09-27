@@ -12,6 +12,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
+import { zlSend } from "./zeolite";
 import type { Tab } from "./store";
 /* Rail spacing lives in its own sheet so it cleanly overrides the
    base theme rules (loaded earlier, same specificity, later wins). */
@@ -159,13 +160,32 @@ export default function App() {
   /* ---- Keyboard shortcuts removed by request: no global key
      handling remains in the app. ---- */
 
-  /* ---- LobsterJet service worker: caches /lj/ routes client-side
-     (cache-first, 10-minute freshness, network fallback). Without a
-     worker the same routes are served by the server rewriter. ---- */
+  /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
+     interception, native wisp transport, in-worker rewriting). The
+     legacy v3 page-cache worker is gone: it owned the "/" scope and
+     kept the Zeolite worker from ever registering, so unregister it
+     and drop its caches when found, then push the /lj/ route shape —
+     the prefix is runtime state in the worker and resets to /j/ on
+     every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/lobsterjet.js").catch(() => {});
-    }
+    void (async () => {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) {
+          const p = r.active || r.installing || r.waiting;
+          if (p && new URL(p.scriptURL).pathname === "/lobsterjet.js") {
+            await r.unregister();
+          }
+        }
+        if ("caches" in window) {
+          await caches.delete("lobsterjet-v3");
+          await caches.delete("lobsterjet-decentraleyes-v1");
+        }
+      } catch {
+        /* best effort: the Zeolite push below still runs */
+      }
+      await zlSend({ type: "zl:config", prefix: "/lj/", scheme: "b64u" }, 8000);
+    })();
   }, []);
 
   /* ---- Decentraleyes toggle: tell the worker the current state.
