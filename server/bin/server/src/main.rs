@@ -2532,11 +2532,27 @@ async fn anubis_bridge(
         &state.client
     };
     match client.get(&url).send().await {
-        Ok(_) => push_log(
-            &state,
-            "info",
-            &format!("anubis bridged {} -> {}", uri.path(), back),
-        ),
+        Ok(resp) => {
+            // Anubis answers pass-challenge with 302 + Set-Cookie; the
+            // redirect chain must land on the protected page. Log the
+            // verdict: status, final URL after redirects, cookie count.
+            let sc = 0;
+            if let Some(v) = resp.headers().get_all(header::SET_COOKIE).iter().next() {
+                let _ = v;
+                sc = resp.headers().get_all(header::SET_COOKIE).iter().count();
+            }
+            push_log(
+                &state,
+                "info",
+                &format!(
+                    "anubis pass-challenge upstream {} final {} cookies {} -> {}",
+                    resp.status(),
+                    resp.url(),
+                    sc,
+                    back
+                ),
+            );
+        }
         Err(e) => push_log(
             &state,
             "warn",
