@@ -1023,7 +1023,13 @@ mod js_import_tests {
             "/lj/",
         );
         assert!(out.contains("import(`/lj/"), "template: {out}");
-        assert!(out.contains(".js`);"), "backtick kept: {out}");
+        // ./conversation-small-abc.js resolved against the entry's dir and
+        // routed; the specifier is base64 so match the encoded prefix and
+        // that the closing backtick survived.
+        assert!(
+            out.contains("/lj/aHR0cHM6Ly9jaGF0Z3B0LmNvbS9jZG4vYXNzZXRzL2NvbnZlcnNhdGlvbi1zbWFsbC1hYmMuanM`);"),
+            "routed backtick: {out}"
+        );
     }
 
     #[test]
