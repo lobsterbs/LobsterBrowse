@@ -2537,14 +2537,23 @@ async fn anubis_bridge(
             // redirect chain must land on the protected page. Log the
             // verdict: status, final URL after redirects, cookie count.
             let sc = resp.headers().get_all(header::SET_COOKIE).iter().count();
+            let status = resp.status();
+            let final_url = resp.url().to_string();
+            let body_snip = String::new();
+            if !status.is_success() {
+                if let Ok(b) = resp.text().await {
+                    body_snip = b.chars().take(300).collect();
+                }
+            }
             push_log(
                 &state,
                 "info",
                 &format!(
-                    "anubis pass-challenge upstream {} final {} cookies {} -> {}",
-                    resp.status(),
-                    resp.url(),
+                    "anubis pass-challenge upstream {} final {} cookies {} body [{}] -> {}",
+                    status,
+                    final_url,
                     sc,
+                    body_snip,
                     back
                 ),
             );
