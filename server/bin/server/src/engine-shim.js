@@ -148,6 +148,26 @@
     return PREFIX + b64u(abs) + PARAMS + frag;
   }
   window.__lbRoute = route;
+  /* CAPTCHA / anti-bot widget frames must stay genuinely cross-origin
+     (mirrors is_frame_to_challenge_host in main.rs — keep CHALLENGE_HOSTS
+     and this regex in sync): the widget's own scripts validate its real
+     origin, and the embedding page's provider JS validates postMessage
+     event.origin against the provider domain. Routing the frame through
+     the engine makes it same-origin with the proxy, both checks fail,
+     and the widget errors or spins forever instead of letting the user
+     solve it. Leaving the src unrouted makes the browser load the widget
+     directly from the provider, exactly like an unproxied page, so the
+     human's solve works; only the final form submit travels through the
+     proxy. This is compatibility, never solving. */
+  var CHALLENGE_HOST_RE = /(^|\.)(challenges\.cloudflare\.com|cloudflare\.com|hcaptcha\.com|js\.stripe\.com|www\.google\.com|recaptcha\.net)$/i;
+  function chal(u) {
+    try { return CHALLENGE_HOST_RE.test(new URL(String(u), PAGE).hostname); }
+    catch (e) { return false; }
+  }
+  var chalNote = function(v){
+    send("console", { level: "info",
+      text: "[lb] challenge widget frame left cross-origin: " + String(v).slice(0, 120), ts: Date.now() });
+  };
   var of = window.fetch;
   if (of) { window.fetch = function(input, init){
     /* url0 must survive every input shape: string, Request (url) and
@@ -233,7 +253,7 @@
       });
       return ws; };
     WS.prototype = OWS.prototype; window.WebSocket = WS; }
-  function prop(clazz, name) {
+  function prop(clazz, name, keepCrossOrigin) {
     try {
       var proto = window[clazz] && window[clazz].prototype;
       if (!proto) return;
@@ -241,13 +261,18 @@
       if (!d || !d.set || !d.get) return;
       Object.defineProperty(proto, name, {
         get: d.get,
-        set: function(v) { try { d.set.call(this, route(String(v))); } catch (e) { d.set.call(this, v); } },
+        set: function(v) {
+          try {
+            if (keepCrossOrigin && chal(v)) { chalNote(v); d.set.call(this, v); }
+            else { d.set.call(this, route(String(v))); }
+          } catch (e) { d.set.call(this, v); }
+        },
         configurable: true });
     } catch (e) {}
   }
   prop("HTMLImageElement", "src");
   prop("HTMLScriptElement", "src");
-  prop("HTMLIFrameElement", "src");
+  prop("HTMLIFrameElement", "src", true);
   prop("HTMLMediaElement", "src");
   prop("HTMLMediaElement", "poster");
   prop("HTMLSourceElement", "src");
@@ -256,7 +281,13 @@
   Element.prototype.setAttribute = function(n, v) {
     try {
       var ln = String(n).toLowerCase();
-      if ((ln === "href" || ln === "src" || ln === "action" || ln === "poster") && typeof v === "string" && v) v = route(v);
+      /* Challenge widget frames keep their real cross-origin src (see
+         chal()); every other URL attribute routes as before. */
+      if (ln === "src" && this.tagName === "IFRAME" && typeof v === "string" && v && chal(v)) {
+        chalNote(v);
+      } else if ((ln === "href" || ln === "src" || ln === "action" || ln === "poster") && typeof v === "string" && v) {
+        v = route(v);
+      }
     } catch (e) {}
     return sa.call(this, n, v);
   };
