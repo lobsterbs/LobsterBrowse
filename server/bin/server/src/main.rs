@@ -730,7 +730,8 @@ mod challenge_frame_tests {
         ));
         // Relative srcs resolve against the page URL first.
         assert!(!is_frame_to_challenge_host(
-            "/widget", "https://site.example/"
+            "/widget",
+            "https://site.example/"
         ));
     }
 
@@ -743,7 +744,9 @@ mod challenge_frame_tests {
             "/r/",
         );
         assert!(
-            out.contains(r#"src="https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orb""#),
+            out.contains(
+                r#"src="https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orb""#
+            ),
             "challenge iframe must stay cross-origin: {out}"
         );
     }
