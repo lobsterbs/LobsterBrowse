@@ -837,6 +837,14 @@ fn literal_is_url_like(s: &str) -> bool {
         return false;
     }
     let bare = t.split('#').next().unwrap_or(t);
+    // Root-relative literals must carry at least two path segments
+    // ("/cdn/assets/x.js"). Single-segment fragments like gatsby's
+    // "/page-data.json" are concatenation pieces, not standalone URLs,
+    // and rewriting them produces requests against the host root.
+    let segments = bare.trim_matches('/').split('/').count();
+    if t.starts_with('/') && !t.starts_with("//") && segments < 2 {
+        return false;
+    }
     let ext = bare.rsplit('.').next().unwrap_or("");
     matches!(
         ext,
@@ -882,6 +890,13 @@ mod js_literals_tests {
         let out = rewrite_js_literals(js, PAGE, "", "/lj/");
         assert!(out.contains("#zVzKbplPkm\""), "{}", out);
         assert!(!out.contains("/cdn/assets/root-kdmspc1p.css"), "{}", out);
+    }
+
+    #[test]
+    fn leaves_gatsby_page_data_fragment_alone() {
+        let js = r#"var u="/static-pages-assets/page-data/"+p+"/page-data.json";"#;
+        let out = rewrite_js_literals(js, "https://www.startpage.com/", "", "/lj/");
+        assert_eq!(out, js, "{}", out);
     }
 
     #[test]
@@ -1960,6 +1975,8 @@ async fn engine_proxy(
         req = req.body(b);
     }
 
+    let req_retry = req.try_clone();
+
     match req.send().await {
         Ok(resp) => {
             let status = resp.status();
@@ -2059,11 +2076,42 @@ async fn engine_proxy(
                             res_id, url, status, e
                         ),
                     );
-                    return engine_error_page(
-                        &url,
-                        &format!("upstream body read failed: {}", e),
-                        wants_html_page,
-                    );
+                    // One bounded retry: upstream gzip/brotli streams are
+                    // sometimes truncated mid-body (CDN flakiness) and a
+                    // fresh request usually yields the full chunk.
+                    if let Some(r2) = req_retry {
+                        if let Ok(resp2) = r2.send().await {
+                            if let Ok(b2) = resp2.bytes().await {
+                                push_log(
+                                    &state,
+                                    "info",
+                                    &format!(
+                                        "engine body retry ok {} {} ({} bytes)",
+                                        res_id, url, b2.len()
+                                    ),
+                                );
+                                b2
+                            } else {
+                                return engine_error_page(
+                                    &url,
+                                    &format!("upstream body read failed: {}", e),
+                                    wants_html_page,
+                                );
+                            }
+                        } else {
+                            return engine_error_page(
+                                &url,
+                                &format!("upstream body read failed: {}", e),
+                                wants_html_page,
+                            );
+                        }
+                    } else {
+                        return engine_error_page(
+                            &url,
+                            &format!("upstream body read failed: {}", e),
+                            wants_html_page,
+                        );
+                    }
                 }
             };
             let mut is_anubis = false;
