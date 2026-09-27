@@ -2517,7 +2517,12 @@ async fn engine_proxy(
                 // options.
                 if let Some(canon) = amp_canonical(&text, &base_url) {
                     if canon != base_url {
-                        push_log_sess(&state, sess.as_deref(), "info", &format!("de-amp {} -> {}", base_url, canon));
+                        push_log_sess(
+                            &state,
+                            sess.as_deref(),
+                            "info",
+                            &format!("de-amp {} -> {}", base_url, canon),
+                        );
                         let route =
                             format!("{}{}{}", prefix, b64url_encode(canon.as_bytes()), suffix);
                         return de_amp_redirect(&route);
@@ -2606,7 +2611,10 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
     // so they land in that tab's /logs ring, not the global one.
     let sess = raw
         .as_deref()
-        .and_then(|rq| rq.split('&').find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string())))
+        .and_then(|rq| {
+            rq.split('&')
+                .find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string()))
+        })
         .filter(|s| valid_session_token(s));
     if let Some(rq) = raw.as_deref() {
         for part in rq.split('&') {
@@ -2662,7 +2670,12 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             providers.push(fallback);
         }
     }
-    push_log_sess(&state, sess.as_deref(), "info", &format!("suggest {} {}", engine, q));
+    push_log_sess(
+        &state,
+        sess.as_deref(),
+        "info",
+        &format!("suggest {} {}", engine, q),
+    );
     let mut list: Vec<String> = Vec::new();
     let mut last_err = String::new();
     for provider in &providers {
@@ -2693,7 +2706,12 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
         }
     }
     if list.is_empty() && !last_err.is_empty() {
-        push_log_sess(&state, sess.as_deref(), "warn", &format!("suggest failed: {}", last_err));
+        push_log_sess(
+            &state,
+            sess.as_deref(),
+            "warn",
+            &format!("suggest failed: {}", last_err),
+        );
     }
     let out = format!("{{\"suggestions\":[{}]}}", list.join(","));
     ([("content-type", "application/json")], out).into_response()
@@ -2722,10 +2740,7 @@ fn parse_osjson(text: &str) -> Vec<String> {
 }
 
 /// Recent server-side engine log entries, newest last. JSON array.
-async fn logs_endpoint(
-    State(state): State<Arc<AppState>>,
-    RawQuery(raw): RawQuery,
-) -> Response {
+async fn logs_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): RawQuery) -> Response {
     // /logs is session-scoped: the caller must present its own lb_sess
     // token and receives ONLY that session's ring. Without a token the
     // endpoint refuses (403) rather than serving the global ring, so a
@@ -2734,7 +2749,8 @@ async fn logs_endpoint(
     let sess = raw
         .as_deref()
         .and_then(|rq| {
-            rq.split('&').find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string()))
+            rq.split('&')
+                .find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string()))
         })
         .filter(|s| valid_session_token(s));
     let Some(sess) = sess else {
@@ -3003,7 +3019,10 @@ fn zeolite_version(js: &str) -> String {
 async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery) -> Response {
     let sess = q
         .as_deref()
-        .and_then(|rq| rq.split('&').find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string())))
+        .and_then(|rq| {
+            rq.split('&')
+                .find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string()))
+        })
         .filter(|s| valid_session_token(s));
     let host = q
         .as_deref()
@@ -3017,7 +3036,12 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
         )
             .into_response();
     }
-    push_log_sess(&state, sess.as_deref(), "info", &format!("cert lookup {}", host));
+    push_log_sess(
+        &state,
+        sess.as_deref(),
+        "info",
+        &format!("cert lookup {}", host),
+    );
     /* crt.sh first: query the host, pick the best record. */
     let crtsh_url = format!("https://crt.sh/?q={}&output=json", json_escape(&host));
     let picked = match ct_fetch(&state, &crtsh_url).await {
@@ -3398,7 +3422,12 @@ async fn anubis_bridge(
         .to_string();
     let page = b64url_decode(&route_target).and_then(|b| String::from_utf8(b).ok());
     let Some(page) = page else {
-        push_log_sess(&state, sess.as_deref(), "warn", "anubis bridge: undecodable route target");
+        push_log_sess(
+            &state,
+            sess.as_deref(),
+            "warn",
+            "anubis bridge: undecodable route target",
+        );
         return (StatusCode::NOT_FOUND, "undecodable route target").into_response();
     };
     // Forward the original query with `redir` rewritten to the upstream
@@ -3805,14 +3834,22 @@ mod session_log_tests {
     fn per_session_ring_is_bounded() {
         let state = test_state();
         for i in 0..(SESSION_LOG_CAP + 50) {
-            push_log_sess(&state, Some("session-a-token-111"), "info", &format!("line {i}"));
+            push_log_sess(
+                &state,
+                Some("session-a-token-111"),
+                "info",
+                &format!("line {i}"),
+            );
         }
         let sessions = state.sessions.lock().unwrap();
         let ring = &sessions.get("session-a-token-111").unwrap().ring;
         assert_eq!(ring.len(), SESSION_LOG_CAP);
         // Oldest lines were evicted, newest kept.
         assert!(ring.front().unwrap().contains(&format!("line {50}")));
-        assert!(ring.back().unwrap().contains(&format!("line {}", SESSION_LOG_CAP + 49)));
+        assert!(ring
+            .back()
+            .unwrap()
+            .contains(&format!("line {}", SESSION_LOG_CAP + 49)));
     }
 
     #[test]
