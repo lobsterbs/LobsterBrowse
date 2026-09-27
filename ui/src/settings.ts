@@ -237,6 +237,13 @@ export function b64urlDecode(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+/* Route prefix of the active proxy engine. This is the single place
+   engine-specific route shapes live; everywhere else resolves through
+   it so engine branching does not spread through the UI. */
+export function engineRoutePrefix(engine: ProxyEngineId): string {
+  return engine === "lobsterjet" ? "/lj/" : "/r/";
+}
+
 /* Build the navigation route for a target URL. Both engines route
    through the same-origin server for now: when the deployment
    provides a LobsterJet engine this is where its route shape plugs
@@ -245,8 +252,7 @@ export function routeUrl(s: Settings, rules: SiteRule[], target: string, incogni
   const params = proxyParams(s, rules, target, incognito);
   /* LobsterJet routes hit the service worker's client-side cache first;
      the server answers them identically when no worker is installed. */
-  const base = s.proxyEngine === "lobsterjet" ? "/lj/" : "/r/";
-  return base + b64urlEncode(target) + (params ? "?" + params : "");
+  return engineRoutePrefix(s.proxyEngine) + b64urlEncode(target) + (params ? "?" + params : "");
 }
 
 /* Recover the real URL from a /r/<b64> pathname ("" when invalid). */

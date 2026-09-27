@@ -1,0 +1,140 @@
+/* Extensions side panel (installed add-ons list + detail view).
+   Presentational: the engine control-plane queries and state stay in
+   pages/Browser.tsx. */
+export type ExtInfo = {
+  id: string;
+  name: string;
+  version: string;
+  state: string;
+  enabled: boolean;
+  lastError: string | null;
+};
+
+export type ExtDetail = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  state: string;
+  enabled: boolean;
+  lastError: string | null;
+  permissions: string[];
+  hostPermissions: string[];
+  contentScripts: number;
+  optionsPath: string | null;
+};
+
+export default function ExtensionsPanel(props: {
+  list: ExtInfo[] | null;
+  busy: boolean;
+  error: string | null;
+  detail: ExtDetail | null;
+  detailError: string | null;
+  incognito: Record<string, boolean>;
+  onRefresh: () => void;
+  onClose: () => void;
+  onOpenDetail: (id: string) => void;
+  onCloseDetail: () => void;
+  onToggleEnabled: (id: string, on: boolean) => void;
+  onToggleIncognito: (id: string, on: boolean) => void;
+  onOpenOptions: (d: ExtDetail) => void;
+}) {
+  return (
+    <div className="lb-ext-panel" role="dialog" aria-label="Extensions">
+      <div className="lb-ext-head">
+        <span className="lb-ext-title">Extensions</span>
+        <span>
+          <m3e-icon-button aria-label="Refresh extensions" onClick={props.onRefresh}>
+            <m3e-icon name="refresh" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-icon-button aria-label="Close extensions" onClick={props.onClose}>
+            <m3e-icon name="close" aria-hidden={true} />
+          </m3e-icon-button>
+        </span>
+      </div>
+      {props.list === null ? (
+        <p className="lb-ext-note">
+          {props.busy
+            ? "Querying the engine service worker..."
+            : props.error
+              ? "Engine extensions unavailable: " + props.error
+              : "Engine extensions unavailable. No Zeolite service worker on this origin."}
+        </p>
+      ) : props.list.length === 0 ? (
+        <p className="lb-ext-note">No extensions installed.</p>
+      ) : (
+        <div className="lb-ext-list">
+          {props.list.map((e) => (
+            <div
+              key={e.id}
+              className={"lb-ext-item" + (props.detail && props.detail.id === e.id ? " sel" : "")}
+              title={e.lastError ?? ""}
+              role="button"
+              tabIndex={0}
+              onClick={() => props.onOpenDetail(e.id)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") props.onOpenDetail(e.id);
+              }}
+            >
+              <span className="lb-ext-name">{e.name}</span>
+              <span className="lb-ext-ver">{e.version}</span>
+              <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
+                {e.enabled ? e.state : "disabled"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {props.detailError && <p className="lb-ext-err">{props.detailError}</p>}
+      {props.detail && (
+        <div className="lb-ext-detail">
+          <div className="lb-ext-dhead">
+            <span className="lb-ext-dname">
+              {props.detail.name} <span className="lb-ext-ver">{props.detail.version}</span>
+            </span>
+            <m3e-icon-button aria-label="Close extension details" onClick={props.onCloseDetail}>
+              <m3e-icon name="close" aria-hidden={true} />
+            </m3e-icon-button>
+          </div>
+          {props.detail.description && <p className="lb-ext-desc">{props.detail.description}</p>}
+          <div className="lb-ext-trow">
+            <span className="lb-ext-tlabel">Enabled</span>
+            <m3e-switch
+              checked={props.detail.enabled ? "" : undefined}
+              icons="selected"
+              aria-label="Extension enabled"
+              onClick={() => props.onToggleEnabled(props.detail!.id, !props.detail!.enabled)}
+            />
+          </div>
+          <div className="lb-ext-trow">
+            <span className="lb-ext-tlabel">Allow in incognito tabs</span>
+            <m3e-switch
+              checked={props.incognito[props.detail.id] ? "" : undefined}
+              icons="selected"
+              aria-label="Allow extension in incognito tabs"
+              onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
+            />
+          </div>
+          {(props.detail.permissions.length > 0 || props.detail.hostPermissions.length > 0) && (
+            <div className="lb-ext-perms">
+              {[...props.detail.permissions, ...props.detail.hostPermissions].slice(0, 12).map((p) => (
+                <code key={p}>{p}</code>
+              ))}
+            </div>
+          )}
+          {props.detail.contentScripts > 0 && (
+            <p className="lb-ext-desc">
+              {props.detail.contentScripts} content script{props.detail.contentScripts === 1 ? "" : "s"} registered.
+            </p>
+          )}
+          {props.detail.optionsPath && (
+            <m3e-button onClick={() => props.onOpenOptions(props.detail!)} {...{ class: "lb-ext-optbtn" }}>
+              <m3e-icon name="settings" aria-hidden={true} /> Open options page
+            </m3e-button>
+          )}
+          {props.detail.lastError && <p className="lb-ext-err">{props.detail.lastError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
