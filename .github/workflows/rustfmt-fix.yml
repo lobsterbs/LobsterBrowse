@@ -1,6 +1,9 @@
 name: rustfmt fix
 
 on:
+  push:
+    paths:
+      - ".github/workflows/rustfmt-fix.yml"
   workflow_dispatch:
 
 permissions:
