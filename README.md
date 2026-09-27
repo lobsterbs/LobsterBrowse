@@ -2,6 +2,10 @@
 ![LobsterBrowse banner](assets/lobsterbrowse-banner.svg)
 **Open-source proxy browser · Rust + React + Material 3 Expressive**
 LobsterBrowse is a browser-style proxy application built around Rust/Axum, React/M3E, Wisp transport, structured DevTools diagnostics and Zeolite integration.
+## Roadmap
+
+The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemical element codenames for LobsterBrowse releases, distinct from Zeolite's compound/material naming system.
+
 ## Architecture
     LobsterBrowse UI
           |
