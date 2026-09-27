@@ -9,7 +9,7 @@ export type DlItem = {
   url: string;
   size: number;
   got: number;
-  status: "active" | "done" | "error";
+  status: "active" | "done" | "error" | "cancelled";
   error?: string;
 };
 

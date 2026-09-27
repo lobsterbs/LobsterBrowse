@@ -74,6 +74,18 @@ type DlItem = {
   error?: string;
 };
 
+/* Minimal File System Access surface used by the streaming download
+   path. Declared locally (structural, no global augmentation) so it
+   compiles even where the API is absent at runtime. */
+type FileSystemWritableFileStreamLike = {
+  write(data: BufferSource | Blob | string): Promise<void>;
+  close(): Promise<void>;
+  abort?(): Promise<void>;
+};
+type SavePickerFn = (options?: { suggestedName?: string }) => Promise<{
+  createWritable(): Promise<FileSystemWritableFileStreamLike>;
+}>;
+
 export default function BrowserView(props: Props) {
   const { settings, rules, tabs, activeId } = props;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
@@ -201,9 +213,10 @@ export default function BrowserView(props: Props) {
            so any picker failure other than the user dismissing the
            dialog falls back to the capped in-memory Blob path below.
            A user dismissal is an honest cancel, not a failure. */
-        if (res.body && typeof window.showSaveFilePicker === "function") {
+        const picker: SavePickerFn | undefined = (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
+        if (res.body && typeof picker === "function") {
           try {
-            const handle = await window.showSaveFilePicker({ suggestedName: name.slice(0, 120) });
+            const handle = await picker({ suggestedName: name.slice(0, 120) });
             writable = await handle.createWritable();
             streaming = true;
           } catch (e) {
