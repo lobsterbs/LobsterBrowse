@@ -29,6 +29,50 @@ NEW_ATTRS = '''    let attrs: [(&str, u8); 7] = [
 assert src.count(OLD_ATTRS) == 1, "attrs anchor not found exactly once"
 src = src.replace(OLD_ATTRS, NEW_ATTRS)
 
+# --- clippy: format! nested in format! args (engine_error_page) ---
+OLD_JSON = r'''    let detail = json_escape(detail);
+    let url_js = json_escape(url);
+'''
+NEW_JSON = r'''    let detail = json_escape(detail);
+    let url_js = json_escape(url);
+    let url_json = format!("\"{}\"", url_js);
+    let detail_json = format!("\"{}\"", detail);
+'''
+assert src.count(OLD_JSON) == 1, "json_escape anchor not found exactly once"
+src = src.replace(OLD_JSON, NEW_JSON)
+
+OLD_JSON_ARGS = r'''        url_json = format!("\"{}\"", url_js),
+        detail_json = format!("\"{}\"", detail),
+    );
+'''
+NEW_JSON_ARGS = r'''        url_json = url_json,
+        detail_json = detail_json,
+    );
+'''
+assert src.count(OLD_JSON_ARGS) == 1, "json format args anchor not found exactly once"
+src = src.replace(OLD_JSON_ARGS, NEW_JSON_ARGS)
+
+# --- clippy: map_or(true, ...) -> is_none_or (best_crtsh) ---
+OLD_NEWER = r'''            slot.as_ref().map_or(true, |(cur, _)| na > cur.as_str())
+'''
+NEW_NEWER = r'''            slot.as_ref().is_none_or(|(cur, _)| na > cur.as_str())
+'''
+assert src.count(OLD_NEWER) == 1, "map_or anchor not found exactly once"
+src = src.replace(OLD_NEWER, NEW_NEWER)
+
+# --- clippy: format! nested in format! args (/build endpoint) ---
+OLD_BUILD = r'''    let body = format!(
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        format!("{} Molt", env!("CARGO_PKG_VERSION")),
+'''
+NEW_BUILD = r'''    let lb_version = format!("{} Molt", env!("CARGO_PKG_VERSION"));
+    let body = format!(
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        lb_version,
+'''
+assert src.count(OLD_BUILD) == 1, "/build anchor not found exactly once"
+src = src.replace(OLD_BUILD, NEW_BUILD)
+
 # --- 2. shim integrity test module appended at EOF ---
 OLD_TAIL = '''    #[test]
     fn invalid_tokens_fall_back_to_the_global_ring() {
