@@ -831,9 +831,8 @@ fn literal_is_url_like(s: &str) -> bool {
         return false;
     }
     let lower = t.to_ascii_lowercase();
-    let rooted = lower.starts_with("http://")
-        || lower.starts_with("https://")
-        || lower.starts_with('/');
+    let rooted =
+        lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with('/');
     if !rooted {
         return false;
     }
@@ -841,8 +840,7 @@ fn literal_is_url_like(s: &str) -> bool {
     let ext = bare.rsplit('.').next().unwrap_or("");
     matches!(
         ext,
-        "js"
-            | "mjs"
+        "js" | "mjs"
             | "css"
             | "json"
             | "map"
@@ -2106,7 +2104,7 @@ async fn engine_proxy(
                         &suffix,
                         prefix,
                     ))
-                        .into_bytes(),
+                    .into_bytes(),
                     Err(_) => {
                         push_log(
                             &state,
