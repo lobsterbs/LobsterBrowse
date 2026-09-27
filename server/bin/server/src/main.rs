@@ -1618,10 +1618,10 @@ async fn engine_proxy(
                 // -control/expires must travel with it or browser (and SW)
                 // revalidation silently breaks. (Collected before
                 // bytes_stream: that consumes the response.)
-                let mut cache_headers: Vec<(&str, &str)> = Vec::new();
+                let mut cache_headers: Vec<(&str, String)> = Vec::new();
                 for h in ["etag", "last-modified", "cache-control", "expires"] {
                     if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
-                        cache_headers.push((h, v));
+                        cache_headers.push((h, v.to_owned()));
                     }
                 }
                 let stream = resp.bytes_stream();
@@ -1629,7 +1629,7 @@ async fn engine_proxy(
                     .status(axum_status)
                     .header(header::CONTENT_TYPE, ct);
                 for (h, v) in &cache_headers {
-                    builder = builder.header(*h, *v);
+                    builder = builder.header(*h, v.as_str());
                 }
                 return builder
                     .body(Body::from_stream(stream))
