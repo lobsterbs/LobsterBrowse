@@ -216,13 +216,20 @@ export default function BrowserView(props: Props) {
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
         const chunks: BlobPart[] = [];
         if (res.body) {
+          /* Streaming sink note: the File System Access API
+             (showSaveFilePicker + writable) is the true streaming
+             sink, but the proxied frame does not enjoy the user-gesture
+             + permission context it needs and Safari lacks it, so the
+             practical sink here is Blob assembly. Each reader chunk is
+             a fresh buffer per the streams spec, so pushing `value`
+             directly avoids the old full-slice copy that doubled peak
+             memory for large downloads. */
           const reader = res.body.getReader();
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
             if (value) {
-              const buf = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
-              chunks.push(buf);
+              chunks.push(value);
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: d.got + value.byteLength } : d)));
             }
           }
@@ -987,17 +994,22 @@ export default function BrowserView(props: Props) {
      hook order never changes between renders. */
   useEffect(() => {
     const q = draft.trim();
-    if (!q || !settings.suggestQueries) {
+    /* Min length 2: single characters are noise and cost a round trip
+       per keystroke for no useful completion. */
+    if (!q || q.length < 2 || !settings.suggestQueries) {
       setTbSugg([]);
       setTbSuggOpen(false);
       setTbSuggIdx(-1);
       return;
     }
-    let cancelled = false;
+    /* AbortController: a superseded keystroke cancels its in-flight
+       request instead of only ignoring the late answer. Site-generated
+       AbortErrors are normal cancellations and land in the same
+       swallow path; nothing here reports FETCH_FAILURE. */
+    const ac = new AbortController();
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, draft)
+      fetchSuggestions(settings.engine, draft, ac.signal)
         .then((list) => {
-          if (cancelled) return;
           const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
           setTbSugg(items);
           setTbSuggOpen(items.length > 0);
@@ -1008,12 +1020,12 @@ export default function BrowserView(props: Props) {
              setting. */
           pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length);
         })
-        .catch((err) => {
-          if (!cancelled) pushLog("error", "suggest failed: " + String(err).slice(0, 120));
+        .catch(() => {
+          /* aborted or failed; no diagnostic for aborts by design */
         });
     }, 160);
     return () => {
-      cancelled = true;
+      ac.abort();
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

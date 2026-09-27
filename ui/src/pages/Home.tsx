@@ -54,25 +54,24 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
 
   useEffect(() => {
     const q = url.trim();
-    if (!q || looksLikeUrl(q) || !settings.suggestQueries) {
+    if (!q || q.length < 2 || looksLikeUrl(q) || !settings.suggestQueries) {
       setRemote([]);
       setSuggLoading(false);
       return;
     }
-    let cancelled = false;
+    const ac = new AbortController();
     setSuggLoading(true);
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, q).then((list) => {
-        if (cancelled) return;
+      fetchSuggestions(settings.engine, q, ac.signal).then((list) => {
         setRemote(list);
         setSuggLoading(false);
         if (list.length === 0) {
           pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + " + bing fallback)");
         }
-      });
+      }).catch(() => setSuggLoading(false));
     }, 160);
     return () => {
-      cancelled = true;
+      ac.abort();
       clearTimeout(t);
       setSuggLoading(false);
     };
