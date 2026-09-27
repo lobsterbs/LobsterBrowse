@@ -78,6 +78,18 @@ When NativeTransit is active, the network view should show NativeTransit vs Rewr
 The application is deployed on Render. The Docker build must successfully build both the Rust server and strict TypeScript/Vite UI.
 After deployment changes verify `/healthz`, UI, `/r/`, `/lj/`, `/zlsw/`, Wisp endpoints, and extension routes when relevant. Do not claim a deployment is healthy without checking it.
 
+### Stale engine bundle hazard (real incident, 2026-09-27)
+The `zl-builder` Docker stage fetches the Zeolite `dist` tarball in a `RUN`
+layer whose instruction text never changes, so Render's layer cache reuses it
+forever: ordinary deploys silently shipped a months-old engine bundle while
+`dist` had moved on. After a Zeolite `dist` publish, deploy with
+`clearCache: true` (render trigger_deploy) or the bundle will not update.
+`/build` reports `zlswSha` (sha256 prefix of the served `zlsw/sw.js`) and the
+Zeolite version parsed out of that same file: compare against the dist branch
+before believing a deploy picked the new engine up. `/build` reads the bundle
+the server actually serves; it never invents a version ("unknown" when the
+bundle is missing).
+
 ## Development workflow
 Inspect the implementation and trace state/request flow first. Make the smallest coherent change, run applicable Rust/UI tests, inspect the diff, and update docs when behavior changes.
 Test real website classes for engine changes: normal HTML, SPAs, fetch/XHR, WebSockets, modules, CSS/images, iframes, workers, redirects, authentication, MIME-sensitive resources and large responses.
