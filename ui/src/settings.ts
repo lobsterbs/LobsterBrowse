@@ -244,15 +244,15 @@ export function engineRoutePrefix(engine: ProxyEngineId): string {
   return engine === "lobsterjet" ? "/lj/" : "/r/";
 }
 
-/* Build the navigation route for a target URL. Both engines route
-   through the same-origin server for now: when the deployment
-   provides a LobsterJet engine this is where its route shape plugs
-   in. Until then the built-in rewriter serves every navigation. */
+/* Build the navigation route for a target URL. Zeolite is the
+   client-side engine: its service worker owns /lj/ routes, and it
+   forwards the route's query string to the target, so no server-side
+   option params may ride on them. ScramJet routes through the server
+   engine and keeps the lb_ options. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false): string {
+  if (s.proxyEngine === "lobsterjet") return "/lj/" + b64urlEncode(target);
   const params = proxyParams(s, rules, target, incognito);
-  /* LobsterJet routes hit the service worker's client-side cache first;
-     the server answers them identically when no worker is installed. */
-  return engineRoutePrefix(s.proxyEngine) + b64urlEncode(target) + (params ? "?" + params : "");
+  return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
 }
 
 /* Recover the real URL from a /r/<b64> pathname ("" when invalid). */

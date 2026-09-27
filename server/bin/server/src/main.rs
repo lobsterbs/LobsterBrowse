@@ -1673,6 +1673,22 @@ fn compress_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
 /// navigation requests (sec-fetch-dest document/iframe, or no header at
 /// all) get the interactive HTML error card. Subresource requests get an
 /// honest 502 text/plain body.
+/// Honest answer for /lj/ routes: Zeolite's service worker owns them
+/// (client-side interception, native wisp transport, in-worker document
+/// rewriting). Reaching the server means no worker controls the page:
+/// cold start, worker restart, or a browser without module service
+/// workers.
+async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>) -> Response {
+    let real = b64url_decode(&target)
+        .and_then(|b| String::from_utf8(b).ok())
+        .unwrap_or_default();
+    engine_error_page(
+        &real,
+        "Zeolite runs in its service worker, and none controls this page yet. Reload the app so the worker activates, or switch the engine to ScramJet.",
+        true,
+    )
+}
+
 fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
     if !wants_html {
         return (
@@ -2721,10 +2737,12 @@ async fn main() {
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/r/:target", any(engine_proxy))
-        // LobsterJet entry: same engine handler, so pages work even when
-        // the service worker is not installed/ready yet. The worker layers
-        // its client-side cache on top of this route.
-        .route("/lj/:target", any(engine_proxy))
+        // Zeolite is the client-side engine: its service worker owns /lj/
+        // routes (interception, native wisp transport, in-worker document
+        // rewriting). A /lj/ request only reaches the server when no
+        // worker controls the page — answer with the honest load-error
+        // page instead of a second, divergent server rewriter.
+        .route("/lj/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
