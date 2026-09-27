@@ -2384,8 +2384,10 @@ async fn main() {
         // this origin escapes the engine route and used to hit the SPA
         // fallback — the proof never reached the protected host, no cookie
         // was set, and the challenge reloaded forever. The bridge proxies
-        // the pass-challenge upstream (the shared jar keeps the Anubis
-        // cookie) and bounces the frame back to its engine route.
+        // the pass-challenge upstream with redir rewritten to the upstream
+        // page (the challenge script's own redir points at this proxy's
+        // origin, which Anubis rejects), then bounces the frame back to
+        // its engine route.
         .route("/.within.website/*path", any(anubis_bridge))
         .fallback_service(
             ServeDir::new("ui")
@@ -2441,6 +2443,47 @@ fn pct_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Percent-encode a query component value.
+fn pct_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => {
+                out.push('%');
+                out.push_str(&format!("{:02X}", b));
+            }
+        }
+    }
+    out
+}
+
+/// Rebuild the pass-challenge query with `redir` pointing at the upstream
+/// page. See the call site for why the original redir cannot be forwarded
+/// and why it cannot simply be dropped.
+fn anubis_forward_query(raw: Option<&str>, page: &str) -> String {
+    let mut q = String::new();
+    if let Some(rq) = raw {
+        for part in rq.split('&') {
+            if part.is_empty() || part.starts_with("redir=") {
+                continue;
+            }
+            if !q.is_empty() {
+                q.push('&');
+            }
+            q.push_str(part);
+        }
+    }
+    if !q.is_empty() {
+        q.push('&');
+    }
+    q.push_str("redir=");
+    q.push_str(&pct_encode(page));
+    q
 }
 
 /// The engine route ("/lj/..." or "/r/...") inside a URL or path string,
@@ -2506,26 +2549,14 @@ async fn anubis_bridge(
         push_log(&state, "warn", "anubis bridge: undecodable route target");
         return (StatusCode::NOT_FOUND, "undecodable route target").into_response();
     };
-    // Forward the original query minus `redir` (Anubis would reject a
-    // foreign-origin redirect target anyway; the browser is bounced back
-    // to the engine route below). Raw parts keep their encoding intact.
-    let mut q = String::new();
-    if let Some(rq) = raw.as_deref() {
-        for part in rq.split('&') {
-            if part.is_empty() || part.starts_with("redir=") {
-                continue;
-            }
-            if !q.is_empty() {
-                q.push('&');
-            }
-            q.push_str(part);
-        }
-    }
-    let url = if q.is_empty() {
-        format!("{}{}", page.trim_end_matches('/'), uri.path())
-    } else {
-        format!("{}{}?{}", page.trim_end_matches('/'), uri.path(), q)
-    };
+    // Forward the original query with `redir` rewritten to the upstream
+    // page URL. The challenge script sets redir to this proxy's origin
+    // (the frame URL), which the protected host rejects with 400
+    // redirect_domain_not_allowed; dropping redir entirely is just as
+    // fatal (400 invalid_redirect). The upstream page URL is the one
+    // redirect target the protected host always accepts.
+    let q = anubis_forward_query(raw.as_deref(), &page);
+    let url = format!("{}{}?{}", page.trim_end_matches('/'), uri.path(), q);
     let client = if back.contains("lb_inc=1") {
         &state.incognito_client
     } else {
@@ -2565,7 +2596,7 @@ async fn anubis_bridge(
 
 #[cfg(test)]
 mod anubis_bridge_tests {
-    use super::{engine_route_in, pct_decode};
+    use super::{anubis_forward_query, engine_route_in, pct_decode};
 
     #[test]
     fn finds_engine_routes() {
@@ -2585,6 +2616,28 @@ mod anubis_bridge_tests {
         );
         assert_eq!(pct_decode("plain"), "plain");
         assert_eq!(pct_decode("100%"), "100%");
+    }
+
+    #[test]
+    fn rewrites_redir_to_upstream_page() {
+        // Foreign-origin redir is replaced, other params survive verbatim.
+        assert_eq!(
+            anubis_forward_query(
+                Some("id=a&response=b&nonce=1&redir=https%3A%2F%2Fproxy.example%2Flj%2FagQ&elapsedTime=2"),
+                "https://www.startpage.com/"
+            ),
+            "id=a&response=b&nonce=1&elapsedTime=2&redir=https%3A%2F%2Fwww.startpage.com%2F"
+        );
+        // Missing redir still yields a valid one.
+        assert_eq!(
+            anubis_forward_query(Some("id=a"), "https://www.startpage.com/do/search"),
+            "id=a&redir=https%3A%2F%2Fwww.startpage.com%2Fdo%2Fsearch"
+        );
+        // No query at all.
+        assert_eq!(
+            anubis_forward_query(None, "https://www.startpage.com/"),
+            "redir=https%3A%2F%2Fwww.startpage.com%2F"
+        );
     }
 }
 
