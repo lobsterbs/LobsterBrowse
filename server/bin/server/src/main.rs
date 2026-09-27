@@ -2556,6 +2556,26 @@ fn pct_encode(s: &str) -> String {
     out
 }
 
+/// The Anubis pass-challenge API lives at the protected host's origin
+/// root (/.within.website/x/cmd/anubis/api/pass-challenge), never under
+/// the page's path. Rebuilding the upstream URL from the FULL page URL
+/// only worked for pages at the host root (the trailing slash got
+/// trimmed and the concatenation accidentally produced the right URL);
+/// on a deep page like https://host/sp/search?query=x it produced
+/// ".../search?query=x/.within.website/..." — the protected host answered
+/// 200 with a fresh challenge page, no cookie was ever set, and the
+/// frame reloaded the challenge forever. Only the origin is kept.
+fn page_origin(page: &str) -> String {
+    match page.find("://") {
+        Some(i) => {
+            let rest = &page[i + 3..];
+            let end = rest.find('/').unwrap_or(rest.len());
+            format!("{}://{}", &page[..i], &rest[..end])
+        }
+        None => page.trim_end_matches('/').to_string(),
+    }
+}
+
 /// Rebuild the pass-challenge query with `redir` pointing at the upstream
 /// page. See the call site for why the original redir cannot be forwarded
 /// and why it cannot simply be dropped.
@@ -2650,7 +2670,7 @@ async fn anubis_bridge(
     // fatal (400 invalid_redirect). The upstream page URL is the one
     // redirect target the protected host always accepts.
     let q = anubis_forward_query(raw.as_deref(), &page);
-    let url = format!("{}{}?{}", page.trim_end_matches('/'), uri.path(), q);
+    let url = format!("{}{}?{}", page_origin(&page), uri.path(), q);
     let client = if back.contains("lb_inc=1") {
         &state.incognito_client
     } else {
@@ -2690,7 +2710,7 @@ async fn anubis_bridge(
 
 #[cfg(test)]
 mod anubis_bridge_tests {
-    use super::{anubis_forward_query, engine_route_in, pct_decode};
+    use super::{anubis_forward_query, engine_route_in, page_origin, pct_decode};
 
     #[test]
     fn finds_engine_routes() {
@@ -2700,6 +2720,22 @@ mod anubis_bridge_tests {
         );
         assert_eq!(engine_route_in("/r/abc"), Some("/r/abc".to_string()));
         assert_eq!(engine_route_in("https://plain.example/"), None);
+    }
+
+    #[test]
+    fn origin_is_kept_path_and_query_are_dropped() {
+        // Deep page with query: the pass-challenge API must be reached at
+        // the origin root, never concatenated onto the page URL.
+        assert_eq!(
+            page_origin("https://www.startpage.com/sp/search?query=Lobster"),
+            "https://www.startpage.com"
+        );
+        // Root pages keep working exactly as before the fix.
+        assert_eq!(page_origin("https://www.startpage.com/"), "https://www.startpage.com");
+        assert_eq!(page_origin("https://www.startpage.com"), "https://www.startpage.com");
+        // Ports survive; bare host without a scheme is passed through.
+        assert_eq!(page_origin("http://host.example:8080/a/b?c=d"), "http://host.example:8080");
+        assert_eq!(page_origin("host.example/"), "host.example");
     }
 
     #[test]
