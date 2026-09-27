@@ -2226,7 +2226,8 @@ mod url_fragment_tests {
     #[test]
     fn svg_use_tag_keeps_the_fragment_after_the_route() {
         let tag = r#"<use href="/cdn/assets/sprites.svg#voice-regular-24">"#;
-        let out = rewrite_tag(tag, tag.to_ascii_lowercase(), "https://chatgpt.com/", "?lb_ab=1", "/lj/");
+        let lower = tag.to_ascii_lowercase();
+        let out = rewrite_tag(tag, &lower, "https://chatgpt.com/", "?lb_ab=1", "/lj/");
         assert!(out.starts_with(r#"<use href="/lj/"#));
         assert!(out.ends_with("#voice-regular-24\">"));
         assert!(out.contains("?lb_ab=1#voice-regular-24"));
