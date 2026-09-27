@@ -133,8 +133,20 @@ fn json_escape(s: &str) -> String {
 /// diagnostic value of the log.
 fn redact_secrets(s: &str) -> String {
     const SECRET_KEYS: &[&str] = &[
-        "token", "access_token", "refresh_token", "api_key", "apikey", "password", "passwd",
-        "pwd", "secret", "authorization", "session", "sessionid", "session_id", "sid",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "apikey",
+        "password",
+        "passwd",
+        "pwd",
+        "secret",
+        "authorization",
+        "session",
+        "sessionid",
+        "session_id",
+        "sid",
         "client_secret",
     ];
     let is_val_char =
@@ -168,7 +180,9 @@ fn redact_secrets(s: &str) -> String {
         if c == 'e' && chars.len() >= i + 20 && chars[i..].starts_with(&['e', 'y', 'J']) {
             let mut end = i;
             while end < chars.len()
-                && (chars[end].is_ascii_alphanumeric() || chars[end] == '_' || chars[end] == '-'
+                && (chars[end].is_ascii_alphanumeric()
+                    || chars[end] == '_'
+                    || chars[end] == '-'
                     || chars[end] == '.')
             {
                 end += 1;
@@ -996,7 +1010,8 @@ mod redact_tests {
 
     #[test]
     fn redacts_jwts() {
-        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV";
+        let jwt =
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV";
         let out = redact_secrets(&format!("auth failed near {jwt} end"));
         assert!(out.contains("[redacted-jwt]"), "{out}");
         assert!(!out.contains("eyJhbGciOiJIUzI1NiJ9"), "{out}");
@@ -1020,7 +1035,10 @@ mod redact_tests {
     #[test]
     fn non_secret_values_survive() {
         let out = redact_secrets("engine done GET https://x.test/page -> 200 (12 ms, 3 B)");
-        assert_eq!(out, "engine done GET https://x.test/page -> 200 (12 ms, 3 B)");
+        assert_eq!(
+            out,
+            "engine done GET https://x.test/page -> 200 (12 ms, 3 B)"
+        );
     }
 }
 
