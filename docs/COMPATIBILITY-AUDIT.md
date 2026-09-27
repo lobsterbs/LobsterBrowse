@@ -124,3 +124,20 @@ worker script routing; per-session `/logs` correlation; challenge-host
 allowlist generation (Rust↔JS single source).
 P2: settings versioned migrations; favicon SSRF hardening; tab
 lifecycle policy; permissions model; downloads page/history.
+
+## 8. Incognito data-flow (P0, fixed 2026-09-27)
+
+Audited every persistent path. What incognito already did NOT persist:
+tabs/session (`saveSessionTabs` skipped), browsing history (`onHistory`
+gated). What it accidentally DID persist: page diagnostic entries
+(console lines, resfail reports) reached `pushLog`, which writes the
+`lobsterbrowse-logs` localStorage key. Fixed: `store.setIncognitoLogging`
+keeps the ring in memory only while incognito is on (App.tsx wires it
+to the incognito state); no new entries are written or flushed to
+localStorage during an incognito session. The pre-incognito log tail
+remains visible (like a real browser's pre-existing state).
+
+What deliberately survives incognito (documented): server-side
+`/logs` ring (shared, sanitized, per-deployment), the ScramJet
+incognito cookie jar in RAM until restart, Zeolite `/lj/` cookie jar
+(documented gap: shared with normal tabs).

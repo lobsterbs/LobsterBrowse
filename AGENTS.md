@@ -137,6 +137,9 @@ The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `
 ## Session restoration (2026-09-27)
 `saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior destroyed back/forward history on reload. Old saves are normalized on load.
 
+## Incognito log hygiene (2026-09-27)
+`store.setIncognitoLogging(on)` (wired from App.tsx incognito state) keeps the technical log ring in memory only during incognito sessions; page diagnostics no longer persist to the `lobsterbrowse-logs` localStorage key while incognito is on.
+
 ## Module import rewriting
 `rewrite_js_imports` rewrites import/export/dynamic-import specifiers in inline `type=module` bodies and served `.js` files, for `"`, `'` and backtick quoting. Backtick templates containing `${` interpolation or escapes are left alone (runtime-computed, unresolvable server-side). This stays server-side: module loading happens below window.fetch, the shim cannot intercept it. Import maps with relative keys are a known gap.
 
