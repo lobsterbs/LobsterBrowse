@@ -425,7 +425,10 @@ fn next_res_id(counter: &AtomicU64) -> String {
 }
 
 fn json_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "")
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "")
 }
 
 fn push_log(state: &AppState, level: &str, msg: &str) {
@@ -468,15 +471,16 @@ const CHALLENGE_HOSTS: &[&str] = &[
 
 fn is_challenge_host(host: &str) -> bool {
     let h = host.to_ascii_lowercase();
-    CHALLENGE_HOSTS.iter().any(|c| h == *c || h.ends_with(&format!(".{c}")))
+    CHALLENGE_HOSTS
+        .iter()
+        .any(|c| h == *c || h.ends_with(&format!(".{c}")))
 }
 
 /// Firefox User-Agent used for the suggestion providers (several reject
 /// non-browser UAs) and force-applied to the Mozilla add-ons store:
 /// AMO gates downloads on a Firefox client, so on addons.mozilla.org
 /// the proxy always spoofs Firefox unless the user set an explicit UA.
-const FIREFOX_UA: &str =
-    "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
+const FIREFOX_UA: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
 
 fn is_amo_host(host: &str) -> bool {
     let h = host.to_ascii_lowercase();
@@ -627,7 +631,10 @@ fn strip_base_tags(html: &str) -> String {
     while let Some(rel) = lower[i..].find("<base") {
         let start = i + rel;
         let nextc = lower[start + 5..].chars().next();
-        let ok = matches!(nextc, Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('>') | Some('/'));
+        let ok = matches!(
+            nextc,
+            Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('>') | Some('/')
+        );
         if !ok {
             out.push_str(&html[i..start + 5]);
             i = start + 5;
@@ -685,7 +692,11 @@ const B64URL_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 fn b64url_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         out.push(B64URL_CHARS[(n >> 18 & 63) as usize] as char);
         out.push(B64URL_CHARS[(n >> 12 & 63) as usize] as char);
@@ -823,7 +834,11 @@ fn resolve_url(base: &str, href: &str) -> Option<String> {
         }
     }
     let joined = segs.join("/");
-    let pathout = if joined.starts_with('/') { joined } else { format!("/{}", joined) };
+    let pathout = if joined.starts_with('/') {
+        joined
+    } else {
+        format!("/{}", joined)
+    };
     Some(format!("{}{}", origin, pathout))
 }
 
@@ -858,7 +873,13 @@ fn rewrite_url_attr(value: &str, page_url: &str, suffix: &str, prefix: &str) -> 
                 Some((b, f)) => (b, format!("#{}", f)),
                 None => (abs.as_str(), String::new()),
             };
-            format!("{}{}{}{}", prefix, b64url_encode(bare.as_bytes()), suffix, frag)
+            format!(
+                "{}{}{}{}",
+                prefix,
+                b64url_encode(bare.as_bytes()),
+                suffix,
+                frag
+            )
         }
         None => value.to_string(),
     }
@@ -916,7 +937,9 @@ fn next_import_kw(js: &str, from: usize) -> Option<(usize, &'static str)> {
 /// only changes string content, never syntax.
 fn rewrite_js_imports(js: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     fn path_like(s: &str) -> bool {
-        (s.starts_with("./") || s.starts_with("../") || (s.starts_with('/') && !s.starts_with("//")))
+        (s.starts_with("./")
+            || s.starts_with("../")
+            || (s.starts_with('/') && !s.starts_with("//")))
             && !s.contains(['"', '\''])
     }
     let mut out = String::with_capacity(js.len() + 256);
@@ -1008,7 +1031,8 @@ mod js_import_tests {
 
     #[test]
     fn bare_and_absolute_specifiers_untouched() {
-        let js = "import \"lodash\";import \"https://cdn.other.com/x.js\";import \"data:text/js,1\";";
+        let js =
+            "import \"lodash\";import \"https://cdn.other.com/x.js\";import \"data:text/js,1\";";
         assert_eq!(rewrite_js_imports(js, "https://a.com/", "", "/lj/"), js);
     }
 
@@ -1050,9 +1074,17 @@ fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> St
         let mut split = it.splitn(2, char::is_whitespace);
         let u = split.next().unwrap_or("");
         let desc = split.next().map(|d| d.trim()).unwrap_or("");
-        let desc_s = if desc.is_empty() { String::new() } else { format!(" {}", desc) };
+        let desc_s = if desc.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", desc)
+        };
         if is_rewritable_url(u) {
-            parts.push(format!("{}{}", rewrite_url_attr(u, page_url, suffix, prefix), desc_s));
+            parts.push(format!(
+                "{}{}",
+                rewrite_url_attr(u, page_url, suffix, prefix),
+                desc_s
+            ));
         } else {
             parts.push(it.to_string());
         }
@@ -1226,17 +1258,20 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
         if tag_lower.starts_with("<script") {
             out.push_str(&rewrite_tag(tag, tag_lower, page_url, suffix, prefix));
             /* type=module bodies: the module loader resolves import
-               specifiers against the document URL (the /lj/ or /r/
-               route), not the upstream site, so an inline module's
-               imports must be rewritten or the app never boots
-               (chatgpt.com's whole entry graph is exactly this). */
+            specifiers against the document URL (the /lj/ or /r/
+            route), not the upstream site, so an inline module's
+            imports must be rewritten or the app never boots
+            (chatgpt.com's whole entry graph is exactly this). */
             let is_module = tag_lower.contains("type=\"module\"")
                 || tag_lower.contains("type='module'")
                 || tag_lower.contains("type=module");
             match lower[end + 1..].find("</script") {
                 Some(c) => {
                     let cs = end + 1 + c;
-                    let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
+                    let after_close = lower[cs..]
+                        .find('>')
+                        .map(|x| cs + x + 1)
+                        .unwrap_or(html.len());
                     let body = &html[end + 1..cs];
                     if is_module {
                         out.push_str(&rewrite_js_imports(body, page_url, suffix, prefix));
@@ -1263,7 +1298,10 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
             match lower[end + 1..].find("</style") {
                 Some(c) => {
                     let cs = end + 1 + c;
-                    let after_close = lower[cs..].find('>').map(|x| cs + x + 1).unwrap_or(html.len());
+                    let after_close = lower[cs..]
+                        .find('>')
+                        .map(|x| cs + x + 1)
+                        .unwrap_or(html.len());
                     out.push_str(&rewrite_css(&html[end + 1..cs], page_url, suffix, prefix));
                     out.push_str(&html[cs..after_close]);
                     i = after_close;
@@ -1481,15 +1519,18 @@ fn rewrite_html_doc(
         }
         let lower = rewritten.to_ascii_lowercase();
         let mut owned = rewritten;
-        if let Some(hpos) = lower.find("<head").and_then(|i| lower[i..].find('>').map(|j| i + j + 1)) {
+        if let Some(hpos) = lower
+            .find("<head")
+            .and_then(|i| lower[i..].find('>').map(|j| i + j + 1))
+        {
             owned.insert_str(hpos, &diag);
         }
         return owned;
     }
     let shimmed = inject_shim(rewritten, page_url, suffix, &diag);
     /* AMO: spoof Firefox both on the wire (engine_proxy applies the
-       header) and in the page (navigator.userAgent), because the
-       add-ons store gates .xpi downloads on a Firefox client. */
+    header) and in the page (navigator.userAgent), because the
+    add-ons store gates .xpi downloads on a Firefox client. */
     if is_amo_host(&host_of(page_url)) {
         insert_in_head(shimmed, amo_spoof_script())
     } else {
@@ -1528,7 +1569,8 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("ÃÂ¢ÃÂÃÂ¡");
+    let looks_amp =
+        page_url.contains("/amp") || html.contains("<html amp") || html.contains("ÃÂ¢ÃÂÃÂ¡");
     if !looks_amp {
         return None;
     }
@@ -1621,7 +1663,10 @@ fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
     }
     // Scramjet compatibility layer: when the rewriter cannot handle a
     // site, offer the deployed headless-browser service as fallback.
-    let scramjet = format!("https://lobsterbrowse-scramjet.onrender.com/?url={}", pct_enc(url));
+    let scramjet = format!(
+        "https://lobsterbrowse-scramjet.onrender.com/?url={}",
+        pct_enc(url)
+    );
     let direct = pct_enc(url);
     let detail = json_escape(detail);
     let url_js = json_escape(url);
@@ -1756,10 +1801,10 @@ async fn engine_proxy(
         format!("{}{}{}", bare_url, sep, page_query.join("&"))
     };
     /* 74.3: only navigations get the interactive HTML error card.
-       The browser sets sec-fetch-dest on same-origin subresource
-       requests (script/style/image/font/fetch) and it cannot be forged
-       by page script, so it is a reliable discriminator. Missing header
-       (curl, tests, old browsers) keeps the HTML page. */
+    The browser sets sec-fetch-dest on same-origin subresource
+    requests (script/style/image/font/fetch) and it cannot be forged
+    by page script, so it is a reliable discriminator. Missing header
+    (curl, tests, old browsers) keeps the HTML page. */
     let fetch_dest = headers
         .get("sec-fetch-dest")
         .and_then(|v| v.to_str().ok())
@@ -1767,28 +1812,44 @@ async fn engine_proxy(
         .to_ascii_lowercase();
     let wants_html_page = matches!(fetch_dest.as_str(), "" | "document" | "iframe");
     if params.get("https").map(|v| v == "1").unwrap_or(false) && fetch_url.starts_with("http://") {
-        return engine_error_page(&url, "HTTPS-only mode: plain-http target rejected", wants_html_page);
+        return engine_error_page(
+            &url,
+            "HTTPS-only mode: plain-http target rejected",
+            wants_html_page,
+        );
     }
 
     let suffix = params_suffix(&params);
     /* Rewritten links keep the entry route: pages loaded through
-       LobsterJet (/lj/) rewrite subresources and links to /lj/ so the
-       service worker's cache intercepts them; ScramJet entries stay
-       on /r/. */
-    let prefix = if uri.path().starts_with("/lj/") { "/lj/" } else { "/r/" };
-    push_log(&state, "info", &format!("engine {} {} {}", res_id, method, url));
+    LobsterJet (/lj/) rewrite subresources and links to /lj/ so the
+    service worker's cache intercepts them; ScramJet entries stay
+    on /r/. */
+    let prefix = if uri.path().starts_with("/lj/") {
+        "/lj/"
+    } else {
+        "/r/"
+    };
+    push_log(
+        &state,
+        "info",
+        &format!("engine {} {} {}", res_id, method, url),
+    );
 
     /* 74.9 engine-side incognito enforcement: lb_inc=1 requests use a
-       separate client with its own cookie jar, so incognito cookies
-       never mix into the shared jar (and back). The suffix keeps the
-       flag on every rewritten subresource and link. */
+    separate client with its own cookie jar, so incognito cookies
+    never mix into the shared jar (and back). The suffix keeps the
+    flag on every rewritten subresource and link. */
     let use_incognito = params.get("inc").map(|v| v == "1").unwrap_or(false);
-    let client = if use_incognito { &state.incognito_client } else { &state.client };
+    let client = if use_incognito {
+        &state.incognito_client
+    } else {
+        &state.client
+    };
     let mut req = client.request(method.clone(), &fetch_url);
     /* Effective UA: on AMO the proxy ALWAYS spoofs Firefox (the store
-       refuses .xpi downloads to non-Firefox clients, so a user-preset
-       Chrome UA must not leak there); everywhere else the user's
-       explicit override wins. */
+    refuses .xpi downloads to non-Firefox clients, so a user-preset
+    Chrome UA must not leak there); everywhere else the user's
+    explicit override wins. */
     let eff_ua = if is_amo_host(&host_of(&fetch_url)) {
         Some(FIREFOX_UA.to_string())
     } else {
@@ -1833,13 +1894,25 @@ async fn engine_proxy(
                         continue;
                     };
                     let name = name.trim();
-                    let value: String = value.chars().filter(|c| *c != '\u{000d}' && *c != '\u{000a}').take(512).collect();
+                    let value: String = value
+                        .chars()
+                        .filter(|c| *c != '\u{000d}' && *c != '\u{000a}')
+                        .take(512)
+                        .collect();
                     let lower = name.to_ascii_lowercase();
                     let valid = !name.is_empty()
                         && !value.is_empty()
-                        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                        && !["host", "content-length", "connection", "transfer-encoding", "cookie"]
-                            .contains(&lower.as_str());
+                        && name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                        && ![
+                            "host",
+                            "content-length",
+                            "connection",
+                            "transfer-encoding",
+                            "cookie",
+                        ]
+                        .contains(&lower.as_str());
                     if valid {
                         req = req.header(name, value);
                     }
@@ -1860,7 +1933,9 @@ async fn engine_proxy(
             }
         }
         let mut decoded_target: Option<String> = None;
-        let stripped = path.strip_prefix("/r/").or_else(|| path.strip_prefix("/lj/"));
+        let stripped = path
+            .strip_prefix("/r/")
+            .or_else(|| path.strip_prefix("/lj/"));
         if let Some(rest) = stripped {
             let seg = rest.split(['?', '#']).next().unwrap_or("");
             if let Some(bytes) = b64url_decode(seg) {
@@ -1891,7 +1966,11 @@ async fn engine_proxy(
             // phantom "redirect" because reqwest strips fragments from
             // the final URL. There was never a redirect.
             if base_url != bare_url {
-                push_log(&state, "info", &format!("engine redirect {} {} -> {}", res_id, bare_url, base_url));
+                push_log(
+                    &state,
+                    "info",
+                    &format!("engine redirect {} {} -> {}", res_id, bare_url, base_url),
+                );
             }
             let ct = resp
                 .headers()
@@ -1920,7 +1999,8 @@ async fn engine_proxy(
                 );
             }
             let is_css = !is_html && ct.contains("css");
-            let is_js = !is_html && !is_css && (ct.contains("javascript") || ct.contains("ecmascript"));
+            let is_js =
+                !is_html && !is_css && (ct.contains("javascript") || ct.contains("ecmascript"));
             let compress_img = params.get("img").map(|v| v == "1").unwrap_or(false)
                 && ct.starts_with("image/jpeg");
             // Anything that is neither rewritten nor re-encoded streams
@@ -1930,9 +2010,13 @@ async fn engine_proxy(
                 push_log(
                     &state,
                     "info",
-                    &format!("engine stream {} {} {} -> {} ({})", res_id, method, url, status, ct),
+                    &format!(
+                        "engine stream {} {} {} -> {} ({})",
+                        res_id, method, url, status, ct
+                    ),
                 );
-                let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+                let axum_status =
+                    StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
                 // Validation/caching headers pass through byte-identical:
                 // the body is upstream's own, so etag/last-modified/cache
                 // -control/expires must travel with it or browser (and SW)
@@ -1964,9 +2048,16 @@ async fn engine_proxy(
                     push_log(
                         &state,
                         "warn",
-                        &format!("engine body read failed {} {} -> {}: {}", res_id, url, status, e),
+                        &format!(
+                            "engine body read failed {} {} -> {}: {}",
+                            res_id, url, status, e
+                        ),
                     );
-                    return engine_error_page(&url, &format!("upstream body read failed: {}", e), wants_html_page);
+                    return engine_error_page(
+                        &url,
+                        &format!("upstream body read failed: {}", e),
+                        wants_html_page,
+                    );
                 }
             };
             let mut is_anubis = false;
@@ -1978,7 +2069,8 @@ async fn engine_proxy(
                 if let Some(canon) = amp_canonical(&text, &base_url) {
                     if canon != base_url {
                         push_log(&state, "info", &format!("de-amp {} -> {}", base_url, canon));
-                        let route = format!("{}{}{}", prefix, b64url_encode(canon.as_bytes()), suffix);
+                        let route =
+                            format!("{}{}{}", prefix, b64url_encode(canon.as_bytes()), suffix);
                         return de_amp_redirect(&route);
                     }
                 }
@@ -2000,7 +2092,8 @@ async fn engine_proxy(
                 // which rewrites bytes into U+FFFD and corrupts the
                 // script. Invalid-UTF-8 bodies are served unmodified.
                 match std::str::from_utf8(&bytes) {
-                    Ok(text) => js_antiframe(&rewrite_js_imports(text, &base_url, &suffix, prefix)).into_bytes(),
+                    Ok(text) => js_antiframe(&rewrite_js_imports(text, &base_url, &suffix, prefix))
+                        .into_bytes(),
                     Err(_) => {
                         push_log(
                             &state,
@@ -2020,17 +2113,26 @@ async fn engine_proxy(
                 "info",
                 &format!(
                     "engine done {} {} {} -> {} ({} ms, {} B, {})",
-                    res_id, method, url, status, started.elapsed().as_millis(), out.len(), ct
+                    res_id,
+                    method,
+                    url,
+                    status,
+                    started.elapsed().as_millis(),
+                    out.len(),
+                    ct
                 ),
             );
-            let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let axum_status =
+                StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let mut resp = (axum_status, [(header::CONTENT_TYPE, ct)], out).into_response();
             if is_anubis {
-                resp.headers_mut().insert(
-                    header::CACHE_CONTROL,
-                    HeaderValue::from_static("no-store"),
+                resp.headers_mut()
+                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                push_log(
+                    &state,
+                    "info",
+                    &format!("anubis challenge served no-store: {}", url),
                 );
-                push_log(&state, "info", &format!("anubis challenge served no-store: {}", url));
             }
             resp
         }
@@ -2040,10 +2142,7 @@ async fn engine_proxy(
 
 /// Search-engine suggestions, proxied server-side to dodge CORS.
 /// Every provider returns the same osjson shape: ["query", ["s1", ...]].
-async fn suggest_endpoint(
-    State(state): State<Arc<AppState>>,
-    RawQuery(raw): RawQuery,
-) -> Response {
+async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): RawQuery) -> Response {
     let mut q = String::new();
     let mut engine = String::new();
     if let Some(rq) = raw.as_deref() {
@@ -2061,17 +2160,27 @@ async fn suggest_endpoint(
         }
     }
     if q.trim().is_empty() {
-        return ([("content-type", "application/json")], r#"{"suggestions":[]}"#).into_response();
+        return (
+            [("content-type", "application/json")],
+            r#"{"suggestions":[]}"#,
+        )
+            .into_response();
     }
     let q_enc = pct_enc(&q);
     // Honest mapping: providers with a working open suggestion API get
     // their native endpoint; Startpage and Mojeek have none, so they
     // fall back to DuckDuckGo's endpoint first.
     let native = match engine.as_str() {
-        "google" => Some(format!("https://suggestqueries.google.com/complete/search?client=firefox&q={}", q_enc)),
+        "google" => Some(format!(
+            "https://suggestqueries.google.com/complete/search?client=firefox&q={}",
+            q_enc
+        )),
         "bing" => Some(format!("https://api.bing.com/osjson.aspx?q={}", q_enc)),
         "brave" => Some(format!("https://search.brave.com/api/suggest?q={}", q_enc)),
-        _ => Some(format!("https://ac.duckduckgo.com/ac/?q={}&type=list", q_enc)),
+        _ => Some(format!(
+            "https://ac.duckduckgo.com/ac/?q={}&type=list",
+            q_enc
+        )),
     };
     // Fallback chain, server-side: some providers rate-limit or block
     // this deployment's datacenter egress (DuckDuckGo does), and an
@@ -2128,11 +2237,15 @@ async fn suggest_endpoint(
 }
 
 /* Pull up to 8 non-empty suggestion strings out of an osjson body
-   (["query", ["s1", ...]]). Any other shape yields an empty list. */
+(["query", ["s1", ...]]). Any other shape yields an empty list. */
 fn parse_osjson(text: &str) -> Vec<String> {
     let mut list: Vec<String> = Vec::new();
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
-        if let Some(suggs) = v.as_array().and_then(|a| a.get(1)).and_then(|x| x.as_array()) {
+        if let Some(suggs) = v
+            .as_array()
+            .and_then(|a| a.get(1))
+            .and_then(|x| x.as_array())
+        {
             for item in suggs.iter().take(8) {
                 if let Some(t) = item.as_str() {
                     if !t.is_empty() {
@@ -2148,13 +2261,16 @@ fn parse_osjson(text: &str) -> Vec<String> {
 /// Recent server-side engine log entries, newest last. JSON array.
 async fn logs_endpoint(State(state): State<Arc<AppState>>) -> Response {
     let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
-    let body = format!("[{}]", logs.iter().cloned().collect::<Vec<String>>().join(","));
+    let body = format!(
+        "[{}]",
+        logs.iter().cloned().collect::<Vec<String>>().join(",")
+    );
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
 }
 
 /* Pull one string value out of raw JSON without a parser: find the
-   key, skip to the opening quote of the value, then read until an
-   unescaped closing quote (handles \" and \\ escapes). */
+key, skip to the opening quote of the value, then read until an
+unescaped closing quote (handles \" and \\ escapes). */
 fn scan_json_str(body: &str, key: &str) -> Option<String> {
     let key_pat = format!("\"{}\"", key);
     let start = body.find(&key_pat)? + key_pat.len();
@@ -2181,12 +2297,17 @@ fn scan_json_str(body: &str, key: &str) -> Option<String> {
 }
 
 /* Days from today until a "YYYY-MM-DD..." date prefix, via the civil
-   epoch-day formula (Howard Hinnant). None when unparseable. */
+epoch-day formula (Howard Hinnant). None when unparseable. */
 fn days_until(date: &str) -> Option<i64> {
     let mut parts = date.splitn(3, '-');
     let y: i64 = parts.next()?.parse().ok()?;
     let m: i64 = parts.next()?.parse().ok()?;
-    let d: i64 = parts.next()?.split(&['T', ' ', '/'][..]).next()?.parse().ok()?;
+    let d: i64 = parts
+        .next()?
+        .split(&['T', ' ', '/'][..])
+        .next()?
+        .parse()
+        .ok()?;
     let (y2, m2) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
     let era = if y2 >= 0 { y2 } else { y2 - 399 } / 400;
     let yoe = y2 - era * 400;
@@ -2199,7 +2320,7 @@ fn days_until(date: &str) -> Option<i64> {
 }
 
 /* Fetch raw JSON from a CT-log API. Errors carry the reason so the
-   log line explains the failure instead of guessing. */
+log line explains the failure instead of guessing. */
 async fn ct_fetch(state: &AppState, url: &str) -> Result<String, String> {
     let resp = state
         .client
@@ -2213,13 +2334,15 @@ async fn ct_fetch(state: &AppState, url: &str) -> Result<String, String> {
     if !status.is_success() {
         return Err(format!("status {}", status));
     }
-    resp.text().await.map_err(|e| format!("body read failed: {}", e))
+    resp.text()
+        .await
+        .map_err(|e| format!("body read failed: {}", e))
 }
 
 /* Does a crt.sh record cover the host? crt.sh matches substring, so a
-   query for github.com also returns random subdomain certs; prefer
-   records whose common_name is the host, a wildcard for it, or whose
-   name_value (newline-separated SANs) lists it. */
+query for github.com also returns random subdomain certs; prefer
+records whose common_name is the host, a wildcard for it, or whose
+name_value (newline-separated SANs) lists it. */
 fn cert_covers_host(rec: &str, host: &str) -> bool {
     if let Some(cn) = scan_json_str(rec, "common_name") {
         if cn == host {
@@ -2240,9 +2363,9 @@ fn cert_covers_host(rec: &str, host: &str) -> bool {
 }
 
 /* Pick the best record from a crt.sh array: newest not_after among
-   the records that cover the host, else the newest overall. ISO-8601
-   dates compare correctly as plain strings. Returns (issuer,
-   not_after). */
+the records that cover the host, else the newest overall. ISO-8601
+dates compare correctly as plain strings. Returns (issuer,
+not_after). */
 fn best_crtsh(body: &str, host: &str) -> Option<(String, String)> {
     let mut best_covered: Option<(String, String)> = None;
     let mut best_any: Option<(String, String)> = None;
@@ -2270,8 +2393,8 @@ fn best_crtsh(body: &str, host: &str) -> Option<(String, String)> {
 }
 
 /* Pick the best Cert Spotter issuance (their list is newest-first):
-   the first one whose dns_names include the host. Returns (issuer,
-   not_after). */
+the first one whose dns_names include the host. Returns (issuer,
+not_after). */
 fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
     for rec in body.split("{\"id\"") {
         if rec.is_empty() {
@@ -2406,7 +2529,11 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
     let picked = match ct_fetch(&state, &crtsh_url).await {
         Ok(body) => best_crtsh(&body, &host),
         Err(err) => {
-            push_log(&state, "warn", &format!("cert lookup {}: crt.sh {}", host, err));
+            push_log(
+                &state,
+                "warn",
+                &format!("cert lookup {}: crt.sh {}", host, err),
+            );
             None
         }
     };
@@ -2422,12 +2549,20 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
                 Ok(body) => {
                     let p = best_certspotter(&body, &host);
                     if p.is_none() {
-                        push_log(&state, "warn", &format!("cert lookup {}: no parseable Cert Spotter record", host));
+                        push_log(
+                            &state,
+                            "warn",
+                            &format!("cert lookup {}: no parseable Cert Spotter record", host),
+                        );
                     }
                     p
                 }
                 Err(err) => {
-                    push_log(&state, "warn", &format!("cert lookup {}: certspotter {}", host, err));
+                    push_log(
+                        &state,
+                        "warn",
+                        &format!("cert lookup {}: certspotter {}", host, err),
+                    );
                     None
                 }
             }
@@ -2443,7 +2578,11 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
                 json_escape(&not_after),
                 days
             );
-            push_log(&state, "info", &format!("cert lookup {} ok: {} ({} days left)", host, issuer, days));
+            push_log(
+                &state,
+                "info",
+                &format!("cert lookup {} ok: {} ({} days left)", host, issuer, days),
+            );
             ([(header::CONTENT_TYPE, "application/json")], out).into_response()
         }
         _ => (
@@ -2453,7 +2592,6 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
             .into_response(),
     }
 }
-
 
 fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
     let mut text = builtin.to_string();
@@ -2491,7 +2629,7 @@ async fn main() {
     };
     let client = build_client();
     /* 74.9: a second client means a second cookie jar. Incognito routes
-       (lb_inc=1) use it; cookies never cross between the two jars. */
+    (lb_inc=1) use it; cookies never cross between the two jars. */
     let incognito_client = build_client();
 
     let state = Arc::new(AppState {
@@ -2526,10 +2664,10 @@ async fn main() {
         // the service worker is not installed/ready yet. The worker layers
         // its client-side cache on top of this route.
         .route("/lj/:target", any(engine_proxy))
-                .route("/suggest", get(suggest_endpoint))
-.route("/logs", get(logs_endpoint))
-.route("/cert", get(cert_endpoint))
-.route("/build", get(build_endpoint))
+        .route("/suggest", get(suggest_endpoint))
+        .route("/logs", get(logs_endpoint))
+        .route("/cert", get(cert_endpoint))
+        .route("/build", get(build_endpoint))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
         // The service worker script gets Service-Worker-Allowed so a
         // "/" scope registration is possible later; its chunks and
@@ -2568,8 +2706,13 @@ async fn main() {
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    info!("LobsterBrowse native engine server listening on {} at {}", addr, wisp_path);
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
+    info!(
+        "LobsterBrowse native engine server listening on {} at {}",
+        addr, wisp_path
+    );
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("bind failed");
     axum::serve(listener, app).await.expect("server error");
 }
 
@@ -2639,12 +2782,20 @@ mod url_fragment_tests {
             .next()
             .unwrap();
         let decoded = String::from_utf8(b64url_decode(seg).unwrap()).unwrap();
-        assert_eq!(decoded, "https://chatgpt.com/cdn/assets/sprites-shell-f705d3e2.svg");
+        assert_eq!(
+            decoded,
+            "https://chatgpt.com/cdn/assets/sprites-shell-f705d3e2.svg"
+        );
     }
 
     #[test]
     fn fragmentless_urls_keep_their_shape() {
-        let out = rewrite_url_attr("https://example.com/app.js", "https://example.com/", "", "/lj/");
+        let out = rewrite_url_attr(
+            "https://example.com/app.js",
+            "https://example.com/",
+            "",
+            "/lj/",
+        );
         let seg = out.strip_prefix("/lj/").unwrap();
         let decoded = String::from_utf8(b64url_decode(seg).unwrap()).unwrap();
         assert_eq!(decoded, "https://example.com/app.js");
@@ -2710,7 +2861,10 @@ mod version_tests {
     #[test]
     fn no_version_shape_means_unknown() {
         assert_eq!(zeolite_version("const x=\"zeolite-pages-v1\";"), "unknown");
-        assert_eq!(zeolite_version("1.2.3 semver but not the identity"), "unknown");
+        assert_eq!(
+            zeolite_version("1.2.3 semver but not the identity"),
+            "unknown"
+        );
         assert_eq!(zeolite_version(""), "unknown");
     }
 }
@@ -2722,7 +2876,9 @@ mod antiframe_tests {
     #[test]
     fn classic_buster_is_neutralized() {
         assert_eq!(
-            js_antiframe("if (top != self) {\n  top.location = location;\n}\nalert('rest of app');"),
+            js_antiframe(
+                "if (top != self) {\n  top.location = location;\n}\nalert('rest of app');"
+            ),
             "if (self != self) {\n  self.LB_antiframe = location;\n}\nalert('rest of app');"
         );
     }
@@ -2738,7 +2894,9 @@ mod antiframe_tests {
     #[test]
     fn reads_and_comparisons_survive() {
         assert_eq!(
-            js_antiframe("var u = top.location.href; if (top.location == x) {} if (top == self) boot();"),
+            js_antiframe(
+                "var u = top.location.href; if (top.location == x) {} if (top == self) boot();"
+            ),
             "var u = self.location.href; if (self.location == x) {} if (self == self) boot();"
         );
     }
@@ -2746,7 +2904,9 @@ mod antiframe_tests {
     #[test]
     fn window_forms_and_boundaries() {
         assert_eq!(
-            js_antiframe("if (window.top != window.self) { window.top.location = document.location; }"),
+            js_antiframe(
+                "if (window.top != window.self) { window.top.location = document.location; }"
+            ),
             "if (self != self) { self.LB_antiframe = document.location; }"
         );
         assert_eq!(

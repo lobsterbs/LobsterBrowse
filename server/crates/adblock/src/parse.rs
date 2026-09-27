@@ -68,7 +68,10 @@ impl FilterSet {
             return false;
         }
         self.blocked_domains.iter().any(|d| domain_matches(d, &h))
-            || self.blocked_substrings.iter().any(|s| h.contains(s.as_str()))
+            || self
+                .blocked_substrings
+                .iter()
+                .any(|s| h.contains(s.as_str()))
     }
 
     pub fn len(&self) -> usize {
@@ -112,7 +115,11 @@ pub fn parse_line(line: &str) -> Result<Option<Rule>, ParseError> {
             return Err(ParseError::Invalid(line.into()));
         }
         return Ok(Some(Rule {
-            kind: if is_exception { RuleKind::ExceptionDomain } else { RuleKind::Domain },
+            kind: if is_exception {
+                RuleKind::ExceptionDomain
+            } else {
+                RuleKind::Domain
+            },
             pattern: domain.to_ascii_lowercase(),
             literal: String::new(),
         }));
@@ -130,14 +137,22 @@ pub fn parse_line(line: &str) -> Result<Option<Rule>, ParseError> {
             return Ok(None);
         }
         return Ok(Some(Rule {
-            kind: if is_exception { RuleKind::ExceptionSubstring } else { RuleKind::Substring },
+            kind: if is_exception {
+                RuleKind::ExceptionSubstring
+            } else {
+                RuleKind::Substring
+            },
             pattern: String::new(),
             literal: hostname.to_ascii_lowercase(),
         }));
     }
     // Plain substring rule.
     Ok(Some(Rule {
-        kind: if is_exception { RuleKind::ExceptionSubstring } else { RuleKind::Substring },
+        kind: if is_exception {
+            RuleKind::ExceptionSubstring
+        } else {
+            RuleKind::Substring
+        },
         pattern: String::new(),
         literal: body.to_ascii_lowercase(),
     }))
