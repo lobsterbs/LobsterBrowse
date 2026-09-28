@@ -2028,9 +2028,9 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
         .and_then(|b| String::from_utf8(b).ok())
         .unwrap_or_default();
     /* 503, not 502: the destination was never fetched - no engine
-       worker controls this page (cold start, worker update, or a
-       browser without module service workers). Same contract as the
-       engine's error-pages doc: the no-control case is the embedder's. */
+    worker controls this page (cold start, worker update, or a
+    browser without module service workers). Same contract as the
+    engine's error-pages doc: the no-control case is the embedder's. */
     let mut resp = engine_error_page(
         &real,
         "Zeolite runs in its service worker and none controls this page yet. Open or reload the app once so the worker installs, then retry.",
