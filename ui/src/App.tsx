@@ -4,6 +4,7 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import {
+  engineRoutePrefix,
   loadSettings,
   saveSettings,
   loadSiteRules,
@@ -198,9 +199,12 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      await zlSend({ type: "zl:config", prefix: "/lj/", scheme: "b64u" }, 8000);
+      await zlSend(
+        { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
+        8000,
+      );
     })();
-  }, []);
+  }, [settings.proxyEngine]);
 
   /* ---- Zeolite adblock: the engine's /rules.json (the migrated
        ad/tracker host lists) is evaluated client-side in its worker;

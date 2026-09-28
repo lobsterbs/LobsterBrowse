@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
+  zeoliteOwned,
   type EngineId,
   type Settings,
   type SiteRule,
@@ -201,8 +202,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
               Zeolite — default
             </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+            <m3e-button-segment checked={!zeoliteOwned(settings.proxyEngine) ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.proxyEngine === "zeolite-beta" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite-beta" })}>
+              Zeolite Beta (/zl/)
             </m3e-button-segment>
           </m3e-segmented-button>
           </div>
@@ -213,6 +217,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
             HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
             de-amping on every upstream request.
+          </p>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            Zeolite Beta (/zl/) is the unstable NativeTransit-first experiment: the same engine
+            worker claims /zl/ routes and transports requests natively over Wisp, with rewriting
+            only where browser origin semantics require it. Expect rough edges; switching back to
+            Zeolite or ScramJet is instant and /r/ + /lj/ are untouched.
           </p>
         </div>
         <div className="lb-setting-group">
@@ -278,7 +288,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
+          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
       </Panel>
 
@@ -367,7 +377,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             Cached proxied pages and local libraries live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
           </p>
-          <div className={settings.proxyEngine !== "lobsterjet" ? "lb-off" : ""}>
+          <div className={!zeoliteOwned(settings.proxyEngine) ? "lb-off" : ""}>
           <m3e-button
             onClick={() => {
               (async () => {
@@ -386,7 +396,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
           </div>
-          {settings.proxyEngine !== "lobsterjet" && (
+          {!zeoliteOwned(settings.proxyEngine) && (
             <p className="lb-muted" style={{ fontSize: 12 }}>
               Cache options apply when Zeolite is the proxy engine.
             </p>

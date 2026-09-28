@@ -3195,6 +3195,11 @@ async fn main() {
         // worker controls the page — answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
+        // Beta branch (beta/zeolite-nativetransit): /zl/ is the explicit
+        // NativeTransit-first engine route. Same honest contract as /lj/:
+        // the Zeolite worker owns the route; the server only answers when
+        // no worker controls the page.
+        .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
