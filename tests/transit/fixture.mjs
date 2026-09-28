@@ -6,7 +6,7 @@ import http from "node:http";
    assert exact behavior through the whole chain:
    LB -> Zeolite SW -> NativeTransit -> Wisp -> here -> and back.
 
-   Standalone: node tests/transit/fixture.mjs  (serves on 127.0.0.1:3999) */
+   Standalone: node tests/transit/fixture.mjs  (serves on 127.0.0.1:3999; PORT/FIXTURE_HOST env override for public deploys) */
 
 export const LARGE_SIZE = 2 * 1024 * 1024;
 export const STREAM_CHUNKS = 10;
@@ -127,13 +127,13 @@ function handler(req, res) {
   res.end("not found");
 }
 
-export function startFixture(port = 0) {
+export function startFixture(port = 0, host = "127.0.0.1") {
   return new Promise((resolve) => {
     const server = http.createServer(handler);
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, host, () => {
       resolve({
         port: server.address().port,
-        origin: "http://127.0.0.1:" + server.address().port,
+        origin: "http://" + host + ":" + server.address().port,
         close: () => new Promise((r) => server.close(r)),
       });
     });
@@ -141,6 +141,6 @@ export function startFixture(port = 0) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith("fixture.mjs")) {
-  const f = await startFixture(3999);
+  const f = await startFixture(Number(process.env.PORT) || 3999, process.env.FIXTURE_HOST || "127.0.0.1");
   console.log("tier-0 fixture on " + f.origin + " (ctrl-c to stop)");
 }
