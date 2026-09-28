@@ -3605,6 +3605,10 @@ async fn zl_sw_js() -> Response {
             .header("service-worker-allowed", "/")
             .body(Body::from(bytes))
             .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
 /// Rewriter wasm root alias. The vendored engine dist builds the
 /// wasm URL as new URL("/rewriter_wasm_bg.wasm", import.meta.url);
 /// the absolute path drops the /zlsw/ base, so the request lands on
@@ -3617,10 +3621,6 @@ async fn zl_rewriter_wasm() -> Response {
             .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),
-        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
-    }
-}
-
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
     }
 }
