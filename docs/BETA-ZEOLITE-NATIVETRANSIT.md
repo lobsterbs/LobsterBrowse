@@ -307,6 +307,19 @@ Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake passes.
 
 Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake
 passes.
+
+## Firefox / WebKit status (honest, 2026-09-28)
+
+- Firefox: no module service workers. The engine bundle registers as
+  type: module; registration throws on Firefox, the worker never
+  installs, and every /zl/ navigation answers with the server's 503
+  no-worker notice. That is the honest ceiling: the Preview engine is
+  Chromium-only until Gecko ships module SWs. /r/ and /lj/ are
+  unaffected on Firefox.
+- WebKit: untested end to end. Recent Safari supports module service
+  workers, but no recorded run of the /zl/ chain exists on WebKit, so
+  no claim is made either way.
+
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
 ```json
