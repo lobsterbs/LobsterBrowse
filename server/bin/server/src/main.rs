@@ -2029,7 +2029,7 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
         .unwrap_or_default();
     engine_error_page(
         &real,
-        "Zeolite runs in its service worker, and none controls this page yet. Reload the app so the worker activates, or switch the engine to ScramJet.",
+        "Zeolite runs in its service worker and none controls this page yet. Reload the app so the worker activates.",
         true,
     )
 }
@@ -2043,22 +2043,22 @@ fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
         )
             .into_response();
     }
-    // Scramjet compatibility layer: when the rewriter cannot handle a
-    // site, offer the deployed headless-browser service as fallback.
-    let scramjet = format!(
-        "https://lobsterbrowse-scramjet.onrender.com/?url={}",
-        pct_enc(url)
-    );
-    let direct = pct_enc(url);
+    // Honest, minimal failure card: the full error chain stays in the
+    // lb-load-error meta and the DevTools report; the visible card shows
+    // one line. No proxy-bypass actions: leaving the proxy is a deliberate
+    // user decision, not a recovery step this page advertises.
+    let detail_line: String = detail
+        .lines()
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(160)
+        .collect();
     let detail = json_escape(detail);
+    let detail_line = json_escape(&detail_line);
     let url_js = json_escape(url);
     let url_json = format!("\"{}\"", url_js);
     let detail_json = format!("\"{}\"", detail);
-    // Standalone page inside the proxied iframe: matches the app's
-    // dynamic-color look as closely as a plain page can (prefers the
-    // M3 tokens when the parent app set them, falls back to a palette
-    // that follows light/dark mode), reports the failure to the UI's
-    // DevTools capture, and offers real actions.
     let body = format!(
         r#"<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2071,35 +2071,25 @@ body {{ margin:0; min-height:100vh; display:flex; align-items:center; justify-co
   font-family: "Google Sans Flex", Roboto, system-ui, sans-serif;
   background: #f7f5ff; color: #1b1b1f; }}
 @media (prefers-color-scheme: dark) {{ body {{ background:#141218; color:#e6e1e9; }} }}
-.card {{ max-width: 560px; width:calc(100% - 48px); padding:36px 36px 28px; border-radius:28px;
+.card {{ max-width: 480px; width:calc(100% - 48px); padding:32px; border-radius:28px;
   background:rgba(127,127,140,.12); border:1px solid rgba(127,127,140,.25); }}
-h1 {{ font-size:22px; margin:0 0 4px; }}
+h1 {{ font-size:20px; margin:0 0 4px; }}
 .muted {{ opacity:.65; font-size:13px; }}
 .url {{ font-family:ui-monospace,monospace; font-size:12px; word-break:break-all;
-  background:rgba(127,127,140,.18); padding:10px 12px; border-radius:12px; margin:14px 0; }}
-.detail {{ font-size:13px; opacity:.8; word-break:break-word; margin:0 0 18px; }}
-.row {{ display:flex; gap:10px; flex-wrap:wrap; }}
-a.btn, button {{ appearance:none; border:none; cursor:pointer; text-decoration:none;
+  background:rgba(127,127,140,.18); padding:10px 12px; border-radius:12px; margin:14px 0 10px; }}
+.detail {{ font-size:13px; opacity:.8; word-break:break-word; margin:0 0 20px; }}
+button {{ appearance:none; border:none; cursor:pointer;
   display:inline-flex; align-items:center; gap:6px; padding:10px 18px; border-radius:999px;
-  font:500 14px "Google Sans Flex", Roboto, system-ui, sans-serif; }}
-.primary {{ background:#6750a4; color:#fff; }}
-.dark .primary, :root.dark .primary {{ background:#cfbcff; color:#381e72; }}
-.plain {{ background:rgba(127,127,140,.2); color:inherit; }}
-.hint {{ margin-top:20px; font-size:12px; opacity:.55; }}
+  font:500 14px "Google Sans Flex", Roboto, system-ui, sans-serif;
+  background:#6750a4; color:#fff; }}
+@media (prefers-color-scheme: dark) {{ button {{ background:#cfbcff; color:#381e72; }} }}
 </style></head><body>
 <div class="card" role="alert">
   <h1>This page could not load</h1>
   <p class="muted">The proxy engine failed to fetch the destination.</p>
   <div class="url">{url_js}</div>
-  <p class="detail">{detail}</p>
-  <div class="row">
-    <button class="primary" onclick="location.reload()">Retry</button>
-    <a class="plain btn" href="{direct}" target="_blank" rel="noreferrer">Open directly (exposes your IP)</a>
-    <a class="plain btn" href="{scramjet}">Try Scramjet (headless browser)</a>
-  </div>
-  <p class="hint">Retry re-runs the request. "Open directly" bypasses the proxy: the site sees
-  your real IP. If this is a CAPTCHA-protected site, solving it directly may unblock the proxied
-  version afterwards (shared cookie jar does not apply).</p>
+  <p class="detail">{detail_line}</p>
+  <button onclick="location.reload()">Retry</button>
 </div>
 <script>
 try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", status:0,
@@ -2108,8 +2098,7 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
 </body></html>"#,
         detail = detail,
         url_js = url_js,
-        direct = direct,
-        scramjet = scramjet,
+        detail_line = detail_line,
         url_json = url_json,
         detail_json = detail_json,
     );

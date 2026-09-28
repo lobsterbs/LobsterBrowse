@@ -276,7 +276,7 @@ export default function BrowserView(props: Props) {
           pushLog("info", "download streamed to disk " + name + " (" + fmtBytes(total) + ")");
           try {
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification("LobsterBrowse download complete", { body: name });
+              new Notification("LobsterBrowse Preview download complete", { body: name });
             }
           } catch {
             /* notifications unavailable */
@@ -316,7 +316,7 @@ export default function BrowserView(props: Props) {
            the entry goes away a few seconds after completion. */
         try {
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("LobsterBrowse download complete", { body: name });
+            new Notification("LobsterBrowse Preview download complete", { body: name });
           }
         } catch {
           /* notifications unavailable */
@@ -739,7 +739,7 @@ export default function BrowserView(props: Props) {
                 if (csp > 0) bits.push(csp + " CSP meta tag(s)");
                 if (sri > 0) bits.push(sri + " integrity attribute(s)");
                 const ctext =
-                  "[LobsterBrowse engine] This proxy stripped " +
+                  "[LobsterBrowse Preview engine] This proxy stripped " +
                   bits.join(" and ") +
                   " from the page. SRI hashes and CSP rules no longer match rewritten content; the rewriter removes them so the page loads at all. If the page misbehaves, this is the proxy's doing, not the website's.";
                 const console_ = [

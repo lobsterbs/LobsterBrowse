@@ -200,18 +200,18 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              Zeolite — default
+              Zeolite
             </m3e-button-segment>
             <m3e-button-segment checked={!zeoliteOwned(settings.proxyEngine) ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
             </m3e-button-segment>
             <m3e-button-segment checked={settings.proxyEngine === "zeolite-beta" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite-beta" })}>
-              Zeolite Beta (/zl/)
+              Zeolite Preview (/zl/)
             </m3e-button-segment>
           </m3e-segmented-button>
           </div>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite is the project default: a service worker that intercepts proxied routes on your
+            Zeolite is the stable engine: a service worker that intercepts proxied routes on your
             device and transports them over Wisp client-side, with on-device caching and
             in-worker rewriting. When no worker controls the page (cold start, worker restart,
             or a browser without module service workers) the /lj/ routes answer with an honest
@@ -220,7 +220,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             de-amping on every upstream request.
           </p>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite Beta (/zl/) is the unstable NativeTransit-first experiment: the same engine
+            Zeolite Preview (/zl/) is the unstable NativeTransit-first experiment: the same engine
             worker claims /zl/ routes and transports requests natively over Wisp, with rewriting
             only where browser origin semantics require it. Expect rough edges; switching back to
             Zeolite or ScramJet is instant and /r/ + /lj/ are untouched.
@@ -365,7 +365,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
-            you return, the cloak covers LobsterBrowse until you click "Return". Browsers do not let a
+            you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
             page re-render while hidden — this is the strongest behavior a normal web page can offer.
           </p>
         </div>
@@ -493,7 +493,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>

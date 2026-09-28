@@ -18,7 +18,7 @@ export default function XpiPrompt(props: {
         <div slot="content" className="lb-site-body">
           <div className="lb-site-row">{props.name} ({fmtBytes(props.bytes.length)})</div>
           <p className="lb-site-note">
-            Install this add-on into LobsterBrowse? The engine validates the package before anything runs.
+            Install this add-on into LobsterBrowse Preview? The engine validates the package before anything runs.
             You can also save the file and import it later from Settings.
           </p>
         </div>
