@@ -2031,8 +2031,10 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
     worker controls this page (cold start, worker update, or a
     browser without module service workers). Same contract as the
     engine's error-pages doc: the no-control case is the embedder's. */
-    let mut resp = engine_error_page(
+    let mut resp = engine_notice_page(
         &real,
+        "No engine worker yet",
+        "This page loads through the engine's service worker once it is installed.",
         "Zeolite runs in its service worker and none controls this page yet. Open or reload the app once so the worker installs, then retry.",
         true,
     );
@@ -2041,6 +2043,25 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
 }
 
 fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
+    engine_notice_page(
+        url,
+        "This page could not load",
+        "The proxy engine failed to fetch the destination.",
+        detail,
+        wants_html,
+    )
+}
+
+/// Parameterized variant of the failure card: the no-worker notice needs
+/// its own honest heading instead of the generic fetch-failure framing.
+/// heading/sub are embedder-owned literals, inserted unescaped on purpose.
+fn engine_notice_page(
+    url: &str,
+    heading: &str,
+    sub: &str,
+    detail: &str,
+    wants_html: bool,
+) -> Response {
     if !wants_html {
         return (
             StatusCode::BAD_GATEWAY,
@@ -2091,8 +2112,8 @@ button {{ appearance:none; border:none; cursor:pointer;
 @media (prefers-color-scheme: dark) {{ button {{ background:#cfbcff; color:#381e72; }} }}
 </style></head><body>
 <div class="card" role="alert">
-  <h1>This page could not load</h1>
-  <p class="muted">The proxy engine failed to fetch the destination.</p>
+  <h1>{heading}</h1>
+  <p class="muted">{sub}</p>
   <div class="url">{url_js}</div>
   <p class="detail">{detail_line}</p>
   <button onclick="location.reload()">Retry</button>
@@ -2102,6 +2123,8 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
   error:{detail_json}, dur:0, ts:Date.now() }} }}, location.origin); }} catch (e) {{}}
 </script>
 </body></html>"#,
+        heading = heading,
+        sub = sub,
         detail = detail,
         url_js = url_js,
         detail_line = detail_line,
@@ -3996,3 +4019,4 @@ mod shim_integrity_tests {
         );
     }
 }
+ 
