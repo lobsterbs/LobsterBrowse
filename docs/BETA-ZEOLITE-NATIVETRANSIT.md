@@ -447,6 +447,23 @@ retried. A manual MessageChannel re-push of zl:config fixes it
 instantly. Filed as LB#15 (retry with backoff, self-heal on
 default-prefix detection, warn on no-reply).
 
+FIXED at f087eec9 (deploy dep-datd44ou01pc73e5rj20, /build
+buildShort f087eec, CI green): two defects in the App.tsx boot
+push. (1) The controllerchange listener was attached inside the
+async boot IIFE AFTER awaited getRegistrations/caches cleanup, so
+a claim firing during those awaits was missed and nothing ever
+retried; it is now attached synchronously before any awaited
+cleanup. (2) The push loop accepted ANY truthy reply as success
+('if (r)'); it now requires the engine's explicit ack shape
+(r && r.ok; zl:config replies { ok: true }). The retry window is
+now backoff 0/1/3/7/15/30s instead of 3 back-to-back attempts,
+covering slow cold installs. Fresh-context verification pending
+(shared browser contention); LB#15 stays open until it passes.
+Residual, engine-side: a mid-session worker restart resets the
+prefix without controllerchange and zl:ping exposes no route shape,
+so drift is undetectable from the page; filed upstream as
+Zeolite#17 (persist the prefix or echo it in zl:ping).
+
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
 ```json
