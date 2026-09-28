@@ -86,6 +86,14 @@ space300=24, space600=48), --md-sys-density-scale/size, --md-sys-state-*-opacity
   shadows are now theme-tinted (color-mix over the shadow color token) and
   M3E-scaled.
 
+Post-ship correction (b3f1b4e): the phase-2 replacement dropped the
+trailing semicolon on all 32 tokenized font-size declarations, so they
+parsed as invalid and fell back to inherited sizes (the badge rendered at
+22px instead of 11px). Caught by the live computed-style check, fixed, and
+re-verified on the deploy. Lesson recorded: anchor-based CSS edits must
+assert the full declaration including punctuation, and the live
+computed-style check is not optional.
+
 Verification: phases 2 and 4 are pixel-identical by construction (token value
 == previous literal, verified against the @m3e/web dist defaults). Phase 3
 changes pacing by at most 30ms per transition and the spring curve; phase 4
