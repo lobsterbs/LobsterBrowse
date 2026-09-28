@@ -211,10 +211,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </m3e-segmented-button>
           </div>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite is the project default: a service worker that caches proxied pages on your
-            device (cache-first, 10-minute freshness, network fallback), so repeat visits load
-            without touching the server. When the worker is not installed the same /lj/ routes are
-            served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
+            Zeolite is the project default: a service worker that intercepts proxied routes on your
+            device and transports them over Wisp client-side, with on-device caching and
+            in-worker rewriting. When no worker controls the page (cold start, worker restart,
+            or a browser without module service workers) the /lj/ routes answer with an honest
+            load-error card, they are NOT silently re-proxied. ScramJet does adblock/tracker stripping,
             HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
             de-amping on every upstream request.
           </p>

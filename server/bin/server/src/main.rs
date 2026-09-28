@@ -3208,9 +3208,11 @@ async fn main() {
         // The service worker script gets Service-Worker-Allowed so a
         // "/" scope registration is possible later; its chunks and
         // wasm assets are plain static files under the same prefix.
-        // The worker registers at its natural /zlsw/ scope today and
-        // acts purely as the extension control plane: it controls no
-        // pages, so proxied /lj/ and /r/ browsing is untouched.
+        // The UI registers this worker at the "/" scope (the header
+        // above allows it) and pushes the engine route prefix into it
+        // at runtime (zl:config): /lj/ on main, /zl/ on the beta
+        // branch. The worker claims only that engine prefix; every
+        // other path passes through untouched.
         .route("/zlsw/sw.js", get(zl_sw_js))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
         // The engine worker's transport adapter resolves the vendored
