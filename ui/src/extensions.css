@@ -54,11 +54,11 @@
   white-space: nowrap;
 }
 .lb-ext-ver {
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
   opacity: 0.7;
 }
 .lb-ext-state {
-  font-size: 11px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px)
   text-transform: uppercase;
   letter-spacing: 0.4px;
   opacity: 0.8;
@@ -86,10 +86,10 @@
   padding: var(--md-sys-measurement-space25, 2px) 0 var(--md-sys-measurement-space75, 6px);
 }
 .lb-ext-dname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-ext-desc { margin: var(--md-sys-measurement-space50, 4px) 0; font-size: 12px; line-height: 1.4; opacity: 0.85; }
+.lb-ext-desc { margin: var(--md-sys-measurement-space50, 4px) 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px) line-height: 1.4; opacity: 0.85; }
 .lb-ext-perms { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); margin: var(--md-sys-measurement-space75, 6px) 0; }
 .lb-ext-perms code {
-  font-size: 11px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px)
   padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space75, 6px);
   border-radius: 6px;
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 18%, transparent);
@@ -108,7 +108,7 @@
 .lb-ext-optbtn { margin-top: var(--md-sys-measurement-space75, 6px); }
 .lb-ext-err {
   margin: var(--md-sys-measurement-space75, 6px) 0 0;
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
   color: var(--md-sys-color-error, #f28b82);
   word-break: break-word;
 }
