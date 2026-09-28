@@ -296,7 +296,7 @@ export default function App() {
         <m3e-nav-rail
           id="nav-rail"
           mode="compact"
-          aria-label="LobsterBrowse"
+          aria-label="LobsterBrowse Preview"
         >
           <m3e-nav-item
             id="nav-home"
@@ -332,7 +332,7 @@ export default function App() {
           {/* The browser view gets every pixel: no header there. */}
           {view !== "browser" && (
             <m3e-app-bar>
-              <span slot="title" className="lb-app-title">LobsterBrowse</span>
+              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
             </m3e-app-bar>
           )}
 

@@ -28,9 +28,8 @@ inside the same-origin proxied frame, same as on main.
    /zl/ route prefix, accepted by loadSettings, routeUrl, engineRoutePrefix,
    decodeRoute. New zeoliteOwned() helper replaces every
    proxyEngine === "lobsterjet" UI check.
-2. Settings panel: third engine segment "Zeolite Beta (/zl/)" plus an
-   honest beta description. The persisted default remains "lobsterjet";
-   the beta is opt-in per device.
+2. Settings panel: third engine segment "Zeolite Preview (/zl/)" plus an
+   honest beta description. The Preview build ships the NativeTransit experiment as the DEFAULT engine (zeolite-beta) with diagnostics on; it is no longer opt-in.
 3. App boot: zl:config prefix now follows the selected engine and is
    re-pushed when the engine changes.
 4. Server: /zl/:target gets the same honest zl_sw_required answer as /lj/

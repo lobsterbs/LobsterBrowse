@@ -98,9 +98,10 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
+  // Preview build: NativeTransit experiment default engine, diagnostics on.
   seed: "#E8552F",
   engine: "startpage",
-  proxyEngine: "lobsterjet",
+  proxyEngine: "zeolite-beta",
   adblock: true,
   decentraleyes: true,
   httpsOnly: true,
@@ -112,7 +113,7 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
-  diagnostics: false,
+  diagnostics: true,
 };
 
 const KEY = "lobsterbrowse-settings";
