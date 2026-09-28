@@ -3119,7 +3119,6 @@ fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
     adblock::compile(&text)
 }
 
-#[tokio::main]
 /// SPA fallback hardening: the app shell goes ONLY to document
 /// navigations. Subresource requests (scripts, fetches, workers, the
 /// engine SW, favicons) that slip past every route get an honest 404
@@ -3127,7 +3126,7 @@ fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
 /// escaped proxied-page fetches (worker-context fetch('/...') on the
 /// /zl/ path is the demonstrated case). Requests without
 /// Sec-Fetch-Dest (curl, health probes) still get the shell.
-fn spa_fallback(headers: HeaderMap) -> Response {
+async fn spa_fallback(headers: HeaderMap) -> Response {
     let dest = headers
         .get("sec-fetch-dest")
         .and_then(|v| v.to_str().ok())
@@ -3148,6 +3147,7 @@ fn spa_fallback(headers: HeaderMap) -> Response {
     }
 }
 
+#[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
