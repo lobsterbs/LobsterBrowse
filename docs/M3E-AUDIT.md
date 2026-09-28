@@ -61,19 +61,33 @@ space300=24, space600=48), --md-sys-density-scale/size, --md-sys-state-*-opacity
   extensions.css token-prefix fix + spacing tokens; theme.css residual
   spacing tokens + error color tokens; rail.css padding token; hover/code
   backgrounds to color-mix; false shape-token comment corrected.
-- Phase 2 (pending): typography. Map font-size/weight/line-height to
-  --md-sys-typescale-* roles with current px fallbacks. Needs an eyeball
-  pass per surface (home, browser chrome, settings, devtools) because typescale
-  values differ from the current raw sizes; fallbacks keep the option of
-  shipping token-first without visual change.
-- Phase 3 (pending): motion. Re-point --m3e-spring to --md-sys-motion-spring-*
-  and durations/easings to the duration/easing tokens, fallback-first so
-  pacing is unchanged until the token values are verified visually.
-- Phase 4 (pending): shape + elevation. Re-point the --m3e-shape-* aliases to
-  --md-sys-shape-corner-* (visual deltas where values differ: lg 20->16,
-  md 16->12), pills to corner-full, box-shadows to --md-sys-elevation-level*.
-  Needs a real-browser eyeball pass after each deploy.
+- Phase 2 (shipped, 98752a0): typography. All 11px sites ->
+  --md-sys-typescale-label-small-font-size, 12px -> body-small, 14px ->
+  body-medium (32 sites, pixel-identical). Deliberate exceptions, kept raw and
+  documented in-file: 13px (9 sites, M3 has no 13) and 15px/16px glyph sizes.
+  font-weight/line-height/tracking stay raw this pass; full role adoption is a
+  later design call.
+- Phase 3 (shipped, f2bc205): motion. Every duration literal -> nearest
+  --md-sys-motion-duration-* token (exact for 150/200/250/300/400ms; deltas of
+  10-30ms for 120/140/160/180/240/260/320ms), cubic-bezier(0.2,0,0,1) ->
+  --md-sys-motion-easing-emphasized (exact), bare ease/ease-out ->
+  easing-standard / easing-standard-decelerate. The --m3e-spring alias is
+  re-pointed to the M3E spring-spatial control points (0.27, 1.06, 0.18, 1.0):
+  the spring TOKENS bundle a duration so they cannot drop into an easing slot,
+  the alias carries the curve only, and the old stronger homemade bounce is
+  retired. Hover/press feel is slightly gentler.
+- Phase 4 (shipped, c3863e4): shape + elevation. All five --m3e-shape-* aliases
+  re-pointed 1:1 to corner tokens (xl=extra-large 28, lg=large-increased 20,
+  md=large 16, sm=medium 12, xs=small 8; pixel-identical; the earlier phase-4
+  prediction of lg->16/md->12 deltas was wrong, large-increased=20 covers lg),
+  all nine 999px pills -> --md-sys-shape-corner-full, all six box-shadows ->
+  --md-sys-elevation-level5 (hero floats) / level3 (toast, ext panel) with the
+  old custom shadows as fallbacks. Elevation is the one real visual change:
+  shadows are now theme-tinted (color-mix over the shadow color token) and
+  M3E-scaled.
 
-Verification for phase 1: pixel-identical by construction (every token carries
-the exact previous px value as its fallback). CI + Render build are the
-compile gates; live check on the Preview deploy after deploy completes.
+Verification: phases 2 and 4 are pixel-identical by construction (token value
+== previous literal, verified against the @m3e/web dist defaults). Phase 3
+changes pacing by at most 30ms per transition and the spring curve; phase 4
+changes shadow geometry. CI + Render build are the compile gates; computed-style
+checks run on the Preview deploy after it goes live.
