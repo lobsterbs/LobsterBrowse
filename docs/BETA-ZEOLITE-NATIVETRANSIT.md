@@ -99,9 +99,11 @@ NOT part of this beta.
   sample (example.com). A Tier 1-3 sample site matrix was run 2026-09-28 and is
   recorded below; real credential flows remain blocked by the
   cookie-jar failure, a Tier 4 media sample and a Tier 5 openstreetmap.org
-  sample were run 2026-09-28 (below); worker behavior and the
-  heaviest rewrite sites remain untested, and real credential
-  flows remain blocked by the cookie-jar failure. No local
+  sample were run 2026-09-28 (below); worker behavior, WS and a Tier 6 site sample are
+  now recorded (Tier 6 workers/WS probe and the 2.3 Selenide
+  re-verification pass below); real credential flows remain
+  blocked by the cookie-jar failure (still reproducing on the
+  served 2.3 dist, upstream issue #10). No local
   toolchain exists; CI plus the Render build are the compile gates.
 - /zl/ shares the Zeolite worker's single runtime prefix: switching
   engines re-pushes zl:config; already-open tabs keep their route prefix.
@@ -351,6 +353,79 @@ WebSocket probes).
 - WebKit: untested end to end. Recent Safari supports module service
   workers, but no recorded run of the /zl/ chain exists on WebKit, so
   no claim is made either way.
+
+
+## Re-verification pass at 2.3 Selenide (beta deploy a79d3401, 2026-09-28)
+
+Fresh-context Chromium runs against the live beta (engine 2.3
+Selenide, zlswSha 145916ddcd49c39f, buildShort a79d340), public
+Tier-0 fixture (manually re-deployed first, dep-datc8nm7bikc73d0j5tg).
+
+Verified FIXED at 2.3 (matching the closed upstream findings):
+- 3xx Location mapping: /zl/ navigation to the fixture /redirect
+  (302 Location: /) lands on the virtual root (title "fixture",
+  h1 "fixture page"), not the app root.
+- Escaped page-context fetches: fetch('/data.json') from inside the
+  proxied page returns 200 application/json with the exact body.
+- Downloads: engine-route navigation to a Content-Disposition:
+  attachment URL (codeload zip of this repo) triggers the browser
+  download with the correct suggested filename. PASS.
+- The 503 no-worker notice card is live and honest; observed
+  answering fresh-profile /zl/ navigations, including one run
+  where the worker was already activated but not yet controlling
+  (claim timing; retry succeeds - matches the cold-start section).
+
+STILL BROKEN at 2.3 (engine-side; upstream issues filed):
+- Cookie jar on /zl/ fetches: cache-busted /set-cookie1 + /cookie
+  from a proxied page still round-trips EMPTY (Set-Cookie captured
+  and stripped from the surfaced headers, never replayed). Filed
+  upstream as Zeolite#10. Auth tiers stay BLOCKED; no fake passes.
+- Tier 2 excalidraw.com: app still never mounts (entry module never
+  evaluates; raw-path routes /zl/mermaid-to-excalidraw-*.js; the
+  origin-root bootstrap.js 404). Same three causes as before.
+- Tier 3 github.com/login: still PARTIAL - form renders with the
+  action correctly encoded, but 78 raw-path engine routes emitted,
+  40 chunk requests fail.
+- Tier 5 openstreetmap.org: still FAIL - document renders,
+  0 tiles; two bare /zl/ (no b64 segment) requests still emitted;
+  bootstrap.js 404.
+- Tier 1 wikipedia: content renders (13.2k chars) but the skin
+  CSS is still lost - both load.php stylesheets now fail through
+  their /zl/ routes outright.
+- craigslist.org: NEW - document navigation dies 'connection
+  interrupted mid-response' (502 engine error) consistently, while
+  /r/ (ScramJet, same egress) loads the same URL fully (200, 363
+  links). Engine streaming defect, filed as Zeolite#11.
+- In-page anchors: NEW - fragment-only hrefs are rewritten to the
+  bare prefix (/zl/#frag, no destination); navigating one answers
+  404 'zeolite: bad route'. Every same-page anchor link on
+  rewritten pages is dead. Filed as Zeolite#12.
+
+Tier 6 site sample (heavy rewriting, same harness):
+- PASS - www.tagesschau.de: 200, correct title, 261 links, 12.4KB
+  of body text, only the global bootstrap.js 404. First fully
+  passing real Tier 6 site.
+- FAIL - www.craigslist.org: engine streaming (Zeolite#11 above).
+- NOT REPRODUCIBLE - old.reddit.com (403 network-security block
+  page; the block page itself proxied and link-rewritten
+  correctly) and stackoverflow.com (Cloudflare 'Just a moment'
+  403). Bot gates, not engine verdicts.
+
+Perf/memory vs /lj/ (single sample, free tier, tagesschau.de):
+/zl/ domContentLoaded 11.8s vs /lj/ 15.5s; JS heap after settle
+21MB on BOTH; resource entries 25 vs 18. No regression observed
+on this sample. Caveat: single run, free-tier variance is high;
+both paths share the same worker on this build.
+
+Isolation probe re-run at a79d3401: baseline UNCHANGED - every
+check still reachable by design (same-origin architecture). New
+concrete evidence of the known gap: localStorage on this origin
+now contains keys written by target-site JS from proxied pages
+(spark_*, ard_mediathek_*), confirming the shared-store model
+recorded in the isolation record below.
+
+Ops: fixture was spun down (502) and needed a manual redeploy
+before this pass; beta autoDeploy still never fires on push.
 
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
