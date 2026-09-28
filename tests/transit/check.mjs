@@ -142,7 +142,7 @@ try {
   if (lb) {
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
     const zt = await rz.text();
-    ok("zl honest notice status 200", rz.status === 200, "got " + rz.status);
+    ok("zl honest notice status 503", rz.status === 503, "got " + rz.status);
     ok("zl honest notice text", zt.includes("Zeolite runs in its service worker"), zt.slice(0, 120));
     ok("zl does not proxy server-side", zt.indexOf("\"ok\":true") === -1, "body contains fixture json!");
 
