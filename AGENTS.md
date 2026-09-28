@@ -34,6 +34,7 @@ Fragments are client-side only (SVG sprite symbol selection, in-page anchors). T
 ## Zeolite
 Zeolite is a separate reusable engine repository. LobsterBrowse consumes its published browser bundle and must not make Zeolite depend on the UI.
 Always check Zeolite's actual compatibility implementation before claiming browser or extension API support.
+Error pages follow the engine's error-pages contract: the engine owns failed-navigation error pages for /zl/ (it renders its own card when a transport fails); the embedder owns only the 503 no-worker notice that /zl/ and /lj/ navigations get when they reach the server without an active service worker. Keep the notice wording in sync with the engine's docs/error-pages.md.
 
 ## NativeTransit direction
 NativeTransit is the long-term transport/interception architecture:
