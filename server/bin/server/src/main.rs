@@ -3219,6 +3219,11 @@ async fn main() {
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
         .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
+        // Same root-alias class as /libcurl above: the engine dist
+        // resolves the rewriter wasm at the origin root
+        // (/rewriter_wasm_bg.wasm), not under /zlsw/; serve the
+        // vendored copy at the path the worker actually requests.
+        .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
         // Extension subsystem routes live in the Zeolite worker
         // (IndexedDB-backed), NOT on this server: any request that
         // slips past the worker gets an honest 404, never the SPA
@@ -3600,6 +3605,22 @@ async fn zl_sw_js() -> Response {
             .header("service-worker-allowed", "/")
             .body(Body::from(bytes))
             .expect("static response build"),
+/// Rewriter wasm root alias. The vendored engine dist builds the
+/// wasm URL as new URL("/rewriter_wasm_bg.wasm", import.meta.url);
+/// the absolute path drops the /zlsw/ base, so the request lands on
+/// the origin root and 404s without this alias.
+async fn zl_rewriter_wasm() -> Response {
+    match tokio::fs::read("zlsw/rewriter_wasm_bg.wasm").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/wasm")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
     }
 }
