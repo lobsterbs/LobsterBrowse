@@ -128,6 +128,55 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     });
   };
 
+  /* Session export / import: the engine owns the envelope and the
+     crypto (PBKDF2 is slow by design, hence the long timeouts). The UI
+     only collects the passphrase and moves the JSON blob in and out. */
+  const [sessPass, setSessPass] = useState("");
+  const [sessMode, setSessMode] = useState<"replace" | "merge">("merge");
+  const [sessStatus, setSessStatus] = useState("");
+  const exportSession = async () => {
+    setSessStatus("Encrypting session, this takes a few seconds...");
+    const rep = await zlSend({ type: "zl:exportSession", passphrase: sessPass }, 20000);
+    if (!rep || !rep.ok) {
+      setSessStatus(
+        rep && rep.error
+          ? "Export failed: " + String(rep.error)
+          : "Export failed: the Zeolite service worker could not be reached on this origin."
+      );
+      return;
+    }
+    const blob = new Blob([JSON.stringify(rep.blob)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "lobsterbrowse-session.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setSessStatus("Session exported. Without the passphrase the file is unreadable.");
+  };
+  const importSessionFile = async (file: File) => {
+    setSessStatus("Decrypting " + file.name + "...");
+    let blob: unknown;
+    try {
+      blob = JSON.parse(await file.text());
+    } catch {
+      setSessStatus("Import failed: not a valid session file.");
+      return;
+    }
+    const rep = await zlSend(
+      { type: "zl:importSession", passphrase: sessPass, blob, mode: sessMode, rule: "keep-existing" },
+      20000
+    );
+    if (!rep || !rep.ok) {
+      setSessStatus(
+        rep && rep.error
+          ? "Import failed: " + String(rep.error) + " (wrong passphrase or corrupt file?)"
+          : "Import failed: the Zeolite service worker could not be reached on this origin."
+      );
+      return;
+    }
+    setSessStatus("Session imported (" + sessMode + ")." + (rep.extra ? " Extra keys were kept." : ""));
+  };
+
   /* About / Build: one authoritative source. The /build endpoint on
      the deployed server reports the versions compiled into that exact
      build plus its deployment git commit, so the UI never claims a
@@ -391,6 +440,54 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               Cache options apply when Zeolite is the proxy engine.
             </p>
           )}
+        </div>
+
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Session export / import</div>
+          <p className="lb-muted">
+            The engine encrypts your whole proxied session (tabs, cookie jar, cache keys) with a
+            passphrase and hands the file to you. Import decrypts it back into this browser.
+            The passphrase is never stored: no passphrase, no data.
+          </p>
+          <TextInput
+            label="Passphrase (min 8 characters)"
+            value={sessPass}
+            placeholder="at least 8 characters"
+            onChange={setSessPass}
+          />
+          <M3eSelect
+            label="Import mode"
+            value={sessMode}
+            options={[
+              ["replace", "Replace: wipe this session, then restore the file"],
+              ["merge", "Merge: existing data wins on conflict"],
+            ]}
+            onChange={(v) => setSessMode(v as "replace" | "merge")}
+          />
+          <div className="lb-seed-row">
+            <m3e-button disabled={sessPass.length >= 8 ? undefined : true} onClick={exportSession}>
+              <m3e-icon name="download" aria-hidden={true} /> Export encrypted session
+            </m3e-button>
+            <label className="lb-import-row">
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="lb-import-file"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importSessionFile(f);
+                  e.target.value = "";
+                }}
+              />
+              <m3e-button
+                disabled={sessPass.length >= 8 ? undefined : true}
+                onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}
+              >
+                <m3e-icon name="upload" aria-hidden={true} /> Import session file
+              </m3e-button>
+            </label>
+          </div>
+          {sessStatus && <p className="lb-muted" style={{ fontSize: 12 }}>{sessStatus}</p>}
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
