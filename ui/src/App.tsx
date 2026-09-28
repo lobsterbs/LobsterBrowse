@@ -183,11 +183,26 @@ export default function App() {
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
-    const push = () =>
-      void zlSend(
-        { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
-        8000,
+    const push = async () => {
+      /* The first zl:config can land on a still-installing worker and
+         be silently dropped; a null reply means the engine never got
+         the route prefix, so retry instead of leaving it at the
+         default (engine routes would then fall through to the honest
+         notice page until the next reload). */
+      const msg = {
+        type: "zl:config",
+        prefix: engineRoutePrefix(settings.proxyEngine),
+        scheme: "b64u",
+      };
+      for (let i = 0; i < 3; i++) {
+        const r = await zlSend(msg, 8000);
+        if (r) return;
+      }
+      store.pushLog(
+        "warn",
+        "zeolite worker did not answer zl:config; engine routes may show the notice page until the app is reloaded",
       );
+    };
     void (async () => {
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
@@ -204,7 +219,7 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      push();
+      void push();
       /* Cold-start race, verified on both live deployments: the
          first zl:config can land on a still-installing worker and
          is silently dropped, so engine routes fall through to the
