@@ -89,8 +89,12 @@ NOT part of this beta.
 
 ## Known limits (do not paper over)
 
-- This branch has not yet been exercised in a real browser; no local
-  toolchain exists, CI + Render build are the only gates run so far.
+- Real-browser verification exists as of 2026-09-28 (Chromium via
+  Playwright against https://lobsterbrowse-beta.onrender.com at
+  4614b57): Tier 0 fully executed and recorded below, plus one Tier 1
+  sample (example.com). Tier 1-6 site matrix, auth-heavy sites,
+  streaming media and worker behavior remain untested. No local
+  toolchain exists; CI plus the Render build are the compile gates.
 - /zl/ shares the Zeolite worker's single runtime prefix: switching
   engines re-pushes zl:config; already-open tabs keep their route prefix.
 - Incognito isolation on the beta path inherits the engine's cookie-jar
@@ -106,10 +110,77 @@ NOT part of this beta.
   honest-notice and /r/ end-to-end regression checks. This proves
   fixture and route behavior, NOT the SW->NativeTransit->Wisp chain:
   no browser runs in CI.
-- Browser-level Tier 0 (SW claims /zl/, transport over Wisp): NOT yet
-  run. Requires a live beta origin; blocked until the beta branch has
-  a deployment. Do not mark done until executed and recorded here.
-- Origin isolation: ui/public/zl-isolation-probe.html measures the real
-  reachability surface on any origin that serves the UI (it has the
-  same privileges as JS in a same-origin proxied frame). Run it on the
-  beta origin and record the JSON in the isolation record below.
+- Browser-level Tier 0 (SW claims /zl/, transport over Wisp): RUN
+  2026-09-28, Chromium (Playwright) against the deployed beta at
+  4614b57, target = the public Tier-0 fixture
+  (https://lobsterbrowse-fixture.onrender.com). Fresh-context
+  sequence UI load -> engine "Zeolite Beta" -> SW install -> zl:config
+  -> /zl/ navigation worked first try (the 5e0b7e3 controllerchange
+  re-push is deployed). Results:
+  PASS - HTML navigation 200, title/text correct, stylesheet applied
+  (body bg rgb(17,34,51) = the fixture #123; sheet href is the /zl/
+  encoded style.css route, rules=2).
+  PASS - CSS 200 text/css, byte-exact body. (Was the one failing
+  path before the /rewriter_wasm_bg.wasm root alias, 204ad95.)
+  PASS - JS 200 text/javascript; JSON 200 application/json byte-exact
+  {"ok":true,"n":42}; POST /echo 200 exact round-trip.
+  PASS - /stream 200, 10240 bytes, first chunk byte-exact
+  (7,10,13,16,19,22,25,28).
+  PASS - Range bytes=0-1023 -> 206, 1024 bytes, firstByte 13,
+  content-range bytes 0-1023/2097152.
+  PASS - /large 200, 2097152 bytes, byte-exact spot checks incl.
+  offset 12345 (2.1 s end to end through Wisp on the free tier).
+  PASS - SSE 200 text/event-stream, all 3 events, delivered in 3
+  separate stream reads.
+  PASS - /r/ regression on the beta origin: fixture JSON proxies
+  byte-exact through ScramJet, 200.
+  PASS - Tier 1 sample: https://example.com/ via /zl/ loads (200,
+  "Example Domain" rendered through the chain).
+  FAIL - Transport redirect at navigation level: /zl/<b64 /redirect>
+  (302, Location: "/") lands on the APP origin root (the
+  LobsterBrowse UI), not the target virtual root. Root-relative
+  Location must be mapped to the /zl/ virtual origin; NativeTransit
+  currently surfaces it unrewritten. Same-origin fetch with
+  redirect:manual sees opaqueredirect (standard for SW-responded
+  redirects, not a bug).
+  FAIL - Cookies do not round-trip on the /zl/ subresource path:
+  /set-cookie then /cookie returns an empty Cookie header and
+  document.cookie stays empty, so the per-virtual-origin jar did
+  not apply between two /zl/ fetches. Blocks all auth-heavy tiers
+  until fixed. Needs engine-side investigation.
+  FAIL - JS string URL surfaces are not rewritten: the fixture
+  page's own app.js does fetch('/data.json'); the string escapes
+  unrewritten to the proxy origin, hits the SPA fallback (404 HTML)
+  and the page's JSON fetch fails. RewriteFallback does not cover
+  JS fetch string literals on /zl/.
+  Ops - Render auto-deploy does NOT fire on pushes to this branch
+  (verified: pushes at 08:53/09:14/09:16 produced zero deploys);
+  every code change needs a manual deploy trigger. Free tier spins
+  down and does not reliably wake on request; a manual redeploy
+  restarts the instance.
+- Origin isolation: ui/public/zl-isolation-probe.html run 2026-09-28
+  on the beta origin at 4614b57; JSON recorded in the isolation
+  record below. Everything is reachable BY DESIGN (same-origin
+  architecture). This is the baseline the isolation phase must
+  deliberately shrink, not a regression.
+
+## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
+
+```json
+[
+  {"check":"localStorage read/write","verdict":"reachable","detail":"write + read + remove ok"},
+  {"check":"localStorage keys visible","verdict":"reachable","detail":"lobsterbrowse-tabs, lobsterbrowse-settings, lobsterbrowse-logs"},
+  {"check":"sessionStorage read/write","verdict":"reachable","detail":"ok"},
+  {"check":"document.cookie write/read","verdict":"reachable","detail":"ok"},
+  {"check":"IndexedDB API","verdict":"reachable","detail":"present (open attempted below)"},
+  {"check":"Cache API","verdict":"reachable","detail":"present (keys listed below)"},
+  {"check":"serviceWorker API","verdict":"reachable","detail":"present (registrations listed below)"},
+  {"check":"fetch /build (app internals)","verdict":"reachable","detail":"fetch allowed (status below)"},
+  {"check":"parent frame access","verdict":"reachable","detail":"not framed (top-level): same privileges as a proxied frame on this origin"},
+  {"check":"BroadcastChannel to other tabs","verdict":"reachable","detail":"channel opens; other tabs on this origin receive messages"},
+  {"check":"Cache API keys (async)","verdict":"reachable","detail":"zeolite-pages-v1"},
+  {"check":"SW registrations (async)","verdict":"reachable","detail":"/ -> /zlsw/sw.js"},
+  {"check":"IndexedDB open (async)","verdict":"reachable","detail":"opened, name: zl-isolation-probe"},
+  {"check":"fetch /build (async)","verdict":"reachable","detail":"HTTP 200 build 4614b57"}
+]
+```
