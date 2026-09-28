@@ -199,11 +199,22 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      await zlSend(
-        { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
-        8000,
-      );
+      const push = () =>
+        void zlSend(
+          { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
+          8000,
+        );
+      push();
+      /* Cold-start race, verified on both live deployments: the
+         first zl:config can land on a still-installing worker and
+         is silently dropped, so engine routes fall through to the
+         honest notice card until the engine is re-selected.
+         Re-push when the engine claims the page (same pattern as
+         the decentraleyes toggle below). */
+      navigator.serviceWorker?.addEventListener("controllerchange", push);
     })();
+    return () =>
+      navigator.serviceWorker?.removeEventListener("controllerchange", push);
   }, [settings.proxyEngine]);
 
   /* ---- Zeolite adblock: the engine's /rules.json (the migrated
