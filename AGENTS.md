@@ -205,3 +205,16 @@ Runtime <base href> mutation (property setter or setAttribute) is dropped with a
 
 ## Guest worker policy (2026-09-27 pass 3)
 Worker/SharedWorker with a foreign-origin script URL throw a SecurityError plus a WORKER_UNSUPPORTED resfail, mirroring the WebSocket policy: the script fetch itself would bypass the proxy (real-IP request), and in-worker subresources are unshimmed by design. Same-origin (rewritten), blob: and data: workers run unchanged. In-worker subresource routing is Zeolite-owned (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from the shim.
+
+## Beta branch: beta/zeolite-nativetransit (/zl/, NativeTransit-first)
+
+Experimental engine selection on this branch only, documented in
+docs/BETA-ZEOLITE-NATIVETRANSIT.md. Engine id "zeolite-beta" builds /zl/
+routes; the app pushes the matching zl:config prefix to the Zeolite worker
+on boot and on engine change. The worker transports via NativeTransit
+(vendored libcurl over Wisp, streaming, no full-body buffering) and uses
+the wasm rewriter only where browser origin semantics require it. The
+server answers /zl/:target with the same honest zl_sw_required page as
+/lj/ when no worker controls the page. /r/ (ScramJet) and /lj/ (stable
+Zeolite) are untouched; nothing merges to main until the promotion
+conditions in the beta doc are met.

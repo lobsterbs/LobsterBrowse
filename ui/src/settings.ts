@@ -64,7 +64,7 @@ export type SiteRule = {
   adblock?: boolean;
 };
 
-export type ProxyEngineId = "scramjet" | "lobsterjet";
+export type ProxyEngineId = "scramjet" | "lobsterjet" | "zeolite-beta";
 
 export type Settings = {
   seed: string;
@@ -128,7 +128,9 @@ export function loadSettings(): Settings {
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
       proxyEngine:
-        parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
+        parsed.proxyEngine === "lobsterjet" ||
+          parsed.proxyEngine === "scramjet" ||
+          parsed.proxyEngine === "zeolite-beta"
           ? parsed.proxyEngine
           : DEFAULT_SETTINGS.proxyEngine,
       decentraleyes: parsed.decentraleyes === undefined ? true : Boolean(parsed.decentraleyes),
@@ -244,7 +246,16 @@ export function b64urlDecode(s: string): string {
    engine-specific route shapes live; everywhere else resolves through
    it so engine branching does not spread through the UI. */
 export function engineRoutePrefix(engine: ProxyEngineId): string {
-  return engine === "lobsterjet" ? "/lj/" : "/r/";
+  if (engine === "lobsterjet") return "/lj/";
+  if (engine === "zeolite-beta") return "/zl/";
+  return "/r/";
+}
+
+/* True when the engine runs inside the Zeolite service worker (it
+   owns its route prefix and transports over Wisp client-side; the
+   stable server engine is the only exception). */
+export function zeoliteOwned(engine: ProxyEngineId): boolean {
+  return engine === "lobsterjet" || engine === "zeolite-beta";
 }
 
 /* Build the navigation route for a target URL. Zeolite is the
@@ -253,7 +264,8 @@ export function engineRoutePrefix(engine: ProxyEngineId): string {
    option params may ride on them. ScramJet routes through the server
    engine and keeps the lb_ options. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
-  if (s.proxyEngine === "lobsterjet") return "/lj/" + b64urlEncode(target);
+  if (zeoliteOwned(s.proxyEngine))
+    return engineRoutePrefix(s.proxyEngine) + b64urlEncode(target);
   const params = proxyParams(s, rules, target, incognito, sess);
   return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
 }
@@ -264,6 +276,7 @@ export function decodeRoute(pathname: string): string {
   let seg = "";
   if (pathname.startsWith("/r/")) seg = pathname.slice(3);
   else if (pathname.startsWith("/lj/")) seg = pathname.slice(4);
+  else if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
   seg = seg.split("?")[0].split("#")[0];
   try {
