@@ -247,7 +247,7 @@ export function startFixture(port = 0, host = "127.0.0.1") {
       resolve({
         port: server.address().port,
         origin: "http://" + host + ":" + server.address().port,
-        close: () => new Promise((r) => server.close(r)),
+        close: () => new Promise((r) => { server.closeIdleConnections(); server.close(r); }),
       });
     });
   });
