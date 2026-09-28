@@ -96,3 +96,20 @@ NOT part of this beta.
 - Incognito isolation on the beta path inherits the engine's cookie-jar
   model (per virtual origin, not per browsing session) - same honest gap
   as /lj/ today.
+
+## Tier 0 status (updated as phases land)
+
+- Automated (CI "transit" job): deterministic fixture
+  (tests/transit/fixture.mjs) + HTTP-level assertions
+  (tests/transit/check.mjs) for HTML/CSS/JS/JSON/redirect/POST/stream/
+  large/range/cookies/SSE, plus - when LB_ORIGIN is set - /zl/
+  honest-notice and /r/ end-to-end regression checks. This proves
+  fixture and route behavior, NOT the SW->NativeTransit->Wisp chain:
+  no browser runs in CI.
+- Browser-level Tier 0 (SW claims /zl/, transport over Wisp): NOT yet
+  run. Requires a live beta origin; blocked until the beta branch has
+  a deployment. Do not mark done until executed and recorded here.
+- Origin isolation: ui/public/zl-isolation-probe.html measures the real
+  reachability surface on any origin that serves the UI (it has the
+  same privileges as JS in a same-origin proxied frame). Run it on the
+  beta origin and record the JSON in the isolation record below.
