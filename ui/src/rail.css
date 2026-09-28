@@ -2,7 +2,7 @@
    never feel cramped; the width stays the component's own business.
    Overrides the theme's tighter spacing (same specificity, loaded
    later, so the cascade resolves in favour of these rules). */
-m3e-nav-rail { padding: 16px 0; }
+m3e-nav-rail { padding: var(--md-sys-measurement-space200, 16px) 0; }
 m3e-nav-rail m3e-nav-item { margin: 7px 0; }
 /* Glued rail: sticky to the top of the scrolling viewport so page
    scrolling never drags it along, full viewport height, never
