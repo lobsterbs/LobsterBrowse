@@ -1,8 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main, beta/zeolite-nativetransit]
+    branches: ["main", "beta/zeolite-nativetransit"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   rust:
