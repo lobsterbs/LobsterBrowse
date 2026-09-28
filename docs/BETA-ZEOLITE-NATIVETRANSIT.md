@@ -308,6 +308,38 @@ Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake passes.
 Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake
 passes.
 
+## Tier 6 workers/WS probe (real browser, RUN 2026-09-28, beta at c02f251b)
+
+Fresh-context harness as before; target = the public fixture's
+workers.html (classic + module worker probes, relative + absolute
+WebSocket probes).
+
+- PASS - Document navigation: workers.html renders through /zl/
+  (title "workers", all probe divs present).
+- PASS with engine defect - Classic AND module workers spawn, run,
+  and fetch through the engine transport - but a root-relative
+  fetch("/data.json") inside the worker resolves against the page
+  route instead of the virtual origin root, so the target's 404
+  body comes back. Page-level fetch of the same URL through an
+  encoded /zl/ route returns the correct JSON, so routes and
+  transport are fine. Filed as Zeolite#4.
+- FAIL - WebSocket from the proxied page: both the proxy-origin
+  relative form and the absolute wss:// form close 1006 with no
+  open/message events. Control: the same absolute wss endpoint
+  from a normal page on another origin connects, echoes and closes
+  cleanly, so the endpoint and cross-origin WS are fine; the
+  failure is the engine's WS bridge inside proxied pages. Filed
+  as Zeolite#4.
+- Verified at c02f251b/a79d3401: /build reports Zeolite 2.3
+  Selenide; the SW installs, activates and controls; /zl/
+  example.com renders; a dead-target /zl/ navigation shows the
+  ENGINE's error page (meta zl-error category tls, version 2.3
+  Selenide, Retry button) - no server card for transport
+  failures anymore; a direct /zl/ navigation with no SW answers
+  503, and the notice card got its own honest heading "No engine
+  worker yet" instead of the generic fetch-failure card (6bf1d036,
+  deployed and verified at a79d3401).
+
 ## Firefox / WebKit status (honest, 2026-09-28)
 
 - Firefox: no module service workers. The engine bundle registers as
