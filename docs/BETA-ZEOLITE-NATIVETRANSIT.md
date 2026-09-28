@@ -94,8 +94,10 @@ NOT part of this beta.
   4614b57): Tier 0 fully executed and recorded below, plus one Tier 1
   sample (example.com). A Tier 1-3 sample site matrix was run 2026-09-28 and is
   recorded below; real credential flows remain blocked by the
-  cookie-jar failure, and streaming media, worker behavior and the
-  heaviest rewrite sites (Tier 4-6) remain untested. No local
+  cookie-jar failure, a Tier 4 media sample and a Tier 5 openstreetmap.org
+  sample were run 2026-09-28 (below); worker behavior and the
+  heaviest rewrite sites remain untested, and real credential
+  flows remain blocked by the cookie-jar failure. No local
   toolchain exists; CI plus the Render build are the compile gates.
 - /zl/ shares the Zeolite worker's single runtime prefix: switching
   engines re-pushes zl:config; already-open tabs keep their route prefix.
@@ -201,11 +203,15 @@ deployed beta.
   the bootstrap);
   (2) raw-path engine routes again (/zl/mermaid-to-excalidraw-*.js,
   /zl/apple-touch-icon.png, 404);
-  (3) escaped root-relative requests /assets/index-*.css and
-  /assets/index-*.js hit the app's OWN /assets/ routes and were
-  answered 200 with the embedder UI's bundle files (both projects
-  are Vite apps with /assets/index-* names), feeding wrong-content
-  200s into the proxied page.
+  (3) CORRECTED 2026-09-28 (see the Tier 4-5 follow-up section):
+  an earlier revision of this entry claimed escaped /assets/*
+  requests were answered 200 with the app's own bundle files;
+  that was a misread of the setup-phase request log (the 200s
+  were the UI's own asset loads before the proxied navigation).
+  Escaped root-relative subresources 404 on the proxy origin,
+  verified on the openstreetmap.org run below. The actual
+  excalidraw blocker is the silent module failure recorded in
+  the Tier 4-5 follow-up section.
 - NOT REPRODUCIBLE - Tier 5 https://chatgpt.com/ in the automated
   context: the transport reaches the target, but chatgpt.com answers
   the Render egress with a Cloudflare challenge (403 "Just a
@@ -221,14 +227,61 @@ fallback misreported as load failures, raw-path engine routes, the
 /bootstrap.js origin-root assumption, wrong MIME on some CSS) are
 filed as lobsterbs/Zeolite#1 with a follow-up evidence comment.
 
-Embedder-side action items from this matrix (this repo, not the
-engine): consider hardening so root-relative requests that escape
-rewriting cannot be answered 200 with the app's own /assets/ files
-inside a proxied page, and decide whether to serve a bootstrap route
-or push the engine to inline its bootstrap.
+Embedder-side notes after the follow-up pass: no bootstrap.js
+file exists anywhere in the engine repo (code search: zero
+matches), so the origin-root injection cannot be satisfied by
+the embedder and the fix must be engine-side inlining;
+escaped root-relative subresources currently 404 cleanly and a
+wrong-content 200 was never observed after the correction
+above, so the SPA-fallback hardening item is downgraded to a
+possible future hardening, not a demonstrated defect.
 
 Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake passes.
 
+## Tier 4-5 follow-up (real browser, RUN 2026-09-28, pass 3, beta at 4614b57)
+
+- PASS - Tier 4 media/range: 1.1MB MP4 (mdn.github.io shared
+  asset) via /zl/: single request 206, content-range bytes
+  0-1128374/1128375, accept-ranges bytes, the video decodes
+  (readyState 4, duration 5.055s, fully buffered in ~6s). The
+  old gtv-videos-bucket sample now 403s for everyone
+  (deprecated bucket), not a proxy failure.
+- FAIL - Tier 5 https://www.openstreetmap.org/: the document
+  renders (title, nav, leaflet container 1280x665, jQuery
+  runs, their application.js executes through a correctly
+  encoded /zl/ route) but the map never initializes: 0 tile
+  elements, 0 tile requests. Causes: (1) link rel=preload
+  hrefs for /assets/*.css|js are left completely unrewritten
+  and 404/abort at the proxy origin while script[src] on the
+  same page is correctly encoded; (2) two requests hit a BARE
+  /zl/ (prefix with no b64 segment at all) and got honest
+  502s; (3) the usual /bootstrap.js origin-root 404. All
+  engine-side, filed upstream.
+- Controlled module-script experiment (fixture, after waking
+  it): a JSON URL loaded as type=module through /zl/ gets
+  200 + application/json and the browser's loud
+  spec-correct MIME rejection; a JS URL as a classic script
+  executes. The module pipeline itself works.
+- excalidraw repro narrowed (Tier 2): the entry module gets
+  200 + correct MIME, the full 2.2MB body is readable via
+  in-page fetch, and executing the body as a classic script
+  throws the import-statement SyntaxError (intact ESM), but
+  as a module it NEVER evaluates: zero import-resolution
+  requests, zero runtime fetches, zero console/page errors,
+  #root stays empty; a later dynamic import() of the same URL
+  fails with "Failed to fetch dynamically imported module"
+  and makes no new network request (module-map cached
+  failure). Suspects: CORS-mode script-destination handling
+  (the transport preserves the target's ACAO header) or
+  content-encoding br passthrough in script streaming.
+  Filed upstream with the exact repro.
+- Fixture ops: the fixture spun down mid-session (free tier,
+  no wake on request, Render 502) and needed a manual
+  redeploy; while it was down the engine 502ed honestly on
+  every fixture subresource instead of hanging.
+
+Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake
+passes.
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
 ```json
