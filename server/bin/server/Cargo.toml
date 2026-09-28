@@ -10,7 +10,7 @@ name = "lobster-server"
 path = "src/main.rs"
 
 [dependencies]
-zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "e52fd5a3725b6a32d22a7958cffb29ebde617b5c" }
+zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "4f710ec7843680da2931d8c920c26ee677d578b9" }
 adblock = { path = "../../crates/adblock" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
