@@ -73,7 +73,7 @@
 .lb-ext-detail {
   border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   padding: var(--md-sys-measurement-space100, 8px);
-  animation: lb-ext-pop 180ms cubic-bezier(0.2, 0, 0, 1);
+  animation: lb-ext-pop var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
 @keyframes lb-ext-pop {
   from { opacity: 0; transform: translateY(4px); }
