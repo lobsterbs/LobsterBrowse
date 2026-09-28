@@ -194,9 +194,16 @@ export default function App() {
         prefix: engineRoutePrefix(settings.proxyEngine),
         scheme: "b64u",
       };
-      for (let i = 0; i < 3; i++) {
+      /* LB#15: the old 3 back-to-back attempts raced the SW claim
+         window on fresh installs, and any truthy reply counted as
+         success. Retry with backoff (a cold free-tier worker can
+         take tens of seconds to evaluate its bundle) and only trust
+         an explicit ok ack - the engine replies { ok: true }. */
+      const delays = [0, 1000, 3000, 7000, 15000, 30000];
+      for (const d of delays) {
+        if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(msg, 8000);
-        if (r) return;
+        if (r && r.ok) return;
       }
       store.pushLog(
         "warn",
@@ -220,14 +227,13 @@ export default function App() {
         /* best effort: the Zeolite push below still runs */
       }
       void push();
-      /* Cold-start race, verified on both live deployments: the
-         first zl:config can land on a still-installing worker and
-         is silently dropped, so engine routes fall through to the
-         honest notice card until the engine is re-selected.
-         Re-push when the engine claims the page (same pattern as
-         the decentraleyes toggle below). */
-      navigator.serviceWorker?.addEventListener("controllerchange", push);
     })();
+    /* LB#15: attach the claim listener synchronously, BEFORE the
+       awaited lobsterjet cleanup above can run, so a
+       controllerchange firing during that cleanup is not missed.
+       The old late attachment left fresh installs with a healthy
+       worker but the default prefix and nothing retried. */
+    navigator.serviceWorker?.addEventListener("controllerchange", push);
     return () =>
       navigator.serviceWorker?.removeEventListener("controllerchange", push);
   }, [settings.proxyEngine]);
