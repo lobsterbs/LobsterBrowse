@@ -11,6 +11,8 @@
    docs/BETA-ZEOLITE-NATIVETRANSIT.md). Exit 1 on any failure. */
 
 import { startFixture, largeBytes, streamBytes, LARGE_SIZE } from "./fixture.mjs";
+import net from "node:net";
+import crypto from "node:crypto";
 
 let pass = 0;
 const fails = [];
@@ -84,6 +86,57 @@ try {
   ok("sse content-type", (r.headers.get("content-type") || "").includes("text/event-stream"));
   const sse = await r.text();
   ok("sse 3 events", (sse.match(/data: tick/g) || []).length === 3, JSON.stringify(sse));
+
+  r = await fetch(base + "/hdrs", { headers: { "x-lb-probe": "abc123" } });
+  ok("hdrs status 200", r.status === 200);
+  const hdrs = await r.json();
+  ok("hdrs echoes custom header", (hdrs["x-lb-probe"] || "") === "abc123", JSON.stringify(hdrs["x-lb-probe"]));
+
+  r = await fetch(base + "/set-cookie1");
+  const sc1 = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie")];
+  ok("set-cookie1 single cookie", sc1.length === 1 && sc1[0].startsWith("zlprobe1=a"), JSON.stringify(sc1));
+
+  r = await fetch(base + "/worker.js");
+  ok("worker status 200", r.status === 200);
+  ok("worker content-type", (r.headers.get("content-type") || "").includes("javascript"));
+  ok("worker content", (await r.text()).includes("fetch("));
+
+  r = await fetch(base + "/module-worker.js");
+  ok("module worker status 200", r.status === 200);
+  ok("module worker content-type", (r.headers.get("content-type") || "").includes("javascript"));
+
+  r = await fetch(base + "/workers.html");
+  ok("workers page 200", r.status === 200);
+  const wht = await r.text();
+  ok("workers page probes", wht.includes("new Worker(") && wht.includes("WebSocket(") && wht.includes("worker page"));
+
+  {
+    const key = crypto.randomBytes(16).toString("base64");
+    const sock = net.connect(fx.port, "127.0.0.1");
+    await new Promise((resolve) => { sock.on("connect", resolve); });
+    sock.write("GET /ws HTTP/1.1\r\nHost: fixture\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
+    const reply = await new Promise((resolve) => {
+      let acc = Buffer.alloc(0);
+      const t = setTimeout(() => resolve(acc), 3000);
+      sock.on("data", (d) => { acc = Buffer.concat([acc, d]); if (acc.indexOf("\r\n\r\n") !== -1) { clearTimeout(t); resolve(acc); } });
+    });
+    ok("ws handshake 101", reply.toString("utf8").startsWith("HTTP/1.1 101"), reply.toString("utf8").slice(0, 40));
+    const mask = crypto.randomBytes(4);
+    const msg = Buffer.from("wsprobe", "utf8");
+    const frame = Buffer.alloc(2 + 4 + msg.length);
+    frame[0] = 0x81;
+    frame[1] = 0x80 | msg.length;
+    mask.copy(frame, 2);
+    for (let i = 0; i < msg.length; i++) frame[6 + i] = msg[i] ^ mask[i & 3];
+    const echo = await new Promise((resolve) => {
+      let acc2 = Buffer.alloc(0);
+      const t = setTimeout(() => resolve(acc2), 3000);
+      sock.on("data", (d) => { acc2 = Buffer.concat([acc2, d]); if (acc2.length >= 2 + msg.length) { clearTimeout(t); resolve(acc2); } });
+      sock.write(frame);
+    });
+    ok("ws echo exact", echo.length >= 2 + msg.length && echo[0] === 0x81 && echo.subarray(2, 2 + msg.length).toString("utf8") === "wsprobe", echo.toString("hex").slice(0, 30));
+    sock.destroy();
+  }
 
   const lb = process.env.LB_ORIGIN;
   if (lb) {
