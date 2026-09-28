@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tower_http::cors::CorsLayer;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 use tracing::info;
 
 /// Engine shim + devtools hook injected right after <head> of every
@@ -3120,6 +3120,34 @@ fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
 }
 
 #[tokio::main]
+/// SPA fallback hardening: the app shell goes ONLY to document
+/// navigations. Subresource requests (scripts, fetches, workers, the
+/// engine SW, favicons) that slip past every route get an honest 404
+/// instead of index.html with 200 + text/html, which silently masked
+/// escaped proxied-page fetches (worker-context fetch('/...') on the
+/// /zl/ path is the demonstrated case). Requests without
+/// Sec-Fetch-Dest (curl, health probes) still get the shell.
+fn spa_fallback(headers: HeaderMap) -> Response {
+    let dest = headers
+        .get("sec-fetch-dest")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("document");
+    if dest != "document" {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    match std::fs::read("ui/index.html") {
+        Ok(body) => {
+            let mut res = Response::new(Body::from(body));
+            res.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            res
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -3232,7 +3260,7 @@ async fn main() {
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
-                .not_found_service(ServeFile::new("ui/index.html")),
+                .not_found_service(get(spa_fallback)),
         )
         .route(
             &wisp_path,
