@@ -92,8 +92,10 @@ NOT part of this beta.
 - Real-browser verification exists as of 2026-09-28 (Chromium via
   Playwright against https://lobsterbrowse-beta.onrender.com at
   4614b57): Tier 0 fully executed and recorded below, plus one Tier 1
-  sample (example.com). Tier 1-6 site matrix, auth-heavy sites,
-  streaming media and worker behavior remain untested. No local
+  sample (example.com). A Tier 1-3 sample site matrix was run 2026-09-28 and is
+  recorded below; real credential flows remain blocked by the
+  cookie-jar failure, and streaming media, worker behavior and the
+  heaviest rewrite sites (Tier 4-6) remain untested. No local
   toolchain exists; CI plus the Render build are the compile gates.
 - /zl/ shares the Zeolite worker's single runtime prefix: switching
   engines re-pushes zl:config; already-open tabs keep their route prefix.
@@ -163,6 +165,69 @@ NOT part of this beta.
   record below. Everything is reachable BY DESIGN (same-origin
   architecture). This is the baseline the isolation phase must
   deliberately shrink, not a regression.
+
+## Tier 1-3 site matrix (real browser, RUN 2026-09-28, beta at 4614b57)
+
+Second real-browser pass, same fresh-context harness as browser-level
+Tier 0 (UI load -> engine "Zeolite Beta" -> SW ready -> 4.5 s zl:config
+wait -> /zl/<b64> navigation), Chromium via Playwright against the
+deployed beta.
+
+- PASS - Tier 1 https://example.com/ (recorded in Tier 0 above).
+- PASS - Tier 1 https://news.ycombinator.com/: 200, title "Hacker
+  News", 30 .athing rows, 16x200 + 1x404, zero target-side failures.
+- PASS with caveat - Tier 1 https://en.wikipedia.org/wiki/Main_Page:
+  200, title "Wikipedia, the free encyclopedia", 13171 chars of body
+  text, 8 requests via /zl/. Caveat: both load.php?only=styles
+  stylesheets came back with Content-Type text/javascript and
+  Chromium refused to apply them, so the skin CSS was lost (content
+  still readable). Engine finding, filed upstream.
+- PARTIAL - Tier 3 https://github.com/login: 200, title
+  "Sign in to GitHub", login form renders, the form action is
+  correctly rewritten to /zl/<b64 https://github.com/session>, 113
+  requests via /zl/ (84x200). But 40 chunk/modulepreload requests
+  were emitted as raw-path engine routes (/zl/wp-runtime-*.js,
+  /zl/react-core-*.js, no b64 segment) and 404ed. Engine rewriter
+  defect, filed upstream. Real credential flow NOT attempted:
+  blocked by the Tier-0 cookie-jar failure.
+- FAIL - Tier 2 https://excalidraw.com/ (React/Vite SPA): 200, the
+  document and the main bundle load through correctly encoded /zl/
+  routes, cross-origin woff2 fonts (excalidraw.nyc3.cdn
+  .digitaloceanspaces.com) are correctly wrapped, but the React app
+  never mounts (0 canvas elements, 0 buttons). Three causes observed:
+  (1) the engine injects <script src="/bootstrap.js"> at the proxy
+  origin root; the server has no such route, so it 404s on every
+  proxied page (harmless for static pages, fatal when the page needs
+  the bootstrap);
+  (2) raw-path engine routes again (/zl/mermaid-to-excalidraw-*.js,
+  /zl/apple-touch-icon.png, 404);
+  (3) escaped root-relative requests /assets/index-*.css and
+  /assets/index-*.js hit the app's OWN /assets/ routes and were
+  answered 200 with the embedder UI's bundle files (both projects
+  are Vite apps with /assets/index-* names), feeding wrong-content
+  200s into the proxied page.
+- NOT REPRODUCIBLE - Tier 5 https://chatgpt.com/ in the automated
+  context: the transport reaches the target, but chatgpt.com answers
+  the Render egress with a Cloudflare challenge (403 "Just a
+  moment..."), so the bot gate, not the engine, ends the run. A real
+  interactive session (user-reported 2026-09-28) rendered substantial
+  UI with NativeTransit (354 NativeTransit vs 40 RewriteFallback
+  requests) plus resfail entries showing nested double-wrap URLs and
+  CSS fallback classifications; decoded and filed upstream.
+
+All engine findings (redirect Location mapping, cookie jar on the
+/zl/ path, JS fetch string literals, nested double-wrap loop,
+fallback misreported as load failures, raw-path engine routes, the
+/bootstrap.js origin-root assumption, wrong MIME on some CSS) are
+filed as lobsterbs/Zeolite#1 with a follow-up evidence comment.
+
+Embedder-side action items from this matrix (this repo, not the
+engine): consider hardening so root-relative requests that escape
+rewriting cannot be answered 200 with the app's own /assets/ files
+inside a proxied page, and decide whether to serve a bootstrap route
+or push the engine to inline its bootstrap.
+
+Auth tiers stay BLOCKED on the engine cookie-jar fix; no fake passes.
 
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
