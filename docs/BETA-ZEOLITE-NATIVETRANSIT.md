@@ -36,6 +36,11 @@ inside the same-origin proxied frame, same as on main.
    for pages no worker controls (cold start, worker restart, browsers
    without module service workers). No second server rewriter exists for
    /zl/; that is the point.
+5. The no-worker notice for /zl/ and /lj/ navigations is now a real
+   503 (62dbe7d2) with the wording "Open or reload the app once so the
+   worker installs, then retry." Contract: the engine owns
+   failed-navigation error pages; the embedder owns only this
+   no-control notice.
 
 ## What NativeTransit already handles (Zeolite 2.x engine)
 
@@ -103,6 +108,17 @@ NOT part of this beta.
 - Incognito isolation on the beta path inherits the engine's cookie-jar
   model (per virtual origin, not per browsing session) - same honest gap
   as /lj/ today.
+- Cold start: navigating straight to a /zl/ URL before the app has
+  ever loaded answers with the 503 notice by design. The
+  user-reported "every site fails with the notice" state on
+  2026-09-28 did not reproduce in fresh browser profiles at
+  fd756c2; suspected causes were the free-tier instance asleep or
+  mid-deploy and stale service-worker state in long-lived profiles
+  after engine bundle changes. Remediations shipped: Zeolite dist
+  re-pinned to 2.3 Selenide (c5373afb, same as main) and the app
+  retries the zl:config push three times when the worker does not
+  answer during cold start (App.tsx). If the notice still appears,
+  reload the app once so the worker reinstalls.
 
 ## Tier 0 status (updated as phases land)
 
@@ -113,6 +129,16 @@ NOT part of this beta.
   honest-notice and /r/ end-to-end regression checks. This proves
   fixture and route behavior, NOT the SW->NativeTransit->Wisp chain:
   no browser runs in CI.
+- CI transit history (2026-09-28): the workflow was broken from
+  f2a83f6c (a `- uses: setup-node@v4` line lost its actions/ org;
+  every run died before starting any job; fixed in 43761d91). The
+  transit job then failed with node's silent exit code 13: check.mjs
+  awaited the fixture's server.close(), which never settles while
+  keep-alive or upgraded sockets linger, so node killed the module
+  mid-await with zero output. Fixed in c02f251b: close is best-effort
+  and the check exits explicitly with a real code. CI is green on
+  c02f251b (rust, ui, transit); the LB_ORIGIN leg also asserts the
+  503 notice and /r/ end to end.
 - Browser-level Tier 0 (SW claims /zl/, transport over Wisp): RUN
   2026-09-28, Chromium (Playwright) against the deployed beta at
   4614b57, target = the public Tier-0 fixture
