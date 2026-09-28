@@ -40,7 +40,7 @@ m3e-app-bar {
 /* Preview build badge on the app title. */
 .lb-preview-badge {
   display: inline-block;
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px)
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -129,7 +129,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   background: transparent;
   color: inherit;
   font-family: inherit;
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px)
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
 }
 /* m3e-select owns its own styling; inside dense flex rows (per-site
    rules, DevTools toolbar) it just must not collapse. */
@@ -138,7 +138,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* 13px is a deliberate off-scale size: the M3 typescale has 12 (body-small)
    and 14 (body-medium) only. Kept raw until a design call bumps it. */
 .lb-muted { opacity: 0.65; font-size: 13px; }
-.lb-curl { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px) opacity: 0.75; }
+.lb-curl { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.75; }
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
 .lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
@@ -167,7 +167,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   border: none;
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px)
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
 }
 .lb-ac-item:hover,
@@ -177,7 +177,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ac-hint {
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space225);
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px)
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   opacity: 0.55;
   border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
 }
@@ -238,7 +238,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   flex: 0 1 auto;
   min-width: 0;
   max-width: 150px;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease),
@@ -269,7 +269,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* Many tabs: shrink automatically. compact = tighter pill (>=6 tabs),
    tight = drop the titles, favicon-only pills (>=10 tabs). */
 .lb-tabstrip.compact { gap: var(--md-sys-measurement-space50); }
-.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: var(--md-sys-typescale-body-small-font-size, 12px) }
+.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
@@ -508,15 +508,15 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
-.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px) overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .lb-dt-seg { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--md-sys-measurement-space100); overflow: auto; }
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
 .lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: 13px; overflow: auto; }
-.lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px) word-break: break-all; }
-.lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px) font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
+.lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
+.lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
 
-.lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px) }
+.lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-console-line { display: flex; gap: var(--md-sys-measurement-space100); padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-console-ts { opacity: 0.5; flex-shrink: 0; }
 .lb-console-arrow { opacity: 0.6; flex-shrink: 0; }
@@ -537,7 +537,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-console-input { display: flex; gap: var(--md-sys-measurement-space100); align-items: flex-end; padding-top: var(--md-sys-measurement-space100); }
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
-.lb-net { flex: 1; overflow: auto; font-size: var(--md-sys-typescale-body-small-font-size, 12px) }
+.lb-net { flex: 1; overflow: auto; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
@@ -548,18 +548,18 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-net-dur { margin-left: auto; opacity: 0.5; flex-shrink: 0; }
 .lb-net-detail { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); opacity: 0.85; word-break: break-all; }
 .lb-script-item { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; padding: var(--md-sys-measurement-space75); flex-wrap: wrap; }
-.lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--md-sys-typescale-label-small-font-size, 11px) }
-.lb-check { font-size: var(--md-sys-typescale-body-small-font-size, 12px) display: flex; align-items: center; gap: var(--md-sys-measurement-space50); }
-.lb-dt-script-run { display: flex; align-items: center; gap: var(--md-sys-measurement-space125); font-size: var(--md-sys-typescale-body-small-font-size, 12px) opacity: 0.85; flex-wrap: wrap; }
+.lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--md-sys-typescale-label-small-font-size, 11px); }
+.lb-check { font-size: var(--md-sys-typescale-body-small-font-size, 12px); display: flex; align-items: center; gap: var(--md-sys-measurement-space50); }
+.lb-dt-script-run { display: flex; align-items: center; gap: var(--md-sys-measurement-space125); font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.85; flex-wrap: wrap; }
 .lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); overflow: auto; }
-.lb-script-list { margin: var(--md-sys-measurement-space50) 0; padding-left: var(--md-sys-measurement-space250); font-size: var(--md-sys-typescale-body-small-font-size, 12px) word-break: break-all; max-height: 40%; overflow: auto; }
+.lb-script-list { margin: var(--md-sys-measurement-space50) 0; padding-left: var(--md-sys-measurement-space250); font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; max-height: 40%; overflow: auto; }
 
 /* Logs */
 .lb-logs-toolbar { display: flex; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space150) 0; flex-wrap: wrap; }
 .lb-log-section { margin-bottom: var(--md-sys-measurement-space250); }
 .lb-log-list {
   font-family: ui-monospace, monospace;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   max-height: 320px;
   overflow: auto;
   border: 1px solid rgba(128, 128, 128, 0.3);
@@ -697,7 +697,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   border: none;
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px)
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
   transition: background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), padding-left var(--md-sys-motion-duration-short-2, 100ms) var(--m3e-spring);
 }
@@ -772,7 +772,7 @@ m3e-nav-rail.lb-rail-hidden {
   border-radius: var(--m3e-shape-sm);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
 }
-.lb-site-cookie { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-label-small-font-size, 11px) word-break: break-all; }
+.lb-site-cookie { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-label-small-font-size, 11px); word-break: break-all; }
 /* ---- Feature batch: UA dropdown, ext detail switches, incognito in
    the toolbar, smooth suggestion pop-in, new-tab fade. ---- */
 
@@ -787,7 +787,7 @@ m3e-nav-rail.lb-rail-hidden {
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px)
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
 }
 .lb-ua-active {
@@ -797,7 +797,7 @@ m3e-nav-rail.lb-rail-hidden {
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
   color: var(--md-sys-color-on-surface);
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
 }
 .lb-ua-bad { color: var(--md-sys-color-error, #d93025); }
 
@@ -843,7 +843,7 @@ m3e-nav-rail.lb-rail-hidden {
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 60%, transparent);
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   line-height: 1.6;
 }
 .lb-build-chip .lb-build-name { color: var(--md-sys-color-on-surface-variant); }
@@ -855,7 +855,7 @@ m3e-nav-rail.lb-rail-hidden {
 /* ---- DevTools diagnostics ---- */
 .lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75, 6px); margin-bottom: var(--md-sys-measurement-space100, 8px); }
 .lb-diag-chip {
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px)
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
@@ -883,7 +883,7 @@ m3e-nav-rail.lb-rail-hidden {
   background: color-mix(in srgb, var(--md-sys-color-error-container) 70%, transparent);
   color: var(--md-sys-color-on-error-container);
   font-family: inherit;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   font-variation-settings: "wght" 500;
   cursor: pointer;
 }
@@ -974,7 +974,7 @@ m3e-nav-rail.lb-rail-hidden {
   display: flex;
   align-items: center;
   gap: var(--md-sys-measurement-space75);
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px)
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   min-width: 0;
 }
 .lb-tabs-tile-head .lb-tabs-title {
@@ -1061,7 +1061,7 @@ m3e-nav-rail.lb-rail-hidden {
   white-space: nowrap;
 }
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
-.lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px) opacity: 0.65; }
+.lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
   .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
@@ -1086,7 +1086,7 @@ m3e-snackbar {
   border-radius: var(--md-sys-shape-corner-medium, 12px);
   background: var(--md-sys-color-inverse-surface, #2a2a2a);
   color: var(--md-sys-color-inverse-on-surface, #f5f5f5);
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px)
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   box-shadow: var(--md-sys-elevation-level3, 0 2px 12px rgba(0, 0, 0, 0.3));
   animation: lb-toast-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
 }
