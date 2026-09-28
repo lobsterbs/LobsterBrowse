@@ -5,6 +5,15 @@ redirect, POST echo, streaming, 2 MiB large body with real Range
 support, cookie set/echo, SSE). check.mjs asserts every endpoint
 byte-exactly.
 
+Tier-6 probes (added 2026-09-28): /worker.js + /module-worker.js
+(scripts that fetch /data.json and postMessage the result),
+/workers.html (page that spawns classic + module workers and probes
+WebSocket behavior), /ws (minimal RFC6455 echo: handshake + one text
+frame), /hdrs (echoes request headers as JSON), /set-cookie1 (single
+Set-Cookie, to discriminate jar bugs from multi-cookie parsing).
+check.mjs covers all of them at the HTTP level, including a raw
+WebSocket handshake + echo.
+
 With LB_ORIGIN set it also checks the server side of the beta:
 
     LB_ORIGIN=http://127.0.0.1:6001 node tests/transit/check.mjs
