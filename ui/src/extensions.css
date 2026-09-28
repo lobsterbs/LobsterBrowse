@@ -12,7 +12,7 @@
   color: var(--md-sys-color-on-surface, #e6e1e5);
   border-radius: var(--m3e-shape-md, 16px);
   padding: var(--md-sys-measurement-space100, 8px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--md-sys-elevation-level3, 0 4px 16px rgba(0, 0, 0, 0.4));
 }
 .lb-ext-head {
   display: flex;
