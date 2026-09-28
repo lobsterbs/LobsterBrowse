@@ -427,6 +427,26 @@ recorded in the isolation record below.
 Ops: fixture was spun down (502) and needed a manual redeploy
 before this pass; beta autoDeploy still never fires on push.
 
+Range-cache replay (finding B from the 2.2-era issue-#1 comment),
+re-tested at 2.3: CONFIRMED STILL BROKEN. From a proxied page
+context, fetching /zl/<b64 of /large> with no Range header returns
+200 with the full 2097152-byte body and caches it; fetching the
+SAME route again with Range: bytes=0-1023 returns 200 with the
+full 2MiB body again, no content-range header (the stored entry
+is replayed without revalidation). Control: a cache-busted URL for
+the same resource returns the correct 206, content-range bytes
+0-1023/2097152. The response cache serves stored full-body entries
+to range requests. Filed as Zeolite#13.
+
+zl:config push flakiness on fresh installs (EMBEDDER bug, ours):
+four-plus consecutive fresh contexts at ~20:20-20:35 UTC had a
+healthy SW (zl:ping ok) but a default route prefix - all /zl/
+navigations hit the 503 notice with an empty netLog. The app's
+3-attempt zl:config push raced the SW claim window and nothing
+retried. A manual MessageChannel re-push of zl:config fixes it
+instantly. Filed as LB#15 (retry with backoff, self-heal on
+default-prefix detection, warn on no-reply).
+
 ## Isolation record (zl-isolation-probe.html, beta origin, 4614b57)
 
 ```json
