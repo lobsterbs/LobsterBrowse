@@ -183,6 +183,11 @@ export default function App() {
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
+    const push = () =>
+      void zlSend(
+        { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
+        8000,
+      );
     void (async () => {
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
@@ -199,11 +204,6 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      const push = () =>
-        void zlSend(
-          { type: "zl:config", prefix: engineRoutePrefix(settings.proxyEngine), scheme: "b64u" },
-          8000,
-        );
       push();
       /* Cold-start race, verified on both live deployments: the
          first zl:config can land on a still-installing worker and
