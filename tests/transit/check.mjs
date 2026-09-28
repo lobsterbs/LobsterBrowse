@@ -162,9 +162,14 @@ try {
     ok("r large bytes start", rlb.length >= 100 && rlb.subarray(0, 100).equals(largeBytes.subarray(0, 100)), "len " + rlb.length);
   }
 } finally {
-  await fx.close();
+  /* One-shot CI process: awaiting server.close() can leave this
+     module's top-level await pending (keep-alive / upgraded sockets),
+     which node ends with silent exit code 13. Close is best-effort;
+     the explicit exit below is authoritative. */
+  console.error("tier-0: body done, closing fixture");
+  fx.close();
 }
 
 console.log("tier-0: " + pass + " passed, " + fails.length + " failed" + (process.env.LB_ORIGIN ? " (LB_ORIGIN checks ran)" : " (fixture-only; set LB_ORIGIN for server checks)"));
 for (const f of fails) console.log("  FAIL " + f);
-if (fails.length) process.exit(1);
+process.exit(fails.length ? 1 : 0);
