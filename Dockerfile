@@ -26,7 +26,7 @@ RUN npm run build
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=e40727cd7bb438d64aeaa4f60aff2959c9ffd4ff
+ARG ZEOLITE_COMMIT=88116094d5a29a6cc136b4dbec6c4da694b647f4
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates npm \
     && rm -rf /var/lib/apt/lists/*

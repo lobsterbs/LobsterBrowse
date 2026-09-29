@@ -217,6 +217,26 @@ export default function App() {
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
+    /* LB#15: the first zl:config can land on a still-installing
+       worker and be silently dropped; a null reply means the engine
+       never got the route prefix. Retry with backoff (a cold
+       free-tier worker can take tens of seconds to evaluate its
+       bundle) and only trust an explicit ok ack - the engine
+       replies { ok: true }. Mid-session restarts need no re-push:
+       since Zeolite#17 the worker persists the route shape and
+       restores it before the first fetch. */
+    const push = async () => {
+      const msg = { type: "zl:config", prefix: "/lj/", scheme: "b64u" };
+      for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
+        if (d) await new Promise((res) => setTimeout(res, d));
+        const r = await zlSend(msg, 8000);
+        if (r && r.ok) return;
+      }
+      store.pushLog(
+        "warn",
+        "zeolite worker did not answer zl:config; engine routes may show the notice page until the app is reloaded",
+      );
+    };
     void (async () => {
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
@@ -233,7 +253,7 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      await zlSend({ type: "zl:config", prefix: "/lj/", scheme: "b64u" }, 8000);
+      await push();
     })();
   }, []);
 
@@ -309,7 +329,7 @@ export default function App() {
   }
 
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density}>
       <div className="lb-shell">
         {/* The rail is always fully visible in every view: no hiding,
            no sliver, no click-to-toggle. */}
@@ -379,6 +399,7 @@ export default function App() {
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
+                  onRulesChange={updateRules}
                 />
               )}
               {view === "settings" && (
