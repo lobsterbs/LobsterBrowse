@@ -116,6 +116,28 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   font-family: inherit;
   font-size: 14px;
 }
+/* Keyboard focus rings (WCAG 2.4.7). M3E components draw their own
+   focus treatment (m3e-theme has strong-focus), but these light-DOM
+   pieces do not, so they get an explicit visible outline. */
+.lb-input:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+.lb-input[aria-invalid="true"] {
+  border-color: var(--md-sys-color-error);
+}
+.lb-ac-item:focus-visible {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+  outline: none;
+}
+.lb-color-input:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+.lb-seed-row input:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
 /* m3e-select owns its own styling; inside dense flex rows (per-site
    rules, DevTools toolbar) it just must not collapse. */
 .lb-seed-row m3e-select,
