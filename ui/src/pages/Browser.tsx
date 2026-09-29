@@ -85,7 +85,7 @@ type DlItem = {
    presets only. A custom UA stays a global setting; resolveUa reads
    the custom string from the global settings, not per-site. */
 const UA_RULE_OPTIONS: Array<[string, string]> = [["", "Use global setting"]].concat(
-  (Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id) => [id, UA_PRESETS[id].name])
+  (Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id): [string, string] => [id, UA_PRESETS[id].name])
 );
 
 /* Minimal File System Access surface used by the streaming download
@@ -1322,7 +1322,7 @@ export default function BrowserView(props: Props) {
       return;
     }
     if (i >= 0) props.onRulesChange(rules.map((r) => (r.domain === host ? { ...r, uaPreset: preset } : r)));
-    else props.onRulesChange([...rules, { domain: host, uaPreset }]);
+    else props.onRulesChange([...rules, { domain: host, uaPreset: preset }]);
   };
   /* TLS certificate details for the site card. The server checks the
      host's public CT-log record (crt.sh), so this works even though
