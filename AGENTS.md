@@ -205,3 +205,15 @@ Runtime <base href> mutation (property setter or setAttribute) is dropped with a
 
 ## Guest worker policy (2026-09-27 pass 3)
 Worker/SharedWorker with a foreign-origin script URL throw a SecurityError plus a WORKER_UNSUPPORTED resfail, mirroring the WebSocket policy: the script fetch itself would bypass the proxy (real-IP request), and in-worker subresources are unshimmed by design. Same-origin (rewritten), blob: and data: workers run unchanged. In-worker subresource routing is Zeolite-owned (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from the shim.
+
+## Find in page (#9)
+The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighter until window.find disappears.
+
+## Per-site rules chip (#10)
+The toolbar tune chip (inline SVG glyph, same pattern as the incognito mask) edits the same site-rule store as Settings (settings.ts loadSiteRules/saveSiteRules). A rule is created lazily and deleted when it carries no overrides. Ad-block semantics follow proxyParams: global on unless the site rule disables it; a site rule cannot enable ad-block while the global setting is off (the switch is disabled then, with an honest note). Unchanged honest gap: per-site rules apply to /r/ ScramJet routes; the Zeolite engine honors the global ad-block toggle only. Wiring per-site rules into the engine lives on the unstable integration branch.
+
+## Content-Disposition passthrough (#11)
+engine_proxy's non-rewritten stream path forwards content-disposition alongside the caching/range headers; the UI download manager reads it for the saved filename (the download attribute and the URL basename remain the fallbacks).
+
+## Density (#21)
+Settings carries settings.density ("normal" | "compact"), applied as the m3e-theme density attribute; migration-safe in loadSettings. The downloads toolbar button carries an m3e-badge with the item count, and every contextual toolbar icon button has an m3e-tooltip.
