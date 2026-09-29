@@ -2665,6 +2665,9 @@ async fn engine_proxy(
                 // is deliberately NOT forwarded: reqwest transparently
                 // decompresses gzip/br, so upstream's length can mismatch
                 // the streamed bytes.
+                // content-disposition IS forwarded (#11): the UI download
+                // manager reads it for the saved file name; the download
+                // attribute and URL basename stay the fallbacks.
                 // (Collected before bytes_stream: that consumes the
                 // response.)
                 let mut cache_headers: Vec<(&str, String)> = Vec::new();
@@ -2675,6 +2678,7 @@ async fn engine_proxy(
                     "expires",
                     "content-range",
                     "accept-ranges",
+                    "content-disposition",
                 ] {
                     if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
                         cache_headers.push((h, v.to_owned()));
