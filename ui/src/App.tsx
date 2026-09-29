@@ -8,6 +8,7 @@ import {
   saveSettings,
   loadSiteRules,
   saveSiteRules,
+  resetIncognitoSid,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -130,6 +131,9 @@ export default function App() {
     (v: boolean) => {
       setIncognito(v);
       if (v) {
+        /* Fresh cookie jar per incognito window (#1): the server-side
+           session client is keyed by sid, so a new sid = an empty jar. */
+        resetIncognitoSid();
         suspendedTabs.current = tabs;
         const t = freshTab();
         setTabs([t]);

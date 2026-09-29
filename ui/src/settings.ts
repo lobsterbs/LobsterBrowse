@@ -2,6 +2,42 @@
    sent to the server except the route query parameters the user's
    settings genuinely control. */
 
+/* Cookie-session id (issue #1): the server keeps one cookie jar per
+   lb_sid, so deployment users no longer share a single jar. Stable per
+   browser profile for normal browsing (cookies survive reloads), fresh
+   and in-memory for each incognito window (its jar dies with the sid). */
+const SID_KEY = "lobsterbrowse-sid";
+let incSid = "";
+let memSid = "";
+function freshSid(): string {
+  return (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Math.random()).slice(2) + String(Date.now());
+}
+/* Called when a new incognito window opens: its jar starts empty. */
+export function resetIncognitoSid(): void {
+  incSid = "";
+}
+function cookieSid(incognito: boolean): string {
+  if (incognito) {
+    if (!incSid) incSid = freshSid();
+    return incSid;
+  }
+  if (!memSid) {
+    try {
+      memSid = localStorage.getItem(SID_KEY) ?? "";
+      if (memSid.length < 16 || memSid.length > 64) memSid = "";
+      if (!memSid) {
+        memSid = freshSid();
+        localStorage.setItem(SID_KEY, memSid);
+      }
+    } catch {
+      memSid = freshSid();
+    }
+  }
+  return memSid;
+}
+
 export type EngineId = "duckduckgo" | "brave" | "startpage" | "google" | "bing" | "mojeek";
 
 export const ENGINES: Record<EngineId, { name: string; url: string }> = {
@@ -206,6 +242,10 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string, inco
      lb_inc routes, so incognito browsing never mixes cookies with the
      normal shared jar. */
   if (incognito) parts.push("lb_inc=1");
+  /* Cookie-session id (#1): routes this tab's engine traffic through
+     its own server-side jar (the rewriter threads it onto every
+     rewritten subresource and link). */
+  parts.push("lb_sid=" + encodeURIComponent(cookieSid(incognito)));
   /* Per-tab session token: server-side /logs is scoped to it, so
      diagnostics from one tab never leak into another session's view. */
   if (sess) parts.push("lb_sess=" + encodeURIComponent(sess));
