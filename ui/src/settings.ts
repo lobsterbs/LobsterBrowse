@@ -131,6 +131,8 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
+  /* M3E density: normal or compact (tighter spacing UI-wide). */
+  density: "normal" | "compact";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -149,6 +151,7 @@ export const DEFAULT_SETTINGS: Settings = {
   prefetchLinks: true,
   autoHideChrome: true,
   diagnostics: false,
+  density: "normal",
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -172,6 +175,7 @@ export function loadSettings(): Settings {
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
+      density: parsed.density === "compact" ? "compact" : "normal",
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
