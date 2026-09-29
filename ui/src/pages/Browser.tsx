@@ -84,9 +84,10 @@ type DlItem = {
 /* User-Agent options for the per-site rules chip (#10): the global
    presets only. A custom UA stays a global setting; resolveUa reads
    the custom string from the global settings, not per-site. */
-const UA_RULE_OPTIONS: Array<[string, string]> = [["", "Use global setting"]].concat(
-  (Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id): [string, string] => [id, UA_PRESETS[id].name])
-);
+const UA_RULE_OPTIONS: Array<[string, string]> = [
+  ["", "Use global setting"],
+  ...(Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id): [string, string] => [id, UA_PRESETS[id].name]),
+];
 
 /* Minimal File System Access surface used by the streaming download
    path. Declared locally (structural, no global augmentation) so it
