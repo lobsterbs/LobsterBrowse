@@ -369,9 +369,7 @@ impl reqwest::dns::Resolve for PolicyDns {
             let policy = zeolite_server::policy::DestinationPolicy::default();
             let allowed: Vec<std::net::SocketAddr> = addrs
                 .into_iter()
-                .filter(|sa| {
-                    policy.check_ip(&sa.ip()) == zeolite_server::policy::Verdict::Allow
-                })
+                .filter(|sa| policy.check_ip(&sa.ip()) == zeolite_server::policy::Verdict::Allow)
                 .collect();
             if allowed.is_empty() {
                 // Every address resolved into blocked space (or nothing
@@ -409,7 +407,10 @@ fn session_jar_client(state: &AppState, sid: &str) -> Option<reqwest::Client> {
     if !valid_session_token(sid) {
         return None;
     }
-    let mut map = state.session_clients.lock().unwrap_or_else(|e| e.into_inner());
+    let mut map = state
+        .session_clients
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let now = now_secs();
     map.retain(|_, (_, t)| now.saturating_sub(*t) < JAR_TTL_SECS);
     if let Some((c, t)) = map.get_mut(sid) {
@@ -2297,7 +2298,9 @@ async fn engine_proxy(
             }
         }
     }
-    for k in ["ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess", "sid"] {
+    for k in [
+        "ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess", "sid",
+    ] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
         }
