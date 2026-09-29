@@ -175,8 +175,39 @@ export default function App() {
     [tabs, activeId, newTab]
   );
 
-  /* ---- Keyboard shortcuts removed by request: no global key
-     handling remains in the app. ---- */
+  /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
+     Ctrl+W) are never delivered to the page, so the tab shortcuts
+     live on Alt combos. AltGr is reported as ctrlKey+altKey and is
+     therefore left alone. Documented in Settings. ---- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const k = e.key.toUpperCase();
+      if (e.shiftKey) {
+        if (k !== "T") return;
+        e.preventDefault();
+        const last = closedTabs.current[closedTabs.current.length - 1];
+        if (!last) return;
+        closedTabs.current = closedTabs.current.slice(0, -1);
+        setTabs((prev) => [...prev, last]);
+        setActiveId(last.id);
+        setView("browser");
+        return;
+      }
+      if (k === "T") {
+        e.preventDefault();
+        newTab();
+      } else if (k === "W") {
+        const active = tabs.find((t) => t.id === activeId);
+        if (active) {
+          e.preventDefault();
+          closeTab(active.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tabs, activeId, newTab, closeTab]);
 
   /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
      interception, native wisp transport, in-worker rewriting). The

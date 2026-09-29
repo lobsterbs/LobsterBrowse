@@ -608,6 +608,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
+          <div className="lb-setting-label">Keyboard shortcuts</div>
+          <p className="lb-muted">
+            Alt+T new tab · Alt+W close tab · Alt+Shift+T reopen closed tab.
+            Ctrl+T and Ctrl+W are reserved by the host browser and can never reach the app.
+          </p>
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
           <div className="lb-setting-label">Data</div>
           <m3e-button onClick={() => setConfirmDelete(true)}>
             <m3e-icon name="delete_forever" aria-hidden={true} /> Delete all data
