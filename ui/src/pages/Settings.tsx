@@ -434,6 +434,22 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-chip-set>
           </div>
         </div>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Density</div>
+          <div className="lb-seg-wrap">
+          <m3e-segmented-button aria-label="Density">
+            <m3e-button-segment checked={settings.density !== "compact" ? "" : undefined} onClick={() => onChange({ density: "normal" })}>
+              Normal
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.density === "compact" ? "" : undefined} onClick={() => onChange({ density: "compact" })}>
+              Compact
+            </m3e-button-segment>
+          </m3e-segmented-button>
+          </div>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            Compact tightens spacing and shrinks touch targets across the app. Useful on narrow viewports.
+          </p>
+        </div>
       </Panel>
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>

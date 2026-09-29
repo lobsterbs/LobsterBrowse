@@ -21,7 +21,7 @@ type M3eBase = {
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "m3e-theme": M3eBase & { color?: string; scheme?: string; "strong-focus"?: boolean };
+      "m3e-theme": M3eBase & { color?: string; scheme?: string; "strong-focus"?: boolean; density?: string };
       "m3e-content-pane": M3eBase;
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;

@@ -329,7 +329,7 @@ export default function App() {
   }
 
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density}>
       <div className="lb-shell">
         {/* The rail is always fully visible in every view: no hiding,
            no sliver, no click-to-toggle. */}
@@ -399,6 +399,7 @@ export default function App() {
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
+                  onRulesChange={updateRules}
                 />
               )}
               {view === "settings" && (
