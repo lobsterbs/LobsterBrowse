@@ -3197,6 +3197,13 @@ async fn main() {
         // pages, so proxied /lj/ and /r/ browsing is untouched.
         .route("/zlsw/sw.js", get(zl_sw_js))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
+        // The engine rewriter injects <script src="/bootstrap.js">
+        // (root-absolute): pages served from engine routes resolve
+        // that URL at the origin root, and the missing route 404ed
+        // silently - the SW consumes the error during init, then
+        // storage virtualization and the WS relay die on SPAs. Serve
+        // the bundle's copy at that exact URL (issue #19).
+        .route("/bootstrap.js", get(zl_bootstrap_js))
         // The engine worker's transport adapter resolves the vendored
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
@@ -3580,6 +3587,22 @@ async fn zl_sw_js() -> Response {
             .header(header::CONTENT_TYPE, "application/javascript")
             .header(header::CACHE_CONTROL, "no-cache")
             .header("service-worker-allowed", "/")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+/// Zeolite bootstrap at the origin root (vendored build,
+/// zlsw/bootstrap.js): the engine rewriter injects a root-absolute
+/// /bootstrap.js, so that exact URL must exist here (issue #19).
+/// no-cache so bundle updates are picked up promptly.
+async fn zl_bootstrap_js() -> Response {
+    match tokio::fs::read("zlsw/bootstrap.js").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/javascript")
+            .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
