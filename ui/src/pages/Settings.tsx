@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
@@ -59,19 +59,38 @@ function Row(props: { label: string; icon: string; on: boolean; toggle: () => vo
 
 /* Text input on the M3E form field: the field owns the outline,
    floating label and focus treatment; the input itself stays native
-   (M3E has no standalone text-field component). */
-function TextInput(props: { label: string; value: string; placeholder?: string; onChange: (v: string) => void }) {
+   (M3E has no standalone text-field component). Validation is native
+   constraint validation (required/pattern): the form field shows the
+   `error` slot message once the control is invalid and the user has
+   interacted with it (see M3E form-field docs). */
+function TextInput(props: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: string;
+  required?: boolean;
+  disabled?: boolean;
+  pattern?: string;
+  hint?: string;
+  errorMessage?: string;
+  onChange: (v: string) => void;
+}) {
   const id = "lb-ti-" + props.label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
     <m3e-form-field {...{ class: "lb-text-input" }}>
       <label slot="label" htmlFor={id}>{props.label}</label>
       <input
         id={id}
-        type="text"
+        type={props.type ?? "text"}
         value={props.value}
         placeholder={props.placeholder}
+        required={props.required}
+        disabled={props.disabled}
+        pattern={props.pattern}
         onChange={(e) => props.onChange(e.target.value)}
       />
+      {props.hint && <span slot="hint">{props.hint}</span>}
+      {props.errorMessage && <span slot="error">{props.errorMessage}</span>}
     </m3e-form-field>
   );
 }
@@ -88,8 +107,31 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   });
   const toggle = (key: string) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /* m3e-dialog opens/closes imperatively (show/hide methods, per the
+     M3E dialog docs). React state mirrors it: opening sets the flag,
+     and the dialog's `closed` event (fired for button, Escape, and
+     backdrop dismissals alike) resets it, so the dialog can never get
+     stuck open after a non-React dismissal. */
+  const deleteDialogRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
+  useEffect(() => {
+    const el = deleteDialogRef.current;
+    if (!el) return;
+    const onClosed = () => setConfirmDelete(false);
+    el.addEventListener("closed", onClosed);
+    return () => el.removeEventListener("closed", onClosed);
+  }, []);
+  useEffect(() => {
+    if (confirmDelete) deleteDialogRef.current?.show();
+  }, [confirmDelete]);
 
   const [ruleDomain, setRuleDomain] = useState("");
+  /* Per-site rule domains: accept an optional scheme+path and strip
+     them, but the stored key itself must be a bare host. Anything
+     else is invalid and blocks the Add action. */
+  const ruleDomainCandidate = ruleDomain.trim().replace(/^https?:\/\//i, "").split("/")[0];
+  const ruleDomainInvalid =
+    ruleDomain.trim() !== "" &&
+    !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(ruleDomainCandidate);
   const [ruleUa, setRuleUa] = useState<UaPresetId>("server-default");
   const [ruleAdblock, setRuleAdblock] = useState(true);
 
@@ -528,6 +570,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               type="text"
               placeholder="example.com"
               aria-label="Site domain"
+              aria-invalid={ruleDomainInvalid ? true : undefined}
               value={ruleDomain}
               onChange={(e) => setRuleDomain(e.target.value)}
             />
@@ -545,7 +588,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <m3e-switch checked={ruleAdblock ? "" : undefined} icons="selected" aria-label="Ad blocking for site" onClick={() => setRuleAdblock(!ruleAdblock)} />
             <m3e-button
               onClick={() => {
-                const domain = ruleDomain.trim().replace(/^https?:\/\//, "").split("/")[0];
+                if (ruleDomainInvalid) return;
+                const domain = ruleDomainCandidate;
                 if (!domain) return;
                 const next = rules.filter((r) => r.domain !== domain);
                 next.push({ domain, uaPreset: ruleUa, adblock: ruleAdblock });
@@ -556,21 +600,41 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               Add
             </m3e-button>
           </div>
+          {ruleDomainInvalid && (
+            <p className="lb-error-text">
+              Enter a plain domain like example.com (scheme and path are stripped, spaces are not allowed).
+            </p>
+          )}
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
           <div className="lb-setting-label">Data</div>
-          {confirmDelete ? (
-            <div className="lb-seed-row">
-              <span className="lb-muted">Delete history, sessions and settings on this device?</span>
-              <m3e-button variant="filled" onClick={onDeleteAll}>Yes, delete</m3e-button>
-              <m3e-button onClick={() => setConfirmDelete(false)}>Cancel</m3e-button>
+          <m3e-button onClick={() => setConfirmDelete(true)}>
+            <m3e-icon name="delete_forever" aria-hidden={true} /> Delete all data
+          </m3e-button>
+          {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
+              handling and alertdialog semantics (alert attribute). */}
+          <m3e-dialog
+            {...{ ref: deleteDialogRef }}
+            alert=""
+            dismissible=""
+            close-label="Cancel"
+          >
+            <span slot="header">Delete all data?</span>
+            <p>Delete history, sessions and settings on this device?</p>
+            <div slot="actions">
+              <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
+              <m3e-button
+                variant="filled"
+                onClick={() => {
+                  onDeleteAll();
+                  deleteDialogRef.current?.hide();
+                }}
+              >
+                Yes, delete
+              </m3e-button>
             </div>
-          ) : (
-            <m3e-button onClick={() => setConfirmDelete(true)}>
-              <m3e-icon name="delete_forever" aria-hidden={true} /> Delete all data
-            </m3e-button>
-          )}
+          </m3e-dialog>
         </div>
       </Panel>
 

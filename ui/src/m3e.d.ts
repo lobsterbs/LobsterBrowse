@@ -28,7 +28,7 @@ declare module "react" {
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
       "m3e-search-view": M3eBase & { mode?: string; contained?: boolean | string; "hide-search-icon"?: boolean | string };
       "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
-      "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
+      "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean; autofocus?: boolean };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
       "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
