@@ -1264,6 +1264,11 @@ export default function BrowserView(props: Props) {
       lastNav.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
+      blankPolls.current.delete(id);
+      lastDiag.current.delete(id);
+      for (const k of lastEscape.current) {
+        if (k.startsWith(id + "|")) lastEscape.current.delete(k);
+      }
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
         if (!(id in prev)) return prev;
         const n = { ...prev };
