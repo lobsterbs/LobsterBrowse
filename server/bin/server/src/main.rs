@@ -2460,9 +2460,7 @@ async fn engine_proxy(
             }
         }
     }
-    for k in [
-        "ab", "trk", "https", "ua", "img", "inc", "sess", "sid",
-    ] {
+    for k in ["ab", "trk", "https", "ua", "img", "inc", "sess", "sid"] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
         }
