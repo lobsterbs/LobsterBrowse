@@ -67,6 +67,9 @@ With LB_ORIGIN set it also checks the server side of the beta:
   502, like every engine failure card.
 - /r/<b64url> must still proxy the fixture end to end (the stable
   engine regression gate).
+- /rewriter_wasm_bg.wasm must answer 200 with application/wasm and
+  the \0asm magic (the origin-root alias of the vendored engine
+  rewriter wasm, same pattern as /bootstrap.js).
 
 The /r/ gates carry a fresh per-run lb_sid session jar. A bare /r/
 hit with no lb_sid shares the deployment-wide DEFAULT cookie jar with

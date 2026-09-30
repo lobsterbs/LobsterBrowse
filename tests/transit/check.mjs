@@ -292,6 +292,15 @@ try {
     ok("zl honest notice text", zt.includes("Zeolite runs in its service worker"), zt.slice(0, 120));
     ok("zl does not proxy server-side", zt.indexOf("\"ok\":true") === -1, "body contains fixture json!");
 
+    /* The engine dist resolves rewriter_wasm_bg.wasm root-absolute,
+       like /bootstrap.js: the origin-root alias must serve the
+       vendored wasm, or the rewriter init 404s silently. */
+    const rw = await fetch(lb + "/rewriter_wasm_bg.wasm");
+    ok("wasm alias status 200", rw.status === 200, "got " + rw.status);
+    ok("wasm alias content type", (rw.headers.get("content-type") || "").includes("application/wasm"), String(rw.headers.get("content-type")));
+    const rwb = Buffer.from(await rw.arrayBuffer());
+    ok("wasm alias magic", rwb.subarray(0, 4).toString("latin1") === "\0asm", "len " + rwb.length);
+
     const rj = await fetch(rRoute("/data.json"));
     ok("r json status 200", rj.status === 200, "got " + rj.status);
     const rjd = await rj.json();
