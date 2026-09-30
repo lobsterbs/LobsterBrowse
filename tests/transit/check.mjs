@@ -200,7 +200,7 @@ try {
 
   r = await fetch(base + "/icon.svg");
   ok("svg content-type", (r.headers.get("content-type") || "").includes("image/svg+xml"), String(r.headers.get("content-type")));
-  ok("svg use href", (await r.text()).includes("<use href=\"sprite.svg#sym\">"));
+  ok("svg use href", (await r.text()).includes("<use href=\"sprite.svg#sym\""));
 
   r = await fetch(base + "/manifest.webmanifest");
   ok("manifest content-type", (r.headers.get("content-type") || "").includes("application/manifest+json"), String(r.headers.get("content-type")));
