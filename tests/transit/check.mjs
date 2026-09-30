@@ -256,54 +256,70 @@ try {
 
   const lb = process.env.LB_ORIGIN;
   if (lb) {
+    /* The /r/ gates run inside a fresh per-run lb_sid session jar
+       (16-64 chars, [A-Za-z0-9_-], per the server's
+       valid_session_token). A bare /r/ hit with no lb_sid shares the
+       deployment-wide DEFAULT jar with every other direct client, so
+       any earlier probe leaves cookies there and the auth gate would
+       be nondeterministic. Minting a session mirrors how the real UI
+       threads lb_sid on every engine route. */
+    const sid = "tb" + crypto.randomBytes(16).toString("hex");
+    const rRoute = (p) => lb + "/r/" + b64u(base + p) + "?lb_sid=" + sid;
+
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
     const zt = await rz.text();
-    ok("zl honest notice status 503", rz.status === 503, "got " + rz.status);
+    /* The route reuses engine_error_page (the honest load-failure
+       card), which answers 502 Bad Gateway - it is a cold-start
+       notice, not a 503. */
+    ok("zl honest notice status 502", rz.status === 502, "got " + rz.status);
     ok("zl honest notice text", zt.includes("Zeolite runs in its service worker"), zt.slice(0, 120));
     ok("zl does not proxy server-side", zt.indexOf("\"ok\":true") === -1, "body contains fixture json!");
 
-    const rj = await fetch(lb + "/r/" + b64u(base + "/data.json"));
+    const rj = await fetch(rRoute("/data.json"));
     ok("r json status 200", rj.status === 200, "got " + rj.status);
     const rjd = await rj.json();
     ok("r json passthrough", rjd.ok === true && rjd.n === 42);
 
-    const rh = await fetch(lb + "/r/" + b64u(base + "/"));
+    const rh = await fetch(rRoute("/"));
     const rht = await rh.text();
     ok("r html status 200", rh.status === 200);
     ok("r html rewritten to /r/", rht.includes("/r/"), "no /r/ prefix in served html");
 
-    const rl = await fetch(lb + "/r/" + b64u(base + "/large"), { headers: { range: "bytes=0-99" } });
+    const rl = await fetch(rRoute("/large"), { headers: { range: "bytes=0-99" } });
     ok("r large range status", rl.status === 206 || rl.status === 200, "got " + rl.status);
     const rlb = Buffer.from(await rl.arrayBuffer());
     ok("r large bytes start", rlb.length >= 100 && rlb.subarray(0, 100).equals(largeBytes.subarray(0, 100)), "len " + rlb.length);
 
     /* Tier-7 through the /r/ engine: server-side hop following and
        method+body replay semantics must match the browser's. */
-    const rc = await fetch(lb + "/r/" + b64u(base + "/redir-chain/a"));
+    const rc = await fetch(rRoute("/redir-chain/a"));
     ok("r chain status 200", rc.status === 200, "got " + rc.status);
     const rcd = await rc.json();
     ok("r chain followed to done", rcd.chain === "done", JSON.stringify(rcd).slice(0, 80));
+    /* Hop b overwrites hop a's hopprobe cookie; the final hop must
+       echo it, proving per-hop Set-Cookie capture mid-chain. */
+    ok("r chain captures per-hop cookies", (rcd.cookies || "").includes("hopprobe=b"), JSON.stringify(rcd.cookies));
 
-    const r303 = await fetch(lb + "/r/" + b64u(base + "/redir-303"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const r303 = await fetch(rRoute("/redir-303"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
     const rd303 = await r303.json();
     ok("r 303 POST becomes GET", rd303.method === "GET", rd303.method);
     ok("r 303 body dropped", rd303.body === "", JSON.stringify(rd303.body));
 
-    const r307 = await fetch(lb + "/r/" + b64u(base + "/redir-307"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const r307 = await fetch(rRoute("/redir-307"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
     const rd307 = await r307.json();
     ok("r 307 replays POST", rd307.method === "POST", rd307.method);
     ok("r 307 preserves body", rd307.body === "x=2", rd307.body);
 
     /* Tier-8 through /r/: rewrite routing of navigation surfaces and
        the authentication redirect chain. */
-    const rn = await fetch(lb + "/r/" + b64u(base + "/nav.html"));
+    const rn = await fetch(rRoute("/nav.html"));
     ok("r nav 200", rn.status === 200, "got " + rn.status);
     const rnt = await rn.text();
     const srcRouted = (rnt.match(/src="\/r\//g) || []).length;
     ok("r nav routes iframe+module srcs", srcRouted >= 2, "src=/r/ count " + srcRouted);
     ok("r nav routes links", rnt.includes("href=\"/r/"), "no /r/ link routes in rewritten nav");
 
-    const ra = await fetch(lb + "/r/" + b64u(base + "/auth/protected"));
+    const ra = await fetch(rRoute("/auth/protected"));
     ok("r auth chain 200", ra.status === 200, "got " + ra.status);
     const rat = await ra.text();
     ok("r auth lands on login", rat.includes("login page"), rat.slice(0, 80));
