@@ -16,7 +16,6 @@ import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
 import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
-import tuneSvg from "@material-symbols/svg-400/outlined/tune.svg?raw";
 import {
   decodeRoute,
   engineRoutePrefix,
@@ -181,9 +180,6 @@ export default function BrowserView(props: Props) {
   const [findQuery, setFindQuery] = useState("");
   const [findCount, setFindCount] = useState<number | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
-  /* ---- Per-site rules chip (#10): quick rule editing for the
-     current host, same store as the Settings editor. ---- */
-  const [rulesOpen, setRulesOpen] = useState(false);
   const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
     dlAbort.current.get(id)?.abort();
@@ -1707,38 +1703,13 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
-          {/* Per-site rules chip (#10): tune icon beside the pill; the
-              glyph is an inline SVG (font coverage is not guaranteed,
-              same pattern as the incognito mask). */}
-          {active.url && (
-            <>
-              <m3e-icon-button
-                id="lb-rules-btn"
-                toggle
-                aria-label={"Site settings for " + uParts.host}
-                selected={rulesOpen ? "" : undefined}
-                onClick={() => {
-                  setRulesOpen((v) => !v);
-                  setSiteInfoOpen(false);
-                  setTabsOpen(false);
-                  setDlOpen(false);
-                }}
-              >
-                <span className="lb-tune-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tuneSvg }} />
-              </m3e-icon-button>
-              <m3e-tooltip for="lb-rules-btn" position="above">Site settings</m3e-tooltip>
-            </>
-          )}
           {/* Find in page (#9). */}
           <m3e-icon-button
             id="lb-find-btn"
             toggle
             aria-label="Find in page"
             selected={findOpen ? "" : undefined}
-            onClick={() => {
-              setFindOpen((v) => !v);
-              setRulesOpen(false);
-            }}
+            onClick={() => setFindOpen((v) => !v)}
           >
             <m3e-icon name="search" aria-hidden={true} />
           </m3e-icon-button>
@@ -1882,10 +1853,13 @@ export default function BrowserView(props: Props) {
               </m3e-icon-button>
             </div>
           )}
-          {/* Site info: a real M3E card (elevated) anchored above the
-              toolbar (outside the identity pill, so opening it can
-              never inflate the pill or the toolbar). Long cookie
-              lists scroll inside the card. */}
+          {/* Site info (#26): a real M3E card (elevated) anchored above
+              the toolbar (outside the identity pill, so opening it can
+              never inflate the pill or the toolbar). It is the single
+              entry point for connection facts, cookies and per-site
+              settings: the former toolbar Site settings chip and card
+              were merged in here. Long cookie lists scroll inside the
+              card. */}
           {siteInfoOpen && (
               <m3e-card variant="elevated" aria-label="Site information" {...{ class: "lb-site-card" }}>
                 <div slot="header" className="lb-site-head">
@@ -1931,6 +1905,41 @@ export default function BrowserView(props: Props) {
                   <p className="lb-site-note">
                     Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.
                   </p>
+                  {/* Per-site settings (#26): same store as the Settings
+                      editor; created lazily, removed when it carries no
+                      overrides anymore. Merged into the lock card from
+                      the removed rules chip card. */}
+                  {active.url && (
+                    <>
+                      <div className="lb-site-ctitle">Site settings</div>
+                      <div className="lb-site-row lb-rule-row">
+                        <span>Block ads &amp; trackers on this site</span>
+                        <m3e-switch
+                          aria-label="Block ads and trackers on this site"
+                          checked={ruleAdBlock ? "" : undefined}
+                          disabled={!settings.adblock ? "" : undefined}
+                          onClick={() => setRuleAdblock(!ruleAdBlock)}
+                        />
+                      </div>
+                      {!settings.adblock && (
+                        <p className="lb-site-note">
+                          Global ad &amp; tracker blocking is off in Settings; a site rule cannot turn it on.
+                        </p>
+                      )}
+                      <div className="lb-site-ctitle">User-Agent</div>
+                      <M3eSelect
+                        label="User-Agent for this site"
+                        value={ruleUa}
+                        options={UA_RULE_OPTIONS}
+                        onChange={(v) => setRuleUa(v as UaPresetId | "")}
+                      />
+                      <p className="lb-site-note">
+                        {settings.proxyEngine === "lobsterjet"
+                          ? "Per-site rules apply to ScramJet (/r/) routes. The Zeolite engine currently applies the global ad-block setting; wiring these rules into the engine is tracked on the unstable integration branch."
+                          : "Applies from the next navigation on /r/ routes."}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div slot="actions" className="lb-site-actions">
                   <m3e-button onClick={clearSiteCookies}>
@@ -1942,47 +1951,6 @@ export default function BrowserView(props: Props) {
                 </div>
               </m3e-card>
             )}
-          {/* Per-site rules card (#10): same store as the Settings
-              editor; created lazily, removed when it carries no
-              overrides anymore. */}
-          {rulesOpen && active.url && (
-            <m3e-card variant="elevated" aria-label="Site settings" {...{ class: "lb-site-card" }}>
-              <div slot="header" className="lb-site-head">
-                <span className="lb-site-ctitle">Site settings: {uParts.host}</span>
-                <m3e-icon-button aria-label="Close site settings" onClick={() => setRulesOpen(false)}>
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </div>
-              <div slot="content" className="lb-site-body">
-                <div className="lb-site-row lb-rule-row">
-                  <span>Block ads &amp; trackers on this site</span>
-                  <m3e-switch
-                    aria-label="Block ads and trackers on this site"
-                    checked={ruleAdBlock ? "" : undefined}
-                    disabled={!settings.adblock ? "" : undefined}
-                    onClick={() => setRuleAdblock(!ruleAdBlock)}
-                  />
-                </div>
-                {!settings.adblock && (
-                  <p className="lb-site-note">
-                    Global ad &amp; tracker blocking is off in Settings; a site rule cannot turn it on.
-                  </p>
-                )}
-                <div className="lb-site-ctitle">User-Agent</div>
-                <M3eSelect
-                  label="User-Agent for this site"
-                  value={ruleUa}
-                  options={UA_RULE_OPTIONS}
-                  onChange={(v) => setRuleUa(v as UaPresetId | "")}
-                />
-                <p className="lb-site-note">
-                  {settings.proxyEngine === "lobsterjet"
-                    ? "Per-site rules apply to ScramJet (/r/) routes. The Zeolite engine currently applies the global ad-block setting; wiring these rules into the engine is tracked on the unstable integration branch."
-                    : "Applies from the next navigation on /r/ routes."}
-                </p>
-              </div>
-            </m3e-card>
-          )}
           {xpiPrompt && (
             <XpiPrompt
               name={xpiPrompt.name}

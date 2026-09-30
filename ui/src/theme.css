@@ -1180,17 +1180,3 @@ m3e-snackbar {
 @media (prefers-reduced-motion: reduce) {
   .lb-find-bar { animation: none; }
 }
-
-/* ---- Per-site rules chip (#10): tune icon inside the toolbar (inline
-   SVG, same pattern as the incognito mask). ---- */
-.lb-tune-ic {
-  display: block;
-  width: 24px;
-  height: 24px;
-}
-.lb-rule-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--md-sys-measurement-space100, 8px);
-}
