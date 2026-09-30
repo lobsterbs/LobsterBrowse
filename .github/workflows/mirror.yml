@@ -9,6 +9,9 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    # LB#14: GITLAB_PAT lives in the 'lobster' environment secret store;
+    # without this declaration the secret resolves empty and the push 401s.
+    environment: lobster
     # GITLAB_PAT lives in the "lobster" environment's secrets, and
     # environment secrets are only exposed to jobs that declare the
     # environment (LB#14: without this the token resolves empty and the
