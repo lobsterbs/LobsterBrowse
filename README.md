@@ -31,7 +31,7 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
 ## UI
 React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions, link prefetch and the retained /lj cache worker.
 ## Zeolite integration
-Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code.
+Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code. On the beta branch, an experimental zeolite-beta preview engine routes browsing over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
 ## NativeTransit direction
 NativeTransit is the next transport/interception architecture:
     LobsterBrowse -> Zeolite -> Transport

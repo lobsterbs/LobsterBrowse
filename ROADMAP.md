@@ -82,6 +82,8 @@ Search source, tests, configuration and documentation for:
 
 If RewriteFallback is genuinely obsolete, remove remaining implementation and documentation references. If a piece is still required, identify the exact dependency instead of deleting working compatibility infrastructure blindly.
 
+Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README/AGENTS), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed LobsterBrowse component. Nothing to delete; recorded here per the audit instruction.
+
 ### Engine architecture
 
 - Make the LobsterBrowse ↔ Zeolite boundary explicit.
@@ -426,12 +428,17 @@ README, AGENTS.md, architecture documentation and DevTools documentation must ag
 
 # Phase: Zeolite Integration — Deferred
 
-Status: **planned, not started.** None of the items below are
-implemented. Zeolite is currently under heavy development and its
-APIs and behavior may change; LobsterBrowse stays pinned to the
-currently working Zeolite version and does not chase moving Zeolite
-internals. Start this phase only after Zeolite's current development
-cycle has stabilized and its 2.x contract is final.
+Status: **started on the beta line, 2026-09-30.** Zeolite's engine
+API has stabilized (3.0 Diamond). Deep integration now lands on
+beta/zeolite-nativetransit per docs/zeolite-integration-plan.md and
+promotes to main via PR #12 only when green and live-verified.
+Resolved so far: js_antiframe parity (the ported pass is wired into
+Zeolite's rewriter at both call sites). Still open on the plan:
+per-site rule push into the engine, incognito jar identity through
+the wisp transport, per-origin virtual WebSocket identities, and
+proxied WebSockets pending the final transport API. main stays
+pinned to verified dist releases and does not chase Zeolite
+internals.
 
 Planned work:
 
