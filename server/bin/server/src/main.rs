@@ -3422,6 +3422,11 @@ async fn main() {
         // worker controls the page — answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
+        // Beta branch (beta/zeolite-nativetransit): /zl/ is the explicit
+        // NativeTransit-first engine route. Same honest contract as /lj/:
+        // the Zeolite worker owns the route; the server only answers when
+        // no worker controls the page.
+        .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
@@ -3446,6 +3451,11 @@ async fn main() {
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
         .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
+        // Same root-alias class as /libcurl above: the engine dist
+        // resolves the rewriter wasm at the origin root
+        // (/rewriter_wasm_bg.wasm), not under /zlsw/; serve the
+        // vendored copy at the path the worker actually requests.
+        .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
         // Extension subsystem routes live in the Zeolite worker
         // (IndexedDB-backed), NOT on this server: any request that
         // slips past the worker gets an honest 404, never the SPA
@@ -3862,6 +3872,22 @@ async fn zl_bootstrap_js() -> Response {
         Ok(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/javascript")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+/// Rewriter wasm root alias. The vendored engine dist builds the
+/// wasm URL as new URL("/rewriter_wasm_bg.wasm", import.meta.url);
+/// the absolute path drops the /zlsw/ base, so the request lands on
+/// the origin root and 404s without this alias.
+async fn zl_rewriter_wasm() -> Response {
+    match tokio::fs::read("zlsw/rewriter_wasm_bg.wasm").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/wasm")
             .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),
