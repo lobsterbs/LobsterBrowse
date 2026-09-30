@@ -83,6 +83,8 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* The proxy browser wants every pixel it can get. */
 /* Browser view fills the viewport: no scrolling, no chrome. */
 .lb-shell:has(.lb-browser) { height: 100vh; overflow: hidden; }
+/* Home view: the hero fits one viewport, no page scroll. */
+.lb-shell:has(.lb-home) { height: 100vh; overflow: hidden; }
 .app-content:has(.lb-browser) { padding: 0; max-width: none; height: 100%; }
 .app-content:has(.lb-browser) .lb-view { max-width: none; height: 100%; }
 
