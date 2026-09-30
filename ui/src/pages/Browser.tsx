@@ -772,7 +772,7 @@ export default function BrowserView(props: Props) {
                 ...base.console,
                 {
                   id: nextEntryId(),
-                  kind: "error",
+                  kind: "error" as const,
                   text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
                   ts: Date.now(),
                 },
@@ -1095,7 +1095,7 @@ export default function BrowserView(props: Props) {
                 ...base.console,
                 {
                   id: nextEntryId(),
-                  kind: "error",
+                  kind: "error" as const,
                   text:
                     "[LobsterBrowse] failed to load " + entry.kind + ": " + entry.url +
                     " (" + reasonText(entry.reason) +

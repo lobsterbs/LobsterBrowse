@@ -4210,8 +4210,8 @@ mod suggest_tests {
     #[test]
     fn suggest_items_are_valid_json_strings() {
         /* The response body joins the items with commas inside
-           {"suggestions":[...]}; each item must be a quoted, escaped
-           JSON string or the whole body fails to parse client-side. */
+        {"suggestions":[...]}; each item must be a quoted, escaped
+        JSON string or the whole body fails to parse client-side. */
         let items = parse_osjson(r#"["q",["a\"b", "c\\d", "e"]]"#);
         let body = format!("{{\"suggestions\":[{}]}}", items.join(","));
         let v: serde_json::Value =
