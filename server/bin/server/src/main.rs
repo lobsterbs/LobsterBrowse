@@ -141,7 +141,7 @@ fn json_escape(s: &str) -> String {
 /// diagnostics routinely carry session tokens, API keys and JWTs, and
 /// the log ring is readable by anyone who can reach the deployment.
 /// Every push_log message passes through here, so no call site has to
-/// remember to redact. Mirrors ui/src/sanitize.ts — keep the patterns
+/// remember to redact. Mirrors ui/src/sanitize.ts â keep the patterns
 /// in sync. Deliberately conservative: over-redaction destroys the
 /// diagnostic value of the log.
 fn redact_secrets(s: &str) -> String {
@@ -305,8 +305,8 @@ fn prune_sessions(sessions: &mut HashMap<String, SessionRing>) {
     }
 }
 
-/// Session-tagged log push. Lines land ONLY in that session's ring —
-/// never in the global ring — so /logs with the matching token sees
+/// Session-tagged log push. Lines land ONLY in that session's ring â
+/// never in the global ring â so /logs with the matching token sees
 /// them and /logs without a token sees nothing of other sessions.
 fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
     let Some(sess) = sess.filter(|s| valid_session_token(s)) else {
@@ -1512,7 +1512,7 @@ mod js_import_tests {
     }
 }
 
-/// srcset="url 2x, url2 1x" — rewrite each candidate URL.
+/// srcset="url 2x, url2 1x" â rewrite each candidate URL.
 fn rewrite_srcset(value: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in value.split(',') {
@@ -1824,8 +1824,8 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
         out.push_str(&tag[pos..pos + nlen]);
         // Quote preservation: rewritten attributes used to lose their
         // quotes (b64 targets have no spaces so pages limped along,
-        // but any rewritten value with a space — srcset descriptors,
-        // style — bled into the following markup as bogus attributes).
+        // but any rewritten value with a space â srcset descriptors,
+        // style â bled into the following markup as bogus attributes).
         if fc == '"' || fc == '\'' {
             out.push(fc);
             out.push_str(&new_value);
@@ -2234,7 +2234,7 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
 /// <link rel="canonical"> back to the real page. Conservative: only
 /// triggered when the URL or the markup actually looks like AMP.
 fn amp_canonical(html: &str, page_url: &str) -> Option<String> {
-    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("⚡");
+    let looks_amp = page_url.contains("/amp") || html.contains("<html amp") || html.contains("â¡");
     if !looks_amp {
         return None;
     }
@@ -2785,7 +2785,7 @@ async fn engine_proxy(
             let is_html = ct.contains("html");
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
-            // inside the proxied iframe forever — the challenge scripts
+            // inside the proxied iframe forever â the challenge scripts
             // never pass through our shim, so the loop cannot be solved.
             // Instead of serving that hostile page, render our own
             // honest error card telling the user the site rate-limited
@@ -3344,7 +3344,7 @@ async fn build_endpoint() -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine — the hash makes that detectable from the outside.
+    // engine â the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -3355,7 +3355,7 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
-    let lb_version = format!("{} Molt", env!("CARGO_PKG_VERSION"));
+    let lb_version = format!("{} Vanadium", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
@@ -3586,7 +3586,7 @@ async fn main() {
         // Zeolite is the client-side engine: its service worker owns /lj/
         // routes (interception, native wisp transport, in-worker document
         // rewriting). A /lj/ request only reaches the server when no
-        // worker controls the page — answer with the honest load-error
+        // worker controls the page â answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
         // The beta UI's Zeolite preview engine uses the /zl/ prefix
@@ -3632,7 +3632,7 @@ async fn main() {
         // Anubis challenge bridge: challenge JS solves the proof and then
         // location.replace()s a root-relative pass-challenge URL, which on
         // this origin escapes the engine route and used to hit the SPA
-        // fallback — the proof never reached the protected host, no cookie
+        // fallback â the proof never reached the protected host, no cookie
         // was set, and the challenge reloaded forever. The bridge proxies
         // the pass-challenge upstream with redir rewritten to the upstream
         // page (the challenge script's own redir points at this proxy's
@@ -3655,7 +3655,7 @@ async fn main() {
             }),
         )
         /* #18: no CorsLayer. The UI, engine frames and every subresource
-        are same-origin, so cross-origin ACAO headers serve nobody — the
+        are same-origin, so cross-origin ACAO headers serve nobody â the
         permissive layer that used to sit here turned the deployment
         into a CORS-stripping relay any web page could read. */
         .with_state(state);
@@ -3726,7 +3726,7 @@ fn pct_encode(s: &str) -> String {
 /// only worked for pages at the host root (the trailing slash got
 /// trimmed and the concatenation accidentally produced the right URL);
 /// on a deep page like https://host/sp/search?query=x it produced
-/// ".../search?query=x/.within.website/..." — the protected host answered
+/// ".../search?query=x/.within.website/..." â the protected host answered
 /// 200 with a fresh challenge page, no cookie was ever set, and the
 /// frame reloaded the challenge forever. Only the origin is kept.
 fn page_origin(page: &str) -> String {
@@ -3776,7 +3776,7 @@ fn engine_route_in(s: &str) -> Option<String> {
 /// must reach the protected host for Anubis to set its cookie, and the
 /// frame must land back on its engine route; both happen here. The
 /// upstream response body is irrelevant (reqwest follows Anubis's own
-/// redirect chain and the jar records the Set-Cookie) — only the fetch
+/// redirect chain and the jar records the Set-Cookie) â only the fetch
 /// and the bounce-back matter.
 async fn anubis_bridge(
     State(state): State<Arc<AppState>>,
@@ -3997,7 +3997,7 @@ mod anubis_bridge_tests {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME — a silent lie about the resource).
+/// 200 and a text/html MIME â a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences
