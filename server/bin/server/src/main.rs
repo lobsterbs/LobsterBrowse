@@ -3722,7 +3722,10 @@ fn anubis_forward_query(raw: Option<&str>, page: &str) -> String {
 /// if any. The Anubis challenge script sets its `redir` param to the
 /// frame's full engine-route URL, so this recovers where to go back.
 fn engine_route_in(s: &str) -> Option<String> {
-    let i = s.find("/lj/").or_else(|| s.find("/zl/")).or_else(|| s.find("/r/"))?;
+    let i = s
+        .find("/lj/")
+        .or_else(|| s.find("/zl/"))
+        .or_else(|| s.find("/r/"))?;
     Some(s[i..].to_string())
 }
 
