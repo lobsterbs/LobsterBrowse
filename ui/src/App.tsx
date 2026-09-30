@@ -4,11 +4,11 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import {
-  engineRoutePrefix,
   loadSettings,
   saveSettings,
   loadSiteRules,
   saveSiteRules,
+  resetIncognitoSid,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -131,6 +131,9 @@ export default function App() {
     (v: boolean) => {
       setIncognito(v);
       if (v) {
+        /* Fresh cookie jar per incognito window (#1): the server-side
+           session client is keyed by sid, so a new sid = an empty jar. */
+        resetIncognitoSid();
         suspendedTabs.current = tabs;
         const t = freshTab();
         setTabs([t]);
@@ -172,8 +175,39 @@ export default function App() {
     [tabs, activeId, newTab]
   );
 
-  /* ---- Keyboard shortcuts removed by request: no global key
-     handling remains in the app. ---- */
+  /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
+     Ctrl+W) are never delivered to the page, so the tab shortcuts
+     live on Alt combos. AltGr is reported as ctrlKey+altKey and is
+     therefore left alone. Documented in Settings. ---- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const k = e.key.toUpperCase();
+      if (e.shiftKey) {
+        if (k !== "T") return;
+        e.preventDefault();
+        const last = closedTabs.current[closedTabs.current.length - 1];
+        if (!last) return;
+        closedTabs.current = closedTabs.current.slice(0, -1);
+        setTabs((prev) => [...prev, last]);
+        setActiveId(last.id);
+        setView("browser");
+        return;
+      }
+      if (k === "T") {
+        e.preventDefault();
+        newTab();
+      } else if (k === "W") {
+        const active = tabs.find((t) => t.id === activeId);
+        if (active) {
+          e.preventDefault();
+          closeTab(active.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tabs, activeId, newTab, closeTab]);
 
   /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
      interception, native wisp transport, in-worker rewriting). The
@@ -183,24 +217,17 @@ export default function App() {
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
+    /* LB#15: the first zl:config can land on a still-installing
+       worker and be silently dropped; a null reply means the engine
+       never got the route prefix. Retry with backoff (a cold
+       free-tier worker can take tens of seconds to evaluate its
+       bundle) and only trust an explicit ok ack - the engine
+       replies { ok: true }. Mid-session restarts need no re-push:
+       since Zeolite#17 the worker persists the route shape and
+       restores it before the first fetch. */
     const push = async () => {
-      /* The first zl:config can land on a still-installing worker and
-         be silently dropped; a null reply means the engine never got
-         the route prefix, so retry instead of leaving it at the
-         default (engine routes would then fall through to the honest
-         notice page until the next reload). */
-      const msg = {
-        type: "zl:config",
-        prefix: engineRoutePrefix(settings.proxyEngine),
-        scheme: "b64u",
-      };
-      /* LB#15: the old 3 back-to-back attempts raced the SW claim
-         window on fresh installs, and any truthy reply counted as
-         success. Retry with backoff (a cold free-tier worker can
-         take tens of seconds to evaluate its bundle) and only trust
-         an explicit ok ack - the engine replies { ok: true }. */
-      const delays = [0, 1000, 3000, 7000, 15000, 30000];
-      for (const d of delays) {
+      const msg = { type: "zl:config", prefix: "/lj/", scheme: "b64u" };
+      for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(msg, 8000);
         if (r && r.ok) return;
@@ -226,17 +253,9 @@ export default function App() {
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
-      void push();
+      await push();
     })();
-    /* LB#15: attach the claim listener synchronously, BEFORE the
-       awaited lobsterjet cleanup above can run, so a
-       controllerchange firing during that cleanup is not missed.
-       The old late attachment left fresh installs with a healthy
-       worker but the default prefix and nothing retried. */
-    navigator.serviceWorker?.addEventListener("controllerchange", push);
-    return () =>
-      navigator.serviceWorker?.removeEventListener("controllerchange", push);
-  }, [settings.proxyEngine]);
+  }, []);
 
   /* ---- Zeolite adblock: the engine's /rules.json (the migrated
        ad/tracker host lists) is evaluated client-side in its worker;
@@ -310,14 +329,14 @@ export default function App() {
   }
 
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density}>
       <div className="lb-shell">
         {/* The rail is always fully visible in every view: no hiding,
            no sliver, no click-to-toggle. */}
         <m3e-nav-rail
           id="nav-rail"
           mode="compact"
-          aria-label="LobsterBrowse Preview"
+          aria-label="LobsterBrowse"
         >
           <m3e-nav-item
             id="nav-home"
@@ -353,7 +372,7 @@ export default function App() {
           {/* The browser view gets every pixel: no header there. */}
           {view !== "browser" && (
             <m3e-app-bar>
-              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
+              <span slot="title" className="lb-app-title">LobsterBrowse</span>
             </m3e-app-bar>
           )}
 
@@ -380,6 +399,7 @@ export default function App() {
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
+                  onRulesChange={updateRules}
                 />
               )}
               {view === "settings" && (

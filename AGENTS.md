@@ -34,7 +34,6 @@ Fragments are client-side only (SVG sprite symbol selection, in-page anchors). T
 ## Zeolite
 Zeolite is a separate reusable engine repository. LobsterBrowse consumes its published browser bundle and must not make Zeolite depend on the UI.
 Always check Zeolite's actual compatibility implementation before claiming browser or extension API support.
-Error pages follow the engine's error-pages contract: the engine owns failed-navigation error pages for /zl/ (it renders its own card when a transport fails); the embedder owns only the 503 no-worker notice that /zl/ and /lj/ navigations get when they reach the server without an active service worker. Keep the notice wording in sync with the engine's docs/error-pages.md.
 
 ## NativeTransit direction
 NativeTransit is the long-term transport/interception architecture:
@@ -207,15 +206,14 @@ Runtime <base href> mutation (property setter or setAttribute) is dropped with a
 ## Guest worker policy (2026-09-27 pass 3)
 Worker/SharedWorker with a foreign-origin script URL throw a SecurityError plus a WORKER_UNSUPPORTED resfail, mirroring the WebSocket policy: the script fetch itself would bypass the proxy (real-IP request), and in-worker subresources are unshimmed by design. Same-origin (rewritten), blob: and data: workers run unchanged. In-worker subresource routing is Zeolite-owned (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from the shim.
 
-## Beta branch: beta/zeolite-nativetransit (/zl/, NativeTransit-first)
+## Find in page (#9)
+The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighter until window.find disappears.
 
-Experimental engine selection on this branch only, documented in
-docs/BETA-ZEOLITE-NATIVETRANSIT.md. Engine id "zeolite-beta" builds /zl/
-routes; the app pushes the matching zl:config prefix to the Zeolite worker
-on boot and on engine change. The worker transports via NativeTransit
-(vendored libcurl over Wisp, streaming, no full-body buffering) and uses
-the wasm rewriter only where browser origin semantics require it. The
-server answers /zl/:target with the same honest zl_sw_required page as
-/lj/ when no worker controls the page. /r/ (ScramJet) and /lj/ (stable
-Zeolite) are untouched; nothing merges to main until the promotion
-conditions in the beta doc are met.
+## Per-site rules chip (#10)
+The toolbar tune chip (inline SVG glyph, same pattern as the incognito mask) edits the same site-rule store as Settings (settings.ts loadSiteRules/saveSiteRules). A rule is created lazily and deleted when it carries no overrides. Ad-block semantics follow proxyParams: global on unless the site rule disables it; a site rule cannot enable ad-block while the global setting is off (the switch is disabled then, with an honest note). Unchanged honest gap: per-site rules apply to /r/ ScramJet routes; the Zeolite engine honors the global ad-block toggle only. Wiring per-site rules into the engine lives on the unstable integration branch.
+
+## Content-Disposition passthrough (#11)
+engine_proxy's non-rewritten stream path forwards content-disposition alongside the caching/range headers; the UI download manager reads it for the saved filename (the download attribute and the URL basename remain the fallbacks).
+
+## Density (#21)
+Settings carries settings.density ("normal" | "compact"), applied as the m3e-theme density attribute; migration-safe in loadSettings. The downloads toolbar button carries an m3e-badge with the item count, and every contextual toolbar icon button has an m3e-tooltip.

@@ -21,20 +21,20 @@ type M3eBase = {
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "m3e-theme": M3eBase & { color?: string; scheme?: string; "strong-focus"?: boolean };
+      "m3e-theme": M3eBase & { color?: string; scheme?: string; "strong-focus"?: boolean; density?: string };
       "m3e-content-pane": M3eBase;
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
       "m3e-search-view": M3eBase & { mode?: string; contained?: boolean | string; "hide-search-icon"?: boolean | string };
       "m3e-heading": M3eBase & { variant?: string; size?: string; level?: number };
-      "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean };
+      "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean; autofocus?: boolean };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
       "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string };
-      "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean };
+      "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean | string };
       "m3e-radio-group": M3eBase;
       "m3e-radio": M3eBase & { value?: string; checked?: boolean | string; disabled?: boolean };
       "m3e-form-field": M3eBase & { variant?: string; "float-label"?: string };

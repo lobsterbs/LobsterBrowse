@@ -16,6 +16,7 @@ import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
 import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
+import tuneSvg from "@material-symbols/svg-400/outlined/tune.svg?raw";
 import {
   decodeRoute,
   engineRoutePrefix,
@@ -25,8 +26,10 @@ import {
   normalizeUrl,
   routeUrl,
   searchUrl,
+  UA_PRESETS,
   type Settings,
   type SiteRule,
+  type UaPresetId,
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
@@ -42,6 +45,7 @@ import TabSwitcherCard from "../browser/TabSwitcherCard";
 import DownloadsCard from "../browser/DownloadsCard";
 import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
+import M3eSelect from "../M3eSelect";
 
 type Props = {
   settings: Settings;
@@ -57,6 +61,9 @@ type Props = {
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
   onOpenLogs: () => void;
+  /* Per-site rule edits from the toolbar chip (#10): the same store
+     the Settings editor writes. */
+  onRulesChange: (rules: SiteRule[]) => void;
 };
 
 /* ---- Downloads (UI-side manager) ----
@@ -73,6 +80,14 @@ type DlItem = {
   status: "active" | "done" | "error" | "cancelled";
   error?: string;
 };
+
+/* User-Agent options for the per-site rules chip (#10): the global
+   presets only. A custom UA stays a global setting; resolveUa reads
+   the custom string from the global settings, not per-site. */
+const UA_RULE_OPTIONS: Array<[string, string]> = [
+  ["", "Use global setting"],
+  ...(Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id): [string, string] => [id, UA_PRESETS[id].name]),
+];
 
 /* Minimal File System Access surface used by the streaming download
    path. Declared locally (structural, no global augmentation) so it
@@ -160,6 +175,15 @@ export default function BrowserView(props: Props) {
      context allows it, and capped in-memory Blob assembly otherwise;
      both paths honor the cancel button. */
   const dlAbort = useRef<Map<number, AbortController>>(new Map());
+  /* ---- Find in page (#9): window.find() against the same-origin
+     frame; the label counts matches with a plain text scan. ---- */
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findCount, setFindCount] = useState<number | null>(null);
+  const findInputRef = useRef<HTMLInputElement | null>(null);
+  /* ---- Per-site rules chip (#10): quick rule editing for the
+     current host, same store as the Settings editor. ---- */
+  const [rulesOpen, setRulesOpen] = useState(false);
   const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
     dlAbort.current.get(id)?.abort();
@@ -203,6 +227,20 @@ export default function BrowserView(props: Props) {
         if (!res.ok) throw new Error("HTTP " + res.status);
         const size = Number(res.headers.get("content-length")) || 0;
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
+        /* Filename from Content-Disposition (#11): the engine route
+           forwards it (main.rs stream passthrough); the download
+           attribute and the URL basename remain the fallbacks. */
+        const cd = res.headers.get("content-disposition") || "";
+        const cdm = /filename\*=(?:UTF-8|utf-8)''([^;\s]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+        if (cdm) {
+          let cdName = "";
+          try { cdName = decodeURIComponent(cdm[1]); } catch { cdName = cdm[1]; }
+          cdName = cdName.trim().slice(0, 120);
+          if (cdName) {
+            name = cdName;
+            setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, name } : d)));
+          }
+        }
         /* Streaming sink (P0 download architecture): when the File
            System Access API is available the bytes go straight to a
            user-chosen file on disk — no Blob, no RAM ceiling. The
@@ -1215,6 +1253,78 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
+  /* ---- Find in page (#9) ---- */
+  const findInPage = (backward: boolean) => {
+    const q = findQuery.trim();
+    if (!q) return;
+    const f = frames.current.get(active.id);
+    const win = f
+      ? (f.contentWindow as (Window & { find?: (q: string, cs?: boolean, back?: boolean, wrap?: boolean) => boolean }) | null)
+      : null;
+    if (!win || typeof win.find !== "function") return;
+    /* window.find is non-standard but the supported cheap path in
+       Chromium; it highlights and scrolls to the match itself. */
+    try { win.find(q, false, backward, true); } catch { /* not supported */ }
+  };
+  /* Match label: a case-insensitive scan of the frame's text.
+     Approximate by design (no shadow-DOM crawl); window.find owns
+     the real highlighting. */
+  useEffect(() => {
+    if (!findOpen) return;
+    const q = findQuery.trim();
+    if (!q) { setFindCount(null); return; }
+    const f = frames.current.get(active.id);
+    const doc = f ? f.contentDocument : null;
+    if (!doc || !doc.body) { setFindCount(null); return; }
+    const text = (doc.body.textContent || "").toLowerCase();
+    const needle = q.toLowerCase();
+    let n = 0;
+    let pos = text.indexOf(needle);
+    while (pos !== -1) { n++; pos = text.indexOf(needle, pos + needle.length); }
+    setFindCount(n);
+  }, [findOpen, findQuery, active.id]);
+
+  /* ---- Per-site rules chip (#10) ---- */
+  const activeRule = rules.find((r) => r.domain === uParts.host);
+  /* Effective ad-block: global unless this site's rule disables it
+     (proxyParams semantics). */
+  const ruleAdBlock = settings.adblock && activeRule?.adblock !== false;
+  const ruleUa: UaPresetId | "" = activeRule?.uaPreset ?? "";
+  const setRuleAdblock = (on: boolean) => {
+    const host = uParts.host;
+    if (!host) return;
+    const i = rules.findIndex((r) => r.domain === host);
+    if (on) {
+      /* Remove the override: the site falls back to the global setting. */
+      if (i < 0) return;
+      const r = { ...rules[i] };
+      delete r.adblock;
+      const next = [...rules];
+      if (Object.keys(r).every((k) => k === "domain" || r[k as keyof SiteRule] === undefined)) next.splice(i, 1);
+      else next[i] = r;
+      props.onRulesChange(next);
+    } else {
+      if (i >= 0) props.onRulesChange(rules.map((r) => (r.domain === host ? { ...r, adblock: false } : r)));
+      else props.onRulesChange([...rules, { domain: host, adblock: false }]);
+    }
+  };
+  const setRuleUa = (preset: UaPresetId | "") => {
+    const host = uParts.host;
+    if (!host) return;
+    const i = rules.findIndex((r) => r.domain === host);
+    if (preset === "") {
+      if (i < 0) return;
+      const r = { ...rules[i] };
+      delete r.uaPreset;
+      const next = [...rules];
+      if (Object.keys(r).every((k) => k === "domain" || r[k as keyof SiteRule] === undefined)) next.splice(i, 1);
+      else next[i] = r;
+      props.onRulesChange(next);
+      return;
+    }
+    if (i >= 0) props.onRulesChange(rules.map((r) => (r.domain === host ? { ...r, uaPreset: preset } : r)));
+    else props.onRulesChange([...rules, { domain: host, uaPreset: preset }]);
+  };
   /* TLS certificate details for the site card. The server checks the
      host's public CT-log record (crt.sh), so this works even though
      the browser never makes a direct TLS connection to the site. */
@@ -1469,21 +1579,26 @@ export default function BrowserView(props: Props) {
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          <m3e-icon-button aria-label="New tab" onClick={() => props.newTab()}>
+          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
-          <m3e-icon-button aria-label="Back" onClick={back}>
+          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
+          <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
             <m3e-icon name="arrow_back" aria-hidden={true} />
           </m3e-icon-button>
-          <m3e-icon-button aria-label="Forward" onClick={forward}>
+          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
+          <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
             <m3e-icon name="arrow_forward" aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
           <m3e-icon-button
+            id="lb-reload-btn"
             aria-label="Reload"
             onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
@@ -1585,7 +1700,44 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
+          {/* Per-site rules chip (#10): tune icon beside the pill; the
+              glyph is an inline SVG (font coverage is not guaranteed,
+              same pattern as the incognito mask). */}
+          {active.url && (
+            <>
+              <m3e-icon-button
+                id="lb-rules-btn"
+                toggle
+                aria-label={"Site settings for " + uParts.host}
+                selected={rulesOpen ? "" : undefined}
+                onClick={() => {
+                  setRulesOpen((v) => !v);
+                  setSiteInfoOpen(false);
+                  setTabsOpen(false);
+                  setDlOpen(false);
+                }}
+              >
+                <span className="lb-tune-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tuneSvg }} />
+              </m3e-icon-button>
+              <m3e-tooltip for="lb-rules-btn" position="above">Site settings</m3e-tooltip>
+            </>
+          )}
+          {/* Find in page (#9). */}
           <m3e-icon-button
+            id="lb-find-btn"
+            toggle
+            aria-label="Find in page"
+            selected={findOpen ? "" : undefined}
+            onClick={() => {
+              setFindOpen((v) => !v);
+              setRulesOpen(false);
+            }}
+          >
+            <m3e-icon name="search" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-find-btn" position="above">Find in page</m3e-tooltip>
+          <m3e-icon-button
+            id="lb-devtools-btn"
             aria-label="Developer tools"
             toggle
             selected={activeDt.open ? "" : undefined}
@@ -1593,6 +1745,7 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="bug_report" aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-tooltip for="lb-devtools-btn" position="above">Developer tools</m3e-tooltip>
           {/* Compaction 3: the diagnostics summary lives on the
               toolbar. The chip appears only when this tab captured
               load failures; it opens DevTools on the diagnostics
@@ -1612,20 +1765,26 @@ export default function BrowserView(props: Props) {
           {/* Downloads: the button appears only while something is
               downloading (or just finished); opens the download card. */}
           {downloads.length > 0 && (
-            <m3e-icon-button
-              aria-label={"Downloads (" + downloads.length + ")"}
-              toggle
-              selected={dlOpen ? "" : undefined}
-              onClick={() => {
-                setDlOpen((v) => !v);
-                setTabsOpen(false);
-                setSiteInfoOpen(false);
-              }}
-            >
-              <m3e-icon name="download" aria-hidden={true} />
-            </m3e-icon-button>
+            <>
+              <m3e-icon-button
+                id="lb-dl-btn"
+                aria-label={"Downloads (" + downloads.length + ")"}
+                toggle
+                selected={dlOpen ? "" : undefined}
+                onClick={() => {
+                  setDlOpen((v) => !v);
+                  setTabsOpen(false);
+                  setSiteInfoOpen(false);
+                }}
+              >
+                <m3e-icon name="download" aria-hidden={true} />
+              </m3e-icon-button>
+              <m3e-badge for="lb-dl-btn">{String(downloads.length)}</m3e-badge>
+              <m3e-tooltip for="lb-dl-btn" position="above">Downloads</m3e-tooltip>
+            </>
           )}
           <m3e-icon-button
+            id="lb-fs-btn"
             aria-label={fullscreen ? "Exit full screen" : "Full screen"}
             toggle
             selected={fullscreen ? "" : undefined}
@@ -1633,7 +1792,9 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
           <m3e-icon-button
+            id="lb-ext-btn"
             aria-label="Extensions"
             toggle
             selected={extPanelOpen ? "" : undefined}
@@ -1645,6 +1806,7 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="extension" aria-hidden={true} />
           </m3e-icon-button>
+          <m3e-tooltip for="lb-ext-btn" position="above">Extensions</m3e-tooltip>
           {/* Incognito toggle: a regular 40x40 icon button inside the
               toolbar, same slot as the other toggles. Toggling on
               suspends the normal session and opens one empty
@@ -1672,6 +1834,47 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
+          {/* Find bar (#9): slim overlay above the toolbar, scoped to
+              the active frame. */}
+          {findOpen && (
+            <div className="lb-find-bar" role="search" aria-label="Find in page">
+              <input
+                ref={findInputRef}
+                className="lb-find-input"
+                aria-label="Find in page"
+                placeholder="Find in page"
+                value={findQuery}
+                spellCheck={false}
+                autoFocus
+                onChange={(e) => setFindQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    findInPage(e.shiftKey);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setFindOpen(false);
+                  }
+                }}
+              />
+              <span className={"lb-find-count" + (findQuery.trim() && findCount === 0 ? " none" : "")}>
+                {findQuery.trim() && findCount != null
+                  ? findCount === 0
+                    ? "0 matches"
+                    : findCount + " match" + (findCount === 1 ? "" : "es")
+                  : ""}
+              </span>
+              <m3e-icon-button aria-label="Previous match" onClick={() => findInPage(true)}>
+                <m3e-icon name="arrow_back" aria-hidden={true} />
+              </m3e-icon-button>
+              <m3e-icon-button aria-label="Next match" onClick={() => findInPage(false)}>
+                <m3e-icon name="arrow_forward" aria-hidden={true} />
+              </m3e-icon-button>
+              <m3e-icon-button aria-label="Close find bar" onClick={() => setFindOpen(false)}>
+                <m3e-icon name="close" aria-hidden={true} />
+              </m3e-icon-button>
+            </div>
+          )}
           {/* Site info: a real M3E card (elevated) anchored above the
               toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). Long cookie
@@ -1732,6 +1935,47 @@ export default function BrowserView(props: Props) {
                 </div>
               </m3e-card>
             )}
+          {/* Per-site rules card (#10): same store as the Settings
+              editor; created lazily, removed when it carries no
+              overrides anymore. */}
+          {rulesOpen && active.url && (
+            <m3e-card variant="elevated" aria-label="Site settings" {...{ class: "lb-site-card" }}>
+              <div slot="header" className="lb-site-head">
+                <span className="lb-site-ctitle">Site settings: {uParts.host}</span>
+                <m3e-icon-button aria-label="Close site settings" onClick={() => setRulesOpen(false)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
+              </div>
+              <div slot="content" className="lb-site-body">
+                <div className="lb-site-row lb-rule-row">
+                  <span>Block ads &amp; trackers on this site</span>
+                  <m3e-switch
+                    aria-label="Block ads and trackers on this site"
+                    checked={ruleAdBlock ? "" : undefined}
+                    disabled={!settings.adblock ? "" : undefined}
+                    onClick={() => setRuleAdblock(!ruleAdBlock)}
+                  />
+                </div>
+                {!settings.adblock && (
+                  <p className="lb-site-note">
+                    Global ad &amp; tracker blocking is off in Settings; a site rule cannot turn it on.
+                  </p>
+                )}
+                <div className="lb-site-ctitle">User-Agent</div>
+                <M3eSelect
+                  label="User-Agent for this site"
+                  value={ruleUa}
+                  options={UA_RULE_OPTIONS}
+                  onChange={(v) => setRuleUa(v as UaPresetId | "")}
+                />
+                <p className="lb-site-note">
+                  {settings.proxyEngine === "lobsterjet"
+                    ? "Per-site rules apply to ScramJet (/r/) routes. The Zeolite engine currently applies the global ad-block setting; wiring these rules into the engine is tracked on the unstable integration branch."
+                    : "Applies from the next navigation on /r/ routes."}
+                </p>
+              </div>
+            </m3e-card>
+          )}
           {xpiPrompt && (
             <XpiPrompt
               name={xpiPrompt.name}
