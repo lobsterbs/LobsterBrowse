@@ -71,7 +71,10 @@ keeping the 1x/2x descriptors, forwards page query keys to the
 target while stripping lb_-prefixed engine keys, replays the
 per-sid session jar across two /r/ requests (set-cookie then
 cookie echo), and honors conditional GET (304 on If-None-Match,
-etag header + body passthrough on the 200).
+etag header + body passthrough on the 200). Tier-10 went live on
+the deployed pair 2026-09-30: fixture and beta both serve the new
+surfaces, and the deployed-pair CI mode runs every Tier-10 gate
+against them.
 
 With LB_ORIGIN set it also checks the server side of the beta:
 
