@@ -663,7 +663,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
-  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-find-bar, .lb-tb-pill { transition: none; }
+  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-tb-pill { transition: none; }
   .lb-view, .lb-tb-ac { animation: none; }
   .lb-tab:active, m3e-icon-button:active { transform: none; }
 }
@@ -1161,31 +1161,4 @@ m3e-snackbar {
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-xpi-card { animation: none; }
-}
-
-/* ---- Find bar (#9): a real m3e-search-bar owns the surface (container
-   color, shape, height, spacing). App CSS only positions the overlay,
-   sizes the slotted input, and styles the match label with the
-   component's own supporting-text tokens. ---- */
-.lb-find-bar { position: absolute; bottom: calc(100% + var(--md-sys-measurement-space100, 8px)); width: min(420px, calc(100vw - var(--md-sys-measurement-space200, 16px))); z-index: 45; left: 50%; transform: translateX(-50%) translateY(8px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--m3e-spring), transform 220ms var(--m3e-spring), visibility 220ms; }
-.lb-find-bar.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(-50%) translateY(0); }
-.lb-find-input {
-  width: 100%;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--m3e-search-bar-input-color, var(--md-sys-color-on-surface, #fff));
-  font: inherit;
-}
-.lb-find-count {
-  font-size: var(--m3e-search-bar-supporting-text-font-size, 12px);
-  font-weight: var(--m3e-search-bar-supporting-text-font-weight, 400);
-  color: var(--md-sys-color-on-surface-variant, #aaa);
-  min-width: 72px;
-  text-align: center;
-}
-.lb-find-count.none { color: var(--md-sys-color-error, #f2b8b5); }
-@media (prefers-reduced-motion: reduce) {
-  .lb-find-bar { animation: none; }
 }
