@@ -1,6 +1,6 @@
 # Beta: Zeolite NativeTransit-First (/zl/)
 
-Unstable experiment branch: beta/zeolite-nativetransit, branched from main
+Experimental branch: beta/zeolite-nativetransit (the retired unstable line was migrated here 2026-09-29)
 at 31bdc9e. Main is untouched; /r/ and /lj/ keep working exactly as on main.
 
 ## Architecture (verified against source, not old docs)
