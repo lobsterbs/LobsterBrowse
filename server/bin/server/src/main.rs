@@ -1605,8 +1605,14 @@ mod importmap_tests {
         let out = rewrite_importmap(MAP, "https://x.test/page.html", "?lb_ab=1", "/r/");
         assert!(out.contains(r#""im-bare":"/r/"#), "{out}");
         assert!(!out.contains("/im-bare.mjs"), "{out}");
-        assert!(out.contains("data:text/javascript,export const ok = 1"), "{out}");
-        assert!(out.contains("data:text/javascript,export const ok = 2"), "{out}");
+        assert!(
+            out.contains("data:text/javascript,export const ok = 1"),
+            "{out}"
+        );
+        assert!(
+            out.contains("data:text/javascript,export const ok = 2"),
+            "{out}"
+        );
         assert!(out.contains(r#""im-bare""#), "{out}");
     }
 
@@ -1656,7 +1662,8 @@ mod importmap_tests {
 
     #[test]
     fn bare_specifiers_stay_for_the_map_to_resolve() {
-        let html = "<script type=\"module\">import { ok } from \"im-bare\"; window.__im = ok;</script>";
+        let html =
+            "<script type=\"module\">import { ok } from \"im-bare\"; window.__im = ok;</script>";
         let out = rewrite_html(html, "https://x.test/page.html", "", "/r/");
         assert!(out.contains("from \"im-bare\""), "{out}");
     }
