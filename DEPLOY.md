@@ -18,7 +18,8 @@ lobsterbs/Zeolite at the `ZEOLITE_COMMIT` pinned in the Dockerfile; the
 Rust wisp handler comes from the zeolite-server git rev pinned in
 `server/bin/server/Cargo.toml`. The two must move together: bump both,
 let the generate-rust-lockfile workflow commit the new `server/Cargo.lock`,
-then trigger a Render deploy with a cleared build cache. Note that the
+then let the push-triggered Render autoDeploy run (see the reliability
+checklist below). Note that the
 lockfile workflow's own commit does not run CI; the next push or a
 manual re-run is what proves the pair green.
 
@@ -39,3 +40,22 @@ dist bundle 3080d559. This matches the
 Dockerfile ZEOLITE_COMMIT and the zeolite-server git rev in
 server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
 the pin.
+
+## Build/deploy reliability checklist (0.3 Titanium)
+
+- A pin move is ONE commit: the Dockerfile ARG, the zeolite-server
+  rev in server/bin/server/Cargo.toml, the regenerated
+  server/Cargo.lock, this file's pin note and AGENTS.md's pin line
+  move together. Never land half a pin.
+- Let the push-triggered Render autoDeploy do deploys. An API-triggered
+  deploy once built from a stale git ref (2026-09-30: deploy metadata
+  named the new commit, the image served the old one; /build proved it).
+  The webhook autoDeploy carries the exact SHA and has not done this.
+- After every deploy, verify /build: buildShort must equal the pushed
+  SHA, and zlswSha must change when the Zeolite pin moved. /healthz
+  must answer ok. A "live" deploy status alone proves nothing.
+- Always cache-bust /build and /healthz queries (?cb=<now>) when
+  fetching through external readers; they serve stale JSON otherwise.
+- The generate-rust-lockfile workflow's own commit does not run CI;
+  the next push (or a retrigger commit) proves the lock/pin pair
+  green before the deploy is trusted.
