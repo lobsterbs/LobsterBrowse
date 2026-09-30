@@ -105,7 +105,7 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  /* Last URL each tab was asked to load â guards the auto-load effect
+  /* Last URL each tab was asked to load — guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
   /* Per-tab navigation generation: every load() bumps it, so results
@@ -243,7 +243,7 @@ export default function BrowserView(props: Props) {
         }
         /* Streaming sink (P0 download architecture): when the File
            System Access API is available the bytes go straight to a
-           user-chosen file on disk â no Blob, no RAM ceiling. The
+           user-chosen file on disk — no Blob, no RAM ceiling. The
            picker needs transient user activation which the parent UI
            may not have (the click happened inside the proxied frame),
            so any picker failure other than the user dismissing the
@@ -293,7 +293,7 @@ export default function BrowserView(props: Props) {
               total += value.byteLength;
               if (!streaming && total > MAX_DL_BYTES) {
                 ac.abort();
-                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " â cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
+                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " — cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
                 return;
               }
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
@@ -801,7 +801,7 @@ export default function BrowserView(props: Props) {
       /* Escaped-navigation recovery: challenge pages (Anubis etc.) get
          no shim on their intermediate hosts, so their JS sometimes
          "solves" the challenge by navigating the frame to a bare app
-         path, which the SPA fallback answers with index.html Ã¢ÂÂ the
+         path, which the SPA fallback answers with index.html — the
          user sees our app shell pretending to be the site. Detect a
          frame sitting on a non-route app path while the tab has a real
          URL, reconstruct the intended target and reload it through the
@@ -848,8 +848,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. AÃ¢ÂÂBÃ¢ÂÂC + back stays AÃ¢ÂÂBÃ¢ÂÂC at
-           index 1, never AÃ¢ÂÂBÃ¢ÂÂCÃ¢ÂÂB. Only a genuinely new URL (pushState,
+           move the index, do not append. A→B→C + back stays A→B→C at
+           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -1068,7 +1068,7 @@ export default function BrowserView(props: Props) {
           }
         })();
         /* Scheme validation: only http(s) navigations. javascript:,
-           data:, blob:, file: and friends are rejected outright â a
+           data:, blob:, file: and friends are rejected outright — a
            proxied page must not script the browser surface. */
         if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
@@ -1485,7 +1485,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} ÃÂ· route {routeUrl(settings, rules, errors[active.id].url)}
+                engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1499,13 +1499,13 @@ export default function BrowserView(props: Props) {
                       return a;
                     }, {}),
                   )
-                    .map(([k, n]) => n + " ÃÂ " + k)
+                    .map(([k, n]) => n + " × " + k)
                     .join(", ")}
                   )
                 </div>
               )}
               {[
-                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " â " + f.reason + (f.note ? " (" + f.note + ")" : "")),
+                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " — " + f.reason + (f.note ? " (" + f.note + ")" : "")),
                 ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
                 ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
               ].map((line, i) => (
@@ -1757,7 +1757,7 @@ export default function BrowserView(props: Props) {
               type="button"
               className="lb-diag-tb-chip"
               aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures Ã¢ÂÂ open diagnostics"}
+              title={activeDt.fails.length + " load failures — open diagnostics"}
               onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
             >
               <m3e-icon name="warning" aria-hidden={true} />
@@ -1817,7 +1817,7 @@ export default function BrowserView(props: Props) {
               (no font glyph exists), sized by CSS. */}
           {/* Incognito: the same m3e-icon-button primitive as every
               other toolbar control, with toggle semantics for the
-              on/off state (selected attribute via the ref effect â
+              on/off state (selected attribute via the ref effect —
               React 18 mangles boolean custom-element attributes). The
               domino mask is an inline SVG: the glyph is missing from
               the self-hosted Material Symbols font. */}
