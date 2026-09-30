@@ -66,6 +66,18 @@ export function reasonText(code: string): string {
   return REASON_TEXT[code] ?? code;
 }
 
+/* Human labels for the engine's transport fallback reasons. Fallbacks
+   are expected routing decisions (every HTML document and CSS load is
+   one by design), not load failures. */
+const FALLBACK_TEXT: Record<string, string> = {
+  DOCUMENT_REWRITE_REQUIRED: "document needs the rewriter (normal)",
+  CSS_URL_REWRITE_REQUIRED: "CSS needs url() rewriting (normal)",
+};
+
+function fallbackText(code: string): string {
+  return FALLBACK_TEXT[code] ?? code;
+}
+
 export type DtState = {
   open: boolean;
   page: "console" | "network" | "inspector" | "diagnostics";
@@ -208,7 +220,7 @@ function ZeoliteDiagnostics() {
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip">NativeTransit: {stats.native}</span>
-        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} — Alpha</span>
+        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} (expected for HTML/CSS)</span>
       </div>
       {stats.fallbacks
         .slice(-10)
@@ -216,11 +228,15 @@ function ZeoliteDiagnostics() {
         .map((f, i) => (
           <details key={f.ts + "-" + i} className="lb-net-row">
             <summary className="lb-net-summary">
-              <span className="lb-net-status lb-bad">FB</span>
-              <span className="lb-net-method">{f.reason}</span>
+              <span className="lb-net-status">FB</span>
+              <span className="lb-net-method">{fallbackText(f.reason)}</span>
               <span className="lb-net-url">{f.url}</span>
               <span className="lb-net-dur">{ts(f.ts)}</span>
             </summary>
+            <div className="lb-net-detail">
+              <div>Reason code: {f.reason}</div>
+              <div>Time: {ts(f.ts)}</div>
+            </div>
           </details>
         ))}
       {notable.map((e) => (
@@ -703,8 +719,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             </m3e-icon-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-            Why didn&apos;t this load? Every entry below is a real load failure captured from the page
-            runtime (the engine shim&apos;s resfail reports). Successful loads are in the Network section.
+            Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
+            are the rows marked FAIL; successful loads are in the Network section. The engine
+            transport section shows routing decisions, not failures: FB rows are expected rewrite
+            fallbacks (every HTML and CSS load uses one).
           </p>
           <ZeoliteDiagnostics />
           {dt.fails.length === 0 ? (

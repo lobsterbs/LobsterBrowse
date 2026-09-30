@@ -3718,11 +3718,11 @@ fn anubis_forward_query(raw: Option<&str>, page: &str) -> String {
     q
 }
 
-/// The engine route ("/lj/..." or "/r/...") inside a URL or path string,
+/// The engine route ("/lj/...", "/zl/..." or "/r/...") inside a URL or path string,
 /// if any. The Anubis challenge script sets its `redir` param to the
 /// frame's full engine-route URL, so this recovers where to go back.
 fn engine_route_in(s: &str) -> Option<String> {
-    let i = s.find("/lj/").or_else(|| s.find("/r/"))?;
+    let i = s.find("/lj/").or_else(|| s.find("/zl/")).or_else(|| s.find("/r/"))?;
     Some(s[i..].to_string())
 }
 
@@ -3801,6 +3801,7 @@ async fn anubis_bridge(
         .next()
         .unwrap_or("")
         .trim_start_matches("/lj/")
+        .trim_start_matches("/zl/")
         .trim_start_matches("/r/")
         .to_string();
     let page = b64url_decode(&route_target).and_then(|b| String::from_utf8(b).ok());
@@ -3884,6 +3885,7 @@ mod anubis_bridge_tests {
             engine_route_in("https://x.example/lj/aHR0cHM6?lb_ab=1"),
             Some("/lj/aHR0cHM6?lb_ab=1".to_string())
         );
+        assert_eq!(engine_route_in("/zl/abc"), Some("/zl/abc".to_string()));
         assert_eq!(engine_route_in("/r/abc"), Some("/r/abc".to_string()));
         assert_eq!(engine_route_in("https://plain.example/"), None);
     }
