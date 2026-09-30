@@ -177,7 +177,7 @@ export default function BrowserView(props: Props) {
      context allows it, and capped in-memory Blob assembly otherwise;
      both paths honor the cancel button. */
   const dlAbort = useRef<Map<number, AbortController>>(new Map());
-  const MAX_DL_BYTES  const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
+  const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
     dlAbort.current.get(id)?.abort();
     dlAbort.current.delete(id);
@@ -1331,7 +1331,7 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
-  /* ---- Per-site rules chip (#10) ---- */  /* ---- Per-site rules chip (#10) ---- */
+  /* ---- Per-site rules chip (#10) ---- */
   const activeRule = rules.find((r) => r.domain === uParts.host);
   /* Effective ad-block: global unless this site's rule disables it
      (proxyParams semantics). */
@@ -1858,7 +1858,7 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
-          {/* Site info (#26): a real M3E card (elevated) anchored above          {/* Site info (#26): a real M3E card (elevated) anchored above
+          {/* Site info (#26): a real M3E card (elevated) anchored above
               the toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). It is the single
               entry point for connection facts, cookies and per-site
