@@ -21,7 +21,13 @@ let the generate-rust-lockfile workflow commit the new `server/Cargo.lock`,
 then let the push-triggered Render autoDeploy run (see the reliability
 checklist below). Note that the
 lockfile workflow's own commit does not run CI; the next push or a
-manual re-run is what proves the pair green.
+manual re-run is what proves the pair green. A pin commit is also
+red in CI by construction: the rust job's cargo --locked fails
+while server/Cargo.lock still holds the old revs. That red run is
+expected, not a regression. The verdict that matters is the green
+Generate server lockfile run on the same SHA, which runs the same
+fmt/build/test/clippy gates as the CI rust job before it lands
+the lock.
 
 ## UI (Render static site)
 

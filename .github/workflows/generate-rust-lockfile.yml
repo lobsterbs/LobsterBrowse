@@ -16,17 +16,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: server
       - name: Resolve dependency tree
         working-directory: server
         run: cargo generate-lockfile
-      - name: Verify lockfile (locked build + tests)
+      - name: Verify lockfile (fmt + locked build + tests + clippy)
         working-directory: server
         run: |
+          cargo fmt --all --check
           cargo build --locked
           cargo test --locked
+          cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt | grep -E "(error|warning):" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          if grep -qE "(error|warning):" /tmp/clippy.txt; then exit 1; fi
       - name: Commit server/Cargo.lock
         run: |
           git config user.name "lobster-ci"
