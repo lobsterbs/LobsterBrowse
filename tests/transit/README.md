@@ -43,6 +43,20 @@ login page. Execution-level behavior (XHR, dynamic import, iframe
 subresource routing, SPA navigation) needs a browser and rides the
 deferred browser pass.
 
+Tier-9 probes (2026-09-30, 0.4 Vanadium): import maps.
+/importmap.html carries an inline <script type="importmap"> with
+bare keys (im-bare), a path-like key (/im-path.mjs), an array value
+mixing an /r/-routable URL with a data: URL, and a pure data: value,
+plus a type=module script importing the bare specifier; the mapped
+modules (/im-bare.mjs, /im-alt.mjs, /im-arr1.mjs) answer 200. With
+LB_ORIGIN, check.mjs asserts the /r/ engine routes the map's URL
+values onto /r/, rewrites the path-like key byte-identically to the
+rewritten import specifier that will look it up, and leaves bare keys,
+data: values, and the type="importmap" script tag verbatim. Scope keys
+stay verbatim by design (a rewritten module referrer can never
+prefix-match an unrewritten scope prefix; scopes fall back to the top
+level).
+
 With LB_ORIGIN set it also checks the server side of the beta:
 
     LB_ORIGIN=http://127.0.0.1:6001 node tests/transit/check.mjs
