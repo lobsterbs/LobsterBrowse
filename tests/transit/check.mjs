@@ -254,6 +254,23 @@ try {
   r = await fetch(base + "/auth/protected", { headers: { cookie: "sid=wrong" }, redirect: "manual" });
   ok("wrong cookie still redirected", r.status === 302, "got " + r.status);
 
+  /* Tier-9 (Vanadium): import map surfaces. */
+  r = await fetch(base + "/importmap.html");
+  ok("importmap 200 html", r.status === 200 && (r.headers.get("content-type") || "").includes("text/html"), r.status + " " + r.headers.get("content-type"));
+  const im = await r.text();
+  ok("importmap carries map",
+    im.includes("\"im-bare\":\"/im-bare.mjs\"") &&
+    im.includes("\"/im-path.mjs\":\"/im-alt.mjs\"") &&
+    im.includes("\"im-arr\":[\"/im-arr1.mjs\",\"data:text/javascript,export const ok = 1\"]") &&
+    im.includes("from \"im-bare\""),
+    im.slice(0, 100));
+  r = await fetch(base + "/im-bare.mjs");
+  ok("im-bare.mjs 200 js", r.status === 200 && (await r.text()).includes("im-bare-ok"));
+  r = await fetch(base + "/im-alt.mjs");
+  ok("im-alt.mjs 200 js", r.status === 200 && (await r.text()).includes("im-alt-ok"));
+  r = await fetch(base + "/im-arr1.mjs");
+  ok("im-arr1.mjs 200 js", r.status === 200 && (await r.text()).includes("im-arr1-ok"));
+
   const lb = process.env.LB_ORIGIN;
   if (lb) {
     /* The /r/ gates run inside a fresh per-run lb_sid session jar
@@ -323,6 +340,19 @@ try {
     ok("r auth chain 200", ra.status === 200, "got " + ra.status);
     const rat = await ra.text();
     ok("r auth lands on login", rat.includes("login page"), rat.slice(0, 80));
+
+    /* Tier-9 through /r/: the import map's URL values route through
+       the engine; bare keys and data: values stay verbatim; the
+       path-like key is rewritten like the import specifier that
+       looks it up; the inline module's bare specifier is left for
+       the map to resolve. */
+    const rim = await fetch(rRoute("/importmap.html"));
+    ok("r importmap 200", rim.status === 200, "got " + rim.status);
+    const rimt = await rim.text();
+    ok("r importmap routes values", rimt.includes("\"im-bare\":\"/r/") && !rimt.includes("/im-bare.mjs"), rimt.slice(0, 100));
+    ok("r importmap routes path-like key", !rimt.includes("/im-path.mjs") && !rimt.includes("/im-alt.mjs"), rimt.slice(0, 100));
+    ok("r importmap keeps data: verbatim", rimt.includes("data:text/javascript,export const ok = 1") && rimt.includes("data:text/javascript,export const ok = 2"), rimt.slice(0, 100));
+    ok("r importmap keeps bare specifier", rimt.includes("from \"im-bare\"") && rimt.includes("type=\"importmap\""), rimt.slice(0, 100));
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this

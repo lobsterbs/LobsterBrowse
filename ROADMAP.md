@@ -50,7 +50,8 @@ Planned sequence:
 | 0.5 | **Cobalt** | Difficult modern websites |
 | 0.6 | **Nickel** | Diagnostics and DevTools |
 | 0.7 | **Zirconium** | Browser state and persistence |
-| 0.8 | **Tungsten** | Extensions |
+| 0.8 | **Tungsten** | Extension
+s |
 | 0.9 | **Iridium** | Stabilization and compatibility freeze |
 | 1.0 | **Osmium** | Stable LobsterBrowse |
 
@@ -90,7 +91,8 @@ Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, e
 - Keep one authoritative decision point for `/r/` vs `/lj/`.
 - Avoid duplicate networking, cookie, rewriting or interception infrastructure.
 - Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only hacks.
-- Keep NativeTransit and rewriting behavior accurately represented as implemented, partial, experimental or planned.
+- Keep NativeTransit and rewriting behavior accurately repre
+sented as implemented, partial, experimental or planned.
 
 ### Build and deployment reliability
 
@@ -167,11 +169,18 @@ Test real behavior involving:
 
 HTTP 200 alone does not constitute compatibility.
 
+
 Status (2026-09-30): started. Tier-8 transit probes gate the
 server-side matrix - navigation-surface routing (iframe doc, module
 script, dynamic import, XHR, relative/absolute/external links) and
 the authentication-redirect flow through /r/, on top of the Tier-7
-redirect-chain and method-replay gates. The deployed-pair gate
+redirect-chain and method-replay gates. Tier-9 probes gate inline
+import maps through /r/: URL values route through the engine,
+path-like keys are rewritten byte-identically to the import
+specifiers that look them up, and bare keys plus data: values stay
+verbatim (the relative-key gap recorded in AGENTS.md is closed
+server-side; scope keys stay verbatim and fall back to the top
+level). The deployed-pair gate
 (transit-live CI job) runs the full transit check against the live
 beta + fixture Render services on every beta push, so the
 server-side live verification is CI-recorded rather than a one-off.
@@ -247,7 +256,8 @@ Important failures should identify:
 4. why it failed
 5. a request/trace identifier where available
 
-Keep diagnostics privacy-safe. Never expose or persist passwords, bearer tokens, API keys, authorization headers, raw cookies or equivalent secrets.
+Keep diagnostics privacy-safe. Never
+ expose or persist passwords, bearer tokens, API keys, authorization headers, raw cookies or equivalent secrets.
 
 Add privacy-safe diagnostic export when appropriate.
 
@@ -367,7 +377,8 @@ Test:
 
 - upstream failures
 - timeouts
-- malformed responses
+- malformed
+ responses
 - redirects
 - connection resets
 - WebSocket disconnects
@@ -456,7 +467,8 @@ beta/zeolite-nativetransit per docs/zeolite-integration-plan.md and
 promotes to main via PR #12 only when green and live-verified.
 The plan's items are implemented on beta (2026-09-30): per-site
 rule push into the engine (zl:rules, Zeolite f3268eff), incognito
-throwaway jar (zl:jarProfile, Zeolite cf2d0400), per-origin virtual
+throwaway jar (zl:jarProfile, Zeolite cf2d0400),
+ per-origin virtual
 WebSocket identities (Zeolite e3f1a171; beta pinned at e3f1a171 /
 dist 3080d559), and js_antiframe parity confirmed already ported
 (the earlier "no counterpart pass" claim was stale). Live
@@ -516,7 +528,8 @@ The canonical roadmap is:
 
 README and AGENTS.md should point here.
 
-## Zeolite remains separate
+## Zeolite remains
+ separate
 
 Do not merge Zeolite's roadmap into this file.
 
