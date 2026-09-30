@@ -3589,6 +3589,12 @@ async fn main() {
         // worker controls the page — answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
+        // The beta UI's Zeolite preview engine uses the /zl/ prefix
+        // (engineRoutePrefix in App.tsx, beta branch only): its worker
+        // owns those routes the same way, so a /zl/ request that
+        // reaches the server means no worker controls the page and
+        // gets the same honest load-error card.
+        .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
@@ -3609,6 +3615,10 @@ async fn main() {
         // storage virtualization and the WS relay die on SPAs. Serve
         // the bundle's copy at that exact URL (issue #19).
         .route("/bootstrap.js", get(zl_bootstrap_js))
+        // The engine rewriter resolves rewriter_wasm_bg.wasm
+        // root-absolute too: serve the vendored copy at the origin root
+        // so the rewriter's wasm init does not 404 silently.
+        .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
         // The engine worker's transport adapter resolves the vendored
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
@@ -4029,6 +4039,22 @@ async fn zl_bootstrap_js() -> Response {
         Ok(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/javascript")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+/// Engine rewriter wasm at the origin root (vendored build,
+/// zlsw/rewriter_wasm_bg.wasm): the engine dist resolves it
+/// root-absolute, same pattern as /bootstrap.js.
+/// no-cache so bundle updates are picked up promptly.
+async fn zl_rewriter_wasm() -> Response {
+    match tokio::fs::read("zlsw/rewriter_wasm_bg.wasm").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/wasm")
             .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),
