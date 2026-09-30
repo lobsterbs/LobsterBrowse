@@ -1134,7 +1134,12 @@ export default function BrowserView(props: Props) {
     const q = draft.trim();
     /* Min length 2: single characters are noise and cost a round trip
        per keystroke for no useful completion. */
-    if (!q || q.length < 2 || !settings.suggestQueries) {
+    /* tbExpanded + looksLikeUrl gates: with a page loaded, draft
+       falls back to the page URL, and engines answer URL-shaped
+       text with junk, which popped a phantom dropdown over the
+       COLLAPSED pill and burned a suggest round trip on every
+       navigation. Home already gates looksLikeUrl; match it. */
+    if (!q || q.length < 2 || !settings.suggestQueries || !tbExpanded || looksLikeUrl(q)) {
       setTbSugg([]);
       setTbSuggOpen(false);
       setTbSuggIdx(-1);
@@ -1167,7 +1172,7 @@ export default function BrowserView(props: Props) {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, settings.engine]);
+  }, [draft, settings.engine, settings.suggestQueries, tbExpanded]);
 
   /* Compaction 4: an empty tab IS the new-tab search. The in-page hero
      with its own search bar is gone; the toolbar pill expands and
