@@ -32,8 +32,8 @@ manual re-run is what proves the pair green.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main 6e9d395 (wasm + worker-prelude URL fix,
-rewrite-stream diag), dist bundle bce78b87. The 4ef39b5 CI run failed
-on the documented lockfile race (the lock commit e5eb7ac landed one
-second after CI started); this commit re-runs CI against the
-regenerated lock.
+Current pin: Zeolite main f96eef59 (page-cache-hit rewrite fix,
+Zeolite#22), dist bundle 88116094. This matches the Dockerfile
+ZEOLITE_COMMIT and the zeolite-server git rev in
+server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
+the pin.
