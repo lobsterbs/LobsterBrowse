@@ -55,6 +55,11 @@ compiles; it does not browse). The beta branch isolates that risk.
    and inline event handlers (wrapping js::rewrite_inline) - verified
    at Zeolite e0835e18. Remaining optional work: a behavioral parity
    test between /r/ ScramJet and /lj/ Zeolite on a frame-busting page.
+   A deterministic fixture now lives at ui/public/antiframe-fixture.html
+   (served live at /antiframe-fixture.html): both idioms (top.location
+   assignment and top.location.href assignment) must be sunk by their
+   respective passes, so the page stays framed and flips its status text
+   to "script ran".
 4. Engine-mode WebSocket virtual origins: IMPLEMENTED (2026-09-30,
    Zeolite engine commit cd97712e). The zl:wsOpen upgrade handshake now
    carries the per-origin identity instead of the single bridge
