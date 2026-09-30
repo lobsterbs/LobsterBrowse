@@ -158,7 +158,7 @@ export const DEFAULT_SETTINGS: Settings = {
   prefetchLinks: true,
   autoHideChrome: true,
   diagnostics: true,
-  density: "normal",
+  density: "compact",
 };
 
 const KEY = "lobsterbrowse-settings";

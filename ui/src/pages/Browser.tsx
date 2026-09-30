@@ -508,6 +508,11 @@ export default function BrowserView(props: Props) {
   /* Load errors surfaced from the server's meta[lb-load-error]. */
   const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
 
+  /* Compact browse pass: with density "compact" the collapsed pill
+     shows the site host instead of the page title, and the idle dock
+     tucks sooner. Rollback for the whole pass: Settings > Density >
+     Normal. */
+  const compact = settings.density === "compact";
   /* Dock: tucks out of view when the app is idle; reappears on any
      pointer/keyboard activity in the app, on hovering the visible
      sliver, or on focusing the URL field. The transform lives on a
@@ -523,7 +528,7 @@ export default function BrowserView(props: Props) {
     hideTimer.current = window.setTimeout(() => {
       if (!dockHoverRef.current) setDockTucked(true);
       else hideSoon();
-    }, 3500);
+    }, compact ? 2200 : 3500);
   };
   useEffect(() => {
     const onActivity = () => {
@@ -1699,7 +1704,7 @@ export default function BrowserView(props: Props) {
                 aria-label={"Show URL of " + tabLabel(active)}
                 onClick={() => setTbExpanded(true)}
               >
-                {tabLabel(active)}
+                {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
               </button>
             )}
           </span>
