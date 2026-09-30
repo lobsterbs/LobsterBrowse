@@ -138,6 +138,9 @@ export default function BrowserView(props: Props) {
   const lastDiag = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
+  /* Consecutive poll ticks a frame has spent stuck on about:blank
+     (Zeolite #31: engine bootstrap never attached). */
+  const blankPolls = useRef<Map<number, number>>(new Map());
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
@@ -729,6 +732,31 @@ export default function BrowserView(props: Props) {
         return;
       }
       if (!doc) return;
+      /* Zeolite #31: a page whose engine bootstrap never attaches
+         leaves the frame on about:blank with no error meta to
+         find; without this check the escaped-navigation recovery
+         below would reroute it to a bogus <site>/blank URL. Give
+         the pending navigation four 1200ms ticks to commit, then
+         surface a real error instead of a silent white frame. */
+      if (f.contentWindow!.location.protocol === "about:") {
+        const n = (blankPolls.current.get(t.id) || 0) + 1;
+        blankPolls.current.set(t.id, n);
+        if (n >= 4) {
+          const msg = "The page was left on a blank document (engine bootstrap did not attach).";
+          setStatus((prev) => {
+            const cur = prev[t.id];
+            return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
+          });
+          setErrors((prev) =>
+            prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
+              ? prev
+              : { ...prev, [t.id]: { url: t.url, message: msg } }
+          );
+          if (n === 4) pushLog("error", "blank frame stuck: " + sanitizeUrl(t.url));
+        }
+        return;
+      }
+      blankPolls.current.delete(t.id);
       /* Detailed error page: the server renders meta[lb-load-error]
          at the same /r/ path; surface it and stop the spinner. */
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
