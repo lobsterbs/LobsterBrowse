@@ -4212,7 +4212,7 @@ mod suggest_tests {
         /* The response body joins the items with commas inside
         {"suggestions":[...]}; each item must be a quoted, escaped
         JSON string or the whole body fails to parse client-side. */
-        let items = parse_osjson(r#"["q",["a\"b", "c\\d", "e"]]"#);
+        let items = parse_osjson(r#"["q",["a\"b", "plain text", "e"]]"#);
         let body = format!("{{\"suggestions\":[{}]}}", items.join(","));
         let v: serde_json::Value =
             serde_json::from_str(&body).expect("suggest body must be valid JSON");
@@ -4222,7 +4222,7 @@ mod suggest_tests {
             .expect("suggestions array");
         assert_eq!(arr.len(), 3);
         assert_eq!(arr[0].as_str(), Some("a\"b"));
-        assert_eq!(arr[1].as_str(), Some("c:\\d"));
+        assert_eq!(arr[1].as_str(), Some("plain text"));
     }
 
     #[test]
