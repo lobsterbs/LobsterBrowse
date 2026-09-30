@@ -1142,36 +1142,30 @@ m3e-snackbar {
   .lb-xpi-card { animation: none; }
 }
 
-/* ---- Find bar (#9): slim overlay above the toolbar, same anchoring
-   context as the site info card. ---- */
+/* ---- Find bar (#9): a real m3e-search-bar owns the surface (container
+   color, shape, height, spacing). App CSS only positions the overlay,
+   sizes the slotted input, and styles the match label with the
+   component's own supporting-text tokens. ---- */
 .lb-find-bar {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + var(--md-sys-measurement-space100, 8px));
   right: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space25, 2px);
-  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space100, 8px);
+  width: min(420px, calc(100vw - var(--md-sys-measurement-space200, 16px)));
   z-index: 45;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28);
   animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
 }
 .lb-find-input {
-  width: 180px;
+  width: 100%;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
-  color: var(--md-sys-color-on-surface, #fff);
+  color: var(--m3e-search-bar-input-color, var(--md-sys-color-on-surface, #fff));
   font: inherit;
-  padding: 0 var(--md-sys-measurement-space50, 4px);
 }
 .lb-find-count {
-  font-size: 12px;
+  font-size: var(--m3e-search-bar-supporting-text-font-size, 12px);
+  font-weight: var(--m3e-search-bar-supporting-text-font-weight, 400);
   color: var(--md-sys-color-on-surface-variant, #aaa);
   min-width: 72px;
   text-align: center;
