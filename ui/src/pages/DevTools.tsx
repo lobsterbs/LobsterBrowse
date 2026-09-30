@@ -1,4 +1,4 @@
-/* DevTools panel — console / network / inspector for the currently
+/* DevTools panel — console / network / diagnostics for the currently
    selected proxy tab. Each tab keeps its own state.
 
    Proxied pages are served from the LobsterBrowse origin (/r), rendered
@@ -12,7 +12,7 @@
    edit fields. */
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { Tab } from "../store";
+import { getLogs, type Tab } from "../store";
 import M3eSelect from "../M3eSelect";
 import { zlSend } from "../zeolite";
 
@@ -80,7 +80,7 @@ function fallbackText(code: string): string {
 
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "inspector" | "diagnostics";
+  page: "console" | "network" | "diagnostics";
   console: ConsoleEntry[];
   net: NetEntry[];
   fails: ResFailEntry[];
@@ -130,26 +130,6 @@ function ts(t: number): string {
   return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
 
-/* What the inspector shows for the picked element. */
-type Picked = {
-  tag: string;
-  id: string;
-  cls: string;
-  text: string;
-  style: string;
-};
-
-function describe(el: Element): Picked {
-  const e = el as HTMLElement;
-  return {
-    tag: el.tagName.toLowerCase(),
-    id: el.id || "",
-    cls: el.className && typeof el.className === "string" ? el.className : "",
-    text: (e.innerText || "").slice(0, 500),
-    style: e.getAttribute("style") || "",
-  };
-}
-
 type Props = {
   tab: Tab;
   dt: DtState;
@@ -157,12 +137,13 @@ type Props = {
   frame: () => HTMLIFrameElement | null;
   onClose: () => void;
   onOpenLogs: () => void;
+  /* Session token for the /logs part of the copy-logs button. */
+  sess?: string;
 };
 
 const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
-  ["inspector", "Inspect", "travel_explore"],
   ["diagnostics", "Diagnostics", "bug_report"],
 ];
 
@@ -220,7 +201,6 @@ function ZeoliteDiagnostics() {
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip">NativeTransit: {stats.native}</span>
-        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} (expected for HTML/CSS)</span>
       </div>
       {stats.fallbacks
         .slice(-10)
@@ -338,14 +318,11 @@ function ZeoliteDownloads() {
   );
 }
 
-export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
+export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
   const [multi, setMulti] = useState(false);
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState<{ el: HTMLElement; info: Picked } | null>(null);
-  const [textDraft, setTextDraft] = useState("");
-  const [styleDraft, setStyleDraft] = useState("");
+  const [logsCopied, setLogsCopied] = useState(false);
   const consoleRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -353,108 +330,32 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
   }, [dt.console.length]);
 
-  /* Stop picking when the panel closes or the section changes. */
-  useEffect(() => {
-    if (picking) setPicking(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dt.page, dt.open]);
-
-  /* ---- Element picker: hover highlight + click to select, live on the
-     proxied document. Same-origin frame, so this is a real DOM access. ---- */
-  useEffect(() => {
-    if (!picking) return;
-    const f = frame();
-    if (!f) return;
-    let doc: Document | null = null;
-    let current: Element | null = null;
-    const outline = (el: Element | null, on: boolean) => {
-      const e = el as HTMLElement | null;
-      if (!e || e === doc?.documentElement || e === doc?.body) return;
+  /* ---- Copy logs: the client ring plus this session's server ring
+     (/logs needs the tab's lb_sess token). One click, plain text. ---- */
+  const copyLogs = async () => {
+    const line = (t: number, level: string, msg: string) => new Date(t).toISOString() + " " + level + " " + msg;
+    let text = getLogs().map((l) => line(l.ts, l.level, l.msg)).join("\n");
+    if (sess) {
       try {
-        e.style.outline = on ? "2px solid var(--md-sys-color-primary, #E8552F)" : "";
+        const r = await fetch("/logs?lb_sess=" + encodeURIComponent(sess));
+        if (r.ok) {
+          const arr: unknown = await r.json();
+          if (Array.isArray(arr)) {
+            const server = (arr as unknown[]).filter((e) => typeof e === "string").join("\n");
+            if (server) text += (text ? "\n" : "") + server;
+          }
+        }
       } catch {
-        /* element belonged to a document that is already gone */
+        /* offline or session gone: the client ring is still copied */
       }
-    };
-    const onMove = (ev: MouseEvent) => {
-      const el = (ev.target as Element | null) ?? null;
-      if (el === current) return;
-      outline(current, false);
-      current = el;
-      outline(current, true);
-    };
-    const onLeave = () => {
-      outline(current, false);
-      current = null;
-    };
-    const onClick = (ev: MouseEvent) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const el = ev.target as Element;
-      outline(current, false);
-      current = null;
-      setPicking(false);
-      if (el instanceof HTMLElement) {
-        const info = describe(el);
-        setPicked({ el, info });
-        setTextDraft(info.text);
-        setStyleDraft(info.style);
-      }
-    };
-    const detach = () => {
-      if (!doc) return;
-      doc.removeEventListener("mousemove", onMove, true);
-      doc.removeEventListener("mouseleave", onLeave, true);
-      doc.removeEventListener("click", onClick, true);
-      outline(current, false);
-      current = null;
-      try {
-        if (doc.body) doc.body.style.cursor = "";
-      } catch {
-        /* navigating away already replaced the document */
-      }
-      doc = null;
-    };
-    const attach = () => {
-      detach();
-      doc = frame()?.contentDocument ?? null;
-      if (!doc) return;
-      doc.addEventListener("mousemove", onMove, true);
-      doc.addEventListener("mouseleave", onLeave, true);
-      doc.addEventListener("click", onClick, true);
-      try {
-        if (doc.body) doc.body.style.cursor = "crosshair";
-      } catch {
-        /* body not ready yet; the load re-attach covers it */
-      }
-    };
-    attach();
-    /* The frame's document is replaced on every navigation; re-attach
-       so picking survives a mid-pick navigation instead of dying
-       silently. */
-    f.addEventListener("load", attach);
-    return () => {
-      f.removeEventListener("load", attach);
-      detach();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picking]);
-
-  /* Apply text / style edits live to the picked element. */
-  const applyText = (v: string) => {
-    setTextDraft(v);
-    if (picked) picked.el.innerText = v;
-  };
-  const applyStyle = (v: string) => {
-    setStyleDraft(v);
-    if (picked) {
-      picked.el.removeAttribute("style");
-      if (v.trim()) picked.el.setAttribute("style", v);
     }
-  };
-  const deletePicked = () => {
-    if (picked) picked.el.remove();
-    setPicked(null);
+    try {
+      await navigator.clipboard?.writeText(text);
+      setLogsCopied(true);
+      window.setTimeout(() => setLogsCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
   /* ---- Console: real JS eval in the proxied page context. ---- */
@@ -552,6 +453,14 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     return acc;
   }, {});
 
+  /* Entry count per section, shown on the segment buttons like real
+     devtools do. */
+  const pageCounts: Record<DtState["page"], number> = {
+    console: dt.console.length,
+    network: dt.net.length,
+    diagnostics: dt.fails.length,
+  };
+
   return (
     <m3e-card
       variant="elevated"
@@ -593,6 +502,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
           >
             <m3e-icon slot="icon" name={icon} aria-hidden={true} />
             {label}
+            {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
           </m3e-button-segment>
         ))}
       </m3e-segmented-button>
@@ -631,9 +541,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             </m3e-icon-button>
           </div>
           <div className="lb-console" ref={consoleRef}>
-            {consoleEntries.length === 0 && (
-              <p className="lb-muted">Console is empty. Expressions run in the proxied page context.</p>
-            )}
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
@@ -647,13 +554,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               ref={inputRef}
               className="lb-input lb-console-area"
               aria-label="Console input"
-              placeholder="Run JavaScript in this page — e.g. document.title"
               value={cmd}
               rows={multi ? 4 : 1}
               onChange={(e) => setCmd(e.target.value)}
               onKeyDown={keyDown}
             />
-            <m3e-button variant="filled" onClick={submit}>Run</m3e-button>
+            <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
             <m3e-icon-button
               toggle
               selected={multi ? "" : undefined}
@@ -717,6 +623,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             <m3e-icon-button aria-label="Clear diagnostics" onClick={() => setDt({ fails: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
+            <m3e-button onClick={() => void copyLogs()}>
+              <m3e-icon name="content_copy" aria-hidden={true} />
+              {logsCopied ? "Copied" : "Copy logs"}
+            </m3e-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
@@ -767,73 +677,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
         </div>
       )}
 
-      {dt.page === "inspector" && (
-        <div className="lb-dt-body">
-          <div className="lb-dt-toolbar">
-            <m3e-button
-              variant={picking ? "filled" : "tonal"}
-              onClick={() => setPicking(!picking)}
-            >
-              <m3e-icon name="highlight_alt" aria-hidden={true} />
-              {picking ? "Click an element…" : "Pick element"}
-            </m3e-button>
-            {picked && (
-              <>
-                <m3e-button onClick={() => setPicked(null)}>
-                  <m3e-icon name="close" aria-hidden={true} /> Deselect
-                </m3e-button>
-                <m3e-button variant="tonal" onClick={deletePicked}>
-                  <m3e-icon name="delete" aria-hidden={true} /> Delete element
-                </m3e-button>
-              </>
-            )}
-          </div>
-          {!frame()?.contentDocument ? (
-            <p className="lb-muted">No proxied page in this tab.</p>
-          ) : picking ? (
-            <p className="lb-muted">
-              Move the mouse over the page to highlight an element, then click to select and edit it here.
-            </p>
-          ) : picked ? (
-            <div className="lb-inspect">
-              <div className="lb-inspect-id">
-                <m3e-icon name="code" aria-hidden={true} />
-                <code>
-                  &lt;{picked.info.tag}
-                  {picked.info.id ? ' id="' + picked.info.id + '"' : ""}
-                  {picked.info.cls ? ' class="' + picked.info.cls + '"' : ""}
-                  &gt;
-                </code>
-              </div>
-              <label className="lb-inspect-label" htmlFor="lb-dt-text">Text content</label>
-              <textarea
-                id="lb-dt-text"
-                className="lb-input lb-console-area"
-                rows={3}
-                value={textDraft}
-                onChange={(e) => applyText(e.target.value)}
-              />
-              <label className="lb-inspect-label" htmlFor="lb-dt-style">Inline style (CSS)</label>
-              <textarea
-                id="lb-dt-style"
-                className="lb-input lb-console-area"
-                rows={3}
-                placeholder="e.g. color: red; font-size: 24px;"
-                value={styleDraft}
-                onChange={(e) => applyStyle(e.target.value)}
-              />
-              <p className="lb-muted">Edits apply live to the proxied page. They vanish on the next navigation.</p>
-            </div>
-          ) : (
-            <div className="lb-inspect">
-              <div><b>Title:</b> {frame()?.contentDocument?.title || "(none)"}</div>
-              <div><b>Proxied URL:</b> {tab.url}</div>
-              <div><b>Elements:</b> {frame()?.contentDocument?.getElementsByTagName("*").length ?? 0}</div>
-              <p className="lb-muted">Press "Pick element", then hover and click anything on the page to edit its text and inline style.</p>
-            </div>
-          )}
-        </div>
-      )}
     </m3e-card>
   );
 }

@@ -173,12 +173,14 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
+      /* The stable /lj/ engine segment left the UI; devices still
+         stored on it move to the preview engine. */
       proxyEngine:
-        parsed.proxyEngine === "lobsterjet" ||
-          parsed.proxyEngine === "scramjet" ||
-          parsed.proxyEngine === "zeolite-beta"
+        parsed.proxyEngine === "scramjet" || parsed.proxyEngine === "zeolite-beta"
           ? parsed.proxyEngine
-          : DEFAULT_SETTINGS.proxyEngine,
+          : parsed.proxyEngine === "lobsterjet"
+            ? "zeolite-beta"
+            : DEFAULT_SETTINGS.proxyEngine,
       decentraleyes: parsed.decentraleyes === undefined ? true : Boolean(parsed.decentraleyes),
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
