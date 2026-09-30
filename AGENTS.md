@@ -30,6 +30,7 @@ Do not remove this path while NativeTransit is being developed.
 
 ## URL fragments
 Fragments are client-side only (SVG sprite symbol selection, in-page anchors). They 
+
 must never become part of the encoded request target, a cache key, an upstream request identity or a fallback decision. The rewriter strips the fragment before encoding and re-attaches it after the route (`/lj/<b64>?lb_...#symbol`); the engine defensively strips fragments from decoded targets too. One sprite file stays one network identity however many `#symbol` references the page makes. Element-level resource failures have no observable HTTP status: diagnostics report `unknown`, never a fabricated `0`.
 
 ## Zeolite
@@ -58,7 +59,8 @@ Rules:
 ## Security and privacy
 LobsterBrowse is a proxy, so the server necessarily sees traffic it proxies. Never describe it as server-blind.
 Preserve SSRF and DNS-rebinding protection, URL/redirect validation, header safety, origin/cookie isolation, extension permissions and diagnostic redaction.
-Never store author
+Never store autho
+r
 ization headers, bearer tokens, passwords, API keys or raw cookies in diagnostics.
 
 ## DevTools
@@ -82,6 +84,7 @@ When NativeTransit is active, the network view should show NativeTransit vs Rewr
 - The site info (lock) card content rows carry their own padding inside the m3e-card surface; the card itself is `overflow: hidden`.
 
 ## Search suggestions
+
 `/
 suggest` owns the fallback chain server-side: the engine's native provider is tried first, then Brave, then Bing (several providers block or rate-limit the deployment's datacenter egress, DuckDuckGo among them). The client makes exactly one request per keystroke; do not reintroduce client-side double-fetch fallbacks. Startpage and Mojeek have no open suggest API and honestly fall back to the chain.
 
@@ -101,7 +104,8 @@ After deployment changes verify `/healthz`, UI, `/r/`, `/lj/`, `/zlsw/`, Wisp en
 ### Stale engine bundle hazard (real incident, 2026-09-27)
 The `zl-builder` Docker stage fetches the Zeolite `dist` tarball in a `RUN`
 layer whose instruction text never changes, so Render's layer cache reuses it
-forever: ordinary deploys silently shipped a m
+forever: ordinary deploys silently shipped 
+a m
 onths-old engine bundle while
 `dist` had moved on. After a Zeolite `dist` publish, deploy with
 `clearCache: true` (render trigger_deploy) or the bundle will not update.
@@ -126,7 +130,8 @@ RewriteFallback = compatibility escape hatch.
 ## Engine shim layout (2026-09-27 refactor)
 The injected page JavaScript no longer lives inside main.rs as a raw string. It is embedded at compile time:
 - `server/bin/server/src/engine-shim.js` — `ENGINE_JS`, the routing + diagnostics shim. Patch categories are labeled inside it (ENGINE CORE / REWRITE COMPATIBILITY / DIAGNOSTICS / LEGACY COMPAT); read them before deleting a patch. Diagnostics events are buffered and flushed as one `{lb:"batch"}` postMessage every 120ms (or 32 events); the UI message handler accepts both batch and single-event shapes.
-- `server/bin/server/src/engine-compat.js` — `COMPAT_JS`, the honest compat layer for guest page
+- `server/bin/server/src/engine-compat.js` — `COMPAT_JS`, the honest compat layer for guest 
+page
 s (service workers, notifications, install prompts). Every stub fails immediately and predictably, produces a one-time console diagnostic explaining WHY the real API cannot exist on the proxy origin, and never claims success or hangs (`ready` resolves, `register` rejects). See docs/COMPATIBILITY-AUDIT.md for the full inventory and threat model.
 Never edit a patch away because it looks like a monkey patch; prove the behavior is no longer required first.
 
@@ -140,7 +145,8 @@ The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `
 `startDownload` in Browser.tsx uses an AbortController per download: the downloads card's close button on an ACTIVE item cancels the transfer (honest "Cancelled" state), and a 1 GiB in-memory ceiling aborts oversized files instead of exhausting device memory. Blob assembly remains the sink (File System Access API needs a top-level user gesture the proxied frame cannot provide); the cap is the honest ceiling of that design.
 
 ## Session restoration (2026-09-27)
-`saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior destroyed
+`saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior dest
+royed
  back/forward history on reload. Old saves are normalized on load.
 
 ## Incognito log hygiene (2026-09-27)
@@ -153,7 +159,8 @@ The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `
 Responses whose HTML contains `id="anubis_challenge"` are served with `Cache-Control: no-store`: the Zeolite service worker serves /lj/ cache-first and a cached challenge page reloads itself forever. The worker honors no-store with TTL 0. Keep this for any interstitial/challenge page.
 
 ## Anubis pass-challenge bridge
-Challenge JS that solves the proof does location.replace() on a ROOT-RELATIVE /.within.website/... URL. Served same-origin that escapes the engine route (the SPA fallback used to answer it with the app shell), so the proof never reached the protected host, no cookie was set, and the challenge reloaded forever. The server now routes /.within.website/*path to anubis_bridge: it decodes the engine route from Anubis's own redir param (or the Referer), fetches the pass-challenge upstream against that route's page (shared cookie jar keeps the Anubis cookie) and 303s the frame back to its engine route.
+Challenge JS that solves the proof does location.replace() on a ROOT-RELATIVE /.within.website/... URL. Served same-origin that escapes the engine route (the SPA fallback used to answer it with the app shell), so the proof never reached the protected host, no cookie was set, and the challenge reloaded forever. The server now routes /.within.website/*path to anubis_bridge: it decodes the engine route from Anubis
+'s own redir param (or the Referer), fetches the pass-challenge upstream against that route's page (shared cookie jar keeps the Anubis cookie) and 303s the frame back to its engine route.
 
 The redir forwarded upstream is NOT the one the browser sent. The challenge script sets redir to the frame's full engine-route URL on this origin, which upstream Anubis rejects with 400 redirect_domain_not_allowed. Dropping redir is
  equally fatal: 400 invalid_redirect. anubis_bridge rewrites redir to the decoded upstream page URL (the one redirect target the protected host always accepts) and forwards every other query param verbatim. If pass-challenge ever 400s again, check what redir upstream received first.
@@ -165,7 +172,8 @@ The compat shim is an IIFE: the file must end with a closing `)();`. The 2026-09
 Goal: a human's challenge solve must WORK through the proxy; the engine never solves anything itself. Three rules:
 
 1. Same-site PoW challenges (Anubis): the challenge JS runs in the frame, the proof is submitted upstream by the anubis_bridge (see above) against the shared cookie jar. Fully supported.
-2. Third-party widget frames (Turnstile, hCaptcha, reCAPTCHA, Stripe challenges) must stay GENUINELY cross-origin. Their scripts validate the frame's own origin and the embedding page validates postMessage event.origin against the provider domain. Routing the frame through the engine makes it same-origin with the proxy and the widget errors or spins forever. So: rewrite_tag leaves `<iframe>/<frame src` untouched when the resolved host is in CHALLENGE_HOSTS (is_frame_to_challenge_host), and engine-shim.js does the same at runtime (prop("HTMLIFrameElement","src", keepCrossOrigin) and the setAttribute src/IFRAME case, regex CHALLENGE_HOST_RE kept in sync with CHALLENGE_HOSTS in main.rs). The browser then loads the widget directly from the provider; the human solves it; only the form submit travels through the proxy. The shim logs "[lb] challenge widget frame left cross-origin: <url>" to the console diagnostics channel — that is the detection signal for the
+2. Third-party widget frames (Turnstile, hCaptcha, reCAPTCHA, Stripe challenges) must stay GENUINELY cross-origin. Their scripts validate the frame's own origin and the embedding page validates postMessage event.origin against the provider domain. Routing the frame through the engine makes it same-origin with the proxy and the widget errors or spins forever. So: rewrite_tag leaves `<iframe>/<frame src` untouched when the resolved host is in CHALLENGE_HOSTS (is_frame_to_challenge_host), and engine-shim.js does the same at runtime (prop("HTM
+LIFrameElement","src", keepCrossOrigin) and the setAttribute src/IFRAME case, regex CHALLENGE_HOST_RE kept in sync with CHALLENGE_HOSTS in main.rs). The browser then loads the widget directly from the provider; the human solves it; only the form submit travels through the proxy. The shim logs "[lb] challenge widget frame left cross-origin: <url>" to the console diagnostics channel — that is the detection signal for the
  UI.
 3. Honest limits: providers may additionally bind the sitekey to the site's real hostname (Turnstile 110200, hCaptcha, reCAPTCHA ERROR_FOR_DOMAIN). That check sees the proxy origin and no compatibility layer can honestly pass it; the widget then shows the provider's own domain error, which is the honest outcome. Never spoof the widget's origin to defeat it.
 Also: upstream CSP/X-Frame-Options headers never reach the browser (engine_proxy forwards only content-type + cache headers), so they cannot break widget scripts; the meta-tag CSP strip (strip_csp_meta) plus this is the whole story. Loader scripts (challenges.cloudflare.com/turnstile/v0/api.js etc.) still route through the engine like any other script — only frames are exempt.
@@ -176,7 +184,8 @@ Also: upstream CSP/X-Frame-Options headers never reach the browser (engine_proxy
 - `.github/workflows/rustfmt-fix.yml` (manual/one-shot) runs `cargo fmt` and commits; do not use it to bypass the fmt gate habitually.
 
 ## JS string-literal asset rewriting
-Vite-built SPAs (chatgpt.com) bake full root-relative asset paths ("/cdn/assets/x.js") into ordinary string literals in their route manifest and import() them through a variable, so the import-spec pass cannot see them. rewrite_js_literals scans string literals in inline module script bodies and served .js files (after rewrite_js_imports, before js_antiframe) and routes any literal that points at a static asset (absolute, protocol-relative, or root-relative; exte
+Vite-built SPAs (chatgpt.com) bake full root
+-relative asset paths ("/cdn/assets/x.js") into ordinary string literals in their route manifest and import() them through a variable, so the import-spec pass cannot see them. rewrite_js_literals scans string literals in inline module script bodies and served .js files (after rewrite_js_imports, before js_antiframe) and routes any literal that points at a static asset (absolute, protocol-relative, or root-relative; exte
 nsion-gated) through the engine. Non-asset literals are left alone on purpose: pathname/origin comparisons and API endpoints must never be rewritten server-side, and the engine shim handles runtime fetches. Root-relative literals must also carry at least two path segments ("/cdn/assets/x.js"): single-segment pieces like gatsby's "/page-data.json" are concatenation fragments, and rewriting them turns page-data fetches into requests against the host root. Ported from Zeolite rewriter js::literals.
 
 ## Engine upstream body reads
@@ -186,15 +195,18 @@ engine_proxy buffers upstream bodies; a mid-stream decode failure (truncated CDN
 `ui/src/browser/` holds the presentational panels split out of `pages/Browser.tsx`: `TabSwitcherCard`, `DownloadsCard`, `XpiPrompt`, `ExtensionsPanel`, plus `browserShared.ts` (tabLabel, dlIconFor, fmtBytes, DL_FILE_RE). All state stays in the browser page lifecycle; the panels take explicit props and do not own state or effects. Keep new panels there, not inside Browser.tsx.
 
 ## Zeolite engine mode (client-side)
-Zeolite is NOT the server rewriter: its service worker owns the engine routes (/lj/, and /zl/ for the experimental zeolite-beta preview engine on this branch). App.tsx unregisters the legacy v3 page-cache worker (it owned the "/" scope and silently blocked the Zeolite SW registration), drops its caches, and pushes `zl:config` (prefix from `engineRoutePrefix(settings.proxyEngine)`, scheme "b64u") on every boot and on engine switch, because the prefix is runtime state that resets to "/j/" on worker restart. The SW intercepts /lj/ requests: subresources travel natively over wisp (NativeTransit), documents/CSS are rewritten by the wasm
- rewriter inside the worker. The server route /lj/:target only answers when NO worker controls the page (cold start, worker restart, no module SW support) and returns the honest engine_error_page — the server never rewrites /lj/ traffic. The lb_ engine options (adblock, trackers, https-only, image re-encode, UA override, incognito jar) are ScramJet-only; routeUrl sends no params on /lj/ routes because the SW forwards the query string to the target. Honest gaps: incognito gets a throwaway engine jar — App.tsx pushes `zl:jarProfile` (the incognito sid while incognito is on, null otherwise; re-pushed on boot, on the toggle and on controllerchange); the engine keeps session-profile cookies in memory only and drops them when the profile switches back (docs/zeolite-integration-plan.md item 2, Zeolite cf2d0400). On the /r/ side the same honest rule applies to jars: requests without a valid lb_sid (direct link opens, old cached pages, API probes) fall back to the deployment-wide shared default jar, so direct clients can observe cookies other direct clients left there; the UI always threads lb_sid and never shares it (tests/transit/check.mjs mints a per-run sid for the same reason). Known limits: a SW restart mid-incognito briefly admits cookies into the default jar until the re-push lands, and the engine page cache is shared across profiles (cookies never are). Engine-mode WebSockets bridge end to end over wisp (zl:wsOpen); since Zeolite cd97712e the bridge assigns each page origin its own virtual WS identity instead of one shared bridge origin, so a page cannot fingerprint the bridge across origins (docs/zeolite-integration-plan.md item 4). LB's server adblock chain does not run for Zeolite mode; instead the engine ships the migrated ad/tracker host lists as its own /rules.json and evaluates them client-side in its worker (request-level 403 before cache and transport, captcha hosts allowlisted; Zeolite 1.1 Oxide). App.tsx pushes `zl:adblock` {enabled} from the same setting
+Zeolite is NOT the server rewriter: its service worker owns the engine routes (/lj/, and /zl/ for the experimental zeolite-beta preview engine on this branch). App.tsx unregisters the legacy v3 page-cache worker (it
+ owned the "/" scope and silently blocked the Zeolite SW registration), drops its caches, and pushes `zl:config` (prefix from `engineRoutePrefix(settings.proxyEngine)`, scheme "b64u") on every boot and on engine switch, because the prefix is runtime state that resets to "/j/" on worker restart. The SW intercepts /lj/ requests: subresources travel natively over wisp (NativeTransit), documents/CSS are rewritten by the wasm
+ rewriter inside the worker. The server route /lj/:target only answers when NO worker controls the page (cold start, worker restart, no module SW support) and returns the honest engine_error_page — the server never rewrites /lj/ traffic. The same holds for /zl/:target (the zeolite-beta preview engine prefix): b1d6475 restored it after transit-live caught the live server answering bare /zl/ hits with the SPA 404 shell — the 438d405a merge-repair commit message claimed the route but its tree never contained it (main.rs was blob-identical from 91ec9d0a through a9601ec). The same commit restored the /rewriter_wasm_bg.wasm origin-root alias (the engine dist resolves it root-absolute, exactly like /bootstrap.js). Both surfaces are gated by the deployed-pair transit-live CI job: /zl/<b64> must answer 502 with the honest card, the wasm alias 200 application/wasm with the \0asm magic. The lb_ engine options (adblock, trackers, https-only, image re-encode, UA override, incognito jar) are ScramJet-only; routeUrl sends no params on /lj/ routes because the SW forwards the query string to the target. Honest gaps: incognito gets a throwaway engine jar — App.tsx pushes `zl:jarProfile` (the incognito sid while incognito is on, null otherwise; re-pushed on boot, on the toggle and on controllerchange); the engine keeps session-profile cookies in memory only and drops them when the profile switches back (docs/zeolite-integration-plan.md item 2, Zeolite cf2d0400). On the /r/ side the same honest rule applies to jars: requests without a valid lb_sid (direct link opens, old cached pages, API probes) fall back to the deployment-wide shared default jar, so direct clients can observe cookies other direct clients left there; the UI always threads lb_sid and never shares it (tests/transit/check.mjs mints a per-run sid for the same reason). Known limits: a SW restart mid-incognito briefly admits cookies into the default jar until the re-push lands, and the engine page cache is shared across profiles (cookies never are). Engine-mode WebSockets bridge end to end over wisp (zl:wsOpen); since Zeolite cd97712e the bridge assigns each page origin its own virtual WS identity instead of one shared bridge origin, so a page c
+annot fingerprint the bridge across origins (docs/zeolite-integration-plan.md item 4). LB's server adblock chain does not run for Zeolite mode; instead the engine ships the migrated ad/tracker host lists as its own /rules.json and evaluates them client-side in its worker (request-level 403 before cache and transport, captcha hosts allowlisted; Zeolite 1.1 Oxide). App.tsx pushes `zl:adblock` {enabled} from the same setting
 s.adblock that drives lb_ab/lb_trk on /r/ routes, plus `zl:rules` (per-site host + adblock + UA, and a global default UA) built from the same loadSiteRules() store the /r/ chain reads — per-site overrides now reach the engine too (Zeolite `zl:rules`, engine-side eval in rules.ts; the adblock override can only disable per site, the global toggle still wins, and an active engine fingerprint profile still wins over any UA override). The rules engine has reached LB users since the pin moved past 1.1 Oxide (current pin: Zeolite main e3f1a171, 3.0 Diamond — see DEPLOY.md; the pin note there is kept accurate). The Settings Decentraleyes toggle remains dead UI (it posted to the legacy worker) until reimplemented as a Zeolite site-rule/plugin.
 
 ## Engine route prefix
 `settings.ts` `engineRoutePrefix(engine)` is the single place that decides `/r/` vs `/lj/` vs `/zl/` (zeolite-beta, beta branch only). Do not reintroduce engine ternaries in components.
 
 ## Server log session isolation (2026-09-27 pass 2)
-/logs is session-scoped: the UI mints a per-tab token (store.ts Tab.sess, crypto.randomUUID, never persisted, regenerated on restore) and threads it on /r/ routes as lb_sess= (settings.ts proxyParams/routeUrl; the engine carries it onto every rewritten subresource via params_suffix). Server side: AppState.sessions holds one bounded SessionRing (500 lines) per token; push_log_sess writes tagged lines ONLY there; /logs requires a valid lb_sess and answers 403 without one. Map cap 128 with LRU eviction, idle expiry 1800s. Suggest/cert/Anubis diagnostics are tagged too. Tests: session_log_tests in main.rs. Tokens are UI state: guest pages cannot read or forge another session's token.
+/logs is session-scoped: the UI mints a per-tab token (store.ts Tab.sess, crypto.randomUUID, never persisted, regenerated on restore) and threads it on /r/ routes as lb_sess= (settings.ts proxyParams/routeUrl; the engine carries it onto every rewritten subresource via params_suffix). Server side: AppState.sessions holds one bounded SessionRing (500 lines) per token; push_log_sess writes tagged lines ONLY there; /logs requires a valid lb_sess and answers 403 without one. Map cap 128 with LRU eviction, idle expiry 1800s. Suggest/cert/Anubis diagnostics are tagge
+d too. Tests: session_log_tests in main.rs. Tokens are UI state: guest pages cannot read or forge another session's token.
 
 ## WebSocket policy (2026-09-27 pass 2)
 engine-shim.js blocks foreign-origin ws(s):// WebSockets: the native constructor would connect straight to the target host, bypassing the proxy and leaking the user's real IP. Blocked sockets throw a SecurityError immediately and emit a WEBSOCKET_UNSUPPORTED res
@@ -207,7 +219,8 @@ main.rs injects window.__LB_CHALLENGE_HOSTS (serialized from CHALLENGE_HOSTS) in
 startDownload streams to disk via the File System Access API when available (showSaveFilePicker + createWritable, O(1) memory; writable.abort() discards the partial file on cancel/error; a dismissed save dialog is an honest "cancelled"). Browsers/contexts without the API fall back to capped in-memory Blob assembly (1 GiB ceiling, the honest limit of that path). Incognito downloads carry lb_inc. "cancelled" is a DlItem status, not a fake error.
 
 ## Challenge-host regex construction (2026-09-27 pass 3)
-The CHALLENGE_HOST_RE build line in engine-shim.js escaped hostnames with replace(/[.*+?^${}()|[\]\\]/g, "\\$&"). A pass-2 splice once replaced that "\\$&" with the deleted fallback literal text: the line still parsed, but the regex matched nothing and runtime-created captcha frames (reCAPTCHA etc. create their iframes via JS) were routed through the engine and broke silently. The challenge_regex_construction test in main.rs asserts the exact construction line; keep test and line in sync. engine-shim.js is include_str!'d and never executed as JS by CI — only this byte-level test and live browser verification cover it.
+The CHALLENGE_HOST_RE build line in engine-shim.js escaped hostnames with replace(/[.*+?^${}()|[\]\\]/g, "\\$&"). A pass-2 splice once replaced that "\\$&" with the deleted fallback literal text: the line still parsed, but the regex matched nothing and runtime-created captcha frames (reCAPTCHA etc. create their iframes via JS) were routed through the engine and broke silently. The challenge_regex_co
+nstruction test in main.rs asserts the exact construction line; keep test and line in sync. engine-shim.js is include_str!'d and never executed as JS by CI — only this byte-level test and live browser verification cover it.
 
 ## Runtime URL property routing (2026-09-27 pass 3)
 engine-shim.js routes runtime property assignments through the same prop() wrapper as the element setters: HTMLAnchorElement.href, HTMLFormElement.act
@@ -220,7 +233,8 @@ Runtime <base href> mutation (property setter or setAttribute) is dropped with a
 Worker/SharedWorker with a foreign-origin script URL throw a SecurityError plus a WORKER_UNSUPPORTED resfail, mirroring the WebSocket policy: the script fetch itself would bypass the proxy (real-IP request), and in-worker subresources are unshimmed by design. Same-origin (rewritten), blob: and data: workers run unchanged. In-worker subresource routing is Zeolite-owned (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from the shim.
 
 ## Find in page (#9)
-The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighter until window.find disappears.
+The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighte
+r until window.find disappears.
 
 ## Per-site rules chip (#10)
 The toolbar tune chip (inline SVG glyph, same pattern as the incognito mask) edits the same site-rule store as Settings (settings.ts loadSiteRules/saveSiteRules). A rule is created lazily and deleted when it carries no overrides. Ad-block semantics follow proxyParams: global on unless the site rule disables it; a site rule cannot enable ad-block while the global s
