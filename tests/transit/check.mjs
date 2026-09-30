@@ -271,6 +271,21 @@ try {
   r = await fetch(base + "/im-arr1.mjs");
   ok("im-arr1.mjs 200 js", r.status === 200 && (await r.text()).includes("im-arr1-ok"));
 
+  /* Tier-10 (Vanadium): CSS url() shapes, srcset, page-query echo. */
+  r = await fetch(base + "/css-probes.css");
+  ok("css-probes 200 css", r.status === 200 && (r.headers.get("content-type") || "").includes("text/css"), r.status + " " + r.headers.get("content-type"));
+  const cssp = await r.text();
+  ok("css-probes carries shapes",
+    cssp.includes("@import url(\"/style.css\");") &&
+    cssp.includes("url(/l.png);") &&
+    cssp.includes("url('/l.png?v=2');") &&
+    cssp.includes("url(\"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7\");"),
+    cssp.slice(0, 80));
+  ok("nav carries srcset", nav.includes("srcset=\"/l.png 1x, /icon.svg 2x\""), nav.slice(0, 80));
+  r = await fetch(base + "/query?say=hi%20there&flag");
+  const qd = await r.json();
+  ok("query echoes raw target", qd.method === "GET" && qd.url === "/query?say=hi%20there&flag", JSON.stringify(qd));
+
   const lb = process.env.LB_ORIGIN;
   if (lb) {
     /* The /r/ gates run inside a fresh per-run lb_sid session jar
@@ -362,6 +377,37 @@ try {
     ok("r importmap routes path-like key", !rimt.includes("/im-path.mjs") && !rimt.includes("/im-alt.mjs"), rimt.slice(0, 100));
     ok("r importmap keeps data: verbatim", rimt.includes("data:text/javascript,export const ok = 1") && rimt.includes("data:text/javascript,export const ok = 2"), rimt.slice(0, 100));
     ok("r importmap keeps bare specifier", rimt.includes("from \"im-bare\"") && rimt.includes("type=\"importmap\""), rimt.slice(0, 100));
+
+    /* Tier-10 through /r/: CSS url()/@import routing with data: URLs
+       verbatim, srcset candidate routing with descriptors kept,
+       page-query forwarding with engine keys stripped, the per-sid
+       session jar roundtrip, and conditional GET (304 + etag). */
+    const rcs = await fetch(rRoute("/css-probes.css"));
+    ok("r css-probes 200", rcs.status === 200, "got " + rcs.status);
+    ok("r css-probes css type", (rcs.headers.get("content-type") || "").includes("css"), String(rcs.headers.get("content-type")));
+    const rcst = await rcs.text();
+    ok("r css routes url()s", rcst.includes("url(/r/") && rcst.includes("url('/r/"), rcst.slice(0, 80));
+    ok("r css routes all targets", rcst.indexOf("/l.png") === -1 && rcst.indexOf("/style.css") === -1, rcst.slice(0, 120));
+    ok("r css keeps data: verbatim", rcst.includes("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), rcst.slice(0, 120));
+    ok("r nav routes srcset", rnt.includes("srcset=\"/r/") && rnt.includes("1x, /r/") && rnt.includes(" 2x"), "srcset not routed");
+
+    const rq = await fetch(lb + "/r/" + b64u(base + "/query") + "?lb_sid=" + sid + "&say=hi%20there&flag");
+    ok("r query 200", rq.status === 200, "got " + rq.status);
+    const rqd = await rq.json();
+    ok("r query forwards page keys", rqd.url === "/query?say=hi%20there&flag", JSON.stringify(rqd));
+    ok("r query strips engine keys", rqd.url.indexOf("lb_") === -1, JSON.stringify(rqd));
+
+    const rsc = await fetch(rRoute("/set-cookie"));
+    ok("r set-cookie 200", rsc.status === 200, "got " + rsc.status);
+    const rck = await fetch(rRoute("/cookie"));
+    const ckt = await rck.text();
+    ok("r jar replays cookies", ckt.includes("zlprobe=a") && ckt.includes("zlprobe2=b"), ckt);
+
+    const r304 = await fetch(rRoute("/etag"), { headers: { "if-none-match": "\"fixed-etag\"" } });
+    ok("r conditional 304", r304.status === 304, "got " + r304.status);
+    const r200 = await fetch(rRoute("/etag"));
+    ok("r etag 200 body", r200.status === 200 && (await r200.text()) === "etag body", "got " + r200.status);
+    ok("r etag header forwarded", r200.headers.get("etag") === "\"fixed-etag\"", String(r200.headers.get("etag")));
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this

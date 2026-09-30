@@ -57,6 +57,22 @@ stay verbatim by design (a rewritten module referrer can never
 prefix-match an unrewritten scope prefix; scopes fall back to the top
 level).
 
+Tier-10 probes (2026-09-30, 0.4 Vanadium): CSS rewrite surface,
+srcset, page query, session jar, conditional GET. /css-probes.css
+carries every url() shape the CSS rewriter must handle (a bare
+url(), a single-quoted url() with a query string, an @import in
+url() form, and a data: URL that must stay verbatim); /nav.html's
+img grows a srcset with two candidates so srcset routing keeps its
+descriptors; /query echoes the raw request target (path + query)
+byte-exactly. With LB_ORIGIN, check.mjs asserts the /r/ engine
+routes every css-probes url()/@import target onto /r/ while leaving
+the data: URL verbatim, routes the nav srcset candidates onto /r/
+keeping the 1x/2x descriptors, forwards page query keys to the
+target while stripping lb_-prefixed engine keys, replays the
+per-sid session jar across two /r/ requests (set-cookie then
+cookie echo), and honors conditional GET (304 on If-None-Match,
+etag header + body passthrough on the 200).
+
 With LB_ORIGIN set it also checks the server side of the beta:
 
     LB_ORIGIN=http://127.0.0.1:6001 node tests/transit/check.mjs
