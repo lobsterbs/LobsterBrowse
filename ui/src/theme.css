@@ -654,7 +654,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
-  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item { transition: none; }
+  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-find-bar, .lb-tb-pill { transition: none; }
   .lb-view { animation: none; }
   .lb-tab:active, m3e-icon-button:active { transform: none; }
 }

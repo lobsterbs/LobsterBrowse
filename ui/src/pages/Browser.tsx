@@ -1707,6 +1707,12 @@ export default function BrowserView(props: Props) {
                   } else if (e.key === "Escape") {
                     setTbSuggOpen(false);
                     setTbExpanded(false);
+                    setDrafts((prev) => {
+                      if (!(active.id in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[active.id];
+                      return next;
+                    });
                   }
                 }}
               />
