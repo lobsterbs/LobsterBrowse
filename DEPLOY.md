@@ -32,6 +32,8 @@ manual re-run is what proves the pair green.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main e52fd5a3 (issue #1 fix set: route unwrap at decode,
-referrer reroute for escaped fetches, 3xx Location mapping, fallback diag
-channel), dist bundle 7c4efaf1.
+Current pin: Zeolite main 6e9d395 (wasm + worker-prelude URL fix,
+rewrite-stream diag), dist bundle bce78b87. The 4ef39b5 CI run failed
+on the documented lockfile race (the lock commit e5eb7ac landed one
+second after CI started); this commit re-runs CI against the
+regenerated lock.

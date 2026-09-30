@@ -242,6 +242,86 @@ function ZeoliteDiagnostics() {
   );
 }
 
+/* ---- Zeolite download registry ---- */
+/* The engine owns download tracking (attachment responses go through
+   its registry; the bytes themselves land in the browser's own download
+   machinery). This section only mirrors the engine's registry and
+   forwards cancels over the control plane: no parallel LB state.
+   Polled only while the Network page is open. */
+
+type ZlDownload = {
+  id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  received: number;
+  startedAt: number;
+  endedAt: number;
+  status: "active" | "done" | "error" | "cancelled";
+  source: string;
+  speed: number;
+  error?: string;
+};
+
+function fmtBytes(n: number): string {
+  if (n < 0) return "unknown";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function ZeoliteDownloads() {
+  const [dls, setDls] = useState<ZlDownload[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    const tick = async () => {
+      const r = await zlSend({ type: "zl:downloads" });
+      if (!dead && r && r.ok && Array.isArray(r.downloads)) setDls(r.downloads as ZlDownload[]);
+    };
+    void tick();
+    const iv = setInterval(tick, 2000);
+    return () => {
+      dead = true;
+      clearInterval(iv);
+    };
+  }, []);
+
+  if (!dls || dls.length === 0) return null;
+  const cancel = async (id: string) => {
+    setBusy(id);
+    await zlSend({ type: "zl:cancelDownload", id });
+    setBusy(null);
+    /* The next poll tick (2 s) picks up the cancelled state. */
+  };
+  return (
+    <div className="lb-net" style={{ marginBottom: "12px" }}>
+      <div className="lb-diag-counts">
+        <span className="lb-diag-chip">Engine download registry: {dls.length}</span>
+      </div>
+      {dls.map((d) => (
+        <div key={d.id} className="lb-net-summary" style={{ alignItems: "center" }}>
+          <span className={"lb-net-status " + (d.status === "done" || d.status === "active" ? "lb-ok" : "lb-bad")}>
+            {d.status}
+          </span>
+          <span className="lb-net-url">{d.filename}</span>
+          <span className="lb-net-dur">
+            {fmtBytes(d.received)}
+            {d.size >= 0 ? " / " + fmtBytes(d.size) : ""}
+            {d.status === "active" ? " (" + fmtBytes(d.speed) + "/s)" : ""}
+          </span>
+          {d.status === "active" && (
+            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void cancel(d.id)}>
+              Cancel
+            </m3e-button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
@@ -588,6 +668,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             Requests made by the page's JavaScript (fetch/XHR/WebSocket). Headers and byte sizes are not
             exposed to the page context by the browser — this is a page-level view, not a network tap.
           </p>
+          <ZeoliteDownloads />
           <div className="lb-net">
             {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
             {netEntries.map((n) => (

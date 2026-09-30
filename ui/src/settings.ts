@@ -2,6 +2,42 @@
    sent to the server except the route query parameters the user's
    settings genuinely control. */
 
+/* Cookie-session id (issue #1): the server keeps one cookie jar per
+   lb_sid, so deployment users no longer share a single jar. Stable per
+   browser profile for normal browsing (cookies survive reloads), fresh
+   and in-memory for each incognito window (its jar dies with the sid). */
+const SID_KEY = "lobsterbrowse-sid";
+let incSid = "";
+let memSid = "";
+function freshSid(): string {
+  return (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Math.random()).slice(2) + String(Date.now());
+}
+/* Called when a new incognito window opens: its jar starts empty. */
+export function resetIncognitoSid(): void {
+  incSid = "";
+}
+function cookieSid(incognito: boolean): string {
+  if (incognito) {
+    if (!incSid) incSid = freshSid();
+    return incSid;
+  }
+  if (!memSid) {
+    try {
+      memSid = localStorage.getItem(SID_KEY) ?? "";
+      if (memSid.length < 16 || memSid.length > 64) memSid = "";
+      if (!memSid) {
+        memSid = freshSid();
+        localStorage.setItem(SID_KEY, memSid);
+      }
+    } catch {
+      memSid = freshSid();
+    }
+  }
+  return memSid;
+}
+
 export type EngineId = "duckduckgo" | "brave" | "startpage" | "google" | "bing" | "mojeek";
 
 export const ENGINES: Record<EngineId, { name: string; url: string }> = {
@@ -64,7 +100,7 @@ export type SiteRule = {
   adblock?: boolean;
 };
 
-export type ProxyEngineId = "scramjet" | "lobsterjet" | "zeolite-beta";
+export type ProxyEngineId = "scramjet" | "lobsterjet";
 
 export type Settings = {
   seed: string;
@@ -95,13 +131,14 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
+  /* M3E density: normal or compact (tighter spacing UI-wide). */
+  density: "normal" | "compact";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  // Preview build: NativeTransit experiment default engine, diagnostics on.
   seed: "#E8552F",
   engine: "startpage",
-  proxyEngine: "zeolite-beta",
+  proxyEngine: "lobsterjet",
   adblock: true,
   decentraleyes: true,
   httpsOnly: true,
@@ -113,7 +150,8 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
-  diagnostics: true,
+  diagnostics: false,
+  density: "normal",
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -129,9 +167,7 @@ export function loadSettings(): Settings {
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
       proxyEngine:
-        parsed.proxyEngine === "lobsterjet" ||
-          parsed.proxyEngine === "scramjet" ||
-          parsed.proxyEngine === "zeolite-beta"
+        parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
           ? parsed.proxyEngine
           : DEFAULT_SETTINGS.proxyEngine,
       decentraleyes: parsed.decentraleyes === undefined ? true : Boolean(parsed.decentraleyes),
@@ -139,6 +175,7 @@ export function loadSettings(): Settings {
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
+      density: parsed.density === "compact" ? "compact" : "normal",
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -209,6 +246,10 @@ export function proxyParams(s: Settings, rules: SiteRule[], target: string, inco
      lb_inc routes, so incognito browsing never mixes cookies with the
      normal shared jar. */
   if (incognito) parts.push("lb_inc=1");
+  /* Cookie-session id (#1): routes this tab's engine traffic through
+     its own server-side jar (the rewriter threads it onto every
+     rewritten subresource and link). */
+  parts.push("lb_sid=" + encodeURIComponent(cookieSid(incognito)));
   /* Per-tab session token: server-side /logs is scoped to it, so
      diagnostics from one tab never leak into another session's view. */
   if (sess) parts.push("lb_sess=" + encodeURIComponent(sess));
@@ -247,16 +288,7 @@ export function b64urlDecode(s: string): string {
    engine-specific route shapes live; everywhere else resolves through
    it so engine branching does not spread through the UI. */
 export function engineRoutePrefix(engine: ProxyEngineId): string {
-  if (engine === "lobsterjet") return "/lj/";
-  if (engine === "zeolite-beta") return "/zl/";
-  return "/r/";
-}
-
-/* True when the engine runs inside the Zeolite service worker (it
-   owns its route prefix and transports over Wisp client-side; the
-   stable server engine is the only exception). */
-export function zeoliteOwned(engine: ProxyEngineId): boolean {
-  return engine === "lobsterjet" || engine === "zeolite-beta";
+  return engine === "lobsterjet" ? "/lj/" : "/r/";
 }
 
 /* Build the navigation route for a target URL. Zeolite is the
@@ -265,8 +297,7 @@ export function zeoliteOwned(engine: ProxyEngineId): boolean {
    option params may ride on them. ScramJet routes through the server
    engine and keeps the lb_ options. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
-  if (zeoliteOwned(s.proxyEngine))
-    return engineRoutePrefix(s.proxyEngine) + b64urlEncode(target);
+  if (s.proxyEngine === "lobsterjet") return "/lj/" + b64urlEncode(target);
   const params = proxyParams(s, rules, target, incognito, sess);
   return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
 }
@@ -277,7 +308,6 @@ export function decodeRoute(pathname: string): string {
   let seg = "";
   if (pathname.startsWith("/r/")) seg = pathname.slice(3);
   else if (pathname.startsWith("/lj/")) seg = pathname.slice(4);
-  else if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
   seg = seg.split("?")[0].split("#")[0];
   try {

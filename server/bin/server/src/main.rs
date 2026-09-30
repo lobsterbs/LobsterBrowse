@@ -20,8 +20,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 /// Engine shim + devtools hook injected right after <head> of every
@@ -91,6 +90,14 @@ struct AppState {
     /// lb_inc=1 use this client, so incognito cookies never mix into
     /// the shared jar (and vice versa). RAM only, no persistence.
     incognito_client: reqwest::Client,
+    /// #1: one cookie jar per lb_sid. The UI mints a stable sid per
+    /// browser profile (fresh per incognito window) and threads it on
+    /// every engine route; this map holds one client (one jar) per sid,
+    /// TTL-evicted and capped. Without it every user of a deployment
+    /// shared ONE jar, so user A's logins answered for user B.
+    session_clients: Mutex<HashMap<String, (reqwest::Client, u64)>>,
+    /// #2: fixed-window per-IP rate counters for the engine route.
+    iprate: Mutex<HashMap<String, (u64, u32)>>,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
@@ -327,6 +334,128 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
     ring.ring.push_back(line);
     ring.last_seen = now_secs();
     prune_sessions(&mut sessions);
+}
+
+/// #16: SSRF guard installed as every engine client's DNS resolver.
+/// Each RESOLVED address is checked against the Zeolite destination
+/// policy (loopback, RFC1918, link-local/metadata, embedded-IPv6
+/// forms, ...) and only allowed addresses reach the connection pool:
+/// the validated address IS the one connected, so a DNS-rebinding
+/// answer that passes a pre-fetch check has no window between check
+/// and connect. Literal-IP destinations bypass the resolver; the
+/// per-hop check_hostname in engine_proxy covers those.
+struct PolicyDns;
+
+fn boxed_err<E: std::error::Error + Send + Sync + 'static>(
+    e: E,
+) -> Box<dyn std::error::Error + Send + Sync> {
+    Box::new(e)
+}
+
+impl reqwest::dns::Resolve for PolicyDns {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().trim_end_matches('.').to_string();
+        Box::pin(async move {
+            let h = host.clone();
+            let addrs = tokio::task::spawn_blocking(move || {
+                use std::net::ToSocketAddrs;
+                (h.as_str(), 0u16)
+                    .to_socket_addrs()
+                    .map(|it| it.collect::<Vec<std::net::SocketAddr>>())
+            })
+            .await
+            .map_err(boxed_err)?
+            .map_err(boxed_err)?;
+            let policy = zeolite_server::policy::DestinationPolicy::default();
+            let allowed: Vec<std::net::SocketAddr> = addrs
+                .into_iter()
+                .filter(|sa| policy.check_ip(&sa.ip()) == zeolite_server::policy::Verdict::Allow)
+                .collect();
+            if allowed.is_empty() {
+                // Every address resolved into blocked space (or nothing
+                // resolved at all): fail closed.
+                return Err("destination resolves to blocked or no addresses".into());
+            }
+            Ok(Box::new(allowed.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// Every engine client: manual redirects (engine_proxy's validated
+/// hop loop - reqwest never follows a 3xx on its own), the PolicyDns
+/// SSRF guard at connect time, and its own cookie jar.
+fn build_engine_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .dns_resolver(std::sync::Arc::new(PolicyDns))
+        .cookie_store(true)
+        .build()
+        .expect("reqwest client")
+}
+
+/// #1: TTL + cap for the per-sid jar map. Cookies are RAM-only and
+/// die with the entry; 24h matches a reasonable cookie-session life.
+const JAR_TTL_SECS: u64 = 24 * 3600;
+const JAR_CAP: usize = 1024;
+
+/// Get (or lazily create) the per-sid client. Called on every engine
+/// request carrying an lb_sid; the lock is held only for map access.
+fn session_jar_client(state: &AppState, sid: &str) -> Option<reqwest::Client> {
+    if !valid_session_token(sid) {
+        return None;
+    }
+    let mut map = state
+        .session_clients
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let now = now_secs();
+    map.retain(|_, (_, t)| now.saturating_sub(*t) < JAR_TTL_SECS);
+    if let Some((c, t)) = map.get_mut(sid) {
+        *t = now;
+        return Some(c.clone());
+    }
+    // ponytail: oldest-first eviction at the cap; per-sid LRU if the
+    // eviction rate ever becomes measurable.
+    while map.len() >= JAR_CAP {
+        let oldest = map
+            .iter()
+            .min_by_key(|(_, (_, t))| *t)
+            .map(|(k, _)| k.clone());
+        match oldest {
+            Some(k) => {
+                map.remove(&k);
+            }
+            None => break,
+        }
+    }
+    let c = build_engine_client();
+    map.insert(sid.to_string(), (c.clone(), now));
+    Some(c)
+}
+
+/// #2: fixed-window per-IP limit on the engine route. Generous - a
+/// proxied page load fans out dozens of subresource fetches - it stops
+/// runaway scripted abuse of the fetch relay, not humans.
+const RATE_WINDOW_SECS: u64 = 60;
+const RATE_MAX: u32 = 600;
+
+fn iprate_allow(state: &AppState, ip: &str) -> bool {
+    let mut m = state.iprate.lock().unwrap_or_else(|e| e.into_inner());
+    let now = now_secs();
+    let win = now - now % RATE_WINDOW_SECS;
+    if m.len() > 4096 {
+        // lazy sweep so the map cannot grow without bound
+        m.retain(|_, (w, _)| now.saturating_sub(*w) < RATE_WINDOW_SECS * 4);
+    }
+    let e = m.entry(ip.to_string()).or_insert((win, 0));
+    if e.0 != win {
+        *e = (win, 0);
+    }
+    e.1 += 1;
+    e.1 <= RATE_MAX
 }
 
 /// Hostname of an absolute URL ("" when not absolute).
@@ -1901,7 +2030,9 @@ fn rewrite_html_doc(
 /// Engine option query string carried on to every rewritten URL.
 fn params_suffix(params: &HashMap<String, String>) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for k in ["ab", "trk", "https", "img", "inc"] {
+    // lb_sid (#1) rides along so the session jar sticks to every
+    // rewritten link and subresource of the page.
+    for k in ["ab", "trk", "https", "img", "inc", "sid"] {
         if let Some(v) = params.get(k) {
             if v == "1" {
                 parts.push(format!("lb_{}=1", k));
@@ -2027,41 +2158,14 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
     let real = b64url_decode(&target)
         .and_then(|b| String::from_utf8(b).ok())
         .unwrap_or_default();
-    /* 503, not 502: the destination was never fetched - no engine
-    worker controls this page (cold start, worker update, or a
-    browser without module service workers). Same contract as the
-    engine's error-pages doc: the no-control case is the embedder's. */
-    let mut resp = engine_notice_page(
+    engine_error_page(
         &real,
-        "No engine worker yet",
-        "This page loads through the engine's service worker once it is installed.",
-        "Zeolite runs in its service worker and none controls this page yet. Open or reload the app once so the worker installs, then retry.",
+        "Zeolite runs in its service worker, and none controls this page yet. Reload the app so the worker activates, or switch the engine to ScramJet.",
         true,
-    );
-    *resp.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
-    resp
-}
-
-fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
-    engine_notice_page(
-        url,
-        "This page could not load",
-        "The proxy engine failed to fetch the destination.",
-        detail,
-        wants_html,
     )
 }
 
-/// Parameterized variant of the failure card: the no-worker notice needs
-/// its own honest heading instead of the generic fetch-failure framing.
-/// heading/sub are embedder-owned literals, inserted unescaped on purpose.
-fn engine_notice_page(
-    url: &str,
-    heading: &str,
-    sub: &str,
-    detail: &str,
-    wants_html: bool,
-) -> Response {
+fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
     if !wants_html {
         return (
             StatusCode::BAD_GATEWAY,
@@ -2112,8 +2216,8 @@ button {{ appearance:none; border:none; cursor:pointer;
 @media (prefers-color-scheme: dark) {{ button {{ background:#cfbcff; color:#381e72; }} }}
 </style></head><body>
 <div class="card" role="alert">
-  <h1>{heading}</h1>
-  <p class="muted">{sub}</p>
+  <h1>This page could not load</h1>
+  <p class="muted">The proxy engine failed to fetch the destination.</p>
   <div class="url">{url_js}</div>
   <p class="detail">{detail_line}</p>
   <button onclick="location.reload()">Retry</button>
@@ -2123,8 +2227,6 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
   error:{detail_json}, dur:0, ts:Date.now() }} }}, location.origin); }} catch (e) {{}}
 </script>
 </body></html>"#,
-        heading = heading,
-        sub = sub,
         detail = detail,
         url_js = url_js,
         detail_line = detail_line,
@@ -2147,6 +2249,7 @@ try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", sta
 /// rewritten; everything else streams through untouched.
 async fn engine_proxy(
     State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
     method: Method,
     OriginalUri(uri): OriginalUri,
     Path(target): Path<String>,
@@ -2156,6 +2259,14 @@ async fn engine_proxy(
 ) -> Response {
     let started = Instant::now();
     let res_id = next_res_id(&state.res_ids);
+    // #2: fixed-window per-IP limit on the engine route.
+    if !iprate_allow(&state, &peer.ip().to_string()) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            "engine rate limit exceeded, retry in a minute",
+        )
+            .into_response();
+    }
     let Some(decoded) = b64url_decode(&target) else {
         return (StatusCode::BAD_REQUEST, "bad route").into_response();
     };
@@ -2187,7 +2298,9 @@ async fn engine_proxy(
             }
         }
     }
-    for k in ["ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess"] {
+    for k in [
+        "ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess", "sid",
+    ] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
         }
@@ -2252,11 +2365,19 @@ async fn engine_proxy(
     never mix into the shared jar (and back). The suffix keeps the
     flag on every rewritten subresource and link. */
     let use_incognito = params.get("inc").map(|v| v == "1").unwrap_or(false);
-    let client = if use_incognito {
-        &state.incognito_client
-    } else {
-        &state.client
-    };
+    /* #1: a valid lb_sid routes this request (and, via params_suffix,
+    every rewritten subresource and link) through its own cookie jar.
+    lb_inc=1 without a sid keeps the legacy incognito jar. */
+    let client = params
+        .get("sid")
+        .and_then(|sid| session_jar_client(&state, sid))
+        .unwrap_or_else(|| {
+            if use_incognito {
+                state.incognito_client.clone()
+            } else {
+                state.client.clone()
+            }
+        });
     let mut req = client.request(method.clone(), &fetch_url);
     /* Effective UA: on AMO the proxy ALWAYS spoofs Firefox (the store
     refuses .xpi downloads to non-Firefox clients, so a user-preset
@@ -2373,13 +2494,103 @@ async fn engine_proxy(
             req = req.header(reqwest::header::REFERER, real);
         }
     }
+    /* #1: replayable body for redirect hops (307/308) and the bounded
+    retry below. */
+    let mut hop_body = body.clone();
     if let Some(b) = body {
         req = req.body(b);
     }
 
-    let req_retry = req.try_clone();
+    /* #16/#17: redirects are followed manually, never by reqwest (all
+    engine clients run redirect::Policy::none). Every hop is re-validated
+    before it is fetched - scheme, destination-policy hostname, and the
+    HTTPS-only flag - so a public host answering 302 Location:
+    http://169.254.169.254/ or a plain-http hop under lb_https=1 is
+    rejected AT the hop instead of silently followed. The PolicyDns
+    resolver installed on the clients re-validates every resolved
+    address at connect time, closing the DNS-rebinding window a
+    pre-fetch check alone would leave. */
+    let https_only = params.get("https").map(|v| v == "1").unwrap_or(false);
+    let policy = zeolite_server::policy::DestinationPolicy::default();
+    let template = match req.build() {
+        Ok(t) => t,
+        Err(e) => return engine_error_page(&url, &e.to_string(), wants_html_page),
+    };
+    let hop_headers = template.headers().clone();
+    let mut hop_url = template.url().clone();
+    let mut hop_method = method.clone();
+    let mut hops = 0u32;
+    let sent: Result<reqwest::Response, String> = loop {
+        if hop_url.scheme() != "http" && hop_url.scheme() != "https" {
+            break Err("blocked destination: unsupported redirect scheme".to_string());
+        }
+        if https_only && hop_url.scheme() == "http" {
+            break Err("HTTPS-only mode: plain-http redirect hop rejected".to_string());
+        }
+        match hop_url.host_str() {
+            Some(h) if policy.check_hostname(h) == zeolite_server::policy::Verdict::Block => {
+                push_log_sess(
+                    &state,
+                    sess.as_deref(),
+                    "warn",
+                    &format!("engine blocked destination hop {} {}", res_id, hop_url),
+                );
+                break Err(format!("blocked destination: {}", h));
+            }
+            Some(_) => {}
+            None => break Err("blocked destination: no host".to_string()),
+        }
+        let mut rb = client
+            .request(hop_method.clone(), hop_url.clone())
+            .headers(hop_headers.clone());
+        if let Some(b) = hop_body.clone() {
+            rb = rb.body(b);
+        }
+        let r = match rb.send().await {
+            Ok(r) => r,
+            Err(e) => break Err(e.to_string()),
+        };
+        if !r.status().is_redirection() {
+            break Ok(r);
+        }
+        hops += 1;
+        if hops > 10 {
+            break Err("too many redirects".to_string());
+        }
+        let code = r.status().as_u16();
+        // A 3xx without a resolvable Location is served as-is (browsers
+        // do the same).
+        let next = r
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|loc| r.url().join(loc).ok());
+        let Some(next) = next else {
+            break Ok(r);
+        };
+        // Browser semantics: 303 (and 301/302 on non-GET/HEAD) drop the
+        // body and continue as GET.
+        if code == 303
+            || ((code == 301 || code == 302)
+                && hop_method != Method::GET
+                && hop_method != Method::HEAD)
+        {
+            hop_method = Method::GET;
+            hop_body = None;
+        }
+        hop_url = next;
+    };
+    // Bounded retry for truncated bodies replays the FINAL hop, not
+    // the original URL (redirects are no longer auto-followed).
+    let mut rr = client
+        .request(hop_method.clone(), hop_url.clone())
+        .headers(hop_headers.clone());
+    if let Some(b) = hop_body.clone() {
+        rr = rr.body(b);
+    }
+    let req_retry = Some(rr);
 
-    match req.send().await {
+    match sent {
         Ok(resp) => {
             let status = resp.status();
             // Follows redirects: resolve relative URLs against the FINAL
@@ -2454,6 +2665,9 @@ async fn engine_proxy(
                 // is deliberately NOT forwarded: reqwest transparently
                 // decompresses gzip/br, so upstream's length can mismatch
                 // the streamed bytes.
+                // content-disposition IS forwarded (#11): the UI download
+                // manager reads it for the saved file name; the download
+                // attribute and URL basename stay the fallbacks.
                 // (Collected before bytes_stream: that consumes the
                 // response.)
                 let mut cache_headers: Vec<(&str, String)> = Vec::new();
@@ -2464,6 +2678,7 @@ async fn engine_proxy(
                     "expires",
                     "content-range",
                     "accept-ranges",
+                    "content-disposition",
                 ] {
                     if let Some(v) = resp.headers().get(h).and_then(|v| v.to_str().ok()) {
                         cache_headers.push((h, v.to_owned()));
@@ -2625,7 +2840,7 @@ async fn engine_proxy(
             }
             resp
         }
-        Err(e) => engine_error_page(&url, &e.to_string(), wants_html_page),
+        Err(e) => engine_error_page(&url, &e, wants_html_page),
     }
 }
 
@@ -3148,34 +3363,6 @@ fn load_filters(extra_path: &str, builtin: &str) -> adblock::FilterSet {
     adblock::compile(&text)
 }
 
-/// SPA fallback hardening: the app shell goes ONLY to document
-/// navigations. Subresource requests (scripts, fetches, workers, the
-/// engine SW, favicons) that slip past every route get an honest 404
-/// instead of index.html with 200 + text/html, which silently masked
-/// escaped proxied-page fetches (worker-context fetch('/...') on the
-/// /zl/ path is the demonstrated case). Requests without
-/// Sec-Fetch-Dest (curl, health probes) still get the shell.
-async fn spa_fallback(headers: HeaderMap) -> Response {
-    let dest = headers
-        .get("sec-fetch-dest")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("document");
-    if dest != "document" {
-        return (StatusCode::NOT_FOUND, "not found").into_response();
-    }
-    match std::fs::read("ui/index.html") {
-        Ok(body) => {
-            let mut res = Response::new(Body::from(body));
-            res.headers_mut().insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("text/html; charset=utf-8"),
-            );
-            res
-        }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -3192,23 +3379,17 @@ async fn main() {
     let wisp_path = std::env::var("WISP_PATH").unwrap_or_else(|_| "/wisp/".into());
     let auth_password = std::env::var("WISP_PASSWORD").ok();
 
-    let build_client = || {
-        reqwest::Client::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            .connect_timeout(std::time::Duration::from_secs(8))
-            .timeout(std::time::Duration::from_secs(20))
-            .cookie_store(true)
-            .build()
-            .expect("reqwest client")
-    };
-    let client = build_client();
-    /* 74.9: a second client means a second cookie jar. Incognito routes
-    (lb_inc=1) use it; cookies never cross between the two jars. */
-    let incognito_client = build_client();
+    /* #1: every jar is per-session now. The two legacy clients stay as
+    fallbacks for routes without an lb_sid (old cached pages, direct
+    links); they each still own their own jar. */
+    let client = build_engine_client();
+    let incognito_client = build_engine_client();
 
     let state = Arc::new(AppState {
         client,
         incognito_client,
+        session_clients: Mutex::new(HashMap::new()),
+        iprate: Mutex::new(HashMap::new()),
         logs: Mutex::new(VecDeque::new()),
         sessions: Mutex::new(HashMap::new()),
         res_ids: AtomicU64::new(0),
@@ -3241,11 +3422,6 @@ async fn main() {
         // worker controls the page — answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
-        // Beta branch (beta/zeolite-nativetransit): /zl/ is the explicit
-        // NativeTransit-first engine route. Same honest contract as /lj/:
-        // the Zeolite worker owns the route; the server only answers when
-        // no worker controls the page.
-        .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
@@ -3254,11 +3430,9 @@ async fn main() {
         // The service worker script gets Service-Worker-Allowed so a
         // "/" scope registration is possible later; its chunks and
         // wasm assets are plain static files under the same prefix.
-        // The UI registers this worker at the "/" scope (the header
-        // above allows it) and pushes the engine route prefix into it
-        // at runtime (zl:config): /lj/ on main, /zl/ on the beta
-        // branch. The worker claims only that engine prefix; every
-        // other path passes through untouched.
+        // The worker registers at its natural /zlsw/ scope today and
+        // acts purely as the extension control plane: it controls no
+        // pages, so proxied /lj/ and /r/ browsing is untouched.
         .route("/zlsw/sw.js", get(zl_sw_js))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
         // The engine rewriter injects <script src="/bootstrap.js">
@@ -3272,11 +3446,6 @@ async fn main() {
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
         .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
-        // Same root-alias class as /libcurl above: the engine dist
-        // resolves the rewriter wasm at the origin root
-        // (/rewriter_wasm_bg.wasm), not under /zlsw/; serve the
-        // vendored copy at the path the worker actually requests.
-        .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
         // Extension subsystem routes live in the Zeolite worker
         // (IndexedDB-backed), NOT on this server: any request that
         // slips past the worker gets an honest 404, never the SPA
@@ -3296,7 +3465,7 @@ async fn main() {
         .fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
-                .not_found_service(get(spa_fallback)),
+                .not_found_service(ServeFile::new("ui/index.html")),
         )
         .route(
             &wisp_path,
@@ -3308,7 +3477,10 @@ async fn main() {
                 }
             }),
         )
-        .layer(CorsLayer::permissive())
+        /* #18: no CorsLayer. The UI, engine frames and every subresource
+        are same-origin, so cross-origin ACAO headers serve nobody — the
+        permissive layer that used to sit here turned the deployment
+        into a CORS-stripping relay any web page could read. */
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -3319,7 +3491,12 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind failed");
-    axum::serve(listener, app).await.expect("server error");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("server error");
 }
 
 /// Percent-decode a query component (redir arrives encodeURIComponent'd).
@@ -3513,11 +3690,25 @@ async fn anubis_bridge(
     // redirect target the protected host always accepts.
     let q = anubis_forward_query(raw.as_deref(), &page);
     let url = format!("{}{}?{}", page_origin(&page), uri.path(), q);
-    let client = if back.contains("lb_inc=1") {
-        &state.incognito_client
-    } else {
-        &state.client
-    };
+    /* #1: honor the route's lb_sid (per-session jar) when present;
+    lb_inc=1 without a sid keeps the legacy incognito jar. */
+    let sid = back
+        .split('?')
+        .nth(1)
+        .and_then(|q| q.split('&').find_map(|p| p.strip_prefix("lb_sid=")))
+        .filter(|s| valid_session_token(s))
+        .map(|s| s.to_string());
+    let client = sid
+        .as_deref()
+        .and_then(|s| session_jar_client(&state, s))
+        .or_else(|| {
+            if back.contains("lb_inc=1") {
+                Some(state.incognito_client.clone())
+            } else {
+                Some(state.client.clone())
+            }
+        })
+        .unwrap_or_else(|| state.client.clone());
     match client.get(&url).send().await {
         Ok(resp) => {
             // Anubis answers pass-challenge with 302 + Set-Cookie; the
@@ -3656,22 +3847,6 @@ async fn zl_sw_js() -> Response {
             .header(header::CONTENT_TYPE, "application/javascript")
             .header(header::CACHE_CONTROL, "no-cache")
             .header("service-worker-allowed", "/")
-            .body(Body::from(bytes))
-            .expect("static response build"),
-        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
-    }
-}
-
-/// Rewriter wasm root alias. The vendored engine dist builds the
-/// wasm URL as new URL("/rewriter_wasm_bg.wasm", import.meta.url);
-/// the absolute path drops the /zlsw/ base, so the request lands on
-/// the origin root and 404s without this alias.
-async fn zl_rewriter_wasm() -> Response {
-    match tokio::fs::read("zlsw/rewriter_wasm_bg.wasm").await {
-        Ok(bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "application/wasm")
-            .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
@@ -3897,6 +4072,8 @@ mod session_log_tests {
         AppState {
             client: reqwest::Client::new(),
             incognito_client: reqwest::Client::new(),
+            session_clients: Mutex::new(HashMap::new()),
+            iprate: Mutex::new(HashMap::new()),
             logs: Mutex::new(VecDeque::new()),
             sessions: Mutex::new(HashMap::new()),
             res_ids: AtomicU64::new(0),
