@@ -36,7 +36,7 @@ import { pushLog, type Tab } from "../store";
    enters DevTools state or the app log passes through these (P0
    secret-leak fix). Replaces the old local redactUrl. */
 import { sanitizeText, sanitizeUrl } from "../sanitize";
-import DevTools, { emptyDt, nextEntryId, type DtState, type ResFailEntry } from "./DevTools";
+import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailEntry } from "./DevTools";
 /* Extracted browser feature panels (ui/src/browser/): all state stays
    in this page; the components are presentational. */
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
@@ -177,16 +177,7 @@ export default function BrowserView(props: Props) {
      context allows it, and capped in-memory Blob assembly otherwise;
      both paths honor the cancel button. */
   const dlAbort = useRef<Map<number, AbortController>>(new Map());
-  /* ---- Find in page (#9): window.find() against the same-origin
-     frame; the label counts matches with a plain text scan. ---- */
-  const [findOpen, setFindOpen] = useState(false);
-  const [findQuery, setFindQuery] = useState("");
-  const [findCount, setFindCount] = useState<number | null>(null);
-  const findInputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (findOpen) findInputRef.current?.focus();
-  }, [findOpen]);
-  const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
+  const MAX_DL_BYTES  const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
     dlAbort.current.get(id)?.abort();
     dlAbort.current.delete(id);
@@ -769,6 +760,26 @@ export default function BrowserView(props: Props) {
             : { ...prev, [t.id]: { url: t.url, message: msg } }
         );
         pushLog("error", "load failed: " + msg);
+        /* The error must also surface in the DevTools console, not just
+           the error overlay. */
+        setDtState((prev) => {
+          const base = prev[t.id] ?? emptyDt();
+          return {
+            ...prev,
+            [t.id]: {
+              ...base,
+              console: [
+                ...base.console,
+                {
+                  id: nextEntryId(),
+                  kind: "error",
+                  text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
+                  ts: Date.now(),
+                },
+              ].slice(-500),
+            },
+          };
+        });
         return;
       }
       /* 74.7 CSP/SRI diagnostics: the rewriter strips CSP meta tags and
@@ -1075,7 +1086,25 @@ export default function BrowserView(props: Props) {
         }
         setDtState((prev) => {
           const base = prev[tabId as number] ?? emptyDt();
-          return { ...prev, [tabId as number]: { ...base, fails: [...base.fails, entry].slice(-200) } };
+          return {
+            ...prev,
+            [tabId as number]: {
+              ...base,
+              fails: [...base.fails, entry].slice(-200),
+              console: [
+                ...base.console,
+                {
+                  id: nextEntryId(),
+                  kind: "error",
+                  text:
+                    "[LobsterBrowse] failed to load " + entry.kind + ": " + entry.url +
+                    " (" + reasonText(entry.reason) +
+                    (entry.status !== undefined ? ", HTTP " + entry.status : "") + ")",
+                  ts: Date.now(),
+                },
+              ].slice(-500),
+            },
+          };
         });
       } else if (ev.lb === "ready") {
         /* Stale-navigation guard: a ready that arrives after a newer
@@ -1302,38 +1331,7 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
-  /* ---- Find in page (#9) ---- */
-  const findInPage = (backward: boolean) => {
-    const q = findQuery.trim();
-    if (!q) return;
-    const f = frames.current.get(active.id);
-    const win = f
-      ? (f.contentWindow as (Window & { find?: (q: string, cs?: boolean, back?: boolean, wrap?: boolean) => boolean }) | null)
-      : null;
-    if (!win || typeof win.find !== "function") return;
-    /* window.find is non-standard but the supported cheap path in
-       Chromium; it highlights and scrolls to the match itself. */
-    try { win.find(q, false, backward, true); } catch { /* not supported */ }
-  };
-  /* Match label: a case-insensitive scan of the frame's text.
-     Approximate by design (no shadow-DOM crawl); window.find owns
-     the real highlighting. */
-  useEffect(() => {
-    if (!findOpen) return;
-    const q = findQuery.trim();
-    if (!q) { setFindCount(null); return; }
-    const f = frames.current.get(active.id);
-    const doc = f ? f.contentDocument : null;
-    if (!doc || !doc.body) { setFindCount(null); return; }
-    const text = (doc.body.textContent || "").toLowerCase();
-    const needle = q.toLowerCase();
-    let n = 0;
-    let pos = text.indexOf(needle);
-    while (pos !== -1) { n++; pos = text.indexOf(needle, pos + needle.length); }
-    setFindCount(n);
-  }, [findOpen, findQuery, active.id]);
-
-  /* ---- Per-site rules chip (#10) ---- */
+  /* ---- Per-site rules chip (#10) ---- */  /* ---- Per-site rules chip (#10) ---- */
   const activeRule = rules.find((r) => r.domain === uParts.host);
   /* Effective ad-block: global unless this site's rule disables it
      (proxyParams semantics). */
@@ -1473,6 +1471,7 @@ export default function BrowserView(props: Props) {
           <div key={t.id} className={"lb-page" + (t.id === active.id ? " active" : "")}>
             <iframe
               title={"Proxy tab " + t.id}
+              allow="clipboard-read; clipboard-write"
               ref={(el) => {
                 if (el) frames.current.set(t.id, el);
                 else frames.current.delete(t.id);
@@ -1574,6 +1573,7 @@ export default function BrowserView(props: Props) {
             frame={() => frames.current.get(active.id) ?? null}
             onClose={() => setDt(active.id, { open: false })}
             onOpenLogs={props.onOpenLogs}
+            sess={active.sess}
           />
         )}
 
@@ -1760,17 +1760,6 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
-          {/* Find in page (#9). */}
-          <m3e-icon-button
-            id="lb-find-btn"
-            toggle
-            aria-label="Find in page"
-            selected={findOpen ? "" : undefined}
-            onClick={() => setFindOpen((v) => !v)}
-          >
-            <m3e-icon name="search" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-find-btn" position="above">Find in page</m3e-tooltip>
           <m3e-icon-button
             id="lb-devtools-btn"
             aria-label="Developer tools"
@@ -1869,49 +1858,7 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
-          {/* Find bar (#9): a real m3e-search-bar owns the surface
-              (container, shape, height, spacing); the match label and
-              the prev/next/close actions ride the trailing slot.
-              Scoped to the active frame. */}
-          <m3e-search-bar {...{ class: "lb-find-bar" + (findOpen ? " open" : "") }} aria-label="Find in page">
-            <m3e-icon name="search" aria-hidden={true} slot="leading" />
-            <input
-              slot="input"
-              ref={findInputRef}
-              className="lb-find-input"
-              aria-label="Find in page"
-              placeholder="Find in page"
-              value={findQuery}
-              spellCheck={false}
-              onChange={(e) => setFindQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  findInPage(e.shiftKey);
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  setFindOpen(false);
-                }
-              }}
-            />
-            <span className={"lb-find-count" + (findQuery.trim() && findCount === 0 ? " none" : "")} slot="trailing">
-              {findQuery.trim() && findCount != null
-                ? findCount === 0
-                  ? "0 matches"
-                  : findCount + " match" + (findCount === 1 ? "" : "es")
-                : ""}
-            </span>
-            <m3e-icon-button aria-label="Previous match" onClick={() => findInPage(true)} slot="trailing">
-              <m3e-icon name="arrow_back" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button aria-label="Next match" onClick={() => findInPage(false)} slot="trailing">
-              <m3e-icon name="arrow_forward" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button aria-label="Close find bar" onClick={() => setFindOpen(false)} slot="trailing">
-              <m3e-icon name="close" aria-hidden={true} />
-            </m3e-icon-button>
-          </m3e-search-bar>
-          {/* Site info (#26): a real M3E card (elevated) anchored above
+          {/* Site info (#26): a real M3E card (elevated) anchored above          {/* Site info (#26): a real M3E card (elevated) anchored above
               the toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). It is the single
               entry point for connection facts, cookies and per-site

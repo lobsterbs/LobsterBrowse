@@ -290,9 +290,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              Zeolite
-            </m3e-button-segment>
             <m3e-button-segment checked={!zeoliteOwned(settings.proxyEngine) ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
             </m3e-button-segment>
@@ -301,21 +298,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-button-segment>
           </m3e-segmented-button>
           </div>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite is the stable engine: a service worker that intercepts proxied routes on your
-            device and transports them over Wisp client-side, with on-device caching and
-            in-worker rewriting. When no worker controls the page (cold start, worker restart,
-            or a browser without module service workers) the /lj/ routes answer with an honest
-            load-error card, they are NOT silently re-proxied. ScramJet does adblock/tracker stripping,
-            HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
-            de-amping on every upstream request.
-          </p>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite Preview (/zl/) is the unstable NativeTransit-first experiment: the same engine
-            worker claims /zl/ routes and transports requests natively over Wisp, with rewriting
-            only where browser origin semantics require it. Expect rough edges; switching back to
-            Zeolite or ScramJet is instant and /r/ + /lj/ are untouched.
-          </p>
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
