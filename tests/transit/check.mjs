@@ -223,6 +223,37 @@ try {
     spa.includes("href=\"sub/page\"") && spa.includes("href=\"https://example.com/abs\""),
     spa.slice(0, 80));
 
+  /* Tier-8 (Vanadium): navigation surfaces + authentication flow. */
+  r = await fetch(base + "/nav.html");
+  ok("nav 200 html", r.status === 200 && (r.headers.get("content-type") || "").includes("text/html"), r.status + " " + r.headers.get("content-type"));
+  const nav = await r.text();
+  ok("nav carries surfaces",
+    nav.includes("<iframe src=\"/frame.html\"") &&
+    nav.includes("<script type=\"module\" src=\"/mod.mjs\"") &&
+    nav.includes("new XMLHttpRequest") && nav.includes("import(\"/dyn.mjs\")") &&
+    nav.includes("href=\"rel/page\"") && nav.includes("href=\"/abs/page\"") && nav.includes("href=\"https://example.com/x\""),
+    nav.slice(0, 80));
+  r = await fetch(base + "/frame.html");
+  ok("frame 200 html", r.status === 200 && (await r.text()).includes("frame page"));
+  r = await fetch(base + "/mod.mjs");
+  ok("mod.mjs 200 js", r.status === 200 && (r.headers.get("content-type") || "").includes("javascript") && (await r.text()).includes("export const ok"));
+  r = await fetch(base + "/dyn.mjs");
+  ok("dyn.mjs 200 js", r.status === 200 && (await r.text()).includes("dyn-ok"));
+
+  r = await fetch(base + "/auth/protected", { redirect: "manual" });
+  ok("auth redirect 302", r.status === 302, "got " + r.status);
+  ok("auth redirect to login", r.headers.get("location") === "/auth/login", String(r.headers.get("location")));
+  r = await fetch(base + "/auth/login");
+  {
+    const scl = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie")];
+    ok("login sets sid", scl.length === 1 && scl[0].startsWith("sid=auth"), JSON.stringify(scl));
+  }
+  ok("login page body", (await r.text()).includes("login page"));
+  r = await fetch(base + "/auth/protected", { headers: { cookie: "sid=auth" } });
+  ok("auth cookie accepted", r.status === 200 && (await r.json()).auth === "ok", "got " + r.status);
+  r = await fetch(base + "/auth/protected", { headers: { cookie: "sid=wrong" }, redirect: "manual" });
+  ok("wrong cookie still redirected", r.status === 302, "got " + r.status);
+
   const lb = process.env.LB_ORIGIN;
   if (lb) {
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
@@ -262,6 +293,20 @@ try {
     const rd307 = await r307.json();
     ok("r 307 replays POST", rd307.method === "POST", rd307.method);
     ok("r 307 preserves body", rd307.body === "x=2", rd307.body);
+
+    /* Tier-8 through /r/: rewrite routing of navigation surfaces and
+       the authentication redirect chain. */
+    const rn = await fetch(lb + "/r/" + b64u(base + "/nav.html"));
+    ok("r nav 200", rn.status === 200, "got " + rn.status);
+    const rnt = await rn.text();
+    const srcRouted = (rnt.match(/src="\/r\//g) || []).length;
+    ok("r nav routes iframe+module srcs", srcRouted >= 2, "src=/r/ count " + srcRouted);
+    ok("r nav routes links", rnt.includes("href=\"/r/"), "no /r/ link routes in rewritten nav");
+
+    const ra = await fetch(lb + "/r/" + b64u(base + "/auth/protected"));
+    ok("r auth chain 200", ra.status === 200, "got " + ra.status);
+    const rat = await ra.text();
+    ok("r auth lands on login", rat.includes("login page"), rat.slice(0, 80));
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this
