@@ -18,6 +18,12 @@ function freshSid(): string {
 export function resetIncognitoSid(): void {
   incSid = "";
 }
+/* The current incognito session id (created lazily; the same one the
+   /r/ chain sends as lb_sid with lb_inc=1). Also used as the Zeolite
+   engine's throwaway jar profile while incognito is on. */
+export function incognitoSid(): string {
+  return cookieSid(true);
+}
 function cookieSid(incognito: boolean): string {
   if (incognito) {
     if (!incSid) incSid = freshSid();
