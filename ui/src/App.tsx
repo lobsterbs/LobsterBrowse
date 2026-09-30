@@ -4,6 +4,7 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import {
+  engineRoutePrefix,
   loadSettings,
   saveSettings,
   loadSiteRules,
@@ -209,11 +210,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tabs, activeId, newTab, closeTab]);
 
-  /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
+  /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
      legacy v3 page-cache worker is gone: it owned the "/" scope and
      kept the Zeolite worker from ever registering, so unregister it
-     and drop its caches when found, then push the /lj/ route shape —
+     and drop its caches when found, then push the engine route prefix —
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
@@ -226,7 +227,11 @@ export default function App() {
        since Zeolite#17 the worker persists the route shape and
        restores it before the first fetch. */
     const push = async () => {
-      const msg = { type: "zl:config", prefix: "/lj/", scheme: "b64u" };
+      const msg = {
+        type: "zl:config",
+        prefix: engineRoutePrefix(settings.proxyEngine),
+        scheme: "b64u",
+      };
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(msg, 8000);
@@ -255,7 +260,7 @@ export default function App() {
       }
       await push();
     })();
-  }, []);
+  }, [settings.proxyEngine]);
 
   /* ---- Zeolite adblock: the engine's /rules.json (the migrated
        ad/tracker host lists) is evaluated client-side in its worker;

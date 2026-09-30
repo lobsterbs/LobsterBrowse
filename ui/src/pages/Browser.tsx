@@ -191,12 +191,13 @@ export default function BrowserView(props: Props) {
   };
   const startDownload = (href: string, name: string, sess?: string) => {
     const id = dlSeq.current++;
-    /* Engine-routed hrefs (/r/, /lj/) are fetched as-is (the session
+    /* Engine-routed hrefs (/r/, /lj/, /zl/) are fetched as-is (the session
        token is already on them); anything else goes through routeUrl
        so settings, site rules, incognito jar and the session token
        apply. Incognito downloads used to fall back to the shared jar
        because the incognito flag never reached this call. */
-    const target = href.startsWith("/r/") || href.startsWith("/lj/")
+    const target =
+      href.startsWith("/r/") || href.startsWith("/lj/") || href.startsWith("/zl/")
       ? href
       : routeUrl(settings, rules, href, props.incognito, sess);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
@@ -583,7 +584,9 @@ export default function BrowserView(props: Props) {
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
     if (attr) {
-      if (attr.startsWith("/r/") || attr.startsWith("/lj/")) {
+      if (
+        attr.startsWith("/r/") || attr.startsWith("/lj/") || attr.startsWith("/zl/")
+      ) {
         href = attr;
       } else {
         try {
@@ -806,7 +809,11 @@ export default function BrowserView(props: Props) {
         "/logs", "/build", "/wisp", "/favicon",
       ];
       const isAppPath = appPrefixes.some((p) => path === p || path.startsWith(p + "/"));
-      if (!path.startsWith("/r/") && !path.startsWith("/lj/")) {
+      if (
+        !path.startsWith("/r/") &&
+        !path.startsWith("/lj/") &&
+        !path.startsWith("/zl/")
+      ) {
         if (!t.url || path === "/" || isAppPath) return;
         try {
           const loc = f.contentWindow!.location;
