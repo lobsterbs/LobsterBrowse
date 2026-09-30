@@ -1594,6 +1594,159 @@ fn rewrite_css(css: &str, base: &str, suffix: &str, prefix: &str) -> String {
 
 /// Rewrite URL-bearing attributes inside a single tag.
 /// kind: 0 = plain URL attr, 1 = srcset, 2 = inline style CSS.
+#[cfg(test)]
+mod importmap_tests {
+    use super::{rewrite_html, rewrite_importmap};
+
+    const MAP: &str = r#"{"imports":{"im-bare":"/im-bare.mjs","/im-path.mjs":"/im-alt.mjs","im-arr":["/im-arr1.mjs","data:text/javascript,export const ok = 1"],"im-data":"data:text/javascript,export const ok = 2"}}"#;
+
+    #[test]
+    fn values_route_through_the_engine() {
+        let out = rewrite_importmap(MAP, "https://x.test/page.html", "?lb_ab=1", "/r/");
+        assert!(out.contains(r#""im-bare":"/r/"#), "{out}");
+        assert!(!out.contains("/im-bare.mjs"), "{out}");
+        assert!(out.contains("data:text/javascript,export const ok = 1"), "{out}");
+        assert!(out.contains("data:text/javascript,export const ok = 2"), "{out}");
+        assert!(out.contains(r#""im-bare""#), "{out}");
+    }
+
+    #[test]
+    fn path_like_keys_rewrite_like_import_specifiers() {
+        let out = rewrite_importmap(MAP, "https://x.test/page.html", "?lb_ab=1", "/r/");
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let imports = v.get("imports").unwrap().as_object().unwrap();
+        let Some(mapped_key) = imports.keys().find(|k| k.starts_with("/r/")) else {
+            panic!("path-like key must be rewritten: {out}");
+        };
+        assert!(!out.contains("/im-path.mjs"), "{out}");
+        assert!(!out.contains("/im-alt.mjs"), "{out}");
+        // Byte-identical to what the import pass produces for the
+        // specifier that looks the key up, or the lookup stops matching.
+        let spec = super::rewrite_js_imports(
+            "import \"/im-path.mjs\";",
+            "https://x.test/page.html",
+            "?lb_ab=1",
+            "/r/",
+        );
+        assert!(spec.contains(mapped_key.as_str()), "{spec} vs {out}");
+    }
+
+    #[test]
+    fn scope_values_route_but_scope_keys_stay() {
+        let body = r#"{"imports":{},"scopes":{"https://cdn.example.com/js/":{"s1":"/s1.mjs"}}}"#;
+        let out = rewrite_importmap(body, "https://x.test/", "", "/r/");
+        assert!(out.contains("https://cdn.example.com/js/"), "{out}");
+        assert!(!out.contains("/s1.mjs"), "{out}");
+    }
+
+    #[test]
+    fn malformed_map_passes_through() {
+        let body = "not json at all";
+        assert_eq!(rewrite_importmap(body, "https://x.test/", "", "/r/"), body);
+    }
+
+    #[test]
+    fn importmap_script_body_is_rewritten_in_html() {
+        let html = format!("<script type=\"importmap\">{MAP}</script>");
+        let out = rewrite_html(&html, "https://x.test/page.html", "?lb_ab=1", "/r/");
+        assert!(out.contains("type=\"importmap\""), "{out}");
+        assert!(out.contains("\"im-bare\":\"/r/"), "{out}");
+        assert!(!out.contains("/im-bare.mjs"), "{out}");
+    }
+
+    #[test]
+    fn bare_specifiers_stay_for_the_map_to_resolve() {
+        let html = "<script type=\"module\">import { ok } from \"im-bare\"; window.__im = ok;</script>";
+        let out = rewrite_html(html, "https://x.test/page.html", "", "/r/");
+        assert!(out.contains("from \"im-bare\""), "{out}");
+    }
+}
+
+/// Rewrite an inline import map (<script type="importmap"> body).
+///
+/// Import maps remap module specifiers BEFORE any fetch: their values
+/// are URLs resolved against the document URL, which on the proxy
+/// origin is the /r/ (or /lj/) route itself. Unrewritten, a bare
+/// specifier like `import "foo"` resolves through the map to a path
+/// on the proxy origin and 404s, killing the module graph before any
+/// script runs; rewrite_js_imports deliberately leaves bare
+/// specifiers alone, so the map is the only thing that can route
+/// them. Values are rewritten with the same rewrite_url_attr the
+/// attribute and import passes use. URL-like keys ("/x.mjs", "./y")
+/// get the identical rewrite rewrite_js_imports applies to the import
+/// specifiers that look them up, so a rewritten specifier still
+/// matches its key; bare keys ("foo", "foo/") are the specifier
+/// surface apps import and stay verbatim. Relative keys resolved
+/// from a nested external module's own URL can mismatch (the key and
+/// the specifier rewrite against different bases); root-relative and
+/// absolute keys are base-independent and always match. Scope keys
+/// are referrer URL prefixes: a rewritten module referrer is its own
+/// engine route, which can never prefix-match, so scopes fall back to
+/// the top-level map (documented limit, not silently mangled).
+/// Malformed JSON is passed through verbatim: the page is broken
+/// either way and the proxy must not invent a different breakage.
+fn rewrite_importmap(body: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
+    let Ok(mut map) = serde_json::from_str::<serde_json::Value>(body) else {
+        return body.to_string();
+    };
+    if let Some(imports) = map.get_mut("imports") {
+        rewrite_importmap_entries(imports, page_url, suffix, prefix);
+    }
+    if let Some(scopes) = map.get_mut("scopes") {
+        if let serde_json::Value::Object(scope_map) = scopes {
+            for entries in scope_map.values_mut() {
+                rewrite_importmap_entries(entries, page_url, suffix, prefix);
+            }
+        }
+    }
+    serde_json::to_string(&map).unwrap_or_else(|_| body.to_string())
+}
+
+fn rewrite_importmap_entries(
+    entries: &mut serde_json::Value,
+    page_url: &str,
+    suffix: &str,
+    prefix: &str,
+) {
+    let Some(map) = entries.as_object_mut() else {
+        return;
+    };
+    let keys: Vec<String> = map.keys().cloned().collect();
+    for k in keys {
+        if let Some(v) = map.get_mut(&k) {
+            match v {
+                serde_json::Value::String(s) => {
+                    if is_rewritable_url(s) {
+                        *s = rewrite_url_attr(s, page_url, suffix, prefix);
+                    }
+                }
+                // Fallback arrays (spec: first loadable entry wins).
+                serde_json::Value::Array(a) => {
+                    for e in a.iter_mut() {
+                        if let serde_json::Value::String(s) = e {
+                            if is_rewritable_url(s) {
+                                *s = rewrite_url_attr(s, page_url, suffix, prefix);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let path_like_key = k.starts_with("./")
+            || k.starts_with("../")
+            || (k.starts_with('/') && !k.starts_with("//"));
+        if path_like_key {
+            let rewritten = rewrite_url_attr(&k, page_url, suffix, prefix);
+            if rewritten != k {
+                if let Some(v) = map.remove(&k) {
+                    map.insert(rewritten, v);
+                }
+            }
+        }
+    }
+}
+
 fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix: &str) -> String {
     // Challenge-widget frames must keep their real cross-origin src (see
     // is_frame_to_challenge_host); every other URL-bearing attribute on
@@ -1731,6 +1884,9 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
             let is_module = tag_lower.contains("type=\"module\"")
                 || tag_lower.contains("type='module'")
                 || tag_lower.contains("type=module");
+            let is_importmap = tag_lower.contains("type=\"importmap\"")
+                || tag_lower.contains("type='importmap'")
+                || tag_lower.contains("type=importmap");
             match lower[end + 1..].find("</script") {
                 Some(c) => {
                     let cs = end + 1 + c;
@@ -1739,7 +1895,9 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
                         .map(|x| cs + x + 1)
                         .unwrap_or(html.len());
                     let body = &html[end + 1..cs];
-                    if is_module {
+                    if is_importmap {
+                        out.push_str(&rewrite_importmap(body, page_url, suffix, prefix));
+                    } else if is_module {
                         out.push_str(&rewrite_js_literals(
                             &rewrite_js_imports(body, page_url, suffix, prefix),
                             page_url,
@@ -1754,7 +1912,9 @@ fn rewrite_html(html: &str, page_url: &str, suffix: &str, prefix: &str) -> Strin
                 }
                 None => {
                     let body = &html[end + 1..];
-                    if is_module {
+                    if is_importmap {
+                        out.push_str(&rewrite_importmap(body, page_url, suffix, prefix));
+                    } else if is_module {
                         out.push_str(&rewrite_js_literals(
                             &rewrite_js_imports(body, page_url, suffix, prefix),
                             page_url,
@@ -3422,11 +3582,6 @@ async fn main() {
         // worker controls the page — answer with the honest load-error
         // page instead of a second, divergent server rewriter.
         .route("/lj/:target", any(zl_sw_required))
-        // Beta branch (beta/zeolite-nativetransit): /zl/ is the explicit
-        // NativeTransit-first engine route. Same honest contract as /lj/:
-        // the Zeolite worker owns the route; the server only answers when
-        // no worker controls the page.
-        .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
@@ -3451,11 +3606,6 @@ async fn main() {
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
         .nest_service("/libcurl", ServeDir::new("zlsw/libcurl"))
-        // Same root-alias class as /libcurl above: the engine dist
-        // resolves the rewriter wasm at the origin root
-        // (/rewriter_wasm_bg.wasm), not under /zlsw/; serve the
-        // vendored copy at the path the worker actually requests.
-        .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
         // Extension subsystem routes live in the Zeolite worker
         // (IndexedDB-backed), NOT on this server: any request that
         // slips past the worker gets an honest 404, never the SPA
@@ -3872,22 +4022,6 @@ async fn zl_bootstrap_js() -> Response {
         Ok(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/javascript")
-            .header(header::CACHE_CONTROL, "no-cache")
-            .body(Body::from(bytes))
-            .expect("static response build"),
-        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
-    }
-}
-
-/// Rewriter wasm root alias. The vendored engine dist builds the
-/// wasm URL as new URL("/rewriter_wasm_bg.wasm", import.meta.url);
-/// the absolute path drops the /zlsw/ base, so the request lands on
-/// the origin root and 404s without this alias.
-async fn zl_rewriter_wasm() -> Response {
-    match tokio::fs::read("zlsw/rewriter_wasm_bg.wasm").await {
-        Ok(bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "application/wasm")
             .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(bytes))
             .expect("static response build"),

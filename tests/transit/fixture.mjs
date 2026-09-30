@@ -137,6 +137,25 @@ const FRAME_HTML = [
 const MOD_JS = "export const ok = \"mod-ok\";";
 const DYN_JS = "export const ok = \"dyn-ok\";";
 
+/* Tier-9 (Vanadium): import map surfaces. The page carries an inline
+   <script type="importmap"> whose values must route through the
+   engine: bare-key values, a path-like key AND value (pin/redirect
+   case), and a fallback array mixing a rewritable URL with a data:
+   URL that must stay verbatim. The inline module uses the bare
+   specifier so the map is the only thing that can route it. */
+const IMPORTMAP_HTML = [
+  "<!doctype html><html><head><meta charset=\"utf-8\">",
+  "<title>importmap</title>",
+  "<script type=\"importmap\">{\"imports\":{\"im-bare\":\"/im-bare.mjs\",\"/im-path.mjs\":\"/im-alt.mjs\",\"im-arr\":[\"/im-arr1.mjs\",\"data:text/javascript,export const ok = 1\"],\"im-data\":\"data:text/javascript,export const ok = 2\"}}</script>",
+  "<script type=\"module\">import { ok } from \"im-bare\"; window.__im = ok;</script>",
+  "</head><body>",
+  "<h1>importmap page</h1>",
+  "</body></html>",
+].join("");
+const IM_BARE_JS = "export const ok = \"im-bare-ok\";";
+const IM_ALT_JS = "export const ok = \"im-alt-ok\";";
+const IM_ARR1_JS = "export const ok = \"im-arr1-ok\";";
+
 function handler(req, res) {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/" && req.method === "GET") {
@@ -344,6 +363,23 @@ function handler(req, res) {
     }
     res.writeHead(302, { location: "/auth/login" });
     return res.end();
+  }
+  /* Tier-9 (Vanadium): import map surfaces. */
+  if (p === "/importmap.html" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(IMPORTMAP_HTML);
+  }
+  if (p === "/im-bare.mjs" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(IM_BARE_JS);
+  }
+  if (p === "/im-alt.mjs" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(IM_ALT_JS);
+  }
+  if (p === "/im-arr1.mjs" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(IM_ARR1_JS);
   }
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");
