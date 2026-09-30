@@ -2211,11 +2211,6 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
             parts.push(format!("lb_ua={}", pct_enc(ua)));
         }
     }
-    if let Some(h) = params.get("hdrs") {
-        if !h.is_empty() {
-            parts.push(format!("lb_hdrs={}", pct_enc(h)));
-        }
-    }
     // Session token threads onto every rewritten URL so subresource
     // fetches log into the same per-session ring as the navigation.
     if let Some(s) = params.get("sess") {
@@ -2466,7 +2461,7 @@ async fn engine_proxy(
         }
     }
     for k in [
-        "ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess", "sid",
+        "ab", "trk", "https", "ua", "img", "inc", "sess", "sid",
     ] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
@@ -2593,44 +2588,6 @@ async fn engine_proxy(
     // browser would send.
     req = req.header("Sec-GPC", "1");
     req = req.header("DNT", "1");
-    // Custom outbound header profile (Settings > Advanced): lines of
-    // "Name: value", base64url-encoded in the lb_hdrs param. Applied
-    // last so a profile can override the defaults above. Hop-by-hop and
-    // jar-managed headers are blocked.
-    if let Some(hdrs_b64) = params.get("hdrs") {
-        if let Some(raw) = b64url_decode(hdrs_b64) {
-            if let Ok(text) = String::from_utf8(raw) {
-                for line in text.lines().take(16) {
-                    let Some((name, value)) = line.split_once(':') else {
-                        continue;
-                    };
-                    let name = name.trim();
-                    let value: String = value
-                        .chars()
-                        .filter(|c| *c != '\u{000d}' && *c != '\u{000a}')
-                        .take(512)
-                        .collect();
-                    let lower = name.to_ascii_lowercase();
-                    let valid = !name.is_empty()
-                        && !value.is_empty()
-                        && name
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                        && ![
-                            "host",
-                            "content-length",
-                            "connection",
-                            "transfer-encoding",
-                            "cookie",
-                        ]
-                        .contains(&lower.as_str());
-                    if valid {
-                        req = req.header(name, value);
-                    }
-                }
-            }
-        }
-    }
     // Referer recovery: the browser sends the engine-local route as the
     // Referer of subresource requests. Decoding it back to the real page
     // URL means upstream sites (and CAPTCHA providers like Cloudflare
