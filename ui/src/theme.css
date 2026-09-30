@@ -956,7 +956,10 @@ m3e-nav-rail.lb-rail-hidden {
   padding: var(--md-sys-measurement-space50);
   border-radius: var(--m3e-shape-sm);
   cursor: pointer;
-  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease);
+  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
+    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-tile:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
@@ -964,9 +967,18 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-tabs-tile.active {
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
 }
+/* The dying tile also surrenders its layout footprint: width and
+   padding animate to 0 and a negative margin eats the row gap, so the
+   surviving tiles slide over smoothly inside the 240ms close window
+   and the final unmount changes nothing (#29). */
 .lb-tabs-tile.closing {
   opacity: 0;
   transform: scale(0.92);
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin-right: calc(-1 * var(--md-sys-measurement-space100, 8px));
+  overflow: hidden;
 }
 .lb-tab-preview {
   position: relative;
