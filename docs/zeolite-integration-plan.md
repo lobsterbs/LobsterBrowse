@@ -61,7 +61,8 @@ compiles; it does not browse). The beta branch isolates that risk.
    respective passes, so the page stays framed and flips its status text
    to "script ran".
 4. Engine-mode WebSocket virtual origins: IMPLEMENTED (2026-09-30,
-   Zeolite engine commit cd97712e). The zl:wsOpen upgrade handshake now
+   Zeolite engine commit e3f1a171, CI-green after the tsc fix for the
+   message-event type). The zl:wsOpen upgrade handshake now
    carries the per-origin identity instead of the single bridge
    identity every proxied site used to share: the initiator's Origin,
    the jar's cookies for the target (cookie-authenticated upgrades

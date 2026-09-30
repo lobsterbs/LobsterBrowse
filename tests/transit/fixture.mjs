@@ -86,6 +86,25 @@ const WORKERS_HTML = [
   "</script></body></html>",
 ].join("");
 
+/* Tier-7: deterministic SPA page (history API, popstate, hash, window.open,
+   relative + absolute links) for the deferred browser pass. */
+const SPA_HTML = [
+  "<!doctype html><html><head><meta charset=\"utf-8\">",
+  "<title>spa</title></head><body>",
+  "<h1>spa page</h1>",
+  "<div id=\"status\">init</div>",
+  "<a href=\"/spa.html\">self</a>",
+  "<a href=\"sub/page\">rel</a>",
+  "<a href=\"https://example.com/abs\">abs</a>",
+  "<script>",
+  "var s = document.getElementById(\"status\");",
+  "try { history.replaceState({ n: 1 }, \"\", \"#r1\"); s.textContent = \"replace:\" + location.hash; } catch (e) { s.textContent = \"throw:\" + String(e); }",
+  "window.addEventListener(\"popstate\", function (e) { s.textContent = \"pop:\" + JSON.stringify(e.state); });",
+  "try { history.pushState({ n: 2 }, \"\", \"#p2\"); s.textContent = \"push:\" + location.hash; } catch (e) { s.textContent = \"throw:\" + String(e); }",
+  "try { var w = window.open(\"/spa.html\", \"_blank\"); s.textContent = w ? \"open:ok\" : \"open:blocked\"; if (w) w.close(); } catch (e) { s.textContent = \"throw:\" + String(e); }",
+  "</script></body></html>",
+].join("");
+
 function handler(req, res) {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/" && req.method === "GET") {
@@ -108,7 +127,7 @@ function handler(req, res) {
     res.writeHead(302, { location: "/" });
     return res.end();
   }
-  if (p === "/echo" && req.method === "POST") {
+  if (p === "/echo") {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
     req.on("end", () => {
@@ -190,6 +209,79 @@ function handler(req, res) {
   if (p === "/workers.html" && req.method === "GET") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(WORKERS_HTML);
+  }
+  /* Tier-7: redirect-chain semantics (relative + absolute hops with
+     per-hop Set-Cookie), 303/307 method replay into /echo, conditional
+     GET, bare 204, MIME-typed binary resources, cookie Path scoping and
+     the SPA page. Deterministic like everything else here. */
+  if (p === "/redir-chain/a" && req.method === "GET") {
+    res.setHeader("set-cookie", ["hopprobe=a; Path=/; Max-Age=3600"]);
+    res.writeHead(302, { location: "/redir-chain/b" });
+    return res.end();
+  }
+  if (p === "/redir-chain/b" && req.method === "GET") {
+    res.setHeader("set-cookie", ["hopprobe=b; Path=/; Max-Age=3600"]);
+    res.writeHead(302, { location: "http://" + (req.headers.host || "x") + "/redir-chain/c" });
+    return res.end();
+  }
+  if (p === "/redir-chain/c" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ chain: "done", cookies: req.headers.cookie || "" }));
+  }
+  if (p === "/redir-303") {
+    res.writeHead(303, { location: "/echo" });
+    return res.end();
+  }
+  if (p === "/redir-307") {
+    res.writeHead(307, { location: "/echo" });
+    return res.end();
+  }
+  if (p === "/etag" && req.method === "GET") {
+    if ((req.headers["if-none-match"] || "") === "\"fixed-etag\"") {
+      res.writeHead(304, { etag: "\"fixed-etag\"" });
+      return res.end();
+    }
+    res.writeHead(200, { "content-type": "text/plain", etag: "\"fixed-etag\"" });
+    return res.end("etag body");
+  }
+  if (p === "/nocontent" && req.method === "GET") {
+    res.writeHead(204);
+    return res.end();
+  }
+  if (p === "/font.woff2" && req.method === "GET") {
+    const b = Buffer.alloc(64);
+    b.write("wOF2", 0, "latin1");
+    res.writeHead(200, { "content-type": "font/woff2" });
+    return res.end(b);
+  }
+  if (p === "/media.mp4" && req.method === "GET") {
+    const b = Buffer.alloc(32);
+    b.writeUInt32BE(8, 0);
+    b.write("ftyp", 4, "latin1");
+    b.write("isom", 8, "latin1");
+    res.writeHead(200, { "content-type": "video/mp4" });
+    return res.end(b);
+  }
+  if (p === "/icon.svg" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "image/svg+xml" });
+    return res.end("<svg xmlns=\"http://www.w3.org/2000/svg\"><use href=\"sprite.svg#sym\"/></svg>");
+  }
+  if (p === "/manifest.webmanifest" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "application/manifest+json" });
+    return res.end("{\"name\":\"fixture\",\"start_url\":\"/\"}");
+  }
+  if (p === "/cookie-scope" && req.method === "GET") {
+    res.setHeader("set-cookie", ["pathprobe=p; Path=/scoped; Max-Age=3600"]);
+    res.writeHead(200, { "content-type": "text/plain" });
+    return res.end("scoped");
+  }
+  if (p === "/scoped/cookie" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/plain" });
+    return res.end(req.headers.cookie || "");
+  }
+  if (p === "/spa.html" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(SPA_HTML);
   }
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");

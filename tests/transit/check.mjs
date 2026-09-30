@@ -22,9 +22,14 @@ function ok(name, cond, detail) {
 }
 const b64u = (s) => Buffer.from(s, "utf8").toString("base64url");
 
-const fx = await startFixture(0);
+/* FIXTURE_ORIGIN: verify an already-deployed fixture (for example
+   https://lobsterbrowse-fixture.onrender.com) instead of spawning a
+   local one; pair it with LB_ORIGIN to gate a deployed beta
+   end to end. */
+const extFx = (process.env.FIXTURE_ORIGIN || "").replace(/\/+$/, "");
+const fx = extFx ? null : await startFixture(0);
 try {
-  const base = fx.origin;
+  const base = extFx || fx.origin;
 
   let r = await fetch(base + "/");
   ok("html status 200", r.status === 200, "got " + r.status);
@@ -110,7 +115,8 @@ try {
   const wht = await r.text();
   ok("workers page probes", wht.includes("new Worker(") && wht.includes("WebSocket(") && wht.includes("worker page"));
 
-  {
+  /* Raw-socket WS probe: local spawn only (needs the fixture port). */
+  if (!extFx) {
     const key = crypto.randomBytes(16).toString("base64");
     const sock = net.connect(fx.port, "127.0.0.1");
     await new Promise((resolve) => { sock.on("connect", resolve); });
@@ -138,6 +144,85 @@ try {
     sock.destroy();
   }
 
+  /* Tier-7: redirect chains, 303/307 method replay, conditional GET,
+     204, MIME-typed binaries, cookie Path scoping, SPA page shape. */
+  r = await fetch(base + "/redir-chain/a", { redirect: "manual" });
+  ok("chain a 302", r.status === 302, "got " + r.status);
+  ok("chain a relative location", r.headers.get("location") === "/redir-chain/b", String(r.headers.get("location")));
+  {
+    const sc2 = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie")];
+    ok("chain a hop cookie", sc2.length === 1 && sc2[0].startsWith("hopprobe=a"), JSON.stringify(sc2));
+  }
+  r = await fetch(base + "/redir-chain/a");
+  ok("chain followed status 200", r.status === 200, "got " + r.status);
+  const chain = await r.json();
+  ok("chain done", chain.chain === "done", JSON.stringify(chain));
+
+  r = await fetch(base + "/redir-303", { method: "POST", redirect: "manual", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  ok("303 manual status", r.status === 303, "got " + r.status);
+  ok("303 location /echo", r.headers.get("location") === "/echo", String(r.headers.get("location")));
+  r = await fetch(base + "/redir-303", { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  const e303 = await r.json();
+  ok("303 POST becomes GET", e303.method === "GET", e303.method);
+  ok("303 body dropped", e303.body === "", JSON.stringify(e303.body));
+
+  r = await fetch(base + "/redir-307", { method: "POST", redirect: "manual", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  ok("307 manual status", r.status === 307, "got " + r.status);
+  r = await fetch(base + "/redir-307", { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  const e307 = await r.json();
+  ok("307 replays POST", e307.method === "POST", e307.method);
+  ok("307 preserves body", e307.body === "x=2", e307.body);
+
+  r = await fetch(base + "/etag");
+  ok("etag 200", r.status === 200, "got " + r.status);
+  ok("etag header", r.headers.get("etag") === "\"fixed-etag\"", String(r.headers.get("etag")));
+  ok("etag body", (await r.text()) === "etag body");
+  r = await fetch(base + "/etag", { headers: { "if-none-match": "\"fixed-etag\"" } });
+  ok("etag conditional 304", r.status === 304, "got " + r.status);
+
+  r = await fetch(base + "/nocontent");
+  ok("204 status", r.status === 204, "got " + r.status);
+  ok("204 empty body", (await r.text()) === "");
+
+  r = await fetch(base + "/font.woff2");
+  ok("font content-type", (r.headers.get("content-type") || "").includes("font/woff2"), String(r.headers.get("content-type")));
+  {
+    const fb = Buffer.from(await r.arrayBuffer());
+    ok("font magic wOF2", fb.length === 64 && fb.subarray(0, 4).toString("latin1") === "wOF2", "len " + fb.length);
+  }
+
+  r = await fetch(base + "/media.mp4");
+  ok("media content-type", (r.headers.get("content-type") || "").includes("video/mp4"), String(r.headers.get("content-type")));
+  {
+    const mb = Buffer.from(await r.arrayBuffer());
+    ok("media ftyp box", mb.length === 32 && mb.subarray(4, 8).toString("latin1") === "ftyp", "len " + mb.length);
+  }
+
+  r = await fetch(base + "/icon.svg");
+  ok("svg content-type", (r.headers.get("content-type") || "").includes("image/svg+xml"), String(r.headers.get("content-type")));
+  ok("svg use href", (await r.text()).includes("<use href=\"sprite.svg#sym\">"));
+
+  r = await fetch(base + "/manifest.webmanifest");
+  ok("manifest content-type", (r.headers.get("content-type") || "").includes("application/manifest+json"), String(r.headers.get("content-type")));
+  ok("manifest json name", (await r.json()).name === "fixture");
+
+  r = await fetch(base + "/cookie-scope");
+  {
+    const scs = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie")];
+    ok("cookie-scope Path=/scoped", scs.length === 1 && scs[0].startsWith("pathprobe=p; Path=/scoped"), JSON.stringify(scs));
+  }
+  r = await fetch(base + "/scoped/cookie", { headers: { cookie: "pathprobe=p" } });
+  ok("scoped cookie echo", (await r.text()) === "pathprobe=p");
+
+  r = await fetch(base + "/spa.html");
+  ok("spa 200 html", r.status === 200 && (r.headers.get("content-type") || "").includes("text/html"), r.status + " " + r.headers.get("content-type"));
+  const spa = await r.text();
+  ok("spa deterministic pieces",
+    spa.includes("history.pushState") && spa.includes("history.replaceState") &&
+    spa.includes("popstate") && spa.includes("window.open") &&
+    spa.includes("href=\"sub/page\"") && spa.includes("href=\"https://example.com/abs\""),
+    spa.slice(0, 80));
+
   const lb = process.env.LB_ORIGIN;
   if (lb) {
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
@@ -160,14 +245,31 @@ try {
     ok("r large range status", rl.status === 206 || rl.status === 200, "got " + rl.status);
     const rlb = Buffer.from(await rl.arrayBuffer());
     ok("r large bytes start", rlb.length >= 100 && rlb.subarray(0, 100).equals(largeBytes.subarray(0, 100)), "len " + rlb.length);
+
+    /* Tier-7 through the /r/ engine: server-side hop following and
+       method+body replay semantics must match the browser's. */
+    const rc = await fetch(lb + "/r/" + b64u(base + "/redir-chain/a"));
+    ok("r chain status 200", rc.status === 200, "got " + rc.status);
+    const rcd = await rc.json();
+    ok("r chain followed to done", rcd.chain === "done", JSON.stringify(rcd).slice(0, 80));
+
+    const r303 = await fetch(lb + "/r/" + b64u(base + "/redir-303"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const rd303 = await r303.json();
+    ok("r 303 POST becomes GET", rd303.method === "GET", rd303.method);
+    ok("r 303 body dropped", rd303.body === "", JSON.stringify(rd303.body));
+
+    const r307 = await fetch(lb + "/r/" + b64u(base + "/redir-307"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const rd307 = await r307.json();
+    ok("r 307 replays POST", rd307.method === "POST", rd307.method);
+    ok("r 307 preserves body", rd307.body === "x=2", rd307.body);
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this
      module's top-level await pending (keep-alive / upgraded sockets),
      which node ends with silent exit code 13. Close is best-effort;
      the explicit exit below is authoritative. */
-  console.error("tier-0: body done, closing fixture");
-  fx.close();
+  console.error("tier-0: body done" + (fx ? ", closing fixture" : ""));
+  if (fx) fx.close();
 }
 
 console.log("tier-0: " + pass + " passed, " + fails.length + " failed" + (process.env.LB_ORIGIN ? " (LB_ORIGIN checks ran)" : " (fixture-only; set LB_ORIGIN for server checks)"));

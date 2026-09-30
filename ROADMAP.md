@@ -108,6 +108,16 @@ Bring README, AGENTS.md and architecture documentation into agreement with the i
 
 Complete only when the architecture is understood, obsolete fallback references are resolved, builds are reproducible, deployed engine assets can be verified, and core browsing still works.
 
+Status (2026-09-30): all Titanium items are in place except the recorded
+browser pass, which is deferred until a browser session is free. The
+deterministic transit suite (tests/transit, Tiers 0-7) gates everything
+CI can gate; the browser pass against a live beta origin is the one
+remaining step. The RewriteFallback audit is resolved above, the
+LB/Zeolite boundary is documented (AGENTS.md,
+docs/zeolite-integration.md), the build/deploy reliability checklist
+lives in DEPLOY.md, and README/AGENTS/DEPLOY agree on the current
+Zeolite pin (e3f1a171 / dist 3080d559).
+
 ---
 
 # 0.4 — Vanadium
