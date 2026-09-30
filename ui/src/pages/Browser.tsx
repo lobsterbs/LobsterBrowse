@@ -794,7 +794,7 @@ export default function BrowserView(props: Props) {
       /* Escaped-navigation recovery: challenge pages (Anubis etc.) get
          no shim on their intermediate hosts, so their JS sometimes
          "solves" the challenge by navigating the frame to a bare app
-         path, which the SPA fallback answers with index.html â the
+         path, which the SPA fallback answers with index.html — the
          user sees our app shell pretending to be the site. Detect a
          frame sitting on a non-route app path while the tab has a real
          URL, reconstruct the intended target and reload it through the
@@ -837,8 +837,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. AâBâC + back stays AâBâC at
-           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
+           move the index, do not append. A→B→C + back stays A→B→C at
+           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -1469,7 +1469,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} Â· route {routeUrl(settings, rules, errors[active.id].url)}
+                engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1483,7 +1483,7 @@ export default function BrowserView(props: Props) {
                       return a;
                     }, {}),
                   )
-                    .map(([k, n]) => n + " Ã " + k)
+                    .map(([k, n]) => n + " × " + k)
                     .join(", ")}
                   )
                 </div>
@@ -1755,7 +1755,7 @@ export default function BrowserView(props: Props) {
               type="button"
               className="lb-diag-tb-chip"
               aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures â open diagnostics"}
+              title={activeDt.fails.length + " load failures — open diagnostics"}
               onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
             >
               <m3e-icon name="warning" aria-hidden={true} />

@@ -1,4 +1,4 @@
-# AGENTS.md â LobsterBrowse
+# AGENTS.md — LobsterBrowse
 
 Guidance for AI agents and human contributors. Read this before changing the browser, proxy engine, UI, deployment configuration, or docs.
 
@@ -11,17 +11,17 @@ LobsterBrowse is an open-source proxy browser built around Rust/Axum, React + Ty
 Make sites work first, then improve browser-like compatibility. Do not add a headless browser or attempt to become a full Chromium/Firefox replacement.
 
 ## Repository map
-- `server/` â Rust workspace.
-- `server/bin/server/src/main.rs` â current Axum proxy implementation.
-- `server/crates/adblock/` â network filtering.
-- `ui/` â React + TypeScript + Vite.
-- `ui/src/App.tsx` â application shell/global state.
-- `ui/src/pages/Browser.tsx` â tabs, toolbar and frame integrations.
-- `ui/src/settings.ts` â settings/defaults/migrations.
-- `ui/src/store.ts` â local browser state.
-- `ui/public/lobsterjet.js` â legacy /lj cache/prefetch worker retained here.
-- `/zlsw/` â published Zeolite bundle.
-- `/zl-ext/` and `/zl-cs/` â Zeolite extension resource routes.
+- `server/` — Rust workspace.
+- `server/bin/server/src/main.rs` — current Axum proxy implementation.
+- `server/crates/adblock/` — network filtering.
+- `ui/` — React + TypeScript + Vite.
+- `ui/src/App.tsx` — application shell/global state.
+- `ui/src/pages/Browser.tsx` — tabs, toolbar and frame integrations.
+- `ui/src/settings.ts` — settings/defaults/migrations.
+- `ui/src/store.ts` — local browser state.
+- `ui/public/lobsterjet.js` — legacy /lj cache/prefetch worker retained here.
+- `/zlsw/` — published Zeolite bundle.
+- `/zl-ext/` and `/zl-cs/` — Zeolite extension resource routes.
 
 ## Current proxy paths
 `/r/<base64url target>` and `/lj/<base64url target>` use the existing server-side rewriting path. It rewrites URL-bearing HTML/CSS/srcset surfaces and injects runtime handling for APIs such as fetch/XHR, URL-bearing element properties, history and window.open.
