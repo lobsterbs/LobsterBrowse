@@ -372,8 +372,15 @@ export default function App() {
     );
   }
 
+  /* m3e-theme's density is a Number attribute on the M3E side (Lit
+     converts it with Number()): the app setting is the string
+     "normal" | "compact", so it must be mapped to the numeric M3E
+     density scale before it reaches the element. Passing "normal"
+     made Number("normal") = NaN and the theme emitted
+     --md-sys-density-scale: NaN, which poisoned every
+     DensityToken.calc() in the density-aware components (#27). */
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density === "compact" ? "-1" : undefined}>
       <div className="lb-shell">
         {/* The rail is always fully visible in every view: no hiding,
            no sliver, no click-to-toggle. */}
