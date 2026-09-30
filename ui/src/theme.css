@@ -405,9 +405,9 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), flex-basis 260ms var(--m3e-spring);
 }
-.lb-tb-pill.expanded {
+.lb-tb-pill.expanded { flex-basis: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
 }
@@ -1146,14 +1146,8 @@ m3e-snackbar {
    color, shape, height, spacing). App CSS only positions the overlay,
    sizes the slotted input, and styles the match label with the
    component's own supporting-text tokens. ---- */
-.lb-find-bar {
-  position: absolute;
-  bottom: calc(100% + var(--md-sys-measurement-space100, 8px));
-  right: 0;
-  width: min(420px, calc(100vw - var(--md-sys-measurement-space200, 16px)));
-  z-index: 45;
-  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
-}
+.lb-find-bar { position: absolute; bottom: calc(100% + var(--md-sys-measurement-space100, 8px)); width: min(420px, calc(100vw - var(--md-sys-measurement-space200, 16px))); z-index: 45; left: 50%; transform: translateX(-50%) translateY(8px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--m3e-spring), transform 220ms var(--m3e-spring), visibility 220ms; }
+.lb-find-bar.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(-50%) translateY(0); }
 .lb-find-input {
   width: 100%;
   min-width: 0;
