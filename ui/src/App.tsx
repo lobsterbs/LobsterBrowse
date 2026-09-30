@@ -10,6 +10,7 @@ import {
   loadSiteRules,
   saveSiteRules,
   resetIncognitoSid,
+  resolveUa,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -262,15 +263,34 @@ export default function App() {
     })();
   }, [settings.proxyEngine]);
 
-  /* ---- Zeolite adblock: the engine's /rules.json (the migrated
-       ad/tracker host lists) is evaluated client-side in its worker;
-       keep it in sync with the Ad & tracker blocking setting. The
-       worker resets the toggle to enabled on restart, so re-send on
-       boot and on change. Per-site adblock overrides still apply to
-       the server-side engine only (documented gap). ---- */
+  /* ---- Zeolite adblock + per-site rules: the engine's /rules.json
+       (the migrated ad/tracker host lists) is evaluated client-side in
+       its worker; keep the toggle in sync with the Ad & tracker
+       blocking setting. The per-site rules (rules chip / Settings:
+       host-scoped adblock switch, UA preset) ride along as a zl:rules
+       push built from the same loadSiteRules() store the /r/ chain
+       reads, so the engine applies them per target host with the same
+       semantics the server engine gets from the lb_ options (adblock
+       can only disable per site; the global setting still wins). The
+       worker resets both on restart, so re-send on boot and on
+       change. ---- */
   useEffect(() => {
     void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
-  }, [settings.adblock]);
+    void zlSend(
+      {
+        type: "zl:rules",
+        /* Global UA default: hosts without a rule get the same UA the
+           /r/ server engine would send (resolveUa with no rule hit). */
+        ua: resolveUa(settings, rules, "") ?? undefined,
+        rules: rules.map((r) => ({
+          host: r.domain,
+          adblock: r.adblock === false ? false : undefined,
+          ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
+        })),
+      },
+      8000,
+    );
+  }, [settings, rules]);
 
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker

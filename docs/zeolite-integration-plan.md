@@ -16,13 +16,21 @@ compiles; it does not browse). The beta branch isolates that risk.
 
 ## Current state (honest gaps to close)
 
-1. Per-site rules do not reach the Zeolite engine. The rules editor
-   (per-site ad-block switch, UA preset) builds lb_ query options that
-   the /r/ rewriter honors. The /lj/ engine path ignores per-site
-   overrides today; the UI states this honestly. Plan: a zl:config
-   control message that pushes the per-site rule set (host, adblock,
-   ua) into the engine request pipeline so the SW applies them per
-   target host before the request leaves the browser.
+1. Per-site rules into the engine: IMPLEMENTED (2026-09-30, Zeolite
+   engine commit f3268eff, LB side on this branch). A zl:rules control
+   message (not zl:config; the message carries a rule list plus a
+   global default UA, so it got its own type) pushes the per-site rule
+   set (host, adblock, ua) into the engine request pipeline: App.tsx
+   sends it on boot and on every settings/rules change, alongside the
+   existing zl:adblock toggle. The engine (rules.ts + sw.ts) evaluates
+   per target host with the same semantics as the /r/ chain: the
+   adblock override can only disable per site (the global toggle
+   wins), and the UA override is applied to the outgoing wisp request
+   headers the SW builds itself (an active engine fingerprint profile
+   still wins). Overrides are ephemeral: the SW resets them on restart
+   and LB re-sends. Verified by engine unit tests (rules.test.ts);
+   live behavioral verification rides the beta deploy of the pin
+   bump.
 2. Incognito jar gap in engine mode. Incognito sessions swap the
    server-side cookie jar via session tokens on /r/ routes. The engine
    path does not carry a jar identity, so incognito isolation is
