@@ -10,6 +10,7 @@ import {
   loadSiteRules,
   saveSiteRules,
   resetIncognitoSid,
+  incognitoSid,
   resolveUa,
   type Settings,
   type SiteRule,
@@ -291,6 +292,24 @@ export default function App() {
       8000,
     );
   }, [settings, rules]);
+
+  /* ---- Zeolite incognito jar: while incognito is on, the engine's
+       cookie jar must be a throwaway, same semantics as the /r/
+       engine's lb_inc jar: requests and document.cookie reads/writes
+       use a session profile that never touches IndexedDB and dies the
+       moment incognito ends. The SW resets the profile to default on
+       restart, so re-send on the incognito toggle and on
+       controllerchange (a restart mid-incognito can briefly admit
+       cookies into the default jar until this re-push lands; known,
+       documented in docs/cookies.md). ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:jarProfile", profile: incognito ? incognitoSid() : null }, 8000);
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [incognito]);
 
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker

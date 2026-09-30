@@ -31,12 +31,22 @@ compiles; it does not browse). The beta branch isolates that risk.
    and LB re-sends. Verified by engine unit tests (rules.test.ts);
    live behavioral verification rides the beta deploy of the pin
    bump.
-2. Incognito jar gap in engine mode. Incognito sessions swap the
-   server-side cookie jar via session tokens on /r/ routes. The engine
-   path does not carry a jar identity, so incognito isolation is
-   weaker there. Plan: thread the session token through zl:wsOpen /
-   the wisp transport and give the engine per-session jar state, same
-   semantics as /r/.
+2. Incognito jar in engine mode: IMPLEMENTED (2026-09-30, Zeolite
+   engine commit cf2d0400, LB side on this branch). A zl:jarProfile
+   control message switches the engine cookie jar between the durable
+   default profile and a throwaway session profile: App.tsx pushes the
+   incognito sid while incognito is on (null otherwise) on boot, on the
+   toggle, and on controllerchange. Session-profile cookies are
+   in-memory only (never IndexedDB) and die on the switch back - the
+   same semantics as the /r/ lb_inc jar. The original plan sketch
+   (thread the sid through zl:wsOpen / the wisp transport) turned out
+   unnecessary: the engine jar lives in the service worker, not the
+   server, so no transport change is needed. Known limits, documented
+   in the Zeolite docs/cookies.md: a SW restart mid-incognito briefly
+   admits cookies into the default jar until the re-push lands, the
+   engine page cache is shared across profiles (cookies never are),
+   and the profile is global SW state, so two app windows in different
+   incognito states cannot hold different profiles (last push wins).
 3. js_antiframe parity: RESOLVED, not a gap (corrected per LB#24; the
    earlier claim that the Zeolite wasm rewriter had no counterpart
    pass was stale). The port exists and is wired in:
