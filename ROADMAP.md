@@ -171,10 +171,13 @@ Status (2026-09-30): started. Tier-8 transit probes gate the
 server-side matrix - navigation-surface routing (iframe doc, module
 script, dynamic import, XHR, relative/absolute/external links) and
 the authentication-redirect flow through /r/, on top of the Tier-7
-redirect-chain and method-replay gates. Execution-level behavior
-(XHR, dynamic imports, iframe subresource routing, SPA navigation,
-reloads, cross-origin navigation) needs the recorded browser pass and
-stays open.
+redirect-chain and method-replay gates. The deployed-pair gate
+(transit-live CI job) runs the full transit check against the live
+beta + fixture Render services on every beta push, so the
+server-side live verification is CI-recorded rather than a one-off.
+Execution-level behavior (XHR, dynamic imports, iframe subresource
+routing, SPA navigation, reloads, cross-origin navigation) needs the
+recorded browser pass and stays open.
 
 ---
 
@@ -451,13 +454,16 @@ Status: **started on the beta line, 2026-09-30.** Zeolite's engine
 API has stabilized (3.0 Diamond). Deep integration now lands on
 beta/zeolite-nativetransit per docs/zeolite-integration-plan.md and
 promotes to main via PR #12 only when green and live-verified.
-Resolved so far: js_antiframe parity (the ported pass is wired into
-Zeolite's rewriter at both call sites). Still open on the plan:
-per-site rule push into the engine, incognito jar identity through
-the wisp transport, per-origin virtual WebSocket identities, and
-proxied WebSockets pending the final transport API. main stays
-pinned to verified dist releases and does not chase Zeolite
-internals.
+The plan's items are implemented on beta (2026-09-30): per-site
+rule push into the engine (zl:rules, Zeolite f3268eff), incognito
+throwaway jar (zl:jarProfile, Zeolite cf2d0400), per-origin virtual
+WebSocket identities (Zeolite e3f1a171; beta pinned at e3f1a171 /
+dist 3080d559), and js_antiframe parity confirmed already ported
+(the earlier "no counterpart pass" claim was stale). Live
+behavioral verification of the engine-mode items rides the recorded
+browser pass. Still open beyond the plan: proxied WebSockets pending
+the final transport API. main stays pinned to verified dist
+releases and does not chase Zeolite internals.
 
 Planned work:
 
@@ -543,7 +549,8 @@ Where applicable, completion requires implementation, tests, and real browser/de
 
 ## Immediate priority
 
-The immediate roadmap milestone is **0.3 — Titanium**.
+The immediate roadmap milestone is **0.4 — Vanadium** (0.3 — Titanium
+is complete except its recorded browser pass).
 
 Before expanding into more browser features:
 

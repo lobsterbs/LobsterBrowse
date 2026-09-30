@@ -60,6 +60,11 @@ LB_ORIGIN=<deployed beta> checks a live deployment end to end
     LB_ORIGIN=https://lobsterbrowse-beta.onrender.com \
     node tests/transit/check.mjs
 
+CI runs this deployed-pair mode automatically: the transit-live job
+in .github/workflows/ci.yml fires on every beta-branch push and gates
+the live pair end to end (it verifies the deployed service, which
+can lag the pushed commit while Render rebuilds).
+
 What this can never prove: the SW -> NativeTransit -> Wisp chain itself.
 No browser runs in CI. That verification is a separate recorded step
 against a live beta origin (see docs/BETA-ZEOLITE-NATIVETRANSIT.md,
