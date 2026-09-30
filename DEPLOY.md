@@ -32,9 +32,10 @@ manual re-run is what proves the pair green.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main cf2d0400 (zl:rules per-site overrides and
-zl:jarProfile throwaway jar profiles, deep-integration items 1-2),
-dist bundle d1df4ba9. This matches the
+Current pin: Zeolite main e3f1a171 (zl:rules per-site overrides,
+zl:jarProfile throwaway jar profiles, per-origin virtual WS identities,
+deep-integration items 1, 2 and 4),
+dist bundle 3080d559. This matches the
 Dockerfile ZEOLITE_COMMIT and the zeolite-server git rev in
 server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
 the pin.
