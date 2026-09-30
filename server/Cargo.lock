@@ -369,7 +369,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1076,7 +1076,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2093,7 +2093,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "wisp-core"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=f96eef598cf7c8c26989e8620c2146bcd5c63bc9#f96eef598cf7c8c26989e8620c2146bcd5c63bc9"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=f3268eff8d7e5a3da2d9048d7cff477fba115c3c#f3268eff8d7e5a3da2d9048d7cff477fba115c3c"
 dependencies = [
  "bytes",
  "thiserror 1.0.69",
@@ -2102,7 +2102,7 @@ dependencies = [
 [[package]]
 name = "wisp-extensions"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=f96eef598cf7c8c26989e8620c2146bcd5c63bc9#f96eef598cf7c8c26989e8620c2146bcd5c63bc9"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=f3268eff8d7e5a3da2d9048d7cff477fba115c3c#f3268eff8d7e5a3da2d9048d7cff477fba115c3c"
 dependencies = [
  "ed25519-dalek",
  "rand 0.8.8",
@@ -2143,7 +2143,7 @@ dependencies = [
 [[package]]
 name = "zeolite-server"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=f96eef598cf7c8c26989e8620c2146bcd5c63bc9#f96eef598cf7c8c26989e8620c2146bcd5c63bc9"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=f3268eff8d7e5a3da2d9048d7cff477fba115c3c#f3268eff8d7e5a3da2d9048d7cff477fba115c3c"
 dependencies = [
  "axum",
  "bytes",
