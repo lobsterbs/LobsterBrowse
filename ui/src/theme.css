@@ -7,7 +7,13 @@
    generates the full dynamic palette from the Settings seed color.
    No static fallbacks here: static values froze parts of the UI on a
    hardcoded palette that ignored the user's seed. */
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  /* Let width transitions interpolate to/from sizing keywords
+     (Chromium 129+). Engines without support fall back to the instant
+     snap, so this is a progressive enhancement only. */
+  interpolate-size: allow-keywords;
+}
 
 body {
   margin: 0;
@@ -397,7 +403,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   align-items: center;
   gap: var(--md-sys-measurement-space100);
   /* Auto margins center the pill in the toolbar. */
-  flex: 0 1 320px;
+  flex: 0 1 auto;
   min-width: 120px;
   max-width: 460px;
   margin: 0 auto;
@@ -405,9 +411,9 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), flex-basis 260ms var(--m3e-spring);
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width 260ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-tb-pill.expanded { flex-basis: min(92vw, 440px);
+.lb-tb-pill.expanded { width: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
 }
@@ -475,6 +481,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   border-radius: 0;
 }
 .lb-tb-ac {
+  animation: lb-card-in 180ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
   position: absolute;
   bottom: calc(100% + 10px);
   left: 0;
@@ -655,7 +662,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
   m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-find-bar, .lb-tb-pill { transition: none; }
-  .lb-view { animation: none; }
+  .lb-view, .lb-tb-ac { animation: none; }
   .lb-tab:active, m3e-icon-button:active { transform: none; }
 }
 
