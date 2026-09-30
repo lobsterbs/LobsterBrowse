@@ -37,12 +37,27 @@ m3e-app-bar {
   font-variation-settings: "wght" 600;
 }
 
+/* Preview build badge on the app title. */
+.lb-preview-badge {
+  display: inline-block;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
+  margin-left: var(--md-sys-measurement-space125, 10px);
+  vertical-align: middle;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
+  color: var(--md-sys-color-on-primary-container, #4f378b);
+  background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
+}
+
 /* Smooth nav rail: items glide on state changes. The host width is
    owned by the component itself - overriding it (or clipping with
    overflow) once collapsed the rail to an invisible sliver. */
 m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
-m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0.2, 0, 0, 1), color 250ms cubic-bezier(0.2, 0, 0, 1), transform 250ms cubic-bezier(0.2, 0, 0, 1), opacity 250ms cubic-bezier(0.2, 0, 0, 1); }
+m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), color var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), transform var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
 .lb-shell { display: flex; min-height: 100vh; }
 .lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
@@ -56,7 +71,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   display: flex;
   flex-direction: column;
   justify-content: center;
-  transition: padding 250ms cubic-bezier(0.2, 0, 0, 1);
+  transition: padding var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
 
 /* The proxy browser wants every pixel it can get. */
@@ -70,7 +85,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.lb-view { animation: lb-view-in 150ms ease-out; width: 100%; }
+.lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
 
@@ -114,7 +129,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   background: transparent;
   color: inherit;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
 }
 /* Keyboard focus rings (WCAG 2.4.7). M3E components draw their own
    focus treatment (m3e-theme has strong-focus), but these light-DOM
@@ -142,8 +157,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
    rules, DevTools toolbar) it just must not collapse. */
 .lb-seed-row m3e-select,
 .lb-dt-toolbar m3e-select { flex: 0 1 auto; min-width: 130px; }
+/* 13px is a deliberate off-scale size: the M3 typescale has 12 (body-small)
+   and 14 (body-medium) only. Kept raw until a design call bumps it. */
 .lb-muted { opacity: 0.65; font-size: 13px; }
-.lb-curl { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.75; }
+.lb-curl { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.75; }
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
 .lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
@@ -156,7 +173,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline);
   border-radius: var(--m3e-shape-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.22));
   overflow: hidden;
   text-align: left;
   max-height: 320px;
@@ -172,7 +189,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   border: none;
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
 }
 .lb-ac-item:hover,
@@ -182,7 +199,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
 .lb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ac-hint {
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space225);
-  font-size: 11px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   opacity: 0.55;
   border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
 }
@@ -217,7 +234,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
   border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
-  transition: opacity 300ms ease, transform 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), gap 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* Same retract logic as the bottom dock: after the shared idle timer
    the strip slides up leaving a 16px sliver. The tabs themselves are
@@ -236,20 +253,20 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   align-items: center;
   gap: var(--md-sys-measurement-space75);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   cursor: pointer;
   white-space: nowrap;
   /* Shrinkable so the strip never needs to scroll. */
   flex: 0 1 auto;
   min-width: 0;
   max-width: 150px;
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
-  transition: background 180ms var(--m3e-spring), transform 180ms var(--m3e-spring), color 180ms ease,
-    max-width 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)),
-    padding 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)),
-    opacity 300ms ease, gap 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease),
+    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tab:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
@@ -267,14 +284,14 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   border-radius: 50%;
   font-size: 15px;
   opacity: 0;
-  transition: opacity 120ms ease, background 120ms ease, transform 140ms var(--m3e-spring);
+  transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring);
 }
 .lb-tab:hover .lb-tab-close, .lb-tab.active .lb-tab-close { opacity: 0.8; }
 .lb-tab .lb-tab-close:hover { opacity: 1; background: color-mix(in srgb, var(--md-sys-color-on-surface) 14%, transparent); transform: scale(1.08); }
 /* Many tabs: shrink automatically. compact = tighter pill (>=6 tabs),
    tight = drop the titles, favicon-only pills (>=10 tabs). */
 .lb-tabstrip.compact { gap: var(--md-sys-measurement-space50); }
-.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: 12px; }
+.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
 .lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
 .lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
@@ -314,8 +331,8 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   overflow: hidden;
   background: var(--md-sys-color-surface);
 }
-.lb-page { position: absolute; inset: 0; visibility: hidden; opacity: 0; transition: opacity 180ms ease, visibility 0s 180ms; }
-.lb-page.active { visibility: visible; opacity: 1; transition: opacity 180ms ease; }
+.lb-page { position: absolute; inset: 0; visibility: hidden; opacity: 0; transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), visibility 0s var(--md-sys-motion-duration-short-4, 200ms); }
+.lb-page.active { visibility: visible; opacity: 1; transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease); }
 .lb-page iframe { width: 100%; height: 100%; border: none; background: var(--md-sys-color-surface, #fff); }
 
 .lb-loading { position: absolute; inset: 0; padding: var(--md-sys-measurement-space300); background: var(--md-sys-color-surface); z-index: 5; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); align-items: center; }
@@ -345,7 +362,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
 }
 .lb-dock-pill {
   transform: translateY(0);
-  transition: transform 400ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% - 12px)); }
 .lb-dock:hover .lb-dock-pill,
@@ -368,7 +385,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
   border-radius: 999px !important;
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28) !important;
+  box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
 }
 /* Center identity pill: lock + favicon + tab name. Pressed, it
    expands in place into the editable URL (the name hides). The pill
@@ -385,10 +402,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   max-width: 460px;
   margin: 0 auto;
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space150);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background 180ms ease, border-color 180ms ease;
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
 }
 .lb-tb-pill.expanded {
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
@@ -425,7 +442,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   min-width: 140px;
   margin: 0 var(--md-sys-measurement-space75);
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space175);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   border: none;
   background: rgba(255, 255, 255, 0.12);
   color: var(--md-sys-color-on-surface, #ece6f0) !important;
@@ -466,7 +483,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   background: var(--md-sys-color-surface, #fef7ff);
   border: 1px solid var(--md-sys-color-outline, #79747e);
   border-radius: var(--m3e-shape-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.3));
   overflow: hidden;
   text-align: left;
   max-height: 300px;
@@ -504,8 +521,8 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
   z-index: 9;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.3);
-  animation: lb-dt-in 240ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
+  animation: lb-dt-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 @keyframes lb-dt-in {
   from { opacity: 0; transform: translateX(16px); }
@@ -513,15 +530,15 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
 }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
-.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .lb-dt-seg { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--md-sys-measurement-space100); overflow: auto; }
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
 .lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: 13px; overflow: auto; }
-.lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
-.lb-inspect-label { font-size: 12px; font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
+.lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
+.lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
 
-.lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+.lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-console-line { display: flex; gap: var(--md-sys-measurement-space100); padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-console-ts { opacity: 0.5; flex-shrink: 0; }
 .lb-console-arrow { opacity: 0.6; flex-shrink: 0; }
@@ -542,7 +559,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
 .lb-console-input { display: flex; gap: var(--md-sys-measurement-space100); align-items: flex-end; padding-top: var(--md-sys-measurement-space100); }
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
-.lb-net { flex: 1; overflow: auto; font-size: 12px; }
+.lb-net { flex: 1; overflow: auto; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
@@ -553,18 +570,18 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
 .lb-net-dur { margin-left: auto; opacity: 0.5; flex-shrink: 0; }
 .lb-net-detail { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); opacity: 0.85; word-break: break-all; }
 .lb-script-item { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; padding: var(--md-sys-measurement-space75); flex-wrap: wrap; }
-.lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.lb-check { font-size: 12px; display: flex; align-items: center; gap: var(--md-sys-measurement-space50); }
-.lb-dt-script-run { display: flex; align-items: center; gap: var(--md-sys-measurement-space125); font-size: 12px; opacity: 0.85; flex-wrap: wrap; }
+.lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--md-sys-typescale-label-small-font-size, 11px); }
+.lb-check { font-size: var(--md-sys-typescale-body-small-font-size, 12px); display: flex; align-items: center; gap: var(--md-sys-measurement-space50); }
+.lb-dt-script-run { display: flex; align-items: center; gap: var(--md-sys-measurement-space125); font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.85; flex-wrap: wrap; }
 .lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); overflow: auto; }
-.lb-script-list { margin: var(--md-sys-measurement-space50) 0; padding-left: var(--md-sys-measurement-space250); font-size: 12px; word-break: break-all; max-height: 40%; overflow: auto; }
+.lb-script-list { margin: var(--md-sys-measurement-space50) 0; padding-left: var(--md-sys-measurement-space250); font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; max-height: 40%; overflow: auto; }
 
 /* Logs */
 .lb-logs-toolbar { display: flex; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space150) 0; flex-wrap: wrap; }
 .lb-log-section { margin-bottom: var(--md-sys-measurement-space250); }
 .lb-log-list {
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   max-height: 320px;
   overflow: auto;
   border: 1px solid rgba(128, 128, 128, 0.3);
@@ -594,17 +611,17 @@ m3e-nav-rail m3e-icon-button { transition: background-color 250ms cubic-bezier(0
    Additive layer: bigger shapes, springy motion, expressive type.
    Baseline tokens above stay untouched. */
 :root {
-  --m3e-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
-  /* Shape hierarchy. M3E ships no shape tokens, so this small scale is
-     the app's foundation: xl = hero floating surfaces (tab strip),
-     lg = prominent cards/docks, md = panels and pages, sm = controls
-     and nested tiles, xs = small chips/thumbnails. 999px stays reserved
-     for genuine pills. */
-  --m3e-shape-xl: 28px;
-  --m3e-shape-lg: 20px;
-  --m3e-shape-md: 16px;
-  --m3e-shape-sm: 12px;
-  --m3e-shape-xs: 8px;
+  --m3e-spring: cubic-bezier(0.27, 1.06, 0.18, 1.0); /* M3E spring-spatial control points (the --md-sys-motion-spring-*-spatial tokens bundle a duration, so the alias carries the curve only; the old homemade bounce is retired) */
+  /* Shape hierarchy, aligned 1:1 with the M3E corner tokens:
+     xl = extra-large 28 (hero floating surfaces), lg = large-increased
+     20 (prominent cards/docks), md = large 16 (panels and pages),
+     sm = medium 12 (controls and nested tiles), xs = small 8 (chips).
+     Genuine pills use --md-sys-shape-corner-full. */
+  --m3e-shape-xl: var(--md-sys-shape-corner-extra-large, 28px);
+  --m3e-shape-lg: var(--md-sys-shape-corner-large-increased, 20px);
+  --m3e-shape-md: var(--md-sys-shape-corner-large, 16px);
+  --m3e-shape-sm: var(--md-sys-shape-corner-medium, 12px);
+  --m3e-shape-xs: var(--md-sys-shape-corner-small, 8px);
 }
 
 /* Expressive display type: heavier weight axis, wider width axis. */
@@ -620,18 +637,18 @@ m3e-heading[variant="display"] {
 
 /* Springy interactions: tabs and icon buttons squish on press. */
 .lb-tab {
-  transition: background 160ms var(--m3e-spring), transform 160ms var(--m3e-spring);
+  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring);
 }
 .lb-tab:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
 }
 .lb-tab:active { transform: scale(0.95); }
-m3e-icon-button { transition: transform 140ms var(--m3e-spring); }
+m3e-icon-button { transition: transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring); }
 m3e-icon-button:active { transform: scale(0.88); }
 .lb-dock-pill {
-  transition: transform 400ms var(--m3e-spring), opacity 320ms ease;
+  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease);
 }
-.lb-ac-item { transition: background 120ms ease, padding-left 120ms var(--m3e-spring); }
+.lb-ac-item { transition: background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), padding-left var(--md-sys-motion-duration-short-2, 100ms) var(--m3e-spring); }
 .lb-ac-item:hover, .lb-ac-item.active { padding-left: var(--md-sys-measurement-space275); }
 
 /* Reduced motion: no springs, no squish. */
@@ -660,7 +677,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-nt-search {
   position: relative;
   width: min(420px, 100%);
-  transition: width 320ms cubic-bezier(0.2, 0, 0, 1);
+  transition: width var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
 .lb-nt-search.filled,
 .lb-nt-search:focus-within { width: min(640px, 100%); }
@@ -686,7 +703,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline);
   border-radius: var(--m3e-shape-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.22));
   overflow: hidden;
   text-align: left;
   max-height: 320px;
@@ -702,9 +719,9 @@ m3e-icon-button:active { transform: scale(0.88); }
   border: none;
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
-  transition: background 120ms ease, padding-left 120ms var(--m3e-spring);
+  transition: background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), padding-left var(--md-sys-motion-duration-short-2, 100ms) var(--m3e-spring);
 }
 .lb-nt-ac-item:hover,
 .lb-nt-ac-item.active {
@@ -728,7 +745,7 @@ m3e-nav-rail {
   --m3e-nav-rail-compact-width: 4.8rem;
   --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space75);
 }
-m3e-nav-rail { transition: margin-left 250ms cubic-bezier(0.2, 0, 0, 1); }
+m3e-nav-rail { transition: margin-left var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 m3e-nav-rail m3e-nav-item { margin: var(--md-sys-measurement-space25) 0; }
 /* Browse view: the rail slides off-screen like the rest of the chrome,
    but a sliver stays visible (space75 = 6dp) so the user can grab/click
@@ -744,11 +761,11 @@ m3e-nav-rail.lb-rail-hidden {
 
 /* Lock colors: green closed (https), red broken (http). */
 .lb-tb-lock.secure { color: #1e8e3e; }
-.lb-tb-lock.insecure { color: #d93025; }
+.lb-tb-lock.insecure { color: var(--md-sys-color-error, #d93025); }
 
 /* Site info: a real m3e-card popup anchored above the lock glyph. The
    card supplies the container; positioning and long texts are ours. */
-.lb-tb-lock-wrap { display: inline-flex; align-items: center; cursor: pointer; padding: var(--md-sys-measurement-space25); border-radius: 999px; }
+.lb-tb-lock-wrap { display: inline-flex; align-items: center; cursor: pointer; padding: var(--md-sys-measurement-space25); border-radius: var(--md-sys-shape-corner-full, 999px); }
 .lb-tb-lock-wrap:focus-visible { outline: 2px solid var(--md-sys-color-primary); }
 .lb-site-card {
   position: absolute;
@@ -760,7 +777,7 @@ m3e-nav-rail.lb-rail-hidden {
   z-index: 45;
   border-radius: var(--m3e-shape-lg);
   overflow: hidden;
-  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* The card's slotted rows need their own padding: the m3e-card
    surface has none, and unpadded rows (especially the two long
@@ -777,7 +794,7 @@ m3e-nav-rail.lb-rail-hidden {
   border-radius: var(--m3e-shape-sm);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
 }
-.lb-site-cookie { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }
+.lb-site-cookie { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-label-small-font-size, 11px); word-break: break-all; }
 /* ---- Feature batch: UA dropdown, ext detail switches, incognito in
    the toolbar, smooth suggestion pop-in, new-tab fade. ---- */
 
@@ -786,29 +803,29 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-select {
   width: 100%;
   max-width: 360px;
-  padding: 10px 12px;
+  padding: var(--md-sys-measurement-space125, 10px) var(--md-sys-measurement-space150, 12px);
   border-radius: var(--m3e-shape-md, 12px);
   border: 1px solid var(--md-sys-color-outline, #79747e);
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
 }
 .lb-ua-active {
   display: inline-block;
-  margin-left: 8px;
-  padding: 2px 10px;
-  border-radius: 999px;
+  margin-left: var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
   color: var(--md-sys-color-on-surface);
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
 }
-.lb-ua-bad { color: #d93025; }
+.lb-ua-bad { color: var(--md-sys-color-error, #d93025); }
 
 /* Settings extension import rows: the file inputs are invisible
    surrogates; the buttons trigger them. */
-.lb-import-row { display: block; margin: 6px 0; }
+.lb-import-row { display: block; margin: var(--md-sys-measurement-space75, 6px) 0; }
 .lb-import-row input[type="file"] { display: none; }
 
 /* Suggestion dropdowns: grow/fade in instead of appearing instantly. */
@@ -818,14 +835,14 @@ m3e-nav-rail.lb-rail-hidden {
 }
 .lb-ac,
 .lb-tb-ac,
-.lb-nt-ac { animation: lb-pop-in 160ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-nt-ac { animation: lb-pop-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
 /* New tab page: gentle fade so tab switches feel deliberate. */
 @keyframes lb-fade-in {
   from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: scale(1); }
 }
-.lb-newtab { animation: lb-fade-in 240ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-newtab { animation: lb-fade-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
 /* ---- Settings: About / Build ---- */
 .lb-about { margin-top: var(--md-sys-measurement-space100); }
@@ -845,10 +862,10 @@ m3e-nav-rail.lb-rail-hidden {
   align-items: center;
   gap: var(--md-sys-measurement-space100);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 60%, transparent);
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   line-height: 1.6;
 }
 .lb-build-chip .lb-build-name { color: var(--md-sys-color-on-surface-variant); }
@@ -858,11 +875,11 @@ m3e-nav-rail.lb-rail-hidden {
 }
 
 /* ---- DevTools diagnostics ---- */
-.lb-diag-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75, 6px); margin-bottom: var(--md-sys-measurement-space100, 8px); }
 .lb-diag-chip {
-  font-size: 11px;
-  padding: 2px 10px;
-  border-radius: 999px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
+  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
   color: var(--md-sys-color-on-surface);
 }
@@ -880,15 +897,15 @@ m3e-nav-rail.lb-rail-hidden {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--md-sys-measurement-space50, 4px);
   height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
+  padding: 0 var(--md-sys-measurement-space125, 10px);
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-error) 45%, transparent);
   background: color-mix(in srgb, var(--md-sys-color-error-container) 70%, transparent);
   color: var(--md-sys-color-on-error-container);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   font-variation-settings: "wght" 500;
   cursor: pointer;
 }
@@ -911,14 +928,14 @@ m3e-nav-rail.lb-rail-hidden {
   pointer-events: none;
   opacity: 0;
   transform: translateX(-50%) translateY(14px) scale(0.98);
-  transition: opacity 200ms ease, transform 200ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-card.open {
   visibility: visible;
   pointer-events: auto;
   opacity: 1;
   transform: translateX(-50%);
-  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-row {
   display: flex;
@@ -939,7 +956,7 @@ m3e-nav-rail.lb-rail-hidden {
   padding: var(--md-sys-measurement-space50);
   border-radius: var(--m3e-shape-sm);
   cursor: pointer;
-  transition: background 160ms ease, transform 160ms var(--m3e-spring), opacity 240ms ease;
+  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease);
 }
 .lb-tabs-tile:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
@@ -979,7 +996,7 @@ m3e-nav-rail.lb-rail-hidden {
   display: flex;
   align-items: center;
   gap: var(--md-sys-measurement-space75);
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   min-width: 0;
 }
 .lb-tabs-tile-head .lb-tabs-title {
@@ -992,7 +1009,7 @@ m3e-nav-rail.lb-rail-hidden {
 .lb-tabs-tile .lb-tab-close {
   font-size: 15px;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
 }
 .lb-tabs-tile:hover .lb-tab-close,
 .lb-tabs-tile.active .lb-tab-close { opacity: 0.8; }
@@ -1042,7 +1059,7 @@ m3e-nav-rail.lb-rail-hidden {
   width: 360px;
   max-width: calc(100vw - 32px);
   z-index: 45;
-  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-dl-list {
   display: flex;
@@ -1066,7 +1083,7 @@ m3e-nav-rail.lb-rail-hidden {
   white-space: nowrap;
 }
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
-.lb-dl-meta { font-size: 11px; opacity: 0.65; }
+.lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
   .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
@@ -1087,13 +1104,13 @@ m3e-snackbar {
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 2000;
-  padding: 10px 20px;
+  padding: var(--md-sys-measurement-space125, 10px) var(--md-sys-measurement-space250, 20px);
   border-radius: var(--md-sys-shape-corner-medium, 12px);
   background: var(--md-sys-color-inverse-surface, #2a2a2a);
   color: var(--md-sys-color-inverse-on-surface, #f5f5f5);
-  font-size: 14px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  animation: lb-toast-in 180ms ease;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
+  box-shadow: var(--md-sys-elevation-level3, 0 2px 12px rgba(0, 0, 0, 0.3));
+  animation: lb-toast-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
 }
 @keyframes lb-toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
@@ -1119,7 +1136,7 @@ m3e-snackbar {
   width: min(400px, calc(100vw - 32px));
   border-radius: var(--m3e-shape-lg);
   overflow: hidden;
-  animation: lb-card-in 260ms var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1));
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-xpi-card { animation: none; }

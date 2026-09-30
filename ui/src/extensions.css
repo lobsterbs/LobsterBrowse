@@ -8,17 +8,17 @@
   z-index: 60;
   width: 320px;
   max-width: calc(100vw - 32px);
-  background: var(--m3e-sys-color-surface-container-high, #2b2b2b);
-  color: var(--m3e-sys-color-on-surface, #e6e1e5);
-  border-radius: 16px;
-  padding: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  background: var(--md-sys-color-surface-container-high, #2b2b2b);
+  color: var(--md-sys-color-on-surface, #e6e1e5);
+  border-radius: var(--m3e-shape-md, 16px);
+  padding: var(--md-sys-measurement-space100, 8px);
+  box-shadow: var(--md-sys-elevation-level3, 0 4px 16px rgba(0, 0, 0, 0.4));
 }
 .lb-ext-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
 }
 .lb-ext-head > span:last-child {
   display: inline-flex;
@@ -28,7 +28,7 @@
   font-weight: 500;
 }
 .lb-ext-note {
-  margin: 8px;
+  margin: var(--md-sys-measurement-space100, 8px);
   font-size: 13px;
   line-height: 1.4;
   opacity: 0.85;
@@ -40,12 +40,12 @@
 .lb-ext-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 8px;
+  gap: var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--m3e-shape-xs, 8px);
 }
 .lb-ext-item:hover {
-  background: rgba(128, 128, 128, 0.15);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 15%, transparent);
 }
 .lb-ext-name {
   flex: 1;
@@ -54,11 +54,11 @@
   white-space: nowrap;
 }
 .lb-ext-ver {
-  font-size: 12px;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   opacity: 0.7;
 }
 .lb-ext-state {
-  font-size: 11px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   opacity: 0.8;
@@ -69,11 +69,11 @@
 
 /* Installed list entries are clickable: they open the detail card. */
 .lb-ext-item { cursor: pointer; }
-.lb-ext-item.sel { background: color-mix(in srgb, var(--m3e-sys-color-primary, #cfbfe0) 22%, transparent); }
+.lb-ext-item.sel { background: color-mix(in srgb, var(--md-sys-color-primary, #cfbfe0) 22%, transparent); }
 .lb-ext-detail {
   border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  padding: 8px;
-  animation: lb-ext-pop 180ms cubic-bezier(0.2, 0, 0, 1);
+  padding: var(--md-sys-measurement-space100, 8px);
+  animation: lb-ext-pop var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
 @keyframes lb-ext-pop {
   from { opacity: 0; transform: translateY(4px); }
@@ -83,32 +83,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 0 6px;
+  padding: var(--md-sys-measurement-space25, 2px) 0 var(--md-sys-measurement-space75, 6px);
 }
 .lb-ext-dname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-ext-desc { margin: 4px 0; font-size: 12px; line-height: 1.4; opacity: 0.85; }
-.lb-ext-perms { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.lb-ext-desc { margin: var(--md-sys-measurement-space50, 4px) 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.4; opacity: 0.85; }
+.lb-ext-perms { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); margin: var(--md-sys-measurement-space75, 6px) 0; }
 .lb-ext-perms code {
-  font-size: 11px;
-  padding: 2px 6px;
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
+  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space75, 6px);
   border-radius: 6px;
-  background: rgba(128, 128, 128, 0.18);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 18%, transparent);
 }
 .lb-ext-trow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: var(--md-sys-measurement-space75, 6px) 0;
   font-size: 13px;
 }
 .lb-ext-tlabel { opacity: 0.9; }
 /* Enabled / incognito toggles are real m3e-switch components now; the
    hand-rolled switch (written when the panel believed no M3E switch
    existed - one did, Settings already used it) is gone. */
-.lb-ext-optbtn { margin-top: 6px; }
+.lb-ext-optbtn { margin-top: var(--md-sys-measurement-space75, 6px); }
 .lb-ext-err {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: #f28b82;
+  margin: var(--md-sys-measurement-space75, 6px) 0 0;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+  color: var(--md-sys-color-error, #f28b82);
   word-break: break-word;
 }

@@ -4,11 +4,13 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import {
+  engineRoutePrefix,
   loadSettings,
   saveSettings,
   loadSiteRules,
   saveSiteRules,
   resetIncognitoSid,
+  resolveUa,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -209,11 +211,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tabs, activeId, newTab, closeTab]);
 
-  /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
+  /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
      legacy v3 page-cache worker is gone: it owned the "/" scope and
      kept the Zeolite worker from ever registering, so unregister it
-     and drop its caches when found, then push the /lj/ route shape —
+     and drop its caches when found, then push the engine route prefix —
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
@@ -226,7 +228,11 @@ export default function App() {
        since Zeolite#17 the worker persists the route shape and
        restores it before the first fetch. */
     const push = async () => {
-      const msg = { type: "zl:config", prefix: "/lj/", scheme: "b64u" };
+      const msg = {
+        type: "zl:config",
+        prefix: engineRoutePrefix(settings.proxyEngine),
+        scheme: "b64u",
+      };
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(msg, 8000);
@@ -255,17 +261,36 @@ export default function App() {
       }
       await push();
     })();
-  }, []);
+  }, [settings.proxyEngine]);
 
-  /* ---- Zeolite adblock: the engine's /rules.json (the migrated
-       ad/tracker host lists) is evaluated client-side in its worker;
-       keep it in sync with the Ad & tracker blocking setting. The
-       worker resets the toggle to enabled on restart, so re-send on
-       boot and on change. Per-site adblock overrides still apply to
-       the server-side engine only (documented gap). ---- */
+  /* ---- Zeolite adblock + per-site rules: the engine's /rules.json
+       (the migrated ad/tracker host lists) is evaluated client-side in
+       its worker; keep the toggle in sync with the Ad & tracker
+       blocking setting. The per-site rules (rules chip / Settings:
+       host-scoped adblock switch, UA preset) ride along as a zl:rules
+       push built from the same loadSiteRules() store the /r/ chain
+       reads, so the engine applies them per target host with the same
+       semantics the server engine gets from the lb_ options (adblock
+       can only disable per site; the global setting still wins). The
+       worker resets both on restart, so re-send on boot and on
+       change. ---- */
   useEffect(() => {
     void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
-  }, [settings.adblock]);
+    void zlSend(
+      {
+        type: "zl:rules",
+        /* Global UA default: hosts without a rule get the same UA the
+           /r/ server engine would send (resolveUa with no rule hit). */
+        ua: resolveUa(settings, rules, "") ?? undefined,
+        rules: rules.map((r) => ({
+          host: r.domain,
+          adblock: r.adblock === false ? false : undefined,
+          ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
+        })),
+      },
+      8000,
+    );
+  }, [settings, rules]);
 
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker

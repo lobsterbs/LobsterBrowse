@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
+  zeoliteOwned,
   type EngineId,
   type Settings,
   type SiteRule,
@@ -290,20 +291,30 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              Zeolite — default
+              Zeolite
             </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+            <m3e-button-segment checked={!zeoliteOwned(settings.proxyEngine) ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.proxyEngine === "zeolite-beta" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite-beta" })}>
+              Zeolite Preview (/zl/)
             </m3e-button-segment>
           </m3e-segmented-button>
           </div>
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite is the project default: a service worker that caches proxied pages on your
-            device (cache-first, 10-minute freshness, network fallback), so repeat visits load
-            without touching the server. When the worker is not installed the same /lj/ routes are
-            served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
+            Zeolite is the stable engine: a service worker that intercepts proxied routes on your
+            device and transports them over Wisp client-side, with on-device caching and
+            in-worker rewriting. When no worker controls the page (cold start, worker restart,
+            or a browser without module service workers) the /lj/ routes answer with an honest
+            load-error card, they are NOT silently re-proxied. ScramJet does adblock/tracker stripping,
             HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
             de-amping on every upstream request.
+          </p>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            Zeolite Preview (/zl/) is the unstable NativeTransit-first experiment: the same engine
+            worker claims /zl/ routes and transports requests natively over Wisp, with rewriting
+            only where browser origin semantics require it. Expect rough edges; switching back to
+            Zeolite or ScramJet is instant and /r/ + /lj/ are untouched.
           </p>
         </div>
         <div className="lb-setting-group">
@@ -369,7 +380,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
+          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
       </Panel>
 
@@ -461,7 +472,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
-            you return, the cloak covers LobsterBrowse until you click "Return". Browsers do not let a
+            you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
             page re-render while hidden — this is the strongest behavior a normal web page can offer.
           </p>
         </div>
@@ -474,7 +485,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             Cached proxied pages and local libraries live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
           </p>
-          <div className={settings.proxyEngine !== "lobsterjet" ? "lb-off" : ""}>
+          <div className={!zeoliteOwned(settings.proxyEngine) ? "lb-off" : ""}>
           <m3e-button
             onClick={() => {
               (async () => {
@@ -493,7 +504,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
           </div>
-          {settings.proxyEngine !== "lobsterjet" && (
+          {!zeoliteOwned(settings.proxyEngine) && (
             <p className="lb-muted" style={{ fontSize: 12 }}>
               Cache options apply when Zeolite is the proxy engine.
             </p>
@@ -667,7 +678,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>
