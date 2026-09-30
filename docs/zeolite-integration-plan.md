@@ -55,10 +55,21 @@ compiles; it does not browse). The beta branch isolates that risk.
    and inline event handlers (wrapping js::rewrite_inline) - verified
    at Zeolite e0835e18. Remaining optional work: a behavioral parity
    test between /r/ ScramJet and /lj/ Zeolite on a frame-busting page.
-4. Engine-mode WebSocket virtual origins. The engine bridges page
-   WebSockets end to end (zl:wsOpen). Documented follow-up: per-origin
-   virtual WS identities so a page cannot fingerprint the single
-   bridge origin.
+4. Engine-mode WebSocket virtual origins: IMPLEMENTED (2026-09-30,
+   Zeolite engine commit cd97712e). The zl:wsOpen upgrade handshake now
+   carries the per-origin identity instead of the single bridge
+   identity every proxied site used to share: the initiator's Origin,
+   the jar's cookies for the target (cookie-authenticated upgrades
+   behave like native ones) and the per-site UA from zl:rules, with an
+   active fingerprint profile still winning and pinning accept-language
+   (Telluride). The initiator origin is the message field when the
+   sender supplies it, else recovered from the controlling client's
+   route - the same initiator recovery the fetch path uses, so
+   worker-relayed sockets get it too and the bootstrap needed zero new
+   bytes (its 5 KB CI budget stays intact). Headers are engine-built
+   only: a page can never smuggle handshake headers onto the
+   transport. Unit-gated in the engine (ws-identity.test.ts,
+   wsbridge.test.ts).
 
 ## Ground rules for this branch
 
