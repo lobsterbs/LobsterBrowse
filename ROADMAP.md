@@ -180,7 +180,12 @@ path-like keys are rewritten byte-identically to the import
 specifiers that look them up, and bare keys plus data: values stay
 verbatim (the relative-key gap recorded in AGENTS.md is closed
 server-side; scope keys stay verbatim and fall back to the top
-level). The deployed-pair gate
+level). Tier-10 probes gate the remaining server-side surfaces
+through /r/: CSS url()/@import routing (data: URLs verbatim),
+srcset candidate routing with descriptors kept, page-query
+forwarding with lb_ engine keys stripped, the per-sid session-jar
+roundtrip, and conditional GET (304 + etag passthrough). The
+deployed-pair gate
 (transit-live CI job) runs the full transit check against the live
 beta + fixture Render services on every beta push, so the
 server-side live verification is CI-recorded rather than a one-off.

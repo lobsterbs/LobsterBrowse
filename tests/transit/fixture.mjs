@@ -116,6 +116,7 @@ const NAV_HTML = [
   "</head><body>",
   "<h1>nav page</h1>",
   "<iframe src=\"/frame.html\" id=\"fr\"></iframe>",
+  "<img src=\"/l.png\" srcset=\"/l.png 1x, /icon.svg 2x\">",
   "<a href=\"rel/page\">rel</a>",
   "<a href=\"/abs/page\">abs</a>",
   "<a href=\"https://example.com/x\">ext</a>",
@@ -155,6 +156,19 @@ const IMPORTMAP_HTML = [
 const IM_BARE_JS = "export const ok = \"im-bare-ok\";";
 const IM_ALT_JS = "export const ok = \"im-alt-ok\";";
 const IM_ARR1_JS = "export const ok = \"im-arr1-ok\";";
+
+/* Tier-10 (Vanadium): CSS rewrite surface + page-query echo.
+   css-probes.css carries every url() shape the CSS rewriter must
+   handle: a bare url(), a quoted url() with a query string, an
+   @import in url() form, and a data: URL that must stay verbatim.
+   /query echoes the raw request target (path + query) so the /r/
+   engine's page-query forwarding can be asserted byte-exactly. */
+const CSS_PROBES = [
+  "@import url(\"/style.css\");",
+  ".bare { background: url(/l.png); }",
+  ".quoted { background: url('/l.png?v=2'); }",
+  ".data { background: url(\"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7\"); }",
+].join("\n");
 
 function handler(req, res) {
   const p = new URL(req.url, "http://x").pathname;
@@ -380,6 +394,14 @@ function handler(req, res) {
   if (p === "/im-arr1.mjs" && req.method === "GET") {
     res.writeHead(200, { "content-type": "text/javascript" });
     return res.end(IM_ARR1_JS);
+  }
+  if (p === "/css-probes.css" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/css" });
+    return res.end(CSS_PROBES);
+  }
+  if (p === "/query") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ method: req.method, url: req.url }));
   }
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");
