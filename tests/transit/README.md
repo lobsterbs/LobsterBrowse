@@ -30,6 +30,19 @@ deferred browser pass. With LB_ORIGIN set, check.mjs additionally
 gates the /r/ engine's server-side hop following for the chain and
 both method replays.
 
+Tier-8 probes (2026-09-30, 0.4 Vanadium): navigation surfaces and
+authentication. /nav.html carries every navigation-adjacent resource
+the rewriter must route (iframe doc /frame.html, module script
+/mod.mjs, dynamic import /dyn.mjs, XHR to /data.json, relative +
+absolute + external links); /auth/login + /auth/protected gate the
+authentication-redirect flow (302 to login without the sid cookie,
+JSON with it). With LB_ORIGIN, check.mjs asserts the /r/ engine
+rewrites the nav page's iframe and module srcs onto /r/ routes, its
+links onto /r/ routes, and follows the auth redirect chain to the
+login page. Execution-level behavior (XHR, dynamic import, iframe
+subresource routing, SPA navigation) needs a browser and rides the
+deferred browser pass.
+
 With LB_ORIGIN set it also checks the server side of the beta:
 
     LB_ORIGIN=http://127.0.0.1:6001 node tests/transit/check.mjs

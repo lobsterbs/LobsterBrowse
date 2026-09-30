@@ -167,6 +167,15 @@ Test real behavior involving:
 
 HTTP 200 alone does not constitute compatibility.
 
+Status (2026-09-30): started. Tier-8 transit probes gate the
+server-side matrix - navigation-surface routing (iframe doc, module
+script, dynamic import, XHR, relative/absolute/external links) and
+the authentication-redirect flow through /r/, on top of the Tier-7
+redirect-chain and method-replay gates. Execution-level behavior
+(XHR, dynamic imports, iframe subresource routing, SPA navigation,
+reloads, cross-origin navigation) needs the recorded browser pass and
+stays open.
+
 ---
 
 # 0.5 — Cobalt

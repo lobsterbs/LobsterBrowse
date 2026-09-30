@@ -105,6 +105,38 @@ const SPA_HTML = [
   "</script></body></html>",
 ].join("");
 
+/* Tier-8 (Vanadium): navigation surfaces. The nav page carries every
+   navigation-adjacent resource the rewriter must route (iframe doc,
+   module script, dynamic import, XHR) plus relative/absolute/external
+   links; the auth pair gates the authentication-redirect flow. */
+const NAV_HTML = [
+  "<!doctype html><html><head><meta charset=\"utf-8\">",
+  "<title>nav</title>",
+  "<script type=\"module\" src=\"/mod.mjs\"></script>",
+  "</head><body>",
+  "<h1>nav page</h1>",
+  "<iframe src=\"/frame.html\" id=\"fr\"></iframe>",
+  "<a href=\"rel/page\">rel</a>",
+  "<a href=\"/abs/page\">abs</a>",
+  "<a href=\"https://example.com/x\">ext</a>",
+  "<script>",
+  "var x = new XMLHttpRequest();",
+  "x.open(\"GET\", \"/data.json\");",
+  "x.send();",
+  "import(\"/dyn.mjs\").then(function (m) { window.__dyn = m.ok; }).catch(function (e) { window.__dynErr = String(e); });",
+  "</script></body></html>",
+].join("");
+const FRAME_HTML = [
+  "<!doctype html><html><head><meta charset=\"utf-8\">",
+  "<title>frame</title></head><body>",
+  "<h1>frame page</h1>",
+  "<img src=\"/l.png\">",
+  "<script src=\"/app.js\"></script>",
+  "</body></html>",
+].join("");
+const MOD_JS = "export const ok = \"mod-ok\";";
+const DYN_JS = "export const ok = \"dyn-ok\";";
+
 function handler(req, res) {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/" && req.method === "GET") {
@@ -282,6 +314,36 @@ function handler(req, res) {
   if (p === "/spa.html" && req.method === "GET") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(SPA_HTML);
+  }
+  /* Tier-8 (Vanadium): navigation surfaces + authentication flow. */
+  if (p === "/nav.html" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(NAV_HTML);
+  }
+  if (p === "/frame.html" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(FRAME_HTML);
+  }
+  if (p === "/mod.mjs" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(MOD_JS);
+  }
+  if (p === "/dyn.mjs" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(DYN_JS);
+  }
+  if (p === "/auth/login" && req.method === "GET") {
+    res.setHeader("set-cookie", ["sid=auth; Path=/; Max-Age=3600"]);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><body><h1>login page</h1></body></html>");
+  }
+  if (p === "/auth/protected" && req.method === "GET") {
+    if ((req.headers.cookie || "").indexOf("sid=auth") !== -1) {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end("{\"auth\":\"ok\"}");
+    }
+    res.writeHead(302, { location: "/auth/login" });
+    return res.end();
   }
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");
