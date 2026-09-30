@@ -24,7 +24,6 @@ use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 /// Engine shim + devtools hook injected right after <head> of every
-/// Engine shim + devtools hook injected right after <head> of every
 /// rewritten HTML document. The shim routes runtime fetch/XHR, element
 /// src/href assignments and history changes through /r routes; the hook
 /// reports console output, errors, network traffic and page loads to
