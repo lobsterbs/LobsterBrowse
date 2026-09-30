@@ -3093,7 +3093,7 @@ fn parse_osjson(text: &str) -> Vec<String> {
             for item in suggs.iter().take(8) {
                 if let Some(t) = item.as_str() {
                     if !t.is_empty() {
-                        list.push(json_escape(t));
+                        list.push(format!("\"{}\"", json_escape(t)));
                     }
                 }
             }
@@ -4199,12 +4199,30 @@ mod suggest_tests {
     fn osjson_shapes_parse_or_empty() {
         assert_eq!(
             parse_osjson(r#"["weather",["weather tomorrow","weather radar"]]"#),
-            vec!["weather tomorrow", "weather radar"]
+            vec!["\"weather tomorrow\"", "\"weather radar\""]
         );
         assert!(parse_osjson(r#"{"suggestions":[]}"#).is_empty());
         assert!(parse_osjson("not json at all").is_empty());
         /* Empty strings never make it into the list. */
-        assert_eq!(parse_osjson(r#"["q",["", "a"]]"#), vec!["a"]);
+        assert_eq!(parse_osjson(r#"["q",["", "a"]]"#), vec!["\"a\""]);
+    }
+
+    #[test]
+    fn suggest_items_are_valid_json_strings() {
+        /* The response body joins the items with commas inside
+           {"suggestions":[...]}; each item must be a quoted, escaped
+           JSON string or the whole body fails to parse client-side. */
+        let items = parse_osjson(r#"["q",["a\"b", "c\\d", "e"]]"#);
+        let body = format!("{{\"suggestions\":[{}]}}", items.join(","));
+        let v: serde_json::Value =
+            serde_json::from_str(&body).expect("suggest body must be valid JSON");
+        let arr = v
+            .get("suggestions")
+            .and_then(|s| s.as_array())
+            .expect("suggestions array");
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0].as_str(), Some("a\"b"));
+        assert_eq!(arr[1].as_str(), Some("c:\\d"));
     }
 
     #[test]
