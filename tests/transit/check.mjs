@@ -386,7 +386,10 @@ try {
     ok("r css-probes 200", rcs.status === 200, "got " + rcs.status);
     ok("r css-probes css type", (rcs.headers.get("content-type") || "").includes("css"), String(rcs.headers.get("content-type")));
     const rcst = await rcs.text();
-    ok("r css routes url()s", rcst.includes("url(/r/") && rcst.includes("url('/r/"), rcst.slice(0, 80));
+    /* rewrite_css emits unquoted url() for every shape it routes
+       (quoted input included), so count routed occurrences. */
+    const rRouted = (rcst.match(/url\(\/r\//g) || []).length;
+    ok("r css routes url()s", rRouted >= 3, "routed " + rRouted + ": " + rcst.slice(0, 80));
     ok("r css routes all targets", rcst.indexOf("/l.png") === -1 && rcst.indexOf("/style.css") === -1, rcst.slice(0, 120));
     ok("r css keeps data: verbatim", rcst.includes("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), rcst.slice(0, 120));
     ok("r nav routes srcset", rnt.includes("srcset=\"/r/") && rnt.includes("1x, /r/") && rnt.includes(" 2x"), "srcset not routed");
@@ -407,7 +410,11 @@ try {
     ok("r conditional 304", r304.status === 304, "got " + r304.status);
     const r200 = await fetch(rRoute("/etag"));
     ok("r etag 200 body", r200.status === 200 && (await r200.text()) === "etag body", "got " + r200.status);
-    ok("r etag header forwarded", r200.headers.get("etag") === "\"fixed-etag\"", String(r200.headers.get("etag")));
+    /* The live path crosses an edge that weakens strong etags when it
+       compresses (W/"x"); local CI keeps them strong. Both mean the
+       upstream etag survived the engine. */
+    const retag = r200.headers.get("etag") || "";
+    ok("r etag header forwarded", retag === "\"fixed-etag\"" || retag === "W/\"fixed-etag\"", retag);
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this
