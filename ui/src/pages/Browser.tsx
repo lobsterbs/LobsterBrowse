@@ -180,6 +180,9 @@ export default function BrowserView(props: Props) {
   const [findQuery, setFindQuery] = useState("");
   const [findCount, setFindCount] = useState<number | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (findOpen) findInputRef.current?.focus();
+  }, [findOpen]);
   const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
   const cancelDownload = (id: number) => {
     dlAbort.current.get(id)?.abort();
@@ -1629,7 +1632,6 @@ export default function BrowserView(props: Props) {
                       e.preventDefault();
                       setTbSuggOpen(false);
                       setTbExpanded(false);
-                      setDrafts((prev) => ({ ...prev, [active.id]: "" }));
                       go(it.url);
                     }}
                   >
@@ -1683,6 +1685,12 @@ export default function BrowserView(props: Props) {
                 onBlur={() => {
                   setTbSuggOpen(false);
                   setTbExpanded(false);
+                  setDrafts((prev) => {
+                    if (!(active.id in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[active.id];
+                    return next;
+                  });
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -1826,47 +1834,44 @@ export default function BrowserView(props: Props) {
               (container, shape, height, spacing); the match label and
               the prev/next/close actions ride the trailing slot.
               Scoped to the active frame. */}
-          {findOpen && (
-            <m3e-search-bar {...{ class: "lb-find-bar" }} aria-label="Find in page">
-              <m3e-icon name="search" aria-hidden={true} slot="leading" />
-              <input
-                slot="input"
-                ref={findInputRef}
-                className="lb-find-input"
-                aria-label="Find in page"
-                placeholder="Find in page"
-                value={findQuery}
-                spellCheck={false}
-                autoFocus
-                onChange={(e) => setFindQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    findInPage(e.shiftKey);
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    setFindOpen(false);
-                  }
-                }}
-              />
-              <span className={"lb-find-count" + (findQuery.trim() && findCount === 0 ? " none" : "")} slot="trailing">
-                {findQuery.trim() && findCount != null
-                  ? findCount === 0
-                    ? "0 matches"
-                    : findCount + " match" + (findCount === 1 ? "" : "es")
-                  : ""}
-              </span>
-              <m3e-icon-button aria-label="Previous match" onClick={() => findInPage(true)} slot="trailing">
-                <m3e-icon name="arrow_back" aria-hidden={true} />
-              </m3e-icon-button>
-              <m3e-icon-button aria-label="Next match" onClick={() => findInPage(false)} slot="trailing">
-                <m3e-icon name="arrow_forward" aria-hidden={true} />
-              </m3e-icon-button>
-              <m3e-icon-button aria-label="Close find bar" onClick={() => setFindOpen(false)} slot="trailing">
-                <m3e-icon name="close" aria-hidden={true} />
-              </m3e-icon-button>
-            </m3e-search-bar>
-          )}
+          <m3e-search-bar {...{ class: "lb-find-bar" + (findOpen ? " open" : "") }} aria-label="Find in page">
+            <m3e-icon name="search" aria-hidden={true} slot="leading" />
+            <input
+              slot="input"
+              ref={findInputRef}
+              className="lb-find-input"
+              aria-label="Find in page"
+              placeholder="Find in page"
+              value={findQuery}
+              spellCheck={false}
+              onChange={(e) => setFindQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  findInPage(e.shiftKey);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setFindOpen(false);
+                }
+              }}
+            />
+            <span className={"lb-find-count" + (findQuery.trim() && findCount === 0 ? " none" : "")} slot="trailing">
+              {findQuery.trim() && findCount != null
+                ? findCount === 0
+                  ? "0 matches"
+                  : findCount + " match" + (findCount === 1 ? "" : "es")
+                : ""}
+            </span>
+            <m3e-icon-button aria-label="Previous match" onClick={() => findInPage(true)} slot="trailing">
+              <m3e-icon name="arrow_back" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button aria-label="Next match" onClick={() => findInPage(false)} slot="trailing">
+              <m3e-icon name="arrow_forward" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button aria-label="Close find bar" onClick={() => setFindOpen(false)} slot="trailing">
+              <m3e-icon name="close" aria-hidden={true} />
+            </m3e-icon-button>
+          </m3e-search-bar>
           {/* Site info (#26): a real M3E card (elevated) anchored above
               the toolbar (outside the identity pill, so opening it can
               never inflate the pill or the toolbar). It is the single
