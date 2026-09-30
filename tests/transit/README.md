@@ -48,9 +48,18 @@ With LB_ORIGIN set it also checks the server side of the beta:
     LB_ORIGIN=http://127.0.0.1:6001 node tests/transit/check.mjs
 
 - /zl/<b64url> must answer with the honest "no worker controls this
-  page" notice, never a server-side proxied or rewritten body.
+  page" notice, never a server-side proxied or rewritten body. The
+  notice is the engine_error_page cold-start card and answers HTTP
+  502, like every engine failure card.
 - /r/<b64url> must still proxy the fixture end to end (the stable
   engine regression gate).
+
+The /r/ gates carry a fresh per-run lb_sid session jar. A bare /r/
+hit with no lb_sid shares the deployment-wide DEFAULT cookie jar with
+every other direct client (any earlier probe leaves cookies there and
+the auth-redirect gate would be nondeterministic), so the check mints
+its own session, exactly like the UI threads lb_sid on every engine
+route.
 
 Deployed-pair mode: FIXTURE_ORIGIN=<public fixture> with
 LB_ORIGIN=<deployed beta> checks a live deployment end to end
