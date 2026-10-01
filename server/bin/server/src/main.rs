@@ -2757,12 +2757,12 @@ async fn engine_proxy(
                     wants_html_page,
                 );
             }
-            /* A 404 shell for a document navigation is the upstream
-               site's own "page not found" page (Startpage renders it for
-               any unknown path). Surface it at warn level so it stands
-               out in the tab's Logs view instead of drowning in
-               subresource info lines; the fetched URL names the
-               mangling when a client-built navigation escapes broken. */
+                        // A 404 shell for a document navigation is the upstream
+            // site's own "page not found" page (Startpage renders it for
+            // any unknown path). Surface it at warn level so it stands
+            // out in the tab's Logs view instead of drowning in
+            // subresource info lines; the fetched URL names the
+            // mangling when a client-built navigation escapes broken.
             if status.as_u16() == 404 && wants_html_page {
                 push_log_sess(
                     &state,
