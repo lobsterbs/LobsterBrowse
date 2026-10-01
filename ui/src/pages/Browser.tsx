@@ -120,7 +120,7 @@ export default function BrowserView(props: Props) {
   /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   /* Toolbar autocomplete: engine-queried suggestions, debounced. */
-  const [tbSugg, setTbSugg] = useState<{ text: string; url: string }[]>([]);
+  const [tbSugg, setTbSugg] = useState<{ text: string; url: string; src?: string }[]>([]);
   const [tbSuggOpen, setTbSuggOpen] = useState(false);
   const [tbSuggIdx, setTbSuggIdx] = useState(-1);
   /* Center pill: collapsed shows the tab name; pressed, it expands in
@@ -1212,8 +1212,8 @@ export default function BrowserView(props: Props) {
     const ac = new AbortController();
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, draft, ac.signal, active.sess)
-        .then((list) => {
-          const items = list.map((text) => ({ text, url: searchUrl(settings, text) }));
+        .then((res) => {
+          const items = res.items.map((text) => ({ text, url: searchUrl(settings, text), src: res.source }));
           setTbSugg(items);
           setTbSuggOpen(items.length > 0);
           setTbSuggIdx(-1);
@@ -1221,7 +1221,7 @@ export default function BrowserView(props: Props) {
              fail per engine; a zero count in the app log pinpoints
              whether the box is empty because of the network or the
              setting. */
-          pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length);
+          pushLog("info", "suggest [" + settings.engine + "] '" + draft.slice(0, 40) + "' -> " + items.length + (res.source ? " via " + res.source : ""));
         })
         .catch(() => {
           /* aborted or failed; no diagnostic for aborts by design */
@@ -1497,15 +1497,7 @@ export default function BrowserView(props: Props) {
 
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
-            <m3e-loading-indicator variant="contained" aria-label="Loading page" />
-            <m3e-skeleton animation="wave" shape="rounded" {...{ class: "lb-skel" }}>
-              <div style={{ width: "45%", height: 28 }} />
-              <div style={{ width: "92%", height: 14 }} />
-              <div style={{ width: "88%", height: 14 }} />
-              <div style={{ width: "60%", height: 180, marginTop: 8 }} />
-              <div style={{ width: "92%", height: 14 }} />
-              <div style={{ width: "75%", height: 14 }} />
-            </m3e-skeleton>
+            <m3e-circular-progress-indicator indeterminate={true} aria-label="Loading page" {...{ style: { marginTop: "4vh", width: 56, height: 56 } }} />
           </div>
         )}
 
@@ -1670,6 +1662,9 @@ export default function BrowserView(props: Props) {
                   >
                     <m3e-icon name="search" aria-hidden={true} />
                     <span className="lb-tb-ac-text">{it.text}</span>
+                    {it.src && (
+                      <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {it.src}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1991,6 +1986,7 @@ export default function BrowserView(props: Props) {
           onToggleEnabled={toggleExtEnabled}
           onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
+          onInstallXpi={(name, bytes) => void installXpi({ name, bytes })}
         />
       )}
     </section>
