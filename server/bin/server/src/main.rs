@@ -2996,7 +2996,7 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
     if q.trim().is_empty() {
         return (
             [("content-type", "application/json")],
-            r#"{"suggestions":[]}"#,
+            r#"{"suggestions":[],"source":""}"#,
         )
             .into_response();
     }
@@ -3040,6 +3040,10 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
         &format!("suggest {} {}", engine, q),
     );
     let mut list: Vec<String> = Vec::new();
+    /* Which provider actually answered: the fallback chain can hide the
+       asked-for engine, and the suggestion UI tells the user where
+       their completions came from. */
+    let mut source = String::new();
     let mut last_err = String::new();
     for provider in &providers {
         match state
@@ -3058,6 +3062,15 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
                     Ok(text) => {
                         list = parse_osjson(&text);
                         if !list.is_empty() {
+                            source = if provider.contains("suggestqueries.google.com") {
+                                "google".to_string()
+                            } else if provider.contains("api.bing.com") {
+                                "bing".to_string()
+                            } else if provider.contains("search.brave.com") {
+                                "brave".to_string()
+                            } else {
+                                "duckduckgo".to_string()
+                            };
                             break;
                         }
                     }
@@ -3076,7 +3089,7 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             &format!("suggest failed: {}", last_err),
         );
     }
-    let out = format!("{{\"suggestions\":[{}]}}", list.join(","));
+    let out = format!("{{\"suggestions\":[{}],\"source\":\"{}\"}}", list.join(","), source);
     ([("content-type", "application/json")], out).into_response()
 }
 
