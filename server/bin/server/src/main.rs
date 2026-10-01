@@ -3041,8 +3041,8 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
     );
     let mut list: Vec<String> = Vec::new();
     /* Which provider actually answered: the fallback chain can hide the
-       asked-for engine, and the suggestion UI tells the user where
-       their completions came from. */
+    asked-for engine, and the suggestion UI tells the user where
+    their completions came from. */
     let mut source = String::new();
     let mut last_err = String::new();
     for provider in &providers {
@@ -3089,7 +3089,11 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             &format!("suggest failed: {}", last_err),
         );
     }
-    let out = format!("{{\"suggestions\":[{}],\"source\":\"{}\"}}", list.join(","), source);
+    let out = format!(
+            "{{\"suggestions\":[{}],\"source\":\"{}\"}}",
+        list.join(","),
+        source
+        );
     ([("content-type", "application/json")], out).into_response()
 }
 
