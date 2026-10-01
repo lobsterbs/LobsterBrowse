@@ -43,10 +43,10 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
   );
 }
 
-function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; off?: boolean }) {
+function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
   return (
     <m3e-list-item>
-      <div className={"lb-setting-row" + (props.off ? " lb-off" : "")}>
+      <div className="lb-setting-row">
         <span className="lb-setting-label">
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
@@ -192,7 +192,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     a.href = URL.createObjectURL(blob);
     a.download = "lobsterbrowse-session.json";
     a.click();
-    URL.revokeObjectURL(a.href);
+    /* Revoke late: an immediate revoke can abort the download before
+       the browser takes ownership of the blob (seen on Firefox). */
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 30000);
     setSessStatus("Session exported. Without the passphrase the file is unreadable.");
   };
   const importSessionFile = async (file: File) => {
@@ -300,10 +302,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             Zeolite is the project default: a service worker that caches proxied pages on your
             device (cache-first, 10-minute freshness, network fallback), so repeat visits load
-            without touching the server. When the worker is not installed the same /lj/ routes are
-            served by the ScramJet server-side rewriter. ScramJet does adblock/tracker stripping,
-            HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression and AMP
-            de-amping on every upstream request.
+            without touching the server. There is no server-side fallback for /lj/ routes:
+            without the worker they return an honest notice page asking you to reload so the
+            worker can activate (or switch the engine to ScramJet). ScramJet does adblock/tracker
+            stripping, HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression
+            and AMP de-amping on every upstream request.
           </p>
         </div>
         <div className="lb-setting-group">
@@ -369,7 +372,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={settings.proxyEngine !== "lobsterjet"} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
         </m3e-list>
       </Panel>
 

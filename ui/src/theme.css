@@ -1171,6 +1171,22 @@ m3e-snackbar {
   width: 24px;
   height: 24px;
 }
+.lb-tune-ic svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+/* The raw Material Symbols SVG paths carry their own fill attribute
+   (dark), which overrides inherited fill from the svg element. Force
+   the paint down to every child so the glyph follows the button color
+   (visible in dark mode). */
+.lb-tune-ic svg path,
+.lb-tune-ic svg g,
+.lb-tune-ic svg circle,
+.lb-tune-ic svg rect {
+  fill: currentColor;
+}
 .lb-rule-row {
   display: flex;
   align-items: center;

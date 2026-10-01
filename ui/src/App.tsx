@@ -267,21 +267,6 @@ export default function App() {
     void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
   }, [settings.adblock]);
 
-  /* ---- Decentraleyes toggle: tell the worker the current state.
-     Re-posted when a controller (re)appears, since a fresh worker
-     starts with the pass enabled by default. ---- */
-  useEffect(() => {
-    const post = () => {
-      navigator.serviceWorker?.controller?.postMessage({
-        lb: "decentraleyes",
-        enabled: settings.decentraleyes,
-      });
-    };
-    post();
-    navigator.serviceWorker?.addEventListener("controllerchange", post);
-    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.decentraleyes]);
-
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {

@@ -74,7 +74,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
         </m3e-icon-button>{" "}
         Logs
       </m3e-heading>
-      <p className="lb-muted">Client and server-side proxy events. Not sensitive request data is logged.</p>
+      <p className="lb-muted">Client and server-side proxy events. No sensitive request data is logged.</p>
 
       <div className="lb-logs-toolbar">
         <m3e-button

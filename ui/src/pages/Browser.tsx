@@ -1159,7 +1159,7 @@ export default function BrowserView(props: Props) {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, settings.engine]);
+  }, [draft, settings.engine, settings.suggestQueries]);
 
   /* Compaction 4: an empty tab IS the new-tab search. The in-page hero
      with its own search bar is gone; the toolbar pill expands and
@@ -1404,7 +1404,9 @@ export default function BrowserView(props: Props) {
     a.href = url;
     a.download = "lobsterbrowse-cookies.csv";
     a.click();
-    URL.revokeObjectURL(url);
+    /* Revoke late: an immediate revoke can abort the download before
+       the browser takes ownership of the blob (seen on Firefox). */
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
 
   return (
@@ -1553,6 +1555,7 @@ export default function BrowserView(props: Props) {
           open={tabsOpen}
           settings={settings}
           rules={rules}
+          incognito={props.incognito}
           onNewTab={() => { props.newTab(); setTabsOpen(false); }}
           onClose={() => setTabsOpen(false)}
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
