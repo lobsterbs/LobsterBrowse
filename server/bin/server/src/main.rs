@@ -24,7 +24,6 @@ use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 /// Engine shim + devtools hook injected right after <head> of every
-/// Engine shim + devtools hook injected right after <head> of every
 /// rewritten HTML document. The shim routes runtime fetch/XHR, element
 /// src/href assignments and history changes through /r routes; the hook
 /// reports console output, errors, network traffic and page loads to
@@ -1643,7 +1642,12 @@ fn rewrite_tag(tag: &str, tag_lower: &str, page_url: &str, suffix: &str, prefix:
                 None => (after[1..].to_string(), after.len()),
             }
         } else {
-            match after.find([' ', '\t', '\n', '\r']) {
+            // Unquoted values end at whitespace or the tag-closing '>'
+            // (both are forbidden inside them by the HTML spec): without
+            // '>' in the terminator set, <a href=/foo> swallowed the
+            // closing '>' into the rewritten URL and the tag lost its
+            // terminator entirely.
+            match after.find([' ', '\t', '\n', '\r', '>']) {
                 Some(e) => (after[..e].to_string(), e),
                 None => (after.to_string(), after.len()),
             }
@@ -2044,11 +2048,6 @@ fn params_suffix(params: &HashMap<String, String>) -> String {
             parts.push(format!("lb_ua={}", pct_enc(ua)));
         }
     }
-    if let Some(h) = params.get("hdrs") {
-        if !h.is_empty() {
-            parts.push(format!("lb_hdrs={}", pct_enc(h)));
-        }
-    }
     // Session token threads onto every rewritten URL so subresource
     // fetches log into the same per-session ring as the navigation.
     if let Some(s) = params.get("sess") {
@@ -2299,7 +2298,7 @@ async fn engine_proxy(
         }
     }
     for k in [
-        "ab", "trk", "https", "ua", "hdrs", "img", "inc", "sess", "sid",
+        "ab", "trk", "https", "ua", "img", "inc", "sess", "sid",
     ] {
         if let Some(v) = params.remove(&format!("lb_{}", k)) {
             params.insert(k.to_string(), v);
@@ -2426,44 +2425,6 @@ async fn engine_proxy(
     // browser would send.
     req = req.header("Sec-GPC", "1");
     req = req.header("DNT", "1");
-    // Custom outbound header profile (Settings > Advanced): lines of
-    // "Name: value", base64url-encoded in the lb_hdrs param. Applied
-    // last so a profile can override the defaults above. Hop-by-hop and
-    // jar-managed headers are blocked.
-    if let Some(hdrs_b64) = params.get("hdrs") {
-        if let Some(raw) = b64url_decode(hdrs_b64) {
-            if let Ok(text) = String::from_utf8(raw) {
-                for line in text.lines().take(16) {
-                    let Some((name, value)) = line.split_once(':') else {
-                        continue;
-                    };
-                    let name = name.trim();
-                    let value: String = value
-                        .chars()
-                        .filter(|c| *c != '\u{000d}' && *c != '\u{000a}')
-                        .take(512)
-                        .collect();
-                    let lower = name.to_ascii_lowercase();
-                    let valid = !name.is_empty()
-                        && !value.is_empty()
-                        && name
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                        && ![
-                            "host",
-                            "content-length",
-                            "connection",
-                            "transfer-encoding",
-                            "cookie",
-                        ]
-                        .contains(&lower.as_str());
-                    if valid {
-                        req = req.header(name, value);
-                    }
-                }
-            }
-        }
-    }
     // Referer recovery: the browser sends the engine-local route as the
     // Referer of subresource requests. Decoding it back to the real page
     // URL means upstream sites (and CAPTCHA providers like Cloudflare
@@ -3253,6 +3214,24 @@ fn zeolite_version(js: &str) -> String {
     "unknown".to_string()
 }
 
+/// Plain-hostname check for the /cert endpoint: the host comes from the
+/// route's query string and is interpolated into upstream CT-log URLs,
+/// so only letters, digits, hyphens and dots pass (no scheme, path or
+/// query injection into crt.sh / Cert Spotter).
+fn plain_hostname(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+}
+
 /// TLS certificate details for the site info card. The browser never
 /// makes a direct TLS connection to proxied sites, so this reads the
 /// host's public CT-log record: crt.sh first, Cert Spotter as the
@@ -3272,7 +3251,7 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
         .and_then(|qs| qs.split('&').find_map(|kv| kv.strip_prefix("host=")))
         .map(percent_decode)
         .unwrap_or_default();
-    if host.is_empty() {
+    if !plain_hostname(&host) {
         return (
             [(header::CONTENT_TYPE, "application/json")],
             "{\"ok\":false,\"error\":\"certificate data unavailable\"}",
@@ -3286,7 +3265,7 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
         &format!("cert lookup {}", host),
     );
     /* crt.sh first: query the host, pick the best record. */
-    let crtsh_url = format!("https://crt.sh/?q={}&output=json", json_escape(&host));
+    let crtsh_url = format!("https://crt.sh/?q={}&output=json", pct_enc(&host));
     let picked = match ct_fetch(&state, &crtsh_url).await {
         Ok(body) => best_crtsh(&body, &host),
         Err(err) => {
@@ -3304,7 +3283,7 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
             /* Fallback: Cert Spotter public issuances API. */
             let cs_url = format!(
                 "https://api.certspotter.com/v1/issuances?domain={}&include_certificates=false",
-                json_escape(&host)
+                pct_enc(&host)
             );
             match ct_fetch(&state, &cs_url).await {
                 Ok(body) => {
