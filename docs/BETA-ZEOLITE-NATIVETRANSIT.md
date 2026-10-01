@@ -1,7 +1,38 @@
 # Beta: Zeolite NativeTransit-First (/zl/)
 
 Experimental branch: beta/zeolite-nativetransit (the retired unstable line was migrated here 2026-09-29)
-at 31bdc9e. Main is untouched; /r/ and /lj/ keep working exactly as on main.
+at 31bdc9e. ScramJet is now REMOVED from this branch (2026-10-01, see the section below): Zeolite is the
+only engine, /r/ and /lj/ 302 to /zl/, and main is the only branch that still has the server rewriter.
+
+## ScramJet removal (2026-10-01)
+
+ScramJet (the server-side rewriting engine) is fully removed from this branch.
+
+- Server: the rewrite chain, engine_proxy, ad/tracker host lists, session jars, rate limiting, the
+  Anubis bridge, the AMO Firefox-UA spoof, the shim/compat injection and every lb_ route option are
+  deleted from main.rs. Cargo.toml/lock drop the adblock/bytes/futures-util/image server deps. What
+  remains: /zlsw/ serving, the wisp endpoint, /suggest, /logs, /cert, /build, /healthz, the honest
+  no-worker notice for /zl/, and 302s from /r/ and /lj/ to /zl/ (target + query preserved) so stale
+  bookmarks keep working.
+- UI: proxyEngine/decentraleyes/httpsOnly settings and the Proxy engine segment are gone;
+  routeUrl(target) always builds /zl/ routes; settings reach the engine only through the zl:* control
+  plane (zl:adblock, zl:rules, zl:jarProfile, zl:sameSite, zl:fingerprint). engine-shim.js,
+  engine-compat.js, ui/public/lobsterjet.js and the scramjet/ legacy deployment directory are deleted.
+- Tests: the /r/ server-side transit gates are replaced with /zl/ notice gates, wasm-alias gates and
+  legacy-redirect gates; the Tier-8/9/10 fixtures stay for the browser-level engine pass.
+
+Honest gaps created by the removal (do not paper over):
+
+1. Challenge-protected sites (Anubis). The engine is challenge-DETECT only; the server-side
+   anubis_bridge that solved the proof is gone. Startpage, the DEFAULT search engine, fronts every
+   page with an Anubis challenge and now shows the honest engine error. Filed against Zeolite
+   (challenge-cookie handoff surface).
+2. AMO Firefox-UA spoof. .xpi downloads from AMO's CDN no longer get a forced Firefox UA; installs
+   go through the API route (AmoSearch) and may need a per-site Firefox UA rule.
+3. HTTPS-only / https-upgrade. The lb_https server option had no engine equivalent; the toggle is
+   removed rather than dead. Engine-side https upgrade would be a Zeolite feature.
+4. Image re-encode (lb_img). The JPEG re-encode-on-the-server option is gone; nothing re-encodes
+   images now.
 
 ## Architecture (verified against source, not old docs)
 

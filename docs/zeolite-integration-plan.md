@@ -53,12 +53,14 @@ compiles; it does not browse). The beta branch isolates that risk.
    crates/rewriter/src/js/antiframe.rs, applied by the html rewriter
    at BOTH call sites - served script bodies (after js::rewrite_script)
    and inline event handlers (wrapping js::rewrite_inline) - verified
-   at Zeolite e0835e18. Remaining optional work: a behavioral parity
-   test between /r/ ScramJet and /lj/ Zeolite on a frame-busting page.
-   A deterministic fixture now lives at ui/public/antiframe-fixture.html
+   at Zeolite e0835e18. Remaining optional work: a behavioral test of
+   the engine antiframe pass on a frame-busting page (the ScramJet
+   parity side is gone since the 2026-10-01 removal; the pass now has
+   to stand on its own).
+   A deterministic fixture lives at ui/public/antiframe-fixture.html
    (served live at /antiframe-fixture.html): both idioms (top.location
-   assignment and top.location.href assignment) must be sunk by their
-   respective passes, so the page stays framed and flips its status text
+   assignment and top.location.href assignment) must be sunk by the
+   engine pass, so the page stays framed and flips its status text
    to "script ran".
 4. Engine-mode WebSocket virtual origins: IMPLEMENTED (2026-09-30,
    Zeolite engine commit e3f1a171, CI-green after the tsc fix for the

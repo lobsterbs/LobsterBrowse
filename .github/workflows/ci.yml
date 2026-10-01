@@ -27,8 +27,11 @@ jobs:
         run: cargo test --locked
       - name: Clippy (locked)
         run: |
-          cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt | grep -E "(error|warning):" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
-          if grep -qE "(error|warning):" /tmp/clippy.txt; then exit 1; fi
+          set -o pipefail
+          cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt
+          code=$?
+          grep -E "(error|warning):" /tmp/clippy.txt | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          exit $code
 
   ui:
     runs-on: ubuntu-latest
@@ -39,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npm run build
 
@@ -49,14 +52,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Tier-0 fixture checks
         run: node tests/transit/check.mjs
 
   # Deployed-pair gate: runs the full check against the LIVE Render
   # pair (fixture + beta). This gates the deployed service, which can
-  # lag this commit while Render rebuilds - the /r/ and /zl/ surfaces it
-  # asserts change only with server commits, so a lag here means the
+  # lag this commit while Render rebuilds - the /zl/ and legacy
+  # redirect surfaces it asserts change only with server commits, so a lag here means the
   # previous deploy is verified, not that this push is live. The
   # next beta push re-gates whatever is live then.
   transit-live:
@@ -69,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # Render free tier spins the pair down after idle; the edge answers
       # 503 while the instance wakes. Warm both origins (any non-503 code
       # counts, including the honest /zl/ 503 notice route) before the
