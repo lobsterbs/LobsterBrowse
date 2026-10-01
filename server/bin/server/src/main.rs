@@ -313,29 +313,6 @@ fn build_engine_client() -> reqwest::Client {
 /// Firefox User-Agent for the /suggest provider fetches (Brave and
 /// some other providers reject requests without a browser UA).
 const FIREFOX_UA: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
-const B64URL_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-fn b64url_encode(data: &[u8]) -> String {
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-        out.push(B64URL_CHARS[(n >> 18 & 63) as usize] as char);
-        out.push(B64URL_CHARS[(n >> 12 & 63) as usize] as char);
-        if chunk.len() > 1 {
-            out.push(B64URL_CHARS[(n >> 6 & 63) as usize] as char);
-        }
-        if chunk.len() > 2 {
-            out.push(B64URL_CHARS[(n & 63) as usize] as char);
-        }
-    }
-    out
-}
-
 fn b64url_decode(s: &str) -> Option<Vec<u8>> {
     let mut vals: Vec<u8> = Vec::with_capacity(s.len());
     for ch in s.bytes() {
