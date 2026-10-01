@@ -30,7 +30,7 @@ jobs:
           set -o pipefail
           cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt
           code=$?
-          grep -E "(error|warning):" /tmp/clippy.txt | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          grep -E "(error|warning):" /tmp/clippy.txt | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done || true
           exit $code
 
   ui:
