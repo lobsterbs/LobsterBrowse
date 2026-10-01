@@ -361,6 +361,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
           <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
+          <Row label="SameSite≈ cookies (engine jar)" icon="public" on={settings.sameSitePolicy === "approx"} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ sameSitePolicy: settings.sameSitePolicy === "approx" ? "off" : "approx" })} />
+          <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
         </m3e-list>
       </Panel>
 

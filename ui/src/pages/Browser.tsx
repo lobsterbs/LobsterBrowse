@@ -409,6 +409,35 @@ export default function BrowserView(props: Props) {
     window.setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
     pushLog("info", "xpi saved " + p.name);
   };
+  /* ---- Engine download handoff (#46): an extension calling
+     downloads.download() hands the save to the UI — the engine
+     broadcasts zl:downloadOp to its window clients and owns nothing
+     after that. Feed it into the same transfer machinery the
+     a[download] capture uses. ponytail: the broadcast reaches every
+     LB window (clients.matchAll), so two open windows would both save;
+     elect a single receiver if that ever bites. Reporting state back
+     to the engine waits on a zl:downloadState receiver there. ---- */
+  const startDlRef = useRef(startDownload);
+  startDlRef.current = startDownload;
+  useEffect(() => {
+    const onSwMsg = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string } };
+      if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || !d.op.url) return;
+      let name = (d.op.filename ?? "").trim();
+      if (!name) {
+        try {
+          name = decodeURIComponent(new URL(d.op.url, location.origin).pathname.split("/").filter(Boolean).pop() ?? "");
+        } catch {
+          name = "";
+        }
+      }
+      /* The broadcast does not say which tab the extension acted on,
+         so the active tab's session token applies (best effort). */
+      startDlRef.current(d.op.url, name.slice(0, 120) || "download", active?.sess);
+    };
+    navigator.serviceWorker?.addEventListener("message", onSwMsg);
+    return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
+  }, [active?.sess]);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the

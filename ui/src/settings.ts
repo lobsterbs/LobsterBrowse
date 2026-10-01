@@ -123,6 +123,11 @@ export type Settings = {
   decentraleyes: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
+  /* Zeolite engine jar SameSite policy (#48): "approx" has the
+     engine jar emit SameSite hints it cannot know natively. */
+  sameSitePolicy: "off" | "approx";
+  /* Zeolite document-surface spoofing on engine-routed pages (#48). */
+  fingerprintSpoof: boolean;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -151,6 +156,8 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsOnly: true,
   uaPreset: "chrome-win",
   uaCustom: "",
+  sameSitePolicy: "off",
+  fingerprintSpoof: false,
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -186,6 +193,8 @@ export function loadSettings(): Settings {
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
+      sameSitePolicy: parsed.sameSitePolicy === "approx" ? "approx" : "off",
+      fingerprintSpoof: parsed.fingerprintSpoof === undefined ? false : Boolean(parsed.fingerprintSpoof),
       density: parsed.density === "compact" ? "compact" : "normal",
     };
   } catch {
