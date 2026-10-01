@@ -311,6 +311,33 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [incognito]);
 
+  /* ---- Zeolite jar knobs (#48): SameSite policy on the engine cookie
+     jar, and document-surface fingerprint spoofing on engine-routed
+     pages. Both are worker-global and reset on restart, so re-send on
+     change and on controllerchange (the jarProfile pattern above). The
+     spoof profile is a single field — the same UA the /r/ engine sends
+     on requests — and the engine derives platform, languages and the
+     canvas seed from it; timezone and hardware stay native so local
+     times and page layout keep working. ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
+      const profile = settings.fingerprintSpoof
+        ? { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent }
+        : null;
+      void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
+        /* A rejected profile must not silently read as spoofed: the
+           engine answers ok:false (e.g. a custom UA it cannot derive a
+           platform from) and the toggle would lie. */
+        if (settings.fingerprintSpoof && r && r.ok === false) {
+          store.pushLog("warn", "zeolite rejected the fingerprint profile: " + String(r.error ?? "unknown reason"));
+        }
+      });
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker
      starts with the pass enabled by default. ---- */
