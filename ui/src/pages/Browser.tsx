@@ -183,8 +183,24 @@ export default function BrowserView(props: Props) {
     dlAbort.current.get(id)?.abort();
     dlAbort.current.delete(id);
   };
-  const startDownload = (href: string, name: string) => {
+  const startDownload = (href: string, name: string, engId?: number) => {
     const id = dlSeq.current++;
+    /* Engine handoff (#46): when the download came from the engine's
+       zl:downloadOp (an extension's downloads.download()), report
+       state back over zl:downloadState so the engine's registry and
+       the extension's downloads.onChanged stay truthful — otherwise
+       the engine-side entry stays "active" forever. Fire-and-forget:
+       a report for an already-finished id is answered ok:false and
+       dropped, and zlSend never throws. Progress reports are
+       throttled to one per second per download. */
+    let lastRep = 0;
+    const reportEng = (
+      status: "active" | "done" | "error" | "cancelled",
+      extra?: { received?: number; size?: number; error?: string },
+    ) => {
+      if (engId === undefined) return;
+      void zlSend({ type: "zl:downloadState", id: engId, status, ...extra }, 8000);
+    };
     /* Engine-routed hrefs (/zl/, plus legacy /r/ and /lj/ that the
        server bounces) are fetched as-is; anything else goes through
        routeUrl so it rides the engine like a navigation. */
@@ -213,6 +229,7 @@ export default function BrowserView(props: Props) {
       const fail = (msg: string) => {
         dlAbort.current.delete(id);
         pushLog("error", "download failed " + name + ": " + msg);
+        reportEng("error", { error: msg.slice(0, 120) });
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
       };
       try {
@@ -255,6 +272,7 @@ export default function BrowserView(props: Props) {
                  fetch, no fake failure. */
               ac.abort();
               pushLog("info", "download cancelled at save dialog " + name);
+              reportEng("cancelled");
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
               return;
             }
@@ -290,6 +308,10 @@ export default function BrowserView(props: Props) {
                 return;
               }
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
+              if (Date.now() - lastRep > 1000) {
+                lastRep = Date.now();
+                reportEng("active", { received: total, size });
+              }
             }
           }
           if (streaming && writable) {
@@ -304,6 +326,7 @@ export default function BrowserView(props: Props) {
           setDownloads((prev) =>
             prev.map((d) => (d.id === id ? { ...d, size: d.size || total, got: total, status: "done" } : d)),
           );
+          reportEng("done", { received: total, size: size || total });
           pushLog("info", "download streamed to disk " + name + " (" + fmtBytes(total) + ")");
           try {
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -325,6 +348,7 @@ export default function BrowserView(props: Props) {
         setDownloads((prev) =>
           prev.map((d) => (d.id === id ? { ...d, size: d.size || blob.size, got: blob.size, status: "done" } : d)),
         );
+        reportEng("done", { received: blob.size, size: size || blob.size });
         /* XPI packages from the add-ons store: ask before anything
            happens. Install goes straight into the engine (the same
            zl:installExt path the Settings import uses); Save file
@@ -369,11 +393,13 @@ export default function BrowserView(props: Props) {
           /* User cancel, save-dialog dismissal or the size-cap abort:
              an honest "cancelled" state, not a fake failure. */
           pushLog("info", "download cancelled " + name);
+          reportEng("cancelled");
           setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
           return;
         }
         const msg = err instanceof Error ? err.message : String(err);
         pushLog("error", "download failed " + name + ": " + msg);
+        reportEng("error", { error: msg.slice(0, 120) });
         setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
       }
     })();
@@ -414,13 +440,14 @@ export default function BrowserView(props: Props) {
      after that. Feed it into the same transfer machinery the
      a[download] capture uses. ponytail: the broadcast reaches every
      LB window (clients.matchAll), so two open windows would both save;
-     elect a single receiver if that ever bites. Reporting state back
-     to the engine waits on a zl:downloadState receiver there. ---- */
+     elect a single receiver if that ever bites. State flows back over
+     zl:downloadState so the engine's registry and the extension's
+     downloads.onChanged stay truthful. ---- */
   const startDlRef = useRef(startDownload);
   startDlRef.current = startDownload;
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
-      const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string } };
+      const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string; id?: number } };
       /* Trust boundary: the engine relays extension-supplied values. */
       if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || typeof d.op.url !== "string" || !d.op.url) return;
       let name = typeof d.op.filename === "string" ? d.op.filename.trim() : "";
@@ -431,7 +458,9 @@ export default function BrowserView(props: Props) {
           name = "";
         }
       }
-      startDlRef.current(d.op.url, name.slice(0, 120) || "download");
+      /* The numeric id keys the engine's download state; thread it so
+         progress and completion can flow back (zl:downloadState). */
+      startDlRef.current(d.op.url, name.slice(0, 120) || "download", typeof d.op.id === "number" ? d.op.id : undefined);
     };
     navigator.serviceWorker?.addEventListener("message", onSwMsg);
     return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
