@@ -1147,12 +1147,11 @@ async fn main() {
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
-        // The service worker script gets Service-Worker-Allowed so a
-        // "/" scope registration is possible later; its chunks and
-        // wasm assets are plain static files under the same prefix.
-        // The worker registers at its natural /zlsw/ scope today and
-        // acts purely as the extension control plane: it controls no
-        // pages, so proxied /zl/ browsing is untouched.
+        // The service worker script gets Service-Worker-Allowed so it
+        // registers at the "/" scope (ui/src/zeolite.ts): it intercepts
+        // the engine routes and passes every non-engine path through
+        // untouched. Its chunks and wasm assets are plain static files
+        // under the same prefix.
         .route("/zlsw/sw.js", get(zl_sw_js))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
         // The engine rewriter injects <script src="/bootstrap.js">
