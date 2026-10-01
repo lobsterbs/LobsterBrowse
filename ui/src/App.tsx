@@ -231,7 +231,7 @@ export default function App() {
     const push = async () => {
       const msg = {
         type: "zl:config",
-        prefix: engineRoutePrefix(settings.proxyEngine),
+        prefix: engineRoutePrefix(),
         scheme: "b64u",
       };
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
@@ -262,17 +262,17 @@ export default function App() {
       }
       await push();
     })();
-  }, [settings.proxyEngine]);
+  }, []);
 
   /* ---- Zeolite adblock + per-site rules: the engine's /rules.json
        (the migrated ad/tracker host lists) is evaluated client-side in
        its worker; keep the toggle in sync with the Ad & tracker
        blocking setting. The per-site rules (rules chip / Settings:
        host-scoped adblock switch, UA preset) ride along as a zl:rules
-       push built from the same loadSiteRules() store the /r/ chain
-       reads, so the engine applies them per target host with the same
-       semantics the server engine gets from the lb_ options (adblock
-       can only disable per site; the global setting still wins). The
+       push built from the same loadSiteRules() store the Settings and
+       lock-card UI read, so the engine applies them per target host
+       with the same semantics (adblock can only disable per site; the
+       global setting still wins). The
        worker resets both on restart, so re-send on boot and on
        change. ---- */
   useEffect(() => {
@@ -280,8 +280,8 @@ export default function App() {
     void zlSend(
       {
         type: "zl:rules",
-        /* Global UA default: hosts without a rule get the same UA the
-           /r/ server engine would send (resolveUa with no rule hit). */
+        /* Global UA default: hosts without a rule get the resolved
+           global UA (resolveUa with no rule hit). */
         ua: resolveUa(settings, rules, "") ?? undefined,
         rules: rules.map((r) => ({
           host: r.domain,
@@ -294,8 +294,8 @@ export default function App() {
   }, [settings, rules]);
 
   /* ---- Zeolite incognito jar: while incognito is on, the engine's
-       cookie jar must be a throwaway, same semantics as the /r/
-       engine's lb_inc jar: requests and document.cookie reads/writes
+       cookie jar must be a throwaway (the zl:jarProfile push):
+       requests and document.cookie reads/writes
        use a session profile that never touches IndexedDB and dies the
        moment incognito ends. The SW resets the profile to default on
        restart, so re-send on the incognito toggle and on
@@ -315,7 +315,7 @@ export default function App() {
      jar, and document-surface fingerprint spoofing on engine-routed
      pages. Both are worker-global and reset on restart, so re-send on
      change and on controllerchange (the jarProfile pattern above). The
-     spoof profile is a single field — the same UA the /r/ engine sends
+     spoof profile is a single field — the same UA the engine sends
      on requests — and the engine derives platform, languages and the
      canvas seed from it; timezone and hardware stay native so local
      times and page layout keep working. ---- */
@@ -338,21 +338,6 @@ export default function App() {
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
-
-  /* ---- Decentraleyes toggle: tell the worker the current state.
-     Re-posted when a controller (re)appears, since a fresh worker
-     starts with the pass enabled by default. ---- */
-  useEffect(() => {
-    const post = () => {
-      navigator.serviceWorker?.controller?.postMessage({
-        lb: "decentraleyes",
-        enabled: settings.decentraleyes,
-      });
-    };
-    post();
-    navigator.serviceWorker?.addEventListener("controllerchange", post);
-    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.decentraleyes]);
 
   /* ---- Auto cloak ---- */
   useEffect(() => {

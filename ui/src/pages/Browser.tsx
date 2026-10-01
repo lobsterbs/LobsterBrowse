@@ -1,12 +1,13 @@
 /* The in-app proxy browser surface: tabs, frosted floating tab strip,
    bottom hover toolbar, proxied iframes and per-tab DevTools.
 
-   Single native engine: every navigation goes to /r/<base64url of the
-   target>, which the server rewrites (URL-bearing attributes, CSS urls)
-   and re-injects with a shim that routes runtime fetch/XHR and element
-   assignments. Frames are same-origin, so the UI polls each frame for
-   its real URL, title and favicon, and DevTools get full console and
-   network capture.
+   Zeolite is the only engine: every navigation goes to
+   /zl/<base64url of the target>, which the Zeolite service worker
+   intercepts (native wisp transport, in-worker rewriting of
+   URL-bearing attributes and CSS urls, runtime fetch/XHR and element
+   assignment routing). Frames are same-origin, so the UI polls each
+   frame for its real URL, title and favicon, and DevTools get full
+   console and network capture.
 
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
@@ -130,7 +131,7 @@ export default function BrowserView(props: Props) {
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
-  /* Frame documents that already have LobsterJet prefetch listeners. */
+  /* Frame documents that already have engine prefetch listeners. */
   const wiredDocs = useRef<WeakSet<Document>>(new WeakSet());
   /* Last lb-diag content seen per tab: the proxy rewriter reports how
      many CSP meta tags and SRI integrity attributes it stripped; log
@@ -182,17 +183,15 @@ export default function BrowserView(props: Props) {
     dlAbort.current.get(id)?.abort();
     dlAbort.current.delete(id);
   };
-  const startDownload = (href: string, name: string, sess?: string) => {
+  const startDownload = (href: string, name: string) => {
     const id = dlSeq.current++;
-    /* Engine-routed hrefs (/r/, /lj/, /zl/) are fetched as-is (the session
-       token is already on them); anything else goes through routeUrl
-       so settings, site rules, incognito jar and the session token
-       apply. Incognito downloads used to fall back to the shared jar
-       because the incognito flag never reached this call. */
+    /* Engine-routed hrefs (/zl/, plus legacy /r/ and /lj/ that the
+       server bounces) are fetched as-is; anything else goes through
+       routeUrl so it rides the engine like a navigation. */
     const target =
       href.startsWith("/r/") || href.startsWith("/lj/") || href.startsWith("/zl/")
       ? href
-      : routeUrl(settings, rules, href, props.incognito, sess);
+      : routeUrl(href);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
@@ -432,13 +431,11 @@ export default function BrowserView(props: Props) {
           name = "";
         }
       }
-      /* The broadcast does not say which tab the extension acted on,
-         so the active tab's session token applies (best effort). */
-      startDlRef.current(d.op.url, name.slice(0, 120) || "download", active?.sess);
+      startDlRef.current(d.op.url, name.slice(0, 120) || "download");
     };
     navigator.serviceWorker?.addEventListener("message", onSwMsg);
     return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
-  }, [active?.sess]);
+  }, []);
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the
@@ -628,7 +625,7 @@ export default function BrowserView(props: Props) {
 
   /* ---- Favicon: read from the same-origin frame document, fetch the
      icon through the engine, cache per icon URL. ---- */
-  const loadFavicon = (tabId: number, url: string, doc: Document, sess?: string) => {
+  const loadFavicon = (tabId: number, url: string, doc: Document) => {
     let href = "";
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
@@ -639,7 +636,7 @@ export default function BrowserView(props: Props) {
         href = attr;
       } else {
         try {
-          href = routeUrl(settings, rules, new URL(attr, url).href, false, sess);
+          href = routeUrl(new URL(attr, url).href);
         } catch {
           href = "";
         }
@@ -647,7 +644,7 @@ export default function BrowserView(props: Props) {
     }
     if (!href) {
       try {
-        href = routeUrl(settings, rules, new URL(url).origin + "/favicon.ico", false, sess);
+        href = routeUrl(new URL(url).origin + "/favicon.ico");
       } catch {
         return;
       }
@@ -734,9 +731,10 @@ export default function BrowserView(props: Props) {
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
     const frame = frames.current.get(tab.id);
-    /* 74.9: incognito tabs route through the engine's separate cookie
-       jar (lb_inc=1) so their cookies never mix into the shared one. */
-    const href = routeUrl(settings, rules, url, props.incognito, tab.sess);
+    /* 74.9: incognito tabs ride the engine's throwaway jar profile
+       (zl:jarProfile) so their cookies never mix into the default
+       one. */
+    const href = routeUrl(url);
     if (frame) frame.src = href;
     pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
@@ -799,8 +797,8 @@ export default function BrowserView(props: Props) {
         return;
       }
       blankPolls.current.delete(t.id);
-      /* Detailed error page: the server renders meta[lb-load-error]
-         at the same /r/ path; surface it and stop the spinner. */
+      /* Detailed error page: the engine serves the honest error card
+         at the same /zl/ path; surface it and stop the spinner. */
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
       if (errMeta) {
         setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
@@ -920,7 +918,7 @@ export default function BrowserView(props: Props) {
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
-          f.src = routeUrl(settings, rules, intended, props.incognito, t.sess);
+          f.src = routeUrl(intended);
         } catch {
           /* cross-origin or gone: nothing to recover */
         }
@@ -961,12 +959,12 @@ export default function BrowserView(props: Props) {
         const cur = prev[t.id];
         return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
       });
-      loadFavicon(t.id, real, doc, t.sess);
-      /* LobsterJet prefetch: hovering (or keyboard-focusing) a link in
+      loadFavicon(t.id, real, doc);
+      /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
         wiredDocs.current.add(doc);
-        const prefix = engineRoutePrefix(settings.proxyEngine);
+        const prefix = engineRoutePrefix();
         const prefetch = (el: EventTarget | null) => {
           const target = el as Element | null;
           const a = target && target.closest ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
@@ -1013,7 +1011,7 @@ export default function BrowserView(props: Props) {
                 name = "download";
               }
             }
-            startDownload(href, name.slice(0, 120), t.sess);
+            startDownload(href, name.slice(0, 120));
           },
           true,
         );
@@ -1385,7 +1383,7 @@ export default function BrowserView(props: Props) {
   /* ---- Per-site rules chip (#10) ---- */
   const activeRule = rules.find((r) => r.domain === uParts.host);
   /* Effective ad-block: global unless this site's rule disables it
-     (proxyParams semantics). */
+     (same semantics as the zl:rules push). */
   const ruleAdBlock = settings.adblock && activeRule?.adblock !== false;
   const ruleUa: UaPresetId | "" = activeRule?.uaPreset ?? "";
   const setRuleAdblock = (on: boolean) => {
@@ -1502,7 +1500,9 @@ export default function BrowserView(props: Props) {
     a.href = url;
     a.download = "lobsterbrowse-cookies.csv";
     a.click();
-    URL.revokeObjectURL(url);
+    /* Revoke late: an immediate revoke can abort the download before
+       the browser takes ownership of the blob (seen on Firefox). */
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
 
   return (
@@ -1532,9 +1532,9 @@ export default function BrowserView(props: Props) {
                  sandbox provided no real isolation (that exact pair is
                  what triggers the "can escape its sandboxing" console
                  warning) while adding navigation/download quirks.
-                 Hostile page scripts are contained server-side by the
-                 antiframe rewrite instead. */
-              /* Cross-origin frames (LobsterJet) can't be polled; the
+                 Hostile page scripts are contained by the engine's
+                 navguard instead. */
+              /* Cross-origin frames can't be polled; the
                  load event is the only reliable "done" signal there. */
               onLoad={() =>
                 setStatus((prev) => {
@@ -1560,7 +1560,7 @@ export default function BrowserView(props: Props) {
             <div className="lb-error-logs">
               <div className="lb-error-logs-title">Technical log</div>
               <div className="lb-error-logline">
-                engine {settings.proxyEngine} · route {routeUrl(settings, rules, errors[active.id].url)}
+                engine zeolite · route {routeUrl(errors[active.id].url)}
               </div>
               <div className="lb-error-logline">
                 navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
@@ -1643,8 +1643,6 @@ export default function BrowserView(props: Props) {
           closingIds={closingIds}
           icons={icons}
           open={tabsOpen}
-          settings={settings}
-          rules={rules}
           onNewTab={() => { props.newTab(); setTabsOpen(false); }}
           onClose={() => setTabsOpen(false)}
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
@@ -1985,9 +1983,7 @@ export default function BrowserView(props: Props) {
                         onChange={(v) => setRuleUa(v as UaPresetId | "")}
                       />
                       <p className="lb-site-note">
-                        {settings.proxyEngine === "lobsterjet"
-                          ? "Per-site rules apply to ScramJet (/r/) routes. The Zeolite engine currently applies the global ad-block setting; wiring these rules into the engine is tracked on the unstable integration branch."
-                          : "Applies from the next navigation on /r/ routes."}
+                        Per-site rules reach the engine through the zl:rules push and apply from the next navigation.
                       </p>
                     </>
                   )}

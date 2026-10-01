@@ -4,10 +4,11 @@
    The engine bundle is vendored into /zlsw at build time and served
    with Service-Worker-Allowed: /, so it registers at the "/" scope.
    The SW fetch handler passes through every non-engine path, so a
-   root scope is safe: only /r/, /lj/ and the extension asset routes
-   are intercepted, and /zl-ext/, /zl-cs/ asset serving needs the
-   wide scope. With no controller on the page (Home, Settings, plain
-   tabs) this module is the control plane client. */
+   root scope is safe: only /zl/ (plus the legacy /r/ and /lj/
+   prefixes the server redirects to it) and the extension asset
+   routes are intercepted, and /zl-ext/, /zl-cs/ asset serving needs
+   the wide scope. With no controller on the page (Home, Settings,
+   plain tabs) this module is the control plane client. */
 
 export async function zlWorker(): Promise<ServiceWorker | null> {
   if (!("serviceWorker" in navigator)) return null;
