@@ -1372,7 +1372,6 @@ mod suggest_tests {
         assert_eq!(arr[0].as_str(), Some("a\"b"));
         assert_eq!(arr[1].as_str(), Some("plain text"));
     }
-
 }
 
 #[cfg(test)]
