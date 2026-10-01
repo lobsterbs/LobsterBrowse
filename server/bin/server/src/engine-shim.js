@@ -134,6 +134,11 @@
     if (s.indexOf("/r/") === 0 || s.indexOf("/lj/") === 0) return s;
     if (s.indexOf(location.origin + "/r/") === 0 || s.indexOf(location.origin + "/lj/") === 0) return s;
     if (/^(data|blob|javascript|mailto|tel|about):/i.test(s)) return s;
+    /* Fragment-only values are same-document navigation (in-page
+       anchors, SVG sprite references): routing them would encode the
+       current page into a full navigation/reload instead of the
+       client-side scroll the page asked for. Kept as assigned. */
+    if (s.charAt(0) === "#") return s;
     var abs;
     try { abs = new URL(s, PAGE).href; } catch (e) { return s; }
     if (abs.indexOf(location.origin) === 0) return s;
