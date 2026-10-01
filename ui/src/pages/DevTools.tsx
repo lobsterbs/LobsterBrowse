@@ -443,20 +443,21 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
 
   /* ---- Console: real JS eval in the proxied page context. ---- */
   const runCode = (code: string) => {
-    const entry = (kind: ConsoleEntry["kind"], text: string) =>
-      setDt({ console: [...dt.console, { id: nextEntryId(), kind, text, ts: Date.now() }] });
     const f = frame();
     const w = f?.contentWindow;
     if (!w) {
-      entry("error", "No proxied page in this tab — navigate to a site first.");
+      setDt({ console: [...dt.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }] });
       return;
     }
-    setDt({ console: [...dt.console, { id: nextEntryId(), kind: "input", text: code, ts: Date.now() }] });
+    /* One setDt for input echo AND result: two calls in the same tick
+       (the second reads the render-time dt.console) would drop the
+       first entry; a single append cannot. */
+    const base = [...dt.console, { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() }];
     try {
       const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
       setDt({
         console: [
-          ...dt.console,
+          ...base,
           { id: nextEntryId(), kind: "result", text: formatValue(result), ts: Date.now() },
         ],
         history: [...dt.history, code].slice(-100),
@@ -465,7 +466,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
       const e = err as Error;
       setDt({
         console: [
-          ...dt.console,
+          ...base,
           {
             id: nextEntryId(),
             kind: "error",

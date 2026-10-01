@@ -27,8 +27,11 @@ jobs:
         run: cargo test --locked
       - name: Clippy (locked)
         run: |
-          cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt | grep -E "(error|warning):" | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
-          if grep -qE "(error|warning):" /tmp/clippy.txt; then exit 1; fi
+          set -o pipefail
+          cargo clippy --locked --message-format=short -- -D warnings 2>&1 | tee /tmp/clippy.txt
+          code=$?
+          grep -E "(error|warning):" /tmp/clippy.txt | head -20 | while IFS= read -r l; do echo "::error::CLIPPY $l"; done
+          exit $code
 
   ui:
     runs-on: ubuntu-latest
@@ -39,6 +42,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npm run build

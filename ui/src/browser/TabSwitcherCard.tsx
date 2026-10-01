@@ -14,6 +14,7 @@ export default function TabSwitcherCard(props: {
   open: boolean;
   settings: Settings;
   rules: SiteRule[];
+  incognito: boolean;
   onNewTab: () => void;
   onClose: () => void;
   onSelect: (id: number) => void;
@@ -49,7 +50,7 @@ export default function TabSwitcherCard(props: {
             <div className="lb-tab-preview">
               {t.url ? (
                 <iframe
-                  src={routeUrl(props.settings, props.rules, t.url, false, t.sess)}
+                  src={routeUrl(props.settings, props.rules, t.url, props.incognito, t.sess)}
                   title={"Preview of " + tabLabel(t)}
                   loading="lazy"
                   tabIndex={-1}

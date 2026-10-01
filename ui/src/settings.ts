@@ -113,8 +113,6 @@ export type Settings = {
   adblock: boolean;
   /* Reject plain-http targets (server-side). */
   httpsOnly: boolean;
-  /* Serve known CDN libraries from the device (LobsterJet worker). */
-  decentraleyes: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
@@ -140,7 +138,6 @@ export const DEFAULT_SETTINGS: Settings = {
   engine: "startpage",
   proxyEngine: "lobsterjet",
   adblock: true,
-  decentraleyes: true,
   httpsOnly: true,
   uaPreset: "chrome-win",
   uaCustom: "",
@@ -170,7 +167,6 @@ export function loadSettings(): Settings {
         parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
           ? parsed.proxyEngine
           : DEFAULT_SETTINGS.proxyEngine,
-      decentraleyes: parsed.decentraleyes === undefined ? true : Boolean(parsed.decentraleyes),
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
