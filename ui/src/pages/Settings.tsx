@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
-  zeoliteOwned,
   type EngineId,
   type Settings,
   type SiteRule,
@@ -42,10 +41,10 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
   );
 }
 
-function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; off?: boolean }) {
+function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
   return (
     <m3e-list-item>
-      <div className={"lb-setting-row" + (props.off ? " lb-off" : "")}>
+      <div className="lb-setting-row">
         <span className="lb-setting-label">
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
@@ -187,11 +186,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       return;
     }
     const blob = new Blob([JSON.stringify(rep.blob)], { type: "application/json" });
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = blobUrl;
     a.download = "lobsterbrowse-session.json";
     a.click();
-    URL.revokeObjectURL(a.href);
+    /* Revoke late: an immediate revoke can abort the download before
+       the browser takes ownership of the blob (seen on Firefox). */
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
     setSessStatus("Session exported. Without the passphrase the file is unreadable.");
   };
   const importSessionFile = async (file: File) => {
@@ -243,7 +245,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           ok: boolean;
           lb?: string;
           zeolite?: string;
-          lobsterjet?: string;
+          zlswSha?: string;
           build?: string;
           buildShort?: string;
         }>;
@@ -280,23 +282,10 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
       <p className="lb-muted" style={{ marginTop: 4 }}>
-        Saved on this device only. Toggles marked server-side change how the engine fetches pages.
+        Saved on this device only.
       </p>
 
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Proxy engine</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={!zeoliteOwned(settings.proxyEngine) ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              ScramJet
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine === "zeolite-beta" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite-beta" })}>
-              Zeolite Preview (/zl/)
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
-        </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
@@ -310,7 +299,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-list>
-          <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
       </Panel>
@@ -336,7 +324,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           )}
         </div>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Custom User-Agent (server-side)</div>
+          <div className="lb-setting-label">Custom User-Agent</div>
           <TextInput
             label="Manual User-Agent string"
             value={uaDraft}
@@ -359,10 +347,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Decentraleyes: local CDN libraries" icon="offline_bolt" on={settings.decentraleyes} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ decentraleyes: !settings.decentraleyes })} />
-          <Row label="SameSite≈ cookies (engine jar)" icon="public" on={settings.sameSitePolicy === "approx"} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ sameSitePolicy: settings.sameSitePolicy === "approx" ? "off" : "approx" })} />
-          <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} off={!zeoliteOwned(settings.proxyEngine)} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
+          <Row label="Ad & tracker blocking (engine-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row label="SameSite≈ cookies (engine jar)" icon="public" on={settings.sameSitePolicy === "approx"} toggle={() => onChange({ sameSitePolicy: settings.sameSitePolicy === "approx" ? "off" : "approx" })} />
+          <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
         </m3e-list>
       </Panel>
 
@@ -460,10 +447,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Zeolite cache</div>
           <p className="lb-muted">
-            Cached proxied pages and local libraries live on this device in the service worker
+            Cached proxied pages live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
           </p>
-          <div className={!zeoliteOwned(settings.proxyEngine) ? "lb-off" : ""}>
           <m3e-button
             onClick={() => {
               (async () => {
@@ -481,12 +467,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           >
             <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
-          </div>
-          {!zeoliteOwned(settings.proxyEngine) && (
-            <p className="lb-muted" style={{ fontSize: 12 }}>
-              Cache options apply when Zeolite is the proxy engine.
-            </p>
-          )}
         </div>
 
         <div className="lb-setting-group">

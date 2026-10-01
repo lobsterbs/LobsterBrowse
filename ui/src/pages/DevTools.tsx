@@ -1,10 +1,10 @@
 /* DevTools panel — console / network / diagnostics for the currently
    selected proxy tab. Each tab keeps its own state.
 
-   Proxied pages are served from the LobsterBrowse origin (/r), rendered
-   in a same-origin iframe. That gives the panel real access to the page:
+   Proxied pages are served from the LobsterBrowse origin (/zl/),
+   rendered in a same-origin iframe. That gives the panel real access to the page:
    JavaScript is executed with iframe.contentWindow.eval, and console /
-   network events arrive from the hook the server injects into every
+   network events arrive over the engine's control plane for every
    proxied document.
 
    Built from real M3E components: m3e-card as the container,
@@ -360,20 +360,21 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
 
   /* ---- Console: real JS eval in the proxied page context. ---- */
   const runCode = (code: string) => {
-    const entry = (kind: ConsoleEntry["kind"], text: string) =>
-      setDt({ console: [...dt.console, { id: nextEntryId(), kind, text, ts: Date.now() }] });
     const f = frame();
     const w = f?.contentWindow;
     if (!w) {
-      entry("error", "No proxied page in this tab — navigate to a site first.");
+      setDt({ console: [...dt.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }] });
       return;
     }
-    setDt({ console: [...dt.console, { id: nextEntryId(), kind: "input", text: code, ts: Date.now() }] });
+    /* One setDt for input echo AND result: two calls in the same tick
+       (the second reads the render-time dt.console) would drop the
+       first entry; a single append cannot. */
+    const base = [...dt.console, { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() }];
     try {
       const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
       setDt({
         console: [
-          ...dt.console,
+          ...base,
           { id: nextEntryId(), kind: "result", text: formatValue(result), ts: Date.now() },
         ],
         history: [...dt.history, code].slice(-100),
@@ -382,7 +383,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       const e = err as Error;
       setDt({
         console: [
-          ...dt.console,
+          ...base,
           {
             id: nextEntryId(),
             kind: "error",
@@ -665,7 +666,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
                         fabricated 0 that reads like a browser network
                         error. */}
                     <div>HTTP status: {f.status !== undefined ? f.status : "unknown"}</div>
-                    <div>Transport: server rewrite engine (/r/ or /lj/)</div>
+                    <div>Transport: Zeolite engine (/zl/)</div>
                     {f.nav && <div>Navigation: {f.nav}</div>}
                     {f.note && <div>Note: {f.note}</div>}
                     <div>Time: {ts(f.ts)}</div>

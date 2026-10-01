@@ -2,7 +2,7 @@
    down; the card stays mounted in the dock (its iframes must stay
    alive or tiles show blank frames). Presentational: tab state and
    selection stay in pages/Browser.tsx. */
-import { routeUrl, type Settings, type SiteRule } from "../settings";
+import { routeUrl } from "../settings";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
 
@@ -12,8 +12,6 @@ export default function TabSwitcherCard(props: {
   closingIds: number[];
   icons: Record<number, string>;
   open: boolean;
-  settings: Settings;
-  rules: SiteRule[];
   onNewTab: () => void;
   onClose: () => void;
   onSelect: (id: number) => void;
@@ -49,7 +47,7 @@ export default function TabSwitcherCard(props: {
             <div className="lb-tab-preview">
               {t.url ? (
                 <iframe
-                  src={routeUrl(props.settings, props.rules, t.url, false, t.sess)}
+                  src={routeUrl(t.url)}
                   title={"Preview of " + tabLabel(t)}
                   loading="lazy"
                   tabIndex={-1}

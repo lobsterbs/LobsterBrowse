@@ -1,13 +1,13 @@
 /* AMO add-on search + install (Settings > Extensions). AMO web
    pages are blocked from this deployment's egress, but the public
-   API v5 is not: search runs through the server /r/ chain, where JSON
-   passes the rewriter untouched. The XPI download CDN blocks the
-   server's egress, so the download tries the user's own connection
-   first and then the Zeolite engine route (wisp carries the browser's
-   real headers); the bytes go straight to the engine via
+   API v5 is not: search runs through the Zeolite engine route
+   (the worker carries the request, JSON passes the rewriter
+   untouched). The XPI download CDN blocks the server's egress, so
+   the download tries the user's own connection first and then the
+   engine route again; the bytes go straight to the engine via
    zl:installExt. */
 import { useState } from "react";
-import { b64urlEncode } from "../settings";
+import { routeUrl } from "../settings";
 import { zlSend } from "../zeolite";
 import { fmtBytes } from "./browserShared";
 
@@ -54,11 +54,11 @@ function toHit(r: Record<string, unknown>): AmoHit | null {
   };
 }
 
-/* AMO API v5 over the server /r/ chain: JSON passes the rewriter
-   untouched, and the server egress reaches the API fine (the XPI
-   download CDN is the part that blocks it). */
+/* AMO API v5 over the Zeolite engine route: JSON passes the rewriter
+   untouched (the XPI download CDN is the part that blocks server
+   egress; the API itself is reachable from either). */
 async function amoGet(url: string): Promise<unknown> {
-  const r = await fetch("/r/" + b64urlEncode(url));
+  const r = await fetch(routeUrl(url));
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
@@ -115,7 +115,7 @@ export default function AmoSearch() {
         /* refused or offline; the engine route is next */
       }
       if (!isXpi(bytes)) {
-        const r = await fetch("/zl/" + b64urlEncode(h.xpiUrl));
+        const r = await fetch(routeUrl(h.xpiUrl));
         bytes = r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
       }
       if (!isXpi(bytes)) {
