@@ -471,8 +471,29 @@ export default function BrowserView(props: Props) {
   };
   const toggleExtIncognito = (id: string, on: boolean) =>
     saveExtIncognito({ ...extIncognito, [id]: on });
-  const openExtOptions = (d: ExtDetail) => {
-    if (d.optionsPath) window.open("/zl-ext/" + d.id + "/" + d.optionsPath, "_blank");
+  /* Options pages live at /zl-ext/<id>/<path> inside the engine
+     worker, which today serves only web-accessible resources, so an
+     options page (never WAR-listed) 404s with "zeolite: extension
+     resource not found". Probe first and fail honestly in the panel
+     instead of opening a dead tab; the same URL lights up unchanged
+     when the engine starts serving extension pages. */
+  const openExtOptions = async (d: ExtDetail) => {
+    if (!d.optionsPath) return;
+    const p = "/zl-ext/" + d.id + "/" + d.optionsPath;
+    try {
+      const r = await fetch(p);
+      if (!r.ok) {
+        setExtDetailError(
+          "Options page not served by the engine: only web-accessible extension resources are (HTTP " + r.status + ")."
+        );
+        return;
+      }
+    } catch {
+      setExtDetailError("Options page unavailable: no engine worker on this origin.");
+      return;
+    }
+    pushLog("info", "ext options open " + p);
+    window.open(p, "_blank");
   };
   const loadExtensions = async () => {
     setExtError(null);
@@ -1986,7 +2007,6 @@ export default function BrowserView(props: Props) {
           onToggleEnabled={toggleExtEnabled}
           onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
-          onInstallXpi={(name, bytes) => void installXpi({ name, bytes })}
         />
       )}
     </section>
