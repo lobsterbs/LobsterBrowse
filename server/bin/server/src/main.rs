@@ -2252,7 +2252,6 @@ async fn engine_proxy(
     method: Method,
     OriginalUri(uri): OriginalUri,
     Path(target): Path<String>,
-    RawQuery(raw): RawQuery,
     headers: HeaderMap,
     body: Option<Bytes>,
 ) -> Response {
@@ -2278,6 +2277,10 @@ async fn engine_proxy(
 
     let mut params: HashMap<String, String> = HashMap::new();
     let mut page_query: Vec<&str> = Vec::new();
+    // The raw query string is already inside the OriginalUri; deriving it
+    // here keeps the handler signature at seven arguments (clippy's
+    // too_many_arguments threshold).
+    let raw = uri.query().map(str::to_string);
     if let Some(rq) = raw.as_deref() {
         for part in rq.split('&') {
             if part.is_empty() {
