@@ -78,7 +78,7 @@ jobs:
         run: |
           for url in "$FIXTURE_ORIGIN/data.json" "$LB_ORIGIN/healthz"; do
             for i in $(seq 1 24); do
-              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url")
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url" || true)
               if [ "$code" != "503" ] && [ "$code" != "000" ]; then echo "$url awake (HTTP $code)"; break; fi
               echo "$url cold (HTTP $code), retry $i"; sleep 5
             done
