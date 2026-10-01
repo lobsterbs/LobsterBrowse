@@ -1,4 +1,3 @@
-[package]
 name = "lobster-server"
 description = "LobsterBrowse Wisp server: tokio + axum WSS entrypoint"
 version.workspace = true
@@ -11,15 +10,11 @@ path = "src/main.rs"
 
 [dependencies]
 zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "1d818fc040a4bb446849153190f37f8167dcf3ff" }
-adblock = { path = "../../crates/adblock" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
-futures-util = "0.3"
-bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }
 serde_json = "1"
 sha2 = { workspace = true }
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
