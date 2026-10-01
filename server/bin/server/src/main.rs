@@ -2326,8 +2326,8 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
     )
 }
 
-/* Case-insensitive sniff for a host's own "not found" landing page
-   (e.g. Startpage 302s unknown paths to /notfound/ and serves it 200). */
+// Case-insensitive sniff for a host's own "not found" landing page
+// (Startpage 302s unknown paths to /notfound/ and serves it 200).
 fn notfound_page(url: &str) -> bool {
     let u = url.to_lowercase();
     u.contains("/notfound") || u.contains("not-found") || u.contains("/404")
