@@ -2326,6 +2326,13 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
     )
 }
 
+/* Case-insensitive sniff for a host's own "not found" landing page
+   (e.g. Startpage 302s unknown paths to /notfound/ and serves it 200). */
+fn notfound_page(url: &str) -> bool {
+    let u = url.to_lowercase();
+    u.contains("/notfound") || u.contains("not-found") || u.contains("/404")
+}
+
 fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
     if !wants_html {
         return (
@@ -2737,6 +2744,23 @@ async fn engine_proxy(
                 .unwrap_or("application/octet-stream")
                 .to_string();
             let is_html = ct.contains("html");
+            // A document that lands on the host's own "not found" page
+            // (Startpage 302s unknown paths to /notfound/ and serves it
+            // 200) is an upstream shell, not a transport error; the
+            // URL the client built is usually what got mangled. Warn so
+            // it stands out in the tab's Logs view instead of one info
+            // redirect line among subresource noise.
+            if wants_html_page && is_html && notfound_page(&base_url) {
+                push_log_sess(
+                    &state,
+                    sess.as_deref(),
+                    "warn",
+                    &format!(
+                        "engine document hit the host not-found page: {} -> {}",
+                        bare_url, base_url
+                    ),
+                );
+            }
             // Rate-limit loop breaker: Brave (and other engines) answer
             // a captcha challenge with 429 + HTML that self-refreshes
             // inside the proxied iframe forever — the challenge scripts
