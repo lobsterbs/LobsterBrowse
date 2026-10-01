@@ -3090,10 +3090,10 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
         );
     }
     let out = format!(
-            "{{\"suggestions\":[{}],\"source\":\"{}\"}}",
+        "{{\"suggestions\":[{}],\"source\":\"{}\"}}",
         list.join(","),
         source
-        );
+    );
     ([("content-type", "application/json")], out).into_response()
 }
 
