@@ -338,6 +338,7 @@ export default function App() {
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
+
   /* ---- Decentraleyes toggle: tell the worker the current state.
      Re-posted when a controller (re)appears, since a fresh worker
      starts with the pass enabled by default. ---- */

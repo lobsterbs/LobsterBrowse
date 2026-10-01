@@ -422,8 +422,9 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
       const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string } };
-      if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || !d.op.url) return;
-      let name = (d.op.filename ?? "").trim();
+      /* Trust boundary: the engine relays extension-supplied values. */
+      if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || typeof d.op.url !== "string" || !d.op.url) return;
+      let name = typeof d.op.filename === "string" ? d.op.filename.trim() : "";
       if (!name) {
         try {
           name = decodeURIComponent(new URL(d.op.url, location.origin).pathname.split("/").filter(Boolean).pop() ?? "");
