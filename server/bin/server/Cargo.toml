@@ -1,3 +1,4 @@
+[package]
 name = "lobster-server"
 description = "LobsterBrowse Wisp server: tokio + axum WSS entrypoint"
 version.workspace = true

@@ -7,7 +7,6 @@
   - `PORT` (set by Render automatically; the server reads it).
   - `WISP_PATH` — Wisp endpoint path, defaults to `/wisp/`. Randomize per deployment.
   - `WISP_PASSWORD` / `WISP_USERNAME` — optional password auth (extension 0x02).
-  - `FILTER_LIST_PATH` — optional path to a full EasyList/uAssets download.
   - `DATABASE_URL` — Neon Postgres connection string (used by the upcoming sessions crate).
 - Health check: `GET /healthz`.
 
