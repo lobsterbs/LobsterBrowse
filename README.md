@@ -9,19 +9,17 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
 ## Architecture
     LobsterBrowse UI
           |
-    +-----+------+
-    |            |
-  /r + /lj     Zeolite
-  rewriting     engine
-    |            |
-    +---- Wisp--+
-           |
-        upstream
+        Zeolite
+       engine SW
+          |
+        Wisp
+          |
+       upstream
 ## Server
 - server/bin/server — Tokio + Axum HTTP/WSS entrypoint.
-- server/crates/adblock — network filtering.
-- /r/<base64url target> — server-side rewriting.
-- /lj/<base64url target> — legacy /lj server handler.
+- server/crates/adblock — network filtering (workspace member).
+- /zl/<base64url target> — Zeolite engine route (worker-owned; the server answers only with the honest no-worker notice).
+- /r/, /lj/ — legacy prefixes, 302 to /zl/.
 - /wisp/ — Wisp endpoint.
 - /logs — bounded diagnostics.
 - /healthz — liveness.
@@ -29,39 +27,33 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
 - /zl-ext/ and /zl-cs/ — extension routes.
 - /suggest — search suggestion proxy.
 ## UI
-React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions, link prefetch and the retained /lj cache worker.
+React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions and link prefetch.
 ## Zeolite integration
-Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code. On the beta branch, an experimental zeolite-beta preview engine routes browsing over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
+Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code. On the beta branch, Zeolite is the only engine: browsing routes over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
 ## NativeTransit direction
 NativeTransit is the next transport/interception architecture:
     LobsterBrowse -> Zeolite -> Transport
                               |-> NativeTransit
                               |-> RewriteFallback -> Wisp -> Network
 > Do not rewrite website content unless the engine needs to.
-This is a design direction, not a claim that NativeTransit has already replaced rewriting. Do not remove the existing rewriting engine until compatibility tests demonstrate that it is no longer needed.
+This is a design direction, not a claim that NativeTransit has already replaced rewriting.
 When implemented, DevTools should show transport path, NativeTransit vs RewriteFallback, fallback reason, and whether a failure is upstream, transport, browser/runtime, policy or rewriting related.
 ## Current rewriting behavior
-The server path handles URL-bearing HTML attributes, CSS url()/@import, srcset and inline styles, plus runtime handling for fetch/XHR, URL-bearing element properties, history and window.open. Redirects are followed and relative URLs resolved against the final URL. Non-rewritable content streams without unnecessary buffering.
-Known limitations include client-side cookie differences, limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps.
+The Zeolite service worker owns every proxied navigation and subresource: in-worker rewriting handles URL-bearing HTML attributes and CSS, runtime fetch/XHR and element properties, history and window.open, with transport over Wisp. Redirects are followed and relative URLs resolved against the final URL.
+Known limitations include client-side cookie differences, challenge-protected sites (Anubis), limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps.
 ## Proxy options
-| Option | Purpose |
-| --- | --- |
-| lb_ab=1 | ad filtering |
-| lb_trk=1 | tracker filtering |
-| lb_https=1 | reject plain HTTP |
-| lb_img=1 | JPEG re-encoding |
-| lb_ua= | user-agent override |
+Settings reach the engine through the zl:rules control-plane push (adblock, per-site adblock and User-Agent overrides), not through route query parameters; the route path carries only the base64url target.
 ## DevTools
 DevTools is a real diagnostic surface. Events should identify trace/request ID, redacted URL, subsystem, severity, lifecycle stage and concrete cause where known. A normal WebSocket close is not an error. NativeTransit diagnostics should expose native-vs-fallback behavior.
 ## UI rules
 No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
 ## Privacy
-LobsterBrowse is a proxy, so the server necessarily sees traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
+LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
 cd server && cargo test && cargo build --release
 cd ui && npm install && npm run build
 ## Deployment
-The application is deployed on Render. After deployment changes verify /healthz, UI, /r/, /lj/, /zlsw/, Wisp and extension routes when relevant.
+The application is deployed on Render. After deployment changes verify /healthz, UI, /zl/ (and the /r/, /lj/ redirects), /zlsw/, Wisp and extension routes when relevant.
 ## Contributing
 Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
 ## Architecture goal

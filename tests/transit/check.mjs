@@ -2,9 +2,9 @@
    endpoint over plain HTTP. With LB_ORIGIN set (a locally running
    lobster-server or a deployed beta origin) it additionally asserts:
    - /zl/<b64url> answers with the honest "no worker controls this
-     page" notice (the beta route, server side);
-   - /r/<b64url> still proxies the fixture end to end (the stable
-     engine must keep working on the beta branch).
+     page" notice (the engine route, server side);
+   - the legacy /r/ and /lj/ prefixes 302 to /zl/ with the target and
+     query preserved (ScramJet is gone from this branch).
    This proves fixture + route behavior. It can NOT prove the
    SW -> NativeTransit -> Wisp chain: no browser runs in CI. The
    browser-level run is a separate, recorded step (see
@@ -288,16 +288,6 @@ try {
 
   const lb = process.env.LB_ORIGIN;
   if (lb) {
-    /* The /r/ gates run inside a fresh per-run lb_sid session jar
-       (16-64 chars, [A-Za-z0-9_-], per the server's
-       valid_session_token). A bare /r/ hit with no lb_sid shares the
-       deployment-wide DEFAULT jar with every other direct client, so
-       any earlier probe leaves cookies there and the auth gate would
-       be nondeterministic. Minting a session mirrors how the real UI
-       threads lb_sid on every engine route. */
-    const sid = "tb" + crypto.randomBytes(16).toString("hex");
-    const rRoute = (p) => lb + "/r/" + b64u(base + p) + "?lb_sid=" + sid;
-
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
     const zt = await rz.text();
     /* The route reuses engine_error_page (the honest load-failure
@@ -316,105 +306,17 @@ try {
     const rwb = Buffer.from(await rw.arrayBuffer());
     ok("wasm alias magic", rwb.subarray(0, 4).toString("latin1") === "\0asm", "len " + rwb.length);
 
-    const rj = await fetch(rRoute("/data.json"));
-    ok("r json status 200", rj.status === 200, "got " + rj.status);
-    const rjd = await rj.json();
-    ok("r json passthrough", rjd.ok === true && rjd.n === 42);
-
-    const rh = await fetch(rRoute("/"));
-    const rht = await rh.text();
-    ok("r html status 200", rh.status === 200);
-    ok("r html rewritten to /r/", rht.includes("/r/"), "no /r/ prefix in served html");
-
-    const rl = await fetch(rRoute("/large"), { headers: { range: "bytes=0-99" } });
-    ok("r large range status", rl.status === 206 || rl.status === 200, "got " + rl.status);
-    const rlb = Buffer.from(await rl.arrayBuffer());
-    ok("r large bytes start", rlb.length >= 100 && rlb.subarray(0, 100).equals(largeBytes.subarray(0, 100)), "len " + rlb.length);
-
-    /* Tier-7 through the /r/ engine: server-side hop following and
-       method+body replay semantics must match the browser's. */
-    const rc = await fetch(rRoute("/redir-chain/a"));
-    ok("r chain status 200", rc.status === 200, "got " + rc.status);
-    const rcd = await rc.json();
-    ok("r chain followed to done", rcd.chain === "done", JSON.stringify(rcd).slice(0, 80));
-    /* Hop b overwrites hop a's hopprobe cookie; the final hop must
-       echo it, proving per-hop Set-Cookie capture mid-chain. */
-    ok("r chain captures per-hop cookies", (rcd.cookies || "").includes("hopprobe=b"), JSON.stringify(rcd.cookies));
-
-    const r303 = await fetch(rRoute("/redir-303"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
-    const rd303 = await r303.json();
-    ok("r 303 POST becomes GET", rd303.method === "GET", rd303.method);
-    ok("r 303 body dropped", rd303.body === "", JSON.stringify(rd303.body));
-
-    const r307 = await fetch(rRoute("/redir-307"), { method: "POST", body: "x=2", headers: { "content-type": "application/x-www-form-urlencoded" } });
-    const rd307 = await r307.json();
-    ok("r 307 replays POST", rd307.method === "POST", rd307.method);
-    ok("r 307 preserves body", rd307.body === "x=2", rd307.body);
-
-    /* Tier-8 through /r/: rewrite routing of navigation surfaces and
-       the authentication redirect chain. */
-    const rn = await fetch(rRoute("/nav.html"));
-    ok("r nav 200", rn.status === 200, "got " + rn.status);
-    const rnt = await rn.text();
-    const srcRouted = (rnt.match(/src="\/r\//g) || []).length;
-    ok("r nav routes iframe+module srcs", srcRouted >= 2, "src=/r/ count " + srcRouted);
-    ok("r nav routes links", rnt.includes("href=\"/r/"), "no /r/ link routes in rewritten nav");
-
-    const ra = await fetch(rRoute("/auth/protected"));
-    ok("r auth chain 200", ra.status === 200, "got " + ra.status);
-    const rat = await ra.text();
-    ok("r auth lands on login", rat.includes("login page"), rat.slice(0, 80));
-
-    /* Tier-9 through /r/: the import map's URL values route through
-       the engine; bare keys and data: values stay verbatim; the
-       path-like key is rewritten like the import specifier that
-       looks it up; the inline module's bare specifier is left for
-       the map to resolve. */
-    const rim = await fetch(rRoute("/importmap.html"));
-    ok("r importmap 200", rim.status === 200, "got " + rim.status);
-    const rimt = await rim.text();
-    ok("r importmap routes values", rimt.includes("\"im-bare\":\"/r/") && !rimt.includes("/im-bare.mjs"), rimt.slice(0, 100));
-    ok("r importmap routes path-like key", !rimt.includes("/im-path.mjs") && !rimt.includes("/im-alt.mjs"), rimt.slice(0, 100));
-    ok("r importmap keeps data: verbatim", rimt.includes("data:text/javascript,export const ok = 1") && rimt.includes("data:text/javascript,export const ok = 2"), rimt.slice(0, 100));
-    ok("r importmap keeps bare specifier", rimt.includes("from \"im-bare\"") && rimt.includes("type=\"importmap\""), rimt.slice(0, 100));
-
-    /* Tier-10 through /r/: CSS url()/@import routing with data: URLs
-       verbatim, srcset candidate routing with descriptors kept,
-       page-query forwarding with engine keys stripped, the per-sid
-       session jar roundtrip, and conditional GET (304 + etag). */
-    const rcs = await fetch(rRoute("/css-probes.css"));
-    ok("r css-probes 200", rcs.status === 200, "got " + rcs.status);
-    ok("r css-probes css type", (rcs.headers.get("content-type") || "").includes("css"), String(rcs.headers.get("content-type")));
-    const rcst = await rcs.text();
-    /* rewrite_css emits unquoted url() for every shape it routes
-       (quoted input included), so count routed occurrences. */
-    const rRouted = (rcst.match(/url\(\/r\//g) || []).length;
-    ok("r css routes url()s", rRouted >= 3, "routed " + rRouted + ": " + rcst.slice(0, 80));
-    ok("r css routes all targets", rcst.indexOf("/l.png") === -1 && rcst.indexOf("/style.css") === -1, rcst.slice(0, 120));
-    ok("r css keeps data: verbatim", rcst.includes("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), rcst.slice(0, 120));
-    ok("r nav routes srcset", rnt.includes("srcset=\"/r/") && rnt.includes("1x, /r/") && rnt.includes(" 2x"), "srcset not routed");
-
-    const rq = await fetch(lb + "/r/" + b64u(base + "/query") + "?lb_sid=" + sid + "&say=hi%20there&flag");
-    ok("r query 200", rq.status === 200, "got " + rq.status);
-    const rqd = await rq.json();
-    ok("r query forwards page keys", rqd.url === "/query?say=hi%20there&flag", JSON.stringify(rqd));
-    ok("r query strips engine keys", rqd.url.indexOf("lb_") === -1, JSON.stringify(rqd));
-
-    const rsc = await fetch(rRoute("/set-cookie"));
-    ok("r set-cookie 200", rsc.status === 200, "got " + rsc.status);
-    const rck = await fetch(rRoute("/cookie"));
-    const ckt = await rck.text();
-    ok("r jar replays cookies", ckt.includes("zlprobe=a") && ckt.includes("zlprobe2=b"), ckt);
-
-    const r304 = await fetch(rRoute("/etag"), { headers: { "if-none-match": "\"fixed-etag\"" } });
-    ok("r conditional 304", r304.status === 304, "got " + r304.status);
-    const r200 = await fetch(rRoute("/etag"));
-    ok("r etag 200 body", r200.status === 200 && (await r200.text()) === "etag body", "got " + r200.status);
-    /* The live path crosses an edge that weakens strong etags when it
-       compresses (W/"x"); local CI keeps them strong. Both mean the
-       upstream etag survived the engine. */
-    const retag = r200.headers.get("etag") || "";
-    ok("r etag header forwarded", retag === "\"fixed-etag\"" || retag === "W/\"fixed-etag\"", retag);
+    /* Legacy prefixes: ScramJet is gone, so /r/ and /lj/ must bounce to
+       the /zl/ engine route (302, same base64url target, query kept) so
+       stale bookmarks and old history entries keep working. */
+    const lt = base + "/data.json?say=hi%20there&flag";
+    for (const p of ["/r/", "/lj/"]) {
+      const res = await fetch(lb + p + b64u(lt), { redirect: "manual" });
+      ok(p + " legacy redirect 302", res.status === 302, "got " + res.status);
+      ok(p + " legacy redirect target", res.headers.get("location") === "/zl/" + b64u(lt), String(res.headers.get("location")));
+    }
+    const bare = await fetch(lb + "/r/" + b64u(base + "/data.json"), { redirect: "manual" });
+    ok("r legacy redirect no query", bare.status === 302 && bare.headers.get("location") === "/zl/" + b64u(base + "/data.json"), String(bare.headers.get("location")));
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this

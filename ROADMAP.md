@@ -88,7 +88,7 @@ Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, e
 ### Engine architecture
 
 - Make the LobsterBrowse ↔ Zeolite boundary explicit.
-- Keep one authoritative decision point for `/r/` vs `/lj/`.
+- Keep one authoritative decision point for the engine route prefix (`/zl/`; legacy `/r/` and `/lj/` 302 to it since the ScramJet removal, 2026-10-01).
 - Avoid duplicate networking, cookie, rewriting or interception infrastructure.
 - Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only hacks.
 - Keep NativeTransit and rewriting behavior accurately repre
@@ -170,21 +170,16 @@ Test real behavior involving:
 HTTP 200 alone does not constitute compatibility.
 
 
-Status (2026-09-30): started. Tier-8 transit probes gate the
-server-side matrix - navigation-surface routing (iframe doc, module
-script, dynamic import, XHR, relative/absolute/external links) and
-the authentication-redirect flow through /r/, on top of the Tier-7
-redirect-chain and method-replay gates. Tier-9 probes gate inline
-import maps through /r/: URL values route through the engine,
-path-like keys are rewritten byte-identically to the import
-specifiers that look them up, and bare keys plus data: values stay
-verbatim (the relative-key gap recorded in AGENTS.md is closed
-server-side; scope keys stay verbatim and fall back to the top
-level). Tier-10 probes gate the remaining server-side surfaces
-through /r/: CSS url()/@import routing (data: URLs verbatim),
-srcset candidate routing with descriptors kept, page-query
-forwarding with lb_ engine keys stripped, the per-sid session-jar
-roundtrip, and conditional GET (304 + etag passthrough). The
+Status (2026-09-30, updated 2026-10-01): started. Tier-8/9/10 probes
+were first gated through the server-side /r/ engine (navigation
+surfaces and the auth-redirect flow; inline import maps; CSS
+url()/@import with data: URLs verbatim, srcset routing, page-query
+forwarding with lb_ keys stripped, per-sid session jar, conditional
+GET). The ScramJet removal (2026-10-01) deleted the server-side
+engine, so those gates went with it: check.mjs now gates the /zl/
+honest notice, the legacy /r/ and /lj/ 302s, and the wasm alias,
+while the Tier-8/9/10 fixtures remain for the recorded browser-level
+engine pass (in-worker rewriting owns those surfaces now). The
 deployed-pair gate
 (transit-live CI job) runs the full transit check against the live
 beta + fixture Render services on every beta push, so the
@@ -574,7 +569,7 @@ Before expanding into more browser features:
 
 1. audit the old RewriteFallback architecture;
 2. reconcile LobsterBrowse and Zeolite responsibilities;
-3. verify `/r/`, `/lj/`, Wisp and NativeTransit behavior;
+3. verify `/zl/` (and the legacy `/r/`, `/lj/` redirects), Wisp and NativeTransit behavior;
 4. verify reproducible engine builds/deployments;
 5. establish the first real-site compatibility regression suite;
 6. update documentation to describe the actual architecture;
