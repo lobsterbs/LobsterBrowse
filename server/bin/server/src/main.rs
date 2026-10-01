@@ -872,73 +872,7 @@ fn resolve_url(base: &str, href: &str) -> Option<String> {
     Some(format!("{}{}", origin, pathout))
 }
 
-/// Values the engine leaves untouched (fragments, inline schem        },
-        );
-        push_log_sess(&state, Some("session-a-token-111"), "info", "prune trigger");
-        assert!(!state
-            .sessions
-            .lock()
-            .unwrap()
-            .contains_key("session-old-but-valid1"));
-    }
-
-    #[test]
-    fn invalid_tokens_fall_back_to_the_global_ring() {
-        let state = test_state();
-        push_log_sess(&state, Some("bad token!"), "info", "unified");
-        assert_eq!(state.logs.lock().unwrap().len(), 1);
-        assert!(state.sessions.lock().unwrap().is_empty());
-    }
-}
-
-#[cfg(test)]
-mod shim_integrity_tests {
-    use super::*;
-
-    /* engine-shim.js is include_str!'d and never executed as JS by any
-    test, so a splice that parses but breaks semantics ships silently
-    (the pass-2 CHALLENGE_HOST_RE replacement accident: the line parsed,
-    the regex matched nothing, runtime-created captcha frames broke).
-    These assertions pin the exact construction lines the runtime
-    depends on; keep test and shim in sync. */
-    #[test]
-    fn challenge_regex_construction() {
-        assert!(
-            ENGINE_JS.contains(r#"h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|")"#),
-            "CHALLENGE_HOST_RE construction changed; keep this test in sync"
-        );
-        assert_eq!(
-            ENGINE_JS.matches("CHALLENGE_HOST_RE").count(),
-            2,
-            "CHALLENGE_HOST_RE must appear exactly twice (build + use)"
-        );
-    }
-
-    #[test]
-    fn runtime_url_routing_patches_present() {
-        assert!(ENGINE_JS.contains(r#"prop("HTMLAnchorElement", "href");"#));
-        assert!(ENGINE_JS.contains(r#"prop("HTMLFormElement", "action");"#));
-        assert!(ENGINE_JS.contains(r#""formaction""#));
-        assert!(ENGINE_JS.contains(r#"ln === "href" && this.tagName === "BASE""#));
-        assert!(ENGINE_JS.contains("WORKER_UNSUPPORTED"));
-        assert!(ENGINE_JS.contains("WEBSOCKET_UNSUPPORTED"));
-    }
-
-    #[test]
-    fn formaction_is_rewritten() {
-        let tag = r#"<button formaction="https://example.com/submit" type="submit">"#;
-        let out = rewrite_tag(tag, tag, "https://example.com/", "", "/r/");
-        assert!(
-            out.contains("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS9zdWJtaXQ"),
-            "formaction must route through the engine"
-        );
-        assert!(
-            !out.contains("https://example.com/submit"),
-            "the real formaction URL must not survive rewriting"
-        );
-    }
-}
-es).
+/// Values the engine leaves untouched (fragments, inline schemes).
 fn is_rewritable_url(v: &str) -> bool {
     let t = v.trim();
     if t.is_empty() || t.starts_with('#') {
@@ -4212,4 +4146,69 @@ mod session_log_tests {
             SessionRing {
                 ring: VecDeque::new(),
                 last_seen: now_secs().saturating_sub(SESSION_IDLE_SECS + 60),
-    
+            },
+        );
+        push_log_sess(&state, Some("session-a-token-111"), "info", "prune trigger");
+        assert!(!state
+            .sessions
+            .lock()
+            .unwrap()
+            .contains_key("session-old-but-valid1"));
+    }
+
+    #[test]
+    fn invalid_tokens_fall_back_to_the_global_ring() {
+        let state = test_state();
+        push_log_sess(&state, Some("bad token!"), "info", "unified");
+        assert_eq!(state.logs.lock().unwrap().len(), 1);
+        assert!(state.sessions.lock().unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod shim_integrity_tests {
+    use super::*;
+
+    /* engine-shim.js is include_str!'d and never executed as JS by any
+    test, so a splice that parses but breaks semantics ships silently
+    (the pass-2 CHALLENGE_HOST_RE replacement accident: the line parsed,
+    the regex matched nothing, runtime-created captcha frames broke).
+    These assertions pin the exact construction lines the runtime
+    depends on; keep test and shim in sync. */
+    #[test]
+    fn challenge_regex_construction() {
+        assert!(
+            ENGINE_JS.contains(r#"h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|")"#),
+            "CHALLENGE_HOST_RE construction changed; keep this test in sync"
+        );
+        assert_eq!(
+            ENGINE_JS.matches("CHALLENGE_HOST_RE").count(),
+            2,
+            "CHALLENGE_HOST_RE must appear exactly twice (build + use)"
+        );
+    }
+
+    #[test]
+    fn runtime_url_routing_patches_present() {
+        assert!(ENGINE_JS.contains(r#"prop("HTMLAnchorElement", "href");"#));
+        assert!(ENGINE_JS.contains(r#"prop("HTMLFormElement", "action");"#));
+        assert!(ENGINE_JS.contains(r#""formaction""#));
+        assert!(ENGINE_JS.contains(r#"ln === "href" && this.tagName === "BASE""#));
+        assert!(ENGINE_JS.contains("WORKER_UNSUPPORTED"));
+        assert!(ENGINE_JS.contains("WEBSOCKET_UNSUPPORTED"));
+    }
+
+    #[test]
+    fn formaction_is_rewritten() {
+        let tag = r#"<button formaction="https://example.com/submit" type="submit">"#;
+        let out = rewrite_tag(tag, tag, "https://example.com/", "", "/r/");
+        assert!(
+            out.contains("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS9zdWJtaXQ"),
+            "formaction must route through the engine"
+        );
+        assert!(
+            !out.contains("https://example.com/submit"),
+            "the real formaction URL must not survive rewriting"
+        );
+    }
+}
