@@ -8,7 +8,7 @@ type Props = {
   onNavigate: (target: string) => void;
 };
 
-type Suggestion = { icon: string; text: string; url: string };
+type Suggestion = { icon: string; text: string; url: string; src?: string };
 
 /* Suggestions: matching history entries, a direct URL when the input
    looks like one, and the search fallback. Rendered by the custom
@@ -16,16 +16,16 @@ type Suggestion = { icon: string; text: string; url: string };
    reliably). */
 function buildSuggests(
   input: string,
-  opts: { history: string[]; engineName: string; search: string; remote?: string[]; searchFor: (q: string) => string }
+  opts: { history: string[]; engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
 ): Suggestion[] {
   const q = input.trim();
   if (!q) return [];
   const out: Suggestion[] = [];
   const seen = new Set<string>();
-  const push = (icon: string, text: string, url: string) => {
+  const push = (icon: string, text: string, url: string, src?: string) => {
     if (!seen.has(url) && out.length < 8) {
       seen.add(url);
-      out.push({ icon, text, url });
+      out.push({ icon, text, url, src });
     }
   };
   const ql = q.toLowerCase();
@@ -34,7 +34,7 @@ function buildSuggests(
   }
   if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
   for (const s of opts.remote ?? []) {
-    push("search", s, opts.searchFor(s));
+    push("search", s.text, opts.searchFor(s.text), s.src);
   }
   push("search", q + " · " + opts.engineName + " search", opts.search);
   return out;
@@ -47,7 +47,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   /* Engine-queried completions, fetched through the server's /suggest
      endpoint and merged below the local matches. */
-  const [remote, setRemote] = useState<string[]>([]);
+  const [remote, setRemote] = useState<{ text: string; src: string }[]>([]);
   /* Suggest fetch in flight: shows the M3E loading indicator in the
      search bar so a slow engine is visibly working. */
   const [suggLoading, setSuggLoading] = useState(false);
@@ -62,11 +62,11 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
     const ac = new AbortController();
     setSuggLoading(true);
     const t = setTimeout(() => {
-      fetchSuggestions(settings.engine, q, ac.signal).then((list) => {
-        setRemote(list);
+      fetchSuggestions(settings.engine, q, ac.signal).then((res) => {
+        setRemote(res.items.map((text) => ({ text, src: res.source })));
         setSuggLoading(false);
-        if (list.length === 0) {
-          pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + " + bing fallback)");
+        if (res.items.length === 0) {
+          pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + (res.source ? ", via " + res.source : "") + ")");
         }
       }).catch(() => setSuggLoading(false));
     }, 160);
@@ -164,6 +164,9 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
               >
                 <m3e-icon name={s.icon} aria-hidden={true} />
                 <span className="lb-ac-text">{s.text}</span>
+                {s.src && (
+                  <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {s.src}</span>
+                )}
               </button>
             ))}
             <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>

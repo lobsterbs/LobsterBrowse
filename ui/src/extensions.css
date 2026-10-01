@@ -112,3 +112,53 @@
   color: var(--md-sys-color-error, #f28b82);
   word-break: break-word;
 }
+
+/* AMO add-on search (public AMO API v5): query row + result hits.
+   The panel can now grow past its old size; cap it to the viewport
+   and scroll inside. */
+.lb-ext-panel {
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.lb-ext-search {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
+}
+.lb-ext-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--m3e-shape-xs, 8px);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-on-surface) 25%, transparent);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+}
+.lb-ext-hits {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.lb-ext-hit {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--m3e-shape-xs, 8px);
+  cursor: pointer;
+}
+.lb-ext-hit:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 15%, transparent);
+}
+.lb-ext-hit.sel {
+  background: color-mix(in srgb, var(--md-sys-color-primary, #cfbfe0) 22%, transparent);
+}
+.lb-ext-hit-ic {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+}

@@ -317,7 +317,20 @@ export function zeoliteOwned(engine: ProxyEngineId): boolean {
    option params may ride on them. ScramJet routes through the server
    engine and keeps the lb_ options. */
 export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
-  if (zeoliteOwned(s.proxyEngine))
+  /* ponytail: Startpage fronts every page with an Anubis challenge,
+     and the Zeolite engine is challenge-DETECT only (no solve verb),
+     so those hosts must ride the server /r/ chain where the
+     anubis_bridge auto-solver runs. Hardcode the host list here
+     instead of per-callsite hacks; drop it when the engine can
+     solve challenges itself. */
+  let serverChain = false;
+  try {
+    const host = new URL(target).hostname;
+    serverChain = host === "startpage.com" || host.endsWith(".startpage.com");
+  } catch {
+    /* not a parseable URL; neither branch routes it anyway */
+  }
+  if (zeoliteOwned(s.proxyEngine) && !serverChain)
     return engineRoutePrefix(s.proxyEngine) + b64urlEncode(target);
   const params = proxyParams(s, rules, target, incognito, sess);
   return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
@@ -365,18 +378,28 @@ export function looksLikeUrl(s: string): boolean {
    the server's /suggest endpoint (server-side to avoid CORS). Never
    throws; an aborted signal rejects with the AbortError that the
    caller swallows. Public entry: fetchSuggestions, below. */
-export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
+/* Suggestion round trip: the items plus the provider that actually
+   answered (the server owns the fallback chain, so the asked-for
+   engine is not necessarily the source). */
+export type SuggestResult = { items: string[]; source: string };
+
+export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {
   const query = q.trim();
-  if (!query) return [];
+  if (!query) return { items: [], source: "" };
   try {
     const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query) + (sess ? "&lb_sess=" + encodeURIComponent(sess) : ""), { signal });
-    if (!r.ok) return [];
-    const data = (await r.json()) as { suggestions?: unknown };
-    return Array.isArray(data.suggestions)
-      ? data.suggestions.filter((x): x is string => typeof x === "string").slice(0, 8)
-      : [];
+    if (!r.ok) return { items: [], source: "" };
+    const data = (await r.json()) as { suggestions?: unknown; source?: unknown };
+    const src = typeof data.source === "string" ? data.source : "";
+    return {
+      items: Array.isArray(data.suggestions)
+        ? data.suggestions.filter((x): x is string => typeof x === "string").slice(0, 8)
+        : [],
+      /* Engine display name when the provider id is a known one. */
+      source: (ENGINES as Record<string, { name: string }>)[src]?.name ?? src,
+    };
   } catch {
-    return [];
+    return { items: [], source: "" };
   }
 }
 
@@ -385,6 +408,6 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
    network — DuckDuckGo rate-limits the Render egress — so the server
    retries Brave then Bing before answering empty). One round trip per
    keystroke; the client no longer double-fetches. */
-export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
+export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {
   return suggestFrom(engine, q, signal, sess);
 }
