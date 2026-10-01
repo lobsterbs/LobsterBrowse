@@ -11,6 +11,7 @@ import {
 import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
+import AmoSearch from "../browser/AmoSearch";
 
 type Props = {
   settings: Settings;
@@ -19,9 +20,6 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
-  /* Navigate the active proxy surface in-app (used for the add-ons
-     store: it must load through the engine, not the external browser). */
-  onNavigate: (url: string) => void;
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -96,7 +94,7 @@ function TextInput(props: {
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onNavigate }: Props) {
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     search: true,
     ua: true,
@@ -368,15 +366,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Get extensions</div>
-          {/* The store loads INSIDE LobsterBrowse, through the active
-             proxy engine, exactly like any other site. */}
-          <m3e-button onClick={() => onNavigate("https://addons.mozilla.org/")}>
-            <m3e-icon name="storefront" aria-hidden={true} /> Browse the Mozilla add-ons store
-          </m3e-button>
-          <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            The store opens in a proxied tab. Downloads land in your Downloads folder as .xpi; import that file below.
-          </p>
+          <div className="lb-setting-label">Find and install add-ons</div>
+          {/* AMO web pages are blocked from this deployment's egress;
+             the public API is not, so search and install run over the
+             API instead of the store site. */}
+          <AmoSearch />
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Import locally</div>
