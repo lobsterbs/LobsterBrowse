@@ -557,9 +557,13 @@ export default function BrowserView(props: Props) {
         )
         .filter((x): x is { title: string } => x !== null)
         .slice(0, 2);
+      /* Narrowed local: property narrowing from the typeof guards does
+         not survive the setExtNotes closure boundary, so the object is
+         built here, where n.title and n.message are still string. */
+      const note: ExtNote = { extId, id, title: n.title, message: n.message, buttons };
       setExtNotes((prev) => [
         ...prev.filter((p) => !(p.extId === extId && p.id === id)),
-        { extId, id, title: n.title, message: n.message, buttons },
+        note,
       ]);
       const key = extId + "\u0000" + id;
       const old = noteTimers.current.get(key);
