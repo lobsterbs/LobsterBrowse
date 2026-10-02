@@ -2159,7 +2159,7 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
         .unwrap_or_default();
     engine_error_page(
         &real,
-        "Zeolite runs in its service worker, and none controls this page yet. Reload the app so the worker activates, or switch the engine to ScramJet.",
+        "Zeolite runs in its service worker, and none controls this page yet. Reload the app so the worker activates",
         true,
     )
 }
@@ -2346,7 +2346,7 @@ async fn engine_proxy(
     let suffix = params_suffix(&params);
     /* Rewritten links keep the entry route: pages loaded through
     LobsterJet (/lj/) rewrite subresources and links to /lj/ so the
-    service worker's cache intercepts them; ScramJet entries stay
+    service worker's cache intercepts them; legacy-prefix entries stay
     on /r/. */
     let prefix = if uri.path().starts_with("/lj/") {
         "/lj/"
