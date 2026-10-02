@@ -976,7 +976,7 @@ export default function BrowserView(props: Props) {
         } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
           patch = { url: real, idx: idx + 1 };
         } else {
-          patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+          patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
           if (!props.incognito) props.onHistory(real);
         }
         props.updateTab(t.id, patch);
@@ -1230,7 +1230,7 @@ export default function BrowserView(props: Props) {
           } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
             patch = { url: real, idx: idx + 1 };
           } else {
-            patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+            patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
             if (!L.incognito) L.onHistory(real);
           }
           L.updateTab(tabId, patch);
@@ -1327,6 +1327,13 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     if (tbExpanded) urlInputRef.current?.select();
   }, [tbExpanded]);
+
+  /* TLS certificate state: declared above the !active early return —
+     a useState below a conditional return changes the hook count
+     between renders and crashes React. */
+  const [siteCert, setSiteCert] = useState<
+    { issuer: string; notAfter: string; days: number } | null | "checking" | "error"
+  >(null);
 
   if (!active) {
     /* App sends us back to Home when the last tab closes. */
@@ -1453,9 +1460,6 @@ export default function BrowserView(props: Props) {
   /* TLS certificate details for the site card. The server checks the
      host's public CT-log record (crt.sh), so this works even though
      the browser never makes a direct TLS connection to the site. */
-  const [siteCert, setSiteCert] = useState<
-    { issuer: string; notAfter: string; days: number } | null | "checking" | "error"
-  >(null);
   const loadSiteCert = (host: string) => {
     if (!host) return;
     /* Navigation-generation guard: if the tab navigates while the CT
