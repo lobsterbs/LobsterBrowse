@@ -37,7 +37,7 @@ synthesis (#23), HTML entity decoding in rewritten attributes (#24),
 navguard + WebRTC gate (#28), zl:find (#29), netLog passthrough rows
 (#30), per-client virtual-context routing (#33), opaque page identity
 and mirror scheme removal (#32), cross-origin subresource routing
-(#34)), dist bundle a01f5990. This matches the Dockerfile
+(#34)), dist bundle 78704d61 (navguard inline child-realm guard, Zeolite #58 follow-up; sw.js byte-identical, so ZEOLITE_SW_SHA stays). This matches the Dockerfile
 ZEOLITE_COMMIT and the zeolite-server git rev in
 server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
 the pin.
