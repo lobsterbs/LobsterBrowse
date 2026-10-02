@@ -3162,8 +3162,12 @@ async fn build_endpoint() -> Response {
     // Bundle-stale alarm: pins from the Dockerfile env; a mismatch means
     // the zl-builder layer cache served an older dist tarball.
     let want = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-    let stale = want("ZEOLITE_SW_SHA").as_deref().is_some_and(|w| w != zlsw_sha)
-        || want("ZEOLITE_BOOTSTRAP_SHA").as_deref().is_some_and(|w| w != bootstrap_sha);
+    let stale = want("ZEOLITE_SW_SHA")
+        .as_deref()
+        .is_some_and(|w| w != zlsw_sha)
+        || want("ZEOLITE_BOOTSTRAP_SHA")
+            .as_deref()
+            .is_some_and(|w| w != bootstrap_sha);
     if stale {
         tracing::warn!(
             "stale Zeolite bundle: sw.js {} (want {:?}), bootstrap.js {} (want {:?})",
