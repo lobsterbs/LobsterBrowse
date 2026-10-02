@@ -466,6 +466,12 @@ async fn redirect_to_zl(
     axum::extract::Path(target): axum::extract::Path<String>,
     RawQuery(raw): RawQuery,
 ) -> Response {
+    // The path segment arrives percent-decoded: a target like /r/a%0Db
+    // would put a control byte into the Location header below and panic
+    // the handler while building the 302 (HeaderValue rejects it).
+    if target.is_empty() || b64url_decode(&target).is_none() {
+        return (StatusCode::NOT_FOUND, "malformed engine route target").into_response();
+    }
     let loc = match raw {
         Some(q) if !q.is_empty() => format!("/zl/{target}?{q}"),
         _ => format!("/zl/{target}"),
