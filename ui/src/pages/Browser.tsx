@@ -600,11 +600,6 @@ export default function BrowserView(props: Props) {
       );
     }
   };
-  /* Re-list after every extension panel mutation (the panel refreshes
-     extList after installs/toggles) and on mount. */
-  useEffect(() => {
-    void refreshMenus();
-  }, [extList]);
   const onFrameCtx = (ev: Event) => {
     const me = ev as MouseEvent;
     const doc = (me.currentTarget as Document | null) ?? null;
@@ -653,6 +648,13 @@ export default function BrowserView(props: Props) {
   const [extPanelOpen, setExtPanelOpen] = useState(false);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
+
+  /* Re-list after every extension panel mutation (the panel refreshes
+     extList after installs/toggles) and on mount. Sits here, below the
+     extList declaration, because the deps array reads it. */
+  useEffect(() => {
+    void refreshMenus();
+  }, [extList]);
   /* Last registration/reply failure, shown verbatim in the panel. */
   const [extError, setExtError] = useState<string | null>(null);
   /* Extension detail card: the manifest surface from zl:extInfo. */
