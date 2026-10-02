@@ -47,6 +47,29 @@ import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
 import M3eSelect from "../M3eSelect";
 
+/* Engine handoff payloads (Zeolite #43 notifications, #45 menu
+   listing): the shapes the service worker broadcasts / replies with.
+   Local copies, not imports: the UI has no dependency on engine source
+   and treats every relayed value as untrusted. */
+type ExtNote = {
+  extId: string;
+  id: string;
+  title: string;
+  message: string;
+  buttons: { title: string }[];
+};
+
+type ZlMenuItem = {
+  extId: string;
+  id: string;
+  title: string;
+  contexts: string[];
+  enabled: boolean;
+  parentId: string | null;
+  type: string;
+  checked: boolean;
+};
+
 type Props = {
   settings: Settings;
   rules: SiteRule[];
@@ -465,6 +488,163 @@ export default function BrowserView(props: Props) {
     navigator.serviceWorker?.addEventListener("message", onSwMsg);
     return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
   }, []);
+  /* ---- Engine notification handoff (#50): notifications.create/
+     update/clear broadcast zl:notifyOp; LB owns the rendered surface
+     and reports interactions back over zl:notifyEvent (clicked /
+     buttonClicked / closed), which wakes the owning extension. ---- */
+  const [extNotes, setExtNotes] = useState<ExtNote[]>([]);
+  const noteTimers = useRef<Map<string, number>>(new Map());
+  const notifyEvt = (
+    extId: string,
+    id: string,
+    event: "clicked" | "closed" | "buttonClicked",
+    buttonIndex?: number,
+  ) => {
+    void zlSend(
+      {
+        type: "zl:notifyEvent",
+        extId,
+        msg: { id, event, ...(buttonIndex !== undefined ? { buttonIndex } : {}) },
+      },
+      8000,
+    );
+  };
+  const dropNote = (extId: string, id: string, reportClosed: boolean) => {
+    const key = extId + "\u0000" + id;
+    const t = noteTimers.current.get(key);
+    if (t) {
+      window.clearTimeout(t);
+      noteTimers.current.delete(key);
+    }
+    setExtNotes((prev) => prev.filter((n) => !(n.extId === extId && n.id === id)));
+    if (reportClosed) notifyEvt(extId, id, "closed");
+  };
+  useEffect(() => {
+    const onSwMsg = (ev: MessageEvent) => {
+      const d = ev.data as {
+        type?: string;
+        op?: {
+          op?: string;
+          extId?: string;
+          id?: string;
+          notification?: { title?: unknown; message?: unknown; buttons?: unknown };
+        };
+      };
+      /* Trust boundary: the engine relays extension-supplied values. */
+      if (
+        !d ||
+        d.type !== "zl:notifyOp" ||
+        !d.op ||
+        typeof d.op.op !== "string" ||
+        typeof d.op.extId !== "string" ||
+        typeof d.op.id !== "string"
+      )
+        return;
+      const extId = d.op.extId;
+      const id = d.op.id;
+      if (d.op.op === "clear") {
+        dropNote(extId, id, false);
+        return;
+      }
+      if (d.op.op !== "create" || !d.op.notification) return;
+      const n = d.op.notification;
+      if (typeof n.title !== "string" || typeof n.message !== "string") return;
+      const buttons = (Array.isArray(n.buttons) ? n.buttons : [])
+        .map((x) =>
+          x && typeof (x as { title?: unknown }).title === "string"
+            ? { title: (x as { title: string }).title }
+            : null,
+        )
+        .filter((x): x is { title: string } => x !== null)
+        .slice(0, 2);
+      setExtNotes((prev) => [
+        ...prev.filter((p) => !(p.extId === extId && p.id === id)),
+        { extId, id, title: n.title, message: n.message, buttons },
+      ]);
+      const key = extId + "\u0000" + id;
+      const old = noteTimers.current.get(key);
+      if (old) window.clearTimeout(old);
+      /* Auto-dismiss reports closed, matching Chrome's own timeout
+         behavior; the engine's registry drops the entry on close. */
+      noteTimers.current.set(
+        key,
+        window.setTimeout(() => dropNote(extId, id, true), 10000),
+      );
+    };
+    navigator.serviceWorker?.addEventListener("message", onSwMsg);
+    return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
+  }, []);
+
+  /* ---- Engine context-menu surface (#47): the registry is real;
+     zl:listMenus lists enabled extensions' items, LB renders the menu
+     on right-click inside proxied frames and reports clicks over
+     zl:menuClick (the engine resolves the tab by the page URL). ---- */
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    frame: HTMLIFrameElement;
+    items: ZlMenuItem[];
+  } | null>(null);
+  const menusRef = useRef<ZlMenuItem[]>([]);
+  const ctxHooked = useRef<WeakSet<HTMLIFrameElement>>(new WeakSet());
+  const refreshMenus = async () => {
+    const rep = await zlSend({ type: "zl:listMenus" }, 8000);
+    if (rep && rep.ok && Array.isArray(rep.menus)) {
+      menusRef.current = (rep.menus as ZlMenuItem[]).filter(
+        (m) =>
+          !!m &&
+          typeof m.extId === "string" &&
+          typeof m.id === "string" &&
+          typeof m.title === "string" &&
+          m.enabled !== false,
+      );
+    }
+  };
+  /* Re-list after every extension panel mutation (the panel refreshes
+     extList after installs/toggles) and on mount. */
+  useEffect(() => {
+    void refreshMenus();
+  }, [extList]);
+  const onFrameCtx = (ev: Event) => {
+    const me = ev as MouseEvent;
+    const doc = (me.currentTarget as Document | null) ?? null;
+    const win = doc?.defaultView ?? null;
+    const t = me.target as Element | null;
+    const flags = new Set<string>(["page", "all"]);
+    if (win && String(win.getSelection?.() ?? "").trim()) flags.add("selection");
+    if (t?.closest?.("a")) flags.add("link");
+    if (t?.closest?.("img")) flags.add("image");
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || (t as HTMLElement).isContentEditable))
+      flags.add("editable");
+    const items = menusRef.current.filter(
+      (m) => m.type !== "separator" && m.contexts.some((c) => flags.has(c)),
+    );
+    /* No registered items for this context: keep the browser's own
+       menu, just refresh the cache in the background. */
+    if (items.length === 0) {
+      void refreshMenus();
+      return;
+    }
+    const frame = win && win.frameElement instanceof HTMLIFrameElement ? win.frameElement : null;
+    if (!frame) return;
+    me.preventDefault();
+    const r = frame.getBoundingClientRect();
+    setCtxMenu({ x: r.left + me.clientX, y: r.top + me.clientY, frame, items });
+  };
+  const clickCtxItem = (m: ZlMenuItem) => {
+    const f = ctxMenu?.frame;
+    setCtxMenu(null);
+    if (!f) return;
+    let pageUrl = "";
+    try {
+      pageUrl = f.contentWindow?.location.href ?? "";
+    } catch {
+      pageUrl = "";
+    }
+    if (!pageUrl) return;
+    void zlSend({ type: "zl:menuClick", extId: m.extId, msg: { menuItemId: m.id, pageUrl } }, 8000);
+  };
+
   const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the
@@ -1557,8 +1737,19 @@ export default function BrowserView(props: Props) {
               title={"Proxy tab " + t.id}
               allow="clipboard-read; clipboard-write"
               ref={(el) => {
-                if (el) frames.current.set(t.id, el);
-                else frames.current.delete(t.id);
+                if (el) {
+                  frames.current.set(t.id, el);
+                  /* Context-menu surface (#47): hook each frame's
+                     document on load; the listener captures stable
+                     refs only, so one attach per element is enough. */
+                  if (!ctxHooked.current.has(el)) {
+                    ctxHooked.current.add(el);
+                    el.addEventListener("load", () => {
+                      el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
+                    });
+                    el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
+                  }
+                } else frames.current.delete(t.id);
               }}
               /* No sandbox attribute: engine frames are same-origin by
                  design, so the old allow-same-origin + allow-scripts
@@ -2067,6 +2258,74 @@ export default function BrowserView(props: Props) {
           onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
         />
+      )}
+
+      {ctxMenu && (
+        <div className="lb-ctx-overlay" onPointerDown={() => setCtxMenu(null)}>
+          <div
+            className="lb-ctx-menu"
+            role="menu"
+            aria-label="Extension context menu"
+            style={{
+              left: Math.min(ctxMenu.x, window.innerWidth - 232),
+              top: Math.min(ctxMenu.y, window.innerHeight - 48 - ctxMenu.items.length * 40),
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {ctxMenu.items.map((m) => (
+              <button
+                key={m.extId + ":" + m.id}
+                className={"lb-ctx-item" + (m.parentId ? " nested" : "")}
+                role="menuitem"
+                onClick={() => clickCtxItem(m)}
+              >
+                {(m.type === "checkbox" || m.type === "radio") && m.checked ? "\u2713 " : ""}
+                {m.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {extNotes.length > 0 && (
+        <div className="lb-ext-notes" role="region" aria-label="Extension notifications">
+          {extNotes.map((n) => (
+            <div key={n.extId + ":" + n.id} className="lb-ext-note">
+              <div className="lb-ext-note-title">{n.title}</div>
+              <div className="lb-ext-note-msg">{n.message}</div>
+              <div className="lb-ext-note-actions">
+                {n.buttons.map((b, i) => (
+                  <button
+                    key={i}
+                    className="lb-ext-note-btn"
+                    onClick={() => {
+                      notifyEvt(n.extId, n.id, "buttonClicked", i);
+                      dropNote(n.extId, n.id, true);
+                    }}
+                  >
+                    {b.title}
+                  </button>
+                ))}
+                <button
+                  className="lb-ext-note-btn"
+                  onClick={() => {
+                    notifyEvt(n.extId, n.id, "clicked");
+                    dropNote(n.extId, n.id, true);
+                  }}
+                >
+                  Open
+                </button>
+                <button
+                  className="lb-ext-note-btn"
+                  aria-label="Dismiss"
+                  onClick={() => dropNote(n.extId, n.id, true)}
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );
