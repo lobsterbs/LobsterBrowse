@@ -3150,14 +3150,38 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
+    let bootstrap_sha = match tokio::fs::read("zlsw/bootstrap.js").await {
+        Ok(bytes) => {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(&bytes);
+            hash.iter().take(8).map(|b| format!("{b:02x}")).collect()
+        }
+        Err(_) => "unknown".to_string(),
+    };
     let lb_version = format!("{} Molt", env!("CARGO_PKG_VERSION"));
+    // Bundle-stale alarm: pins from the Dockerfile env; a mismatch means
+    // the zl-builder layer cache served an older dist tarball.
+    let want = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let stale = want("ZEOLITE_SW_SHA").as_deref().is_some_and(|w| w != zlsw_sha)
+        || want("ZEOLITE_BOOTSTRAP_SHA").as_deref().is_some_and(|w| w != bootstrap_sha);
+    if stale {
+        tracing::warn!(
+            "stale Zeolite bundle: sw.js {} (want {:?}), bootstrap.js {} (want {:?})",
+            zlsw_sha,
+            want("ZEOLITE_SW_SHA"),
+            bootstrap_sha,
+            want("ZEOLITE_BOOTSTRAP_SHA")
+        );
+    }
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"bootstrapSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\",\"stale\":{}}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
+        json_escape(&bootstrap_sha),
         json_escape(&build),
         json_escape(&build_short),
+        stale,
     );
     Response::builder()
         .status(200)
