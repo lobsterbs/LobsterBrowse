@@ -16,7 +16,7 @@ type Entry = { path: string; size: number; isDir: boolean; date?: string };
 type Engine = "fflate" | "zipjs";
 
 function saveBytes(name: string, data: Uint8Array | Blob) {
-  const blob = data instanceof Blob ? data : new Blob([data]);
+  const blob = data instanceof Blob ? data : new Blob([data.slice().buffer as ArrayBuffer]);
   const objUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = objUrl;
@@ -108,7 +108,7 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
         if (entry && !entry.directory) {
           const writer = new z.BlobWriter();
           await entry.getData(writer);
-          saveBytes(baseName(path), writer.blob);
+          saveBytes(baseName(path), await writer.getData());
         }
         await reader.close();
       }
