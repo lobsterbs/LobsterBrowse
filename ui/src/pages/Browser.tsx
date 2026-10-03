@@ -873,7 +873,18 @@ export default function BrowserView(props: Props) {
         href = attr;
       } else {
         try {
-          href = routeUrl(new URL(attr, url).href);
+          const abs = new URL(attr, url).href;
+          /* Only http(s) icons can be fetched through the engine. A
+             data: icon is self-contained: use it directly (the proxy
+             cannot fetch a data: URL and answers 502); any other
+             scheme is not proxyable, so fall back to favicon.ico. */
+          if (abs.startsWith("data:")) {
+            href = abs;
+          } else if (abs.startsWith("http:") || abs.startsWith("https:")) {
+            href = routeUrl(abs);
+          } else {
+            href = "";
+          }
         } catch {
           href = "";
         }
