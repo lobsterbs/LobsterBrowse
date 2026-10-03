@@ -1,10 +1,8 @@
 name: fileread-tmp
-on:
-  push:
-    branches: [tmp-fileread]
+on: push
 
 jobs:
-  dump:
+  reprodump:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -22,18 +20,4 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump mhome "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Home.tsx?v=2"
-          dump mdt "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/DevTools.tsx?v=2"
-          dump mbrw2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx?v=2"
-          dump mpoll "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/browser/pollRecovery.ts?v=2"
-          dump mcheck "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/tests/poll-recovery/check.mjs?v=2"
-          dump mci2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/.github/workflows/ci.yml?v=2"
-          dump magents2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md?v=2"
-          dump bdt "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/DevTools.tsx"
-          dump bterm "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/browser/DevTerminal.tsx"
-          dump bhome "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/Home.tsx"
-          dump bpkg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/package.json"
-          dump bci "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/.github/workflows/ci.yml"
-          dump bagents "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/AGENTS.md"
-          dump bbrw "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/Browser.tsx"
-          dump bstore "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/store.ts"
+          dump fyml "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/8c0629dd40004f57954f0fb5701f433ee1bf63f0/.github/workflows/fileread.yml"
