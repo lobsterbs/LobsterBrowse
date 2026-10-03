@@ -117,8 +117,8 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
-      <m3e-heading variant="display" size="medium" level={2}>Browse freely</m3e-heading>
-      <p className="lb-muted" style={{ marginTop: 8 }}>Private proxy with ad blocking.</p>
+      <m3e-heading variant="display" size="medium" level={2}>Never stop browsing</m3e-heading>
+      <p className="lb-muted" style={{ marginTop: 8 }}>Browse the web through a private proxy.</p>
 
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
@@ -170,10 +170,6 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
           </div>
         )}
       </div>
-
-      <p className="lb-muted" style={{ fontSize: 12, marginBottom: 24 }}>
-        Loaded through this server inside the proxy browser.
-      </p>
 
     </section>
   );

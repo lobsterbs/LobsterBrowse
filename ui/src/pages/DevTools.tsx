@@ -702,6 +702,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             <m3e-icon-button aria-label="Clear diagnostics" onClick={() => setDt({ fails: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
+            <m3e-button
+              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank")}
+            >
+              <m3e-icon name="bug_report" aria-hidden={true} />
+              Report
+            </m3e-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Why didn&apos;t this load? Every entry below is a real load failure captured from the page
