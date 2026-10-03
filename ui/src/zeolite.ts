@@ -10,7 +10,7 @@
    the wide scope. With no controller on the page (Home, Settings,
    plain tabs) this module is the control plane client. */
 
-export async function zlWorker(): Promise<ServiceWorker | null> {
+async function zlReg(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
     /* Always (re-)register: this also fetches the registration for the
@@ -19,14 +19,8 @@ export async function zlWorker(): Promise<ServiceWorker | null> {
       scope: "/",
       type: "module",
     });
-    /* Root cause of "Import failed: unknown message": a STALE worker
-       that controls this page (registered before the zl: control
-       messages existed) used to win, and it answers every control
-       message with "unknown message". Ask the browser to check the
-       server for a newer script, then prefer the NEWEST worker
-       instance: installing/waiting beat active/controller, because a
-       control message works against any worker instance, not just the
-       one controlling this page. */
+    /* Ask the browser to check the server for a newer script so an
+       update is at least in flight before we pick a worker. */
     try {
       await reg.update();
     } catch {
@@ -36,17 +30,55 @@ export async function zlWorker(): Promise<ServiceWorker | null> {
       navigator.serviceWorker.ready,
       new Promise((resolve) => setTimeout(resolve, 5000)),
     ]);
-    return (
-      reg.installing ??
-      reg.waiting ??
-      reg.active ??
-      navigator.serviceWorker.controller ??
-      null
-    );
+    return reg;
   } catch (err) {
     console.warn("[lb] Zeolite worker registration failed:", err);
     return null;
   }
+}
+
+/* Worker preference: the one controlling this page (or active) first.
+   Its in-memory registry is warm. An installing/waiting instance only
+   matters as a fallback: a fresh worker boots with a COLD registry and
+   answers registry-dependent control messages ("no such extension")
+   until its startup finishes, so it must not win the pick. A stale
+   pre-zl worker that answers "unknown message" is handled by the
+   escalation in zlSend, not by the pick order. */
+function zlPick(reg: ServiceWorkerRegistration): ServiceWorker | null {
+  return (
+    navigator.serviceWorker.controller ??
+    reg.active ??
+    reg.waiting ??
+    reg.installing ??
+    null
+  );
+}
+
+export async function zlWorker(): Promise<ServiceWorker | null> {
+  const reg = await zlReg();
+  return reg ? zlPick(reg) : null;
+}
+
+/* One-shot control message to a single worker handle: postMessage
+   with a MessageChannel port, resolve on the first reply (or null on
+   timeout). Never throws. */
+function zlSendTo(
+  swc: ServiceWorker,
+  msg: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<Record<string, any> | null> {
+  return new Promise<Record<string, any> | null>((resolve) => {
+    const ch = new MessageChannel();
+    let settled = false;
+    const finish = (v: Record<string, any> | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+    ch.port1.onmessage = (ev) => finish(ev.data as Record<string, any>);
+    setTimeout(() => finish(null), timeoutMs);
+    swc.postMessage(msg, [ch.port2]);
+  });
 }
 
 /* One-shot control message: postMessage with a MessageChannel port,
@@ -55,23 +87,22 @@ export function zlSend(
   msg: Record<string, unknown>,
   timeoutMs = 5000,
 ): Promise<Record<string, any> | null> {
-  return zlWorker().then(
-    (swc) =>
-      new Promise<Record<string, any> | null>((resolve) => {
-        if (!swc) {
-          resolve(null);
-          return;
-        }
-        const ch = new MessageChannel();
-        let settled = false;
-        const finish = (v: Record<string, any> | null) => {
-          if (settled) return;
-          settled = true;
-          resolve(v);
-        };
-        ch.port1.onmessage = (ev) => finish(ev.data as Record<string, any>);
-        setTimeout(() => finish(null), timeoutMs);
-        swc.postMessage(msg, [ch.port2]);
-      }),
-  );
+  return zlReg().then(async (reg) => {
+    if (!reg) return null;
+    const primary = zlPick(reg);
+    if (!primary) return null;
+    const reply = await zlSendTo(primary, msg, timeoutMs);
+    /* {ok:false, error:"unknown message"} means the worker that
+       answered predates the zl: control messages (the legacy SW,
+       still active on a stale session). Escalate ONCE to the newer
+       installing/waiting instance that is replacing it. */
+    const stale =
+      reply !== null &&
+      reply.ok === false &&
+      reply.error === "unknown message";
+    if (!stale) return reply;
+    const fresh = reg.installing ?? reg.waiting ?? null;
+    if (!fresh || fresh === primary) return reply;
+    return zlSendTo(fresh, msg, timeoutMs);
+  });
 }
