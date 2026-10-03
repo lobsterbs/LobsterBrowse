@@ -36,14 +36,17 @@ jobs:
           }
           log('app-title', await page.title());
           await page.waitForTimeout(4000);
+          const copy = await page.evaluate(() => document.body ? document.body.innerText.slice(0, 900) : '');
+          log('COPY ' + JSON.stringify(copy));
           await page.fill('#lb-search-input', SITE);
           await page.press('#lb-search-input', 'Enter');
           await page.waitForTimeout(WAIT);
           const state = await page.evaluate(() => {
             const ifr = document.querySelector('iframe');
-            let loc = null, ready = null, err = null;
+            let loc = null, ready = null, err = null, ev = null;
             try { loc = ifr && ifr.contentWindow && ifr.contentWindow.location.href; ready = ifr && ifr.contentDocument && ifr.contentDocument.readyState; } catch (e) { err = String(e).slice(0, 120); }
-            return { src: ifr && ifr.src, loc, ready, err, title: document.title };
+            try { ev = ifr && ifr.contentWindow ? ifr.contentWindow.eval('1+1') : null; } catch (e) { ev = 'EVALERR ' + String(e).slice(0, 80); }
+            return { src: ifr && ifr.src, loc, ready, err, ev, title: document.title };
           });
           log('STATE ' + JSON.stringify(state));
           const dumps = await page.evaluate(() => ({
@@ -57,3 +60,35 @@ jobs:
           await browser.close();
           ZLEOF
           node repro.mjs
+  bundlecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - run: |
+          fetch() {
+            url="$1"; out="$2"
+            for i in 1 2 3 4 5 6 7 8; do
+              if curl -fsSL --max-time 120 "$url" -o "$out"; then return 0; fi
+              sleep 10
+            done
+            return 1
+          }
+          for base in https://lobsterbrowse-server.onrender.com https://lobsterbrowse-beta.onrender.com; do
+            echo "ZLBUNDLE-BASE $base"
+            fetch "$base/build?v=$RANDOM" build.json || { echo "ZLBUILD-FAIL $base"; continue; }
+            echo "ZLBUILD $(cat build.json)"
+            fetch "$base/?v=$RANDOM" index.html || { echo "ZLHTML-FAIL $base"; continue; }
+            jsurls=$(grep -oE '(src|href)="[^"]+\.js"' index.html | cut -d'"' -f2 || true)
+            if [ -z "$jsurls" ]; then echo "ZLHTML-NOJS $base"; fi
+            for u in $jsurls; do
+              case "$u" in
+                /*) url="$base$u" ;;
+                *) url="$base/$u" ;;
+              esac
+              echo "ZLJS $url"
+              fetch "$url" bundle.js || { echo "ZLJS-FAIL $url"; continue; }
+              for needle in "Never stop browsing" "Browse the web through a private proxy" "Browse freely" "Private proxy with ad blocking" "Loaded through this server" "issues/new" "DevTerminal" "xterm"; do
+                if grep -qF "$needle" bundle.js; then echo "ZLFIND $base HAS $needle"; else echo "ZLFIND $base LACKS $needle"; fi
+              done
+            done
+          done
