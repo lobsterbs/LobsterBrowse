@@ -46,6 +46,9 @@ import DownloadsCard from "../browser/DownloadsCard";
 import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
 import M3eSelect from "../M3eSelect";
+/* Navigation-poll routing decision, kept pure so the regression
+   check (tests/poll-recovery/check.mjs) can run the real logic. */
+import { pollAction } from "../browser/pollRecovery";
 
 type Props = {
   settings: Settings;
@@ -139,6 +142,10 @@ export default function BrowserView(props: Props) {
   const lastDiag = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
+  /* Consecutive poll ticks the active frame has spent on an about:
+     document; past four the pending navigation is declared stuck and
+     the poll surfaces an honest error (see the poll effect). */
+  const blankPolls = useRef<Map<number, number>>(new Map());
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
@@ -722,6 +729,34 @@ export default function BrowserView(props: Props) {
         return;
       }
       if (!doc) return;
+      /* A navigation still in flight (or a page whose engine bootstrap
+         never attached) leaves the frame on about:blank, whose
+         location.pathname is literally "blank". Handing that to the
+         escaped-navigation recovery fabricated <site>/blank, aborted
+         the real in-flight navigation and reloaded the tab in a loop
+         (m.ome.tv after the org-block bypass). Wait for the
+         navigation to commit; past four ticks surface a real error
+         instead of a silent white frame. The routing decision itself
+         lives in pollAction(). */
+      if (f.contentWindow!.location.protocol === "about:") {
+        const n = (blankPolls.current.get(t.id) || 0) + 1;
+        blankPolls.current.set(t.id, n);
+        if (n >= 4) {
+          const msg = "The page was left on a blank document (engine bootstrap did not attach).";
+          setStatus((prev) => {
+            const cur = prev[t.id];
+            return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
+          });
+          setErrors((prev) =>
+            prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
+              ? prev
+              : { ...prev, [t.id]: { url: t.url, message: msg } }
+          );
+          if (n === 4) pushLog("error", "blank frame stuck: " + sanitizeUrl(t.url));
+        }
+        return;
+      }
+      blankPolls.current.delete(t.id);
       /* Detailed error page: the server renders meta[lb-load-error]
          at the same /r/ path; surface it and stop the spinner. */
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
@@ -800,14 +835,10 @@ export default function BrowserView(props: Props) {
          URL, reconstruct the intended target and reload it through the
          engine. Each distinct URL is recovered once per tab (lastEscape
          guard), so a site that genuinely 404s into the fallback does
-         not loop. */
-      const appPrefixes = [
-        "/zlsw", "/libcurl", "/zl-ext", "/zl-cs", "/suggest", "/cert",
-        "/logs", "/build", "/wisp", "/favicon",
-      ];
-      const isAppPath = appPrefixes.some((p) => path === p || path.startsWith(p + "/"));
-      if (!path.startsWith("/r/") && !path.startsWith("/lj/")) {
-        if (!t.url || path === "/" || isAppPath) return;
+         not loop. The routing decision lives in pollAction()
+         (ui/src/browser/pollRecovery.ts). */
+      const act = pollAction(f.contentWindow!.location.protocol, path, t.url);
+      if (act === "recover") {
         try {
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
@@ -820,11 +851,16 @@ export default function BrowserView(props: Props) {
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
           f.src = routeUrl(settings, rules, intended, props.incognito, t.sess);
+          /* The recovered URL syncs back from the frame once it loads;
+             recording it as this tab's last navigation keeps the
+             auto-load effect from issuing a second, duplicate load. */
+          lastNav.current.set(t.id, intended);
         } catch {
           /* cross-origin or gone: nothing to recover */
         }
         return;
       }
+      if (act !== "sync") return;
       const real = decodeRoute(path);
       if (!real) return;
       setErrors((prev) => {
@@ -1218,6 +1254,7 @@ export default function BrowserView(props: Props) {
          it is only revoked when no tab uses it anymore.) */
       frames.current.delete(id);
       lastNav.current.delete(id);
+      blankPolls.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
