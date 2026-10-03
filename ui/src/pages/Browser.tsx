@@ -846,10 +846,17 @@ export default function BrowserView(props: Props) {
     else rootRef.current?.requestFullscreen?.().catch(() => {});
   };
 
-  const setDt = (id: number, patch: Partial<DtState>) => {
+  /* The patch accepts a functional form so DevTools can append
+     entries from async handlers (the zl:* engine commands) without
+     racing the render-time state snapshot. */
+  const setDt = (
+    id: number,
+    patch: Partial<DtState> | ((prev: DtState) => Partial<DtState>),
+  ) => {
     setDtState((prev) => {
       const base = prev[id] ?? emptyDt();
-      return { ...prev, [id]: { ...base, ...patch } };
+      const p = typeof patch === "function" ? patch(base) : patch;
+      return { ...prev, [id]: { ...base, ...p } };
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
@@ -1152,7 +1159,8 @@ export default function BrowserView(props: Props) {
       if (
         !path.startsWith("/r/") &&
         !path.startsWith("/lj/") &&
-        !path.startsWith("/zl/")
+        !path.startsWith("/zl/") &&
+        !path.startsWith("/__zl_nav__/")
       ) {
         if (!t.url || path === "/" || isAppPath) return;
         try {
@@ -1167,6 +1175,10 @@ export default function BrowserView(props: Props) {
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
           f.src = routeUrl(intended);
+          /* Record the recovered URL as this tab's last navigation so
+             the URL sync (once the frame loads it) never triggers a
+             duplicate auto-load of the same target. */
+          lastNav.current.set(t.id, intended);
         } catch {
           /* cross-origin or gone: nothing to recover */
         }

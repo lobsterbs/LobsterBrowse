@@ -61,6 +61,8 @@ DevTools is a real diagnostic surface. Events should identify trace/request ID, 
 Distinguish navigation, upstream HTTP, transport, rewrite, resource, WebSocket, extension/runtime and browser/runtime failures. A normal WebSocket close is not an error.
 Proxied traffic never touches this server: the `/logs` ring holds server-level diagnostics (suggest/cert/session lines) only, and the browser-side resfail reports carry the resource URL; correlate by URL + timestamp. Never invent a `cache_hit` line server-side.
 When NativeTransit is active, the network view should show NativeTransit vs RewriteFallback and the fallback reason.
+DevTools has three sections: Console, Network, Diagnostics. The separate Terminal page is gone. The Console is the single command surface: page eval plus the engine control-plane commands that used to live only in Terminal (zl:help lists them: zl:ping, zl:status, zl:transit, zl:netlog, zl:ext, zl:downloads; every engine reply passes the diagnostics sanitizers, and async replies append through the functional setDt patch).
+The Diagnostics toolbar carries a Report button that opens the project issue tracker at https://github.com/lobsterbs/LobsterBrowse/issues/new.
 
 ## UI rules
 - No hamburger menu. No toolbar Home button (removed by request, 2026-09-27).
