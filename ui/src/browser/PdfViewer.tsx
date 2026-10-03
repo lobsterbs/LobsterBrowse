@@ -78,7 +78,7 @@ export default function PdfViewer(props: { blob: Blob }) {
         canvas.height = Math.floor(viewport.height);
         canvas.style.width = Math.floor(viewport.width) + "px";
         canvas.style.height = Math.floor(viewport.height) + "px";
-        const render = page.render({ canvasContext: ctx, viewport });
+        const render = page.render({ canvas, viewport });
         await render.promise;
         if (cancelled) return;
         text.innerHTML = "";
