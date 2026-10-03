@@ -1,4 +1,4 @@
-# AGENTS.md â LobsterBrowse
+# AGENTS.md — LobsterBrowse
 
 Guidance for AI agents and human contributors. Read this before changing the browser, proxy engine, UI, deployment configuration, or docs.
 
@@ -11,16 +11,16 @@ LobsterBrowse is an open-source proxy browser built around Rust/Axum, React + Ty
 Make sites work first, then improve browser-like compatibility. Do not add a headless browser or attempt to become a full Chromium/Firefox replacement.
 
 ## Repository map
-- `server/` â Rust workspace.
-- `server/bin/server/src/main.rs` â current Axum proxy implementation.
-- `server/crates/adblock/` â network filtering.
-- `ui/` â React + TypeScript + Vite.
-- `ui/src/App.tsx` â application shell/global state.
-- `ui/src/pages/Browser.tsx` â tabs, toolbar and frame integrations.
-- `ui/src/settings.ts` â settings/defaults/migrations.
-- `ui/src/store.ts` â local browser state.
-- `/zlsw/` â published Zeolite bundle.
-- `/zl-ext/` and `/zl-cs/` â Zeolite extension resource routes.
+- `server/` — Rust workspace.
+- `server/bin/server/src/main.rs` — current Axum proxy implementation.
+- `server/crates/adblock/` — network filtering.
+- `ui/` — React + TypeScript + Vite.
+- `ui/src/App.tsx` — application shell/global state.
+- `ui/src/pages/Browser.tsx` — tabs, toolbar and frame integrations.
+- `ui/src/settings.ts` — settings/defaults/migrations.
+- `ui/src/store.ts` — local browser state.
+- `/zlsw/` — published Zeolite bundle.
+- `/zl-ext/` and `/zl-cs/` — Zeolite extension resource routes.
 
 ## Current proxy paths
 `/zl/<base64url target>` is the only engine route: the Zeolite service worker owns it (client-side interception, native wisp transport, in-worker rewriting). The server never rewrites or proxies page traffic. The legacy `/r/` and `/lj/` prefixes 302 to `/zl/` (same target, query preserved) so stale bookmarks and history entries keep working; a `/zl/` request that reaches the server means no worker controls the page and gets the honest engine_error_page.
@@ -54,9 +54,7 @@ Rules:
 ## Security and privacy
 LobsterBrowse is a proxy, so the server necessarily sees traffic it proxies. Never describe it as server-blind.
 Preserve SSRF and DNS-rebinding protection, URL/redirect validation, header safety, origin/cookie isolation, extension permissions and diagnostic redaction.
-Never store autho
-r
-ization headers, bearer tokens, passwords, API keys or raw cookies in diagnostics.
+Never store authorization headers, bearer tokens, passwords, API keys or raw cookies in diagnostics.
 
 ## DevTools
 DevTools is a real diagnostic surface. Events should identify trace/request ID, subsystem, severity, redacted URL, lifecycle event and concrete cause where known.
@@ -80,8 +78,7 @@ When NativeTransit is active, the network view should show NativeTransit vs Rewr
 
 ## Search suggestions
 
-`/
-suggest` owns the fallback chain server-side: the engine's native provider is tried first, then Brave, then Bing (several providers block or rate-limit the deployment's datacenter egress, DuckDuckGo among them). The client makes exactly one request per keystroke; do not reintroduce client-side double-fetch fallbacks. Startpage and Mojeek have no open suggest API and honestly fall back to the chain.
+`/suggest` owns the fallback chain server-side: the engine's native provider is tried first, then Brave, then Bing (several providers block or rate-limit the deployment's datacenter egress, DuckDuckGo among them). The client makes exactly one request per keystroke; do not reintroduce client-side double-fetch fallbacks. Startpage and Mojeek have no open suggest API and honestly fall back to the chain.
 
 ## Mozilla add-ons store
 AMO web pages are unreachable from this deployment's egress; the Settings extensions panel searches the public AMO API v5 over the engine route instead (AmoSearch.tsx), and .xpi downloads try the user's own connection first, then the engine route, before install via `zl:installExt`. Honest gap: the old server-side Firefox-UA spoof for addons.mozilla.org is gone with ScramJet; nothing forces a Firefox UA anywhere, and finished installs still raise the UI prompt (Install into the engine, Save file, Cancel).
@@ -96,9 +93,7 @@ After deployment changes verify `/healthz`, UI, `/zl/` (and the /r/, /lj/ redire
 ### Stale engine bundle hazard (real incident, 2026-09-27)
 The `zl-builder` Docker stage fetches the Zeolite `dist` tarball in a `RUN`
 layer whose instruction text never changes, so Render's layer cache reuses it
-forever: ordinary deploys silently shipped 
-a m
-onths-old engine bundle while
+forever: ordinary deploys silently shipped a months-old engine bundle while
 `dist` had moved on. After a Zeolite `dist` publish, deploy with
 `clearCache: true` (render trigger_deploy) or the bundle will not update.
 `/build` reports `zlswSha` (sha256 prefix of the served `zlsw/sw.js`) and the
@@ -130,9 +125,7 @@ The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `
 `startDownload` in Browser.tsx uses an AbortController per download: the downloads card's close button on an ACTIVE item cancels the transfer (honest "Cancelled" state), and a 1 GiB in-memory ceiling aborts oversized files instead of exhausting device memory. Blob assembly remains the sink (File System Access API needs a top-level user gesture the proxied frame cannot provide); the cap is the honest ceiling of that design.
 
 ## Session restoration (2026-09-27)
-`saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior dest
-royed
- back/forward history on reload. Old saves are normalized on load.
+`saveSessionTabs`/`loadSessionTabs` (ui/src/store.ts) persist the FULL per-tab history stack and index; the old flatten-to-current-URL behavior destroyed back/forward history on reload. Old saves are normalized on load.
 
 ## Incognito log hygiene (2026-09-27)
 `store.setIncognitoLogging(on)` (wired from App.tsx incognito state) keeps the technical log ring in memory only during incognito sessions; page diagnostics no longer persist to the `lobsterbrowse-logs` localStorage key while incognito is on.
@@ -149,7 +142,7 @@ ScramJet's anubis_bridge and the /.within.website/ server route are gone. The Ze
 `ui/src/browser/` holds the presentational panels split out of `pages/Browser.tsx`: `TabSwitcherCard`, `DownloadsCard`, `XpiPrompt`, `ExtensionsPanel`, plus `browserShared.ts` (tabLabel, dlIconFor, fmtBytes, DL_FILE_RE). All state stays in the browser page lifecycle; the panels take explicit props and do not own state or effects. Keep new panels there, not inside Browser.tsx.
 
 ## Zeolite engine mode (client-side, the only engine)
-Zeolite is the ONLY engine: its service worker owns /zl/ (client-side interception, native wisp transport, in-worker rewriting by the wasm rewriter). App.tsx unregisters the legacy v3 page-cache worker if found (it owned the "/" scope and silently blocked the Zeolite SW registration), drops its caches, and pushes `zl:config` (prefix from `engineRoutePrefix()`, scheme "b64u") on every boot, because the prefix is runtime state that resets to "/j/" on worker restart. A /zl/ request that reaches the server means no worker controls the page (cold start, worker restart, no module SW support) and gets the honest engine_error_page — the server never rewrites /zl/ traffic. The /rewriter_wasm_bg.wasm origin-root alias serves the engine rewriter wasm root-absolute, exactly like /bootstrap.js. Both surfaces are gated by the transit CI job: /zl/<b64> must answer 502 with the honest card, the wasm alias 200 application/wasm with the \0asm magic, and the legacy /r/ and /lj/ prefixes must 302 to /zl/ with the target and query preserved. routeUrl sends no option params on engine routes because the SW forwards the query string to the target; settings reach the engine through control-plane pushes instead. `zl:adblock` {enabled} mirrors settings.adblock. `zl:rules` carries the per-site rules (host + adblock + UA) plus a global default UA, built from the same loadSiteRules() store Settings and the lock card read; the adblock override can only disable per site, the global toggle still wins, and an active engine fingerprint profile still wins over any UA override. `zl:jarProfile` gives incognito a throwaway jar (the incognito sid while incognito is on, null otherwise; re-pushed on boot, on the toggle and on controllerchange; the engine keeps session-profile cookies in memory only and drops them when the profile switches back). `zl:sameSite` {policy} ("off"/"approx") and `zl:fingerprint` (one-field profile with the resolved global UA while on — the engine derives platform, languages and the canvas seed, timezone and hardware stay native — null while off) are both re-pushed on the toggle and on controllerchange. Known limits: a SW restart mid-incognito briefly admits cookies into the default jar until the re-push lands, and the engine page cache is shared across profiles (cookies never are). Engine-mode WebSockets bridge end to end over wisp (zl:wsOpen); the bridge assigns each page origin its own virtual WS identity, so a page cannot fingerprint the bridge across origins. The engine ships the migrated ad/tracker host lists as its own /rules.json and evaluates them client-side in its worker (request-level 403 before cache and transport, captcha hosts allowlisted). Settings #46: Browser.tsx listens for the engine's `zl:downloadOp` broadcast (extensions calling downloads.download() hand the save to the UI) and routes it into the same startDownload machinery as the a[download] capture; state reports back to the engine wait on a zl:downloadState receiver in Zeolite. Engine extension surfaces (#47/#50): Browser.tsx renders zl:notifyOp broadcasts as note cards (clicked / buttonClicked / closed report back over zl:notifyEvent, auto-dismiss reports closed) and lists the context-menu registry (zl:listMenus) on right-click inside proxied frames, reporting clicks over zl:menuClick with the frame URL. Current pin: Zeolite main c94ea57e, dist bundle 41ffdeef — see DEPLOY.md; the pin note there is kept accurate.
+Zeolite is the ONLY engine: its service worker owns /zl/ (client-side interception, native wisp transport, in-worker rewriting by the wasm rewriter). App.tsx unregisters the legacy v3 page-cache worker if found (it owned the "/" scope and silently blocked the Zeolite SW registration), drops its caches, and pushes `zl:config` (prefix from `engineRoutePrefix()`, scheme "b64u") on every boot, because the prefix is runtime state that resets to "/j/" on worker restart. A /zl/ request that reaches the server means no worker controls the page (cold start, worker restart, no module SW support) and gets the honest engine_error_page — the server never rewrites /zl/ traffic. The /rewriter_wasm_bg.wasm origin-root alias serves the engine rewriter wasm root-absolute, exactly like /bootstrap.js. Both surfaces are gated by the transit CI job: /zl/<b64> must answer 502 with the honest card, the wasm alias 200 application/wasm with the \0asm magic, and the legacy /r/ and /lj/ prefixes must 302 to /zl/ with the target and query preserved. routeUrl sends no option params on engine routes because the SW forwards the query string to the target; settings reach the engine through control-plane pushes instead. `zl:adblock` {enabled} mirrors settings.adblock. `zl:rules` carries the per-site rules (host + adblock + UA) plus a global default UA, built from the same loadSiteRules() store Settings and the lock card read; the adblock override can only disable per site, the global toggle still wins, and an active engine fingerprint profile still wins over any UA override. `zl:jarProfile` gives incognito a throwaway jar (the incognito sid while incognito is on, null otherwise; re-pushed on boot, on the toggle and on controllerchange; the engine keeps session-profile cookies in memory only and drops them when the profile switches back). `zl:sameSite` {policy} ("off"/"approx") and `zl:fingerprint` (one-field profile with the resolved global UA while on — the engine derives platform, languages and the canvas seed, timezone and hardware stay native — null while off) are both re-pushed on the toggle and on controllerchange. Known limits: a SW restart mid-incognito briefly admits cookies into the default jar until the re-push lands, and the engine page cache is shared across profiles (cookies never are). Engine-mode WebSockets bridge end to end over wisp (zl:wsOpen); the bridge assigns each page origin its own virtual WS identity, so a page cannot fingerprint the bridge across origins. The engine ships the migrated ad/tracker host lists as its own /rules.json and evaluates them client-side in its worker (request-level 403 before cache and transport, captcha hosts allowlisted). Settings #46: Browser.tsx listens for the engine's `zl:downloadOp` broadcast (extensions calling downloads.download() hand the save to the UI) and routes it into the same startDownload machinery as the a[download] capture; state reports back to the engine wait on a zl:downloadState receiver in Zeolite. Engine extension surfaces (#47/#50): Browser.tsx renders zl:notifyOp broadcasts as note cards (clicked / buttonClicked / closed report back over zl:notifyEvent, auto-dismiss reports closed) and lists the context-menu registry (zl:listMenus) on right-click inside proxied frames, reporting clicks over zl:menuClick with the frame URL. Current pin: Zeolite main 51d3d54, dist bundle 52f24fed — see DEPLOY.md; the pin note there is kept accurate.
 
 
 ## Engine route prefix
@@ -167,8 +160,7 @@ startDownload streams to disk via the File System Access API when available (sho
 Worker/SharedWorker handling is engine-owned: in-worker subresource routing belongs to Zeolite (ROADMAP.md "Phase: Zeolite Integration — Deferred"); do not fake it from LB. A guest worker whose script fetch would bypass the proxy must fail honestly, never leak the real IP silently.
 
 ## Find in page (#9)
-The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighte
-r until window.find disappears.
+The toolbar find button scopes window.find() to the active same-origin frame (non-standard but supported in Chromium; engine frames are same-origin by design). The match label is a case-insensitive textContent scan of the frame body: approximate by design (no shadow-DOM crawl); window.find owns the real highlighting and scrolling. No Range-walking highlighter until window.find disappears.
 
 ## Per-site rules (#10, merged into the lock card by #26)
 The lock site-info card (opened from the identity pill) is the single entry point for connection facts, cookies and per-site settings; the former toolbar tune chip and its standalone rules card are gone. The per-site switch and User-Agent select inside the card edit the same site-rule store as Settings (settings.ts loadSiteRules/saveSiteRules). A rule is created lazily and deleted when it carries no overrides. Ad-block semantics: global on unless the site rule disables it; a site rule cannot enable ad-block while the global setting is off (the switch is disabled then, with an honest note). Per-site rules reach the engine through the zl:rules push from App.tsx (docs/zeolite-integration-plan.md, item 1 — implemented) and apply from the next navigation.
