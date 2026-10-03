@@ -1,0 +1,41 @@
+/* Local file viewer surfaces (#39-#42, #44). The overlay mirrors
+   the xpi install prompt; surfaces reuse the app's M3E tokens. */
+.lb-fv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+.lb-fv-card {
+  width: min(880px, calc(100vw - 32px));
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--m3e-shape-lg, 16px);
+}
+.lb-fv-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.lb-fv-actions { display: flex; gap: 8px; padding: 8px 12px; }
+.lb-fv-stage { height: 62vh; overflow: auto; display: flex; justify-content: center; }
+.lb-fv-canvas-wrap { position: relative; }
+.lb-fv-textlayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; }
+.lb-fv-textlayer span { position: absolute; white-space: pre; color: transparent; transform-origin: 0 0; }
+.lb-fv-textlayer ::selection { background: rgba(103, 80, 164, 0.4); }
+.lb-fv-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; }
+.lb-fv-pagecount { min-width: 56px; text-align: center; }
+.lb-fv-searchbox { display: flex; align-items: center; gap: 4px; }
+.lb-fv-results { max-height: 120px; overflow: auto; padding: 0 12px 8px; }
+.lb-fv-result { cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.lb-fv-result:hover { background: rgba(128, 128, 128, 0.15); }
+.lb-fv-text { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 13px; margin: 0; }
+.lb-fv-image { max-width: 100%; max-height: 62vh; display: block; margin: 0 auto; }
+.lb-fv-media { max-width: 100%; max-height: 62vh; display: block; margin: 0 auto; }
+.lb-fv-preview { width: 100%; height: 62vh; border: none; border-radius: 8px; background: var(--md-sys-color-surface, #fff); }
+.lb-fv-entries { width: 100%; border-collapse: collapse; font-size: 14px; }
+.lb-fv-entries th, .lb-fv-entries td { text-align: left; padding: 5px 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }
+.lb-fv-dir { cursor: pointer; color: var(--md-sys-color-primary, #6750a4); }
+.lb-fv-crumb { cursor: pointer; margin: 0 0 8px; color: var(--md-sys-color-primary, #6750a4); }
+.lb-fv-error { color: var(--md-sys-color-error, #b3261e); padding: 8px 0; white-space: pre-wrap; }

@@ -43,6 +43,8 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
 import DownloadsCard from "../browser/DownloadsCard";
+import FileViewer from "../browser/FileViewer";
+import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
 import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
 import M3eSelect from "../M3eSelect";
@@ -196,6 +198,11 @@ export default function BrowserView(props: Props) {
   /* A finished .xpi download waiting for the install prompt. The
      bytes are held here so Install needs no second fetch. */
   const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  /* Local file viewer (#39-#42, #44): a finished transfer the
+     detection layer routed to a viewer surface instead of a silent
+     save. The viewer keeps a Download button, so the normal save
+     path stays one click away. */
+  const [fileView, setFileView] = useState<{ name: string; blob: Blob; kind: FileKind } | null>(null);
   /* Cancellation: every active download owns an AbortController. The
      sink is disk streaming via the File System Access API when the
      context allows it, and capped in-memory Blob assembly otherwise;
@@ -380,6 +387,23 @@ export default function BrowserView(props: Props) {
           const bytes = new Uint8Array(await blob.arrayBuffer());
           setXpiPrompt({ name, bytes });
           pushLog("info", "xpi ready: " + name + " (" + fmtBytes(bytes.length) + ")");
+          return;
+        }
+        /* Detection layer (#42): what was actually received? Magic
+           bytes beat Content-Type, which beats the file extension.
+           Viewable kinds open the local viewer (#39-#41, #44);
+           everything else keeps the classic blob-anchor save. */
+        const head = await headOf(blob);
+        const kind = await detectFileKind(
+          { name, mime: res.headers.get("content-type") ?? undefined },
+          head,
+        );
+        if (kind !== "other") {
+          setFileView({ name, blob, kind });
+          pushLog("info", "download ready to view: " + name + " (" + fmtBytes(blob.size) + ", detected " + kind + ")");
+          window.setTimeout(() => {
+            setDownloads((prev) => prev.filter((d) => d.id !== id));
+          }, 4000);
           return;
         }
         /* Saved on the user's device via a blob anchor click. */
@@ -2241,6 +2265,14 @@ export default function BrowserView(props: Props) {
               onClose={() => setDlOpen(false)}
               onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
               onCancel={cancelDownload}
+            />
+          )}
+          {fileView && (
+            <FileViewer
+              name={fileView.name}
+              blob={fileView.blob}
+              kind={fileView.kind}
+              onClose={() => setFileView(null)}
             />
           )}
         </div>
