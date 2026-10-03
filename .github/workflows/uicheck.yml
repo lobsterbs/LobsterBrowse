@@ -1,0 +1,93 @@
+name: uicheck
+on:
+  push:
+    branches: [tmp-fileread]
+    paths: [zlui-trigger]
+jobs:
+  uicheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i playwright@1.49.1
+      - run: npx playwright install chromium --with-deps
+      - name: run-uicheck
+        run: |
+          cat > uicheck.mjs <<'ZLEOF'
+          import { chromium } from 'playwright';
+          const log = (...a) => console.log('ZLUI', ...a);
+          const bases = ['https://lobsterbrowse-server.onrender.com', 'https://lobsterbrowse-beta.onrender.com'];
+          const browser = await chromium.launch();
+          for (const base of bases) {
+            log('BASE ' + base);
+            const page = await browser.newPage();
+            let ok = false;
+            for (let i = 0; i < 12 && !ok; i++) {
+              try { await page.goto(base + '/', { waitUntil: 'load', timeout: 60000 }); ok = true; }
+              catch (e) { log('goto-retry', String(e).slice(0, 80)); await page.waitForTimeout(5000); }
+            }
+            await page.waitForTimeout(3000);
+            try {
+              await page.fill('#lb-search-input', 'https://example.com/');
+              await page.press('#lb-search-input', 'Enter');
+            } catch (e) { log('nav-fail', String(e).slice(0, 120)); }
+            await page.waitForTimeout(12000);
+            try { await page.click('#lb-devtools-btn', { timeout: 10000 }); } catch (e) { log('devtools-btn-fail', String(e).slice(0, 120)); }
+            await page.waitForTimeout(1500);
+            try {
+              const segs = await page.evaluate(() => Array.from(document.querySelectorAll('m3e-button-segment')).map(s => (s.innerText || '').replace(/\s+/g, ' ').trim()));
+              log('SEGMENTS ' + JSON.stringify(segs));
+            } catch (e) { log('segments-fail', String(e).slice(0, 120)); }
+            try {
+              await page.evaluate(() => {
+                const segs = Array.from(document.querySelectorAll('m3e-button-segment'));
+                const c = segs.find(s => (s.innerText || '').toLowerCase().includes('console'));
+                if (c) c.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+              });
+            } catch (e) { log('seg-fail', String(e).slice(0, 120)); }
+            await page.waitForTimeout(1000);
+            try {
+              const ta = page.locator('textarea[aria-label="Console input"]');
+              await ta.fill('document.title');
+              await ta.press('Enter');
+              await page.waitForTimeout(1500);
+              const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.lb-console-line')).map(l => (l.innerText || '').replace(/\s+/g, ' ').slice(0, 140)));
+              log('CONSOLE-LINES ' + JSON.stringify(lines));
+            } catch (e) { log('console-fail', String(e).slice(0, 120)); }
+            try {
+              const ta = page.locator('textarea[aria-label="Console input"]');
+              await ta.fill('zl:help');
+              await ta.press('Enter');
+              await page.waitForTimeout(2000);
+              const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.lb-console-line')).map(l => (l.innerText || '').replace(/\s+/g, ' ').slice(0, 220)));
+              log('ZLCMD-LINES ' + JSON.stringify(lines));
+            } catch (e) { log('zlcmd-fail', String(e).slice(0, 120)); }
+            try {
+              await page.evaluate(() => {
+                const segs = Array.from(document.querySelectorAll('m3e-button-segment'));
+                const d = segs.find(s => (s.innerText || '').toLowerCase().includes('diagnostics'));
+                if (d) d.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+              });
+              await page.waitForTimeout(1000);
+              const btns = await page.evaluate(() => Array.from(document.querySelectorAll('m3e-button')).map(b => (b.innerText || '').replace(/\s+/g, ' ').trim()).filter(Boolean));
+              log('DT-BUTTONS ' + JSON.stringify(btns));
+              const report = page.locator('m3e-button', { hasText: 'Report' }).first();
+              const cnt = await report.count();
+              log('REPORT-COUNT ' + cnt);
+              if (cnt > 0) {
+                const popup = await Promise.all([
+                  page.waitForEvent('popup', { timeout: 12000 }).catch(e => null),
+                  report.click(),
+                ]).then(r => r[0]);
+                if (popup) { await popup.waitForLoadState('domcontentloaded').catch(() => {}); log('POPUP ' + popup.url()); }
+                else log('POPUP none');
+              }
+            } catch (e) { log('report-fail', String(e).slice(0, 160)); }
+            await page.close();
+          }
+          await browser.close();
+
+          ZLEOF
+          node uicheck.mjs
