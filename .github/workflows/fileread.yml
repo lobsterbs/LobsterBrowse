@@ -5,25 +5,23 @@ on:
 jobs:
   chunk:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        f: [deploy, agents]
-        n: [0, 1, 2]
     steps:
-      - name: print chunk
+      - name: print chunks
         run: |
-          case "${{ matrix.f }}" in
-            deploy) p="DEPLOY.md" ;;
-            agents) p="AGENTS.md" ;;
-          esac
-          curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/$p" -o blob
-          echo "ZLGITHASH-$(git hash-object blob)"
-          echo "ZLSIZE-$(wc -c < blob)"
-          split -b 8000 -d -a 2 blob part
-          c=$(printf 'part%02d' ${{ matrix.n }})
-          echo "ZLCHUNKHASH-${{ matrix.f }}-${{ matrix.n }}-$(sha1sum "$c" 2>/dev/null | cut -d' ' -f1 || echo EMPTY)"
-          echo "ZLFILE-${{ matrix.f }}-${{ matrix.n }}-BEGIN"
-          if [ -f "$c" ]; then base64 -w 0 "$c"; else echo ZLEMPTY; fi
-          echo
-          echo "ZLFILE-${{ matrix.f }}-${{ matrix.n }}-END"
+          read_chunked() {
+            f="$1"; p="$2"
+            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/$p" -o "$f"
+            echo "ZLGITHASH-$f-$(git hash-object "$f")"
+            echo "ZLSIZE-$f-$(wc -c < "$f")"
+            split -b 8000 -d -a 2 "$f" "part_$f."
+            for c in part_$f.*; do
+              echo "ZLFILE-$f-${c#part_$f.}-BEGIN"
+              base64 -w 0 "$c"
+              echo
+              echo "ZLFILE-$f-${c#part_$f.}-END"
+            done
+            rm -f "part_$f."*
+          }
+          read_chunked Dockerfile Dockerfile
+          read_chunked DEPLOY.md DEPLOY.md
+          read_chunked AGENTS.md AGENTS.md
