@@ -2,22 +2,12 @@ name: repro
 on:
   push:
     branches: [tmp-fileread]
+    paths: [zlrepro-trigger]
 jobs:
   repro:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: probe-ome
-        run: |
-          echo "ZLREPRO curl-begin"
-          curl -sS -o /dev/null -w 'ZLREPRO ome-root code=%{http_code} redirect=%{redirect_url}' --max-redirs 0 https://m.ome.tv/ || echo ZLREPRO-ome-root-curl-failed
-          echo ""
-          curl -sS -o /dev/null -w 'ZLREPRO ome-blank code=%{http_code} redirect=%{redirect_url}' --max-redirs 0 https://m.ome.tv/blank || echo ZLREPRO-ome-blank-curl-failed
-          echo ""
-          echo "ZLREPRO html-head-begin"
-          curl -sS https://m.ome.tv/ | head -c 2500 | sed 's/^/ZLREPRO html /'
-          echo ""
-          echo "ZLREPRO html-head-end"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -28,19 +18,20 @@ jobs:
           cat > repro.mjs <<'ZLEOF'
           import { chromium } from 'playwright';
           const log = (...a) => console.log('ZLREPRO', ...a);
+          const TARGET = (process.env.ZL_TARGET || 'https://lobsterbrowse-server.onrender.com/');
+          const SITE = (process.env.ZL_SITE || 'https://m.ome.tv/');
           const browser = await chromium.launch();
           const page = await browser.newPage();
-          page.on('console', (m) => log('console', m.type(), m.text().slice(0, 300)));
+          page.on('console', (m) => { const t = m.text(); if (!t.includes('Custom state pseudo')) log('console', m.type(), t.slice(0, 200)); });
           page.on('requestfailed', (r) => log('reqfail', r.url().slice(0, 220), (r.failure() && r.failure().errorText) || ''));
           page.on('framenavigated', (f) => log('framenav', f.url().slice(0, 250)));
-          page.on('request', (r) => { const u = r.url(); if (u.includes('/lj/') || u.includes('/r/') || u.includes('__zl_nav__')) log('req', u.slice(0, 250)); });
           for (let i = 0; i < 10; i++) {
-            try { await page.goto('https://lobsterbrowse-server.onrender.com/', { waitUntil: 'load', timeout: 60000 }); break; }
+            try { await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 }); break; }
             catch (e) { log('goto-retry', String(e).slice(0, 120)); await page.waitForTimeout(5000); }
           }
           log('app-title', await page.title());
           await page.waitForTimeout(4000);
-          await page.fill('#lb-search-input', 'https://m.ome.tv/');
+          await page.fill('#lb-search-input', SITE);
           await page.press('#lb-search-input', 'Enter');
           await page.waitForTimeout(30000);
           const state = await page.evaluate(() => {
