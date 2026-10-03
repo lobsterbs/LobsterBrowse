@@ -10,10 +10,10 @@ jobs:
       - name: probe-ome
         run: |
           echo "ZLREPRO curl-begin"
-          curl -sS -o /dev/null -w 'ZLREPRO ome-root code=%{http_code} redirect=%{redirect_url}
-' -L --max-redirs 0 https://m.ome.tv/ || echo "ZLREPRO ome-root curl-failed"
-          curl -sS -o /dev/null -w 'ZLREPRO ome-blank code=%{http_code} redirect=%{redirect_url}
-' --max-redirs 0 https://m.ome.tv/blank || echo "ZLREPRO ome-blank curl-failed"
+          curl -sS -o /dev/null -w 'ZLREPRO ome-root code=%{http_code} redirect=%{redirect_url}' --max-redirs 0 https://m.ome.tv/ || echo ZLREPRO-ome-root-curl-failed
+          echo ""
+          curl -sS -o /dev/null -w 'ZLREPRO ome-blank code=%{http_code} redirect=%{redirect_url}' --max-redirs 0 https://m.ome.tv/blank || echo ZLREPRO-ome-blank-curl-failed
+          echo ""
           echo "ZLREPRO html-head-begin"
           curl -sS https://m.ome.tv/ | head -c 2500 | sed 's/^/ZLREPRO html /'
           echo ""
