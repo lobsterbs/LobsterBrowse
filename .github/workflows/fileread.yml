@@ -2,8 +2,9 @@ name: fileread-tmp
 on:
   push:
     branches: [tmp-fileread]
+
 jobs:
-  mbrw:
+  dump:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -21,194 +22,18 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump mbrw "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx"
-  mci:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump mci "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/.github/workflows/ci.yml"
-  mpkg:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump mpkg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/package.json"
-  magents:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump magents "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md"
-  mset:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump mset "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/settings.ts"
-  bset:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bset "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/settings.ts"
-  bgen:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bgen "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/.github/workflows/generate-lockfile.yml"
-  bcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bcheck "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/tests/transit/check.mjs"
-  bbsh:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bbsh "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/browser/browserShared.ts"
-  bsan:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bsan "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/sanitize.ts"
-  bzl:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-            done
-          }
-          dump bzl "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/zeolite.ts"
+          dump mhome "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Home.tsx?v=2"
+          dump mdt "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/DevTools.tsx?v=2"
+          dump mbrw2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx?v=2"
+          dump mpoll "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/browser/pollRecovery.ts?v=2"
+          dump mcheck "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/tests/poll-recovery/check.mjs?v=2"
+          dump mci2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/.github/workflows/ci.yml?v=2"
+          dump magents2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md?v=2"
+          dump bdt "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/DevTools.tsx"
+          dump bterm "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/browser/DevTerminal.tsx"
+          dump bhome "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/Home.tsx"
+          dump bpkg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/package.json"
+          dump bci "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/.github/workflows/ci.yml"
+          dump bagents "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/AGENTS.md"
+          dump bbrw "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/pages/Browser.tsx"
+          dump bstore "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/ui/src/store.ts"
