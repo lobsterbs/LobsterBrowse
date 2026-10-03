@@ -7,18 +7,19 @@ jobs:
       - name: print chunks
         run: |
           read_chunked() {
-            f="$1"; ref="$2"
-            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/$ref/AGENTS.md" -o "$f"
-            echo "ZLGITHASH-$f-$(git hash-object "$f")"
-            echo "ZLSIZE-$f-$(wc -c < "$f")"
-            split -b 8000 -d -a 2 "$f" "part_$f."
-          for c in part_$f.*; do
-            echo "ZLFILE-$f-${c#part_$f.}-BEGIN"
+            key="$1"; ref="$2"; path="$3"
+            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/$ref/$path" -o "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
             base64 -w 0 "$c"
             echo
-            echo "ZLFILE-$f-${c#part_$f.}-END"
+            echo "ZLFILE-$key-${c#part_$key.}-END"
           done
-          rm -f "part_$f."*
+          rm -f "part_$key."*
           }
-          read_chunked b404 b40409e1
-          read_chunked main main
+          read_chunked AGENTS "beta/zeolite-nativetransit" AGENTS.md
+          read_chunked DOCKER "beta/zeolite-nativetransit" Dockerfile
+          read_chunked DEPLOY "beta/zeolite-nativetransit" DEPLOY.md
