@@ -28,7 +28,7 @@ const APP_PREFIXES = [
 const ENGINE_PREFIXES = ["/r/", "/lj/", "/zl/", "/__zl_nav__/"];
 
 export function pollAction(protocol: string, path: string, tabUrl: string): PollAction {
-  if (protocol === "about:") return "wait";
+  if (protocol.startsWith("about:")) return "wait";
   if (!path || path === "/") return "wait";
   if (ENGINE_PREFIXES.some((p) => path.startsWith(p))) return "sync";
   if (!tabUrl) return "wait";
