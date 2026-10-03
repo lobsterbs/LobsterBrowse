@@ -1,14 +1,15 @@
 name: fileread-tmp
 on: push
 jobs:
-  chunk:
+  m1:
     runs-on: ubuntu-latest
     steps:
       - name: print chunks
         run: |
-          read_chunked() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "f_$key"
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
             echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
             echo "ZLSIZE-$key-$(wc -c < "f_$key")"
             split -b 8000 -d -a 2 "f_$key" "part_$key."
@@ -20,19 +21,182 @@ jobs:
           done
           rm -f "part_$key."*
           }
-          read_chunked MAINRS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/main.rs"
-          read_chunked SHIM "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-shim.js"
-          read_chunked COMPAT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-compat.js"
-          read_chunked BROWSER "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx"
-          read_chunked DEVTOOLS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/DevTools.tsx"
-          read_chunked HOME "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Home.tsx"
-          read_chunked APP "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/App.tsx"
-          read_chunked SETTINGS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/settings.ts"
-          read_chunked STORE "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/store.ts"
-          read_chunked SETTSX "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Settings.tsx"
-          read_chunked M3E "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/m3e.d.ts"
-          read_chunked ZLT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/zeolite.ts"
-          read_chunked AGENTS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md"
-          read_chunked DOCKER "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/Dockerfile"
-          read_chunked BOOT "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/bootstrap.js"
-          read_chunked CODEC "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/codec.js"
+          read_range P1 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/main.rs" 1 60000
+  m2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range P2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/main.rs" 60001 60000
+  m3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range P3 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/main.rs" 120001 43687
+  b1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range P1 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx" 1 60000
+  b2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range P2 "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx" 60001 30022
+  u1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range SHIM "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-shim.js" 1 25502
+          read_range DEVTOOLS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/DevTools.tsx" 1 29470
+  u2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range SETTS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/settings.ts" 1 13861
+          read_range SETTSX "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Settings.tsx" 1 30965
+          read_range COMPAT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-compat.js" 1 3072
+  u3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range AGENTS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md" 1 27164
+          read_range APP "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/App.tsx" 1 15008
+          read_range HOME "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Home.tsx" 1 6230
+  u4:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print chunks
+        run: |
+          read_range() {
+            key="$1"; url="$2"; off="$3"; len="$4"
+            curl -fsSL "$url" -o "tmp_$key"
+            tail -c +"$off" "tmp_$key" | head -c "$len" > "f_$key"
+            echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
+            echo "ZLSIZE-$key-$(wc -c < "f_$key")"
+            split -b 8000 -d -a 2 "f_$key" "part_$key."
+          for c in part_$key.*; do
+            echo "ZLFILE-$key-${c#part_$key.}-BEGIN"
+            base64 -w 0 "$c"
+            echo
+            echo "ZLFILE-$key-${c#part_$key.}-END"
+          done
+          rm -f "part_$key."*
+          }
+          read_range STORE "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/store.ts" 1 5607
+          read_range M3E "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/m3e.d.ts" 1 5821
+          read_range ZLT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/zeolite.ts" 1 2808
+          read_range DOCKER "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/Dockerfile" 1 2700
+          read_range BOOT "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/bootstrap.js" 1 17423
+          read_range CODEC "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/codec.js" 1 3869
