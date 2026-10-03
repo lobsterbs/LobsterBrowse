@@ -26,23 +26,23 @@ RUN npm run build
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=400bdcc872fb7764c93c2dd774feb71746f4f67e
+ARG ZEOLITE_COMMIT=5b4a28b9354257e6e49961888133a02db8fed8fd
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates npm \
-    && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends curl ca-certificates npm \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /bundle
 RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.tar.gz" \
-      | tar xz --strip-components=1
+ | tar xz --strip-components=1
 # The libcurl transport (TLS termination for the wisp hop): pulled
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
-    && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
-    && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
+ && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
+ && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
