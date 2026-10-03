@@ -38,21 +38,13 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main 780ff6f1 (script backgrounds boot at
-install via bootInstalled: a live-worker install boots the
-background immediately instead of waiting for the next worker
-evaluation; inline child-realm navguard
-(#58 follow-up), srcdoc navigable-attribute rewire (#58/#59),
-parser-inserted frame observer + 11 KiB bootstrap gate, keyed opaque
-route codec (#55), keyed site token MAC (#32 hardening), strip/map
-of destination-bearing response headers, Location mapping on any
-status, MV3 extension API bridges (#39-#51), engine-origin channel
-isolation (#37), engine error page on every navigation strand (#31),
-real-Chromium E2E harness (#35), rewriter URL-construct coverage
-(#36)), dist bundle 400bdcc8 This matches the
-Dockerfile ZEOLITE_COMMIT and the zeolite-server git rev in
-server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
-the pin.
+Current pin: Zeolite main c94ea57e (mint-first runtime surfaces
+for the page and dedicated workers, mint/ws/EventSource/XHR shim
+parity fixes, sendBeacon unload passthrough, mint key rotation),
+dist bundle 41ffdeef (Zeolite CI build 37148106540, all-green).
+This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
+git rev stays b2a151f0 because no crate change shipped since it,
+and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
