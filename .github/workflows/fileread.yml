@@ -3,7 +3,7 @@ on:
   push:
     branches: [tmp-fileread]
 jobs:
-  brw:
+  mbrw:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -21,8 +21,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump brw "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/pages/Browser.tsx"
-  dts:
+          dump mbrw "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx"
+  mci:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -40,8 +40,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump dts "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/pages/DevTools.tsx"
-  home:
+          dump mci "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/.github/workflows/ci.yml"
+  mpkg:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -59,8 +59,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump home "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/pages/Home.tsx"
-  dterm:
+          dump mpkg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/package.json"
+  magents:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -78,8 +78,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump dterm "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/browser/DevTerminal.tsx"
-  store:
+          dump magents "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md"
+  mset:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -97,8 +97,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump store "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/store.ts"
-  bsh:
+          dump mset "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/settings.ts"
+  bset:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -116,8 +116,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump bsh "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/browser/browserShared.ts"
-  pkg:
+          dump bset "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/settings.ts"
+  bgen:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -135,8 +135,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump pkg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/package.json"
-  ci:
+          dump bgen "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/.github/workflows/generate-lockfile.yml"
+  bcheck:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -154,8 +154,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump ci "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/.github/workflows/ci.yml"
-  m3e:
+          dump bcheck "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/tests/transit/check.mjs"
+  bbsh:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -173,8 +173,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump m3e "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/m3e.d.ts"
-  agents:
+          dump bbsh "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/browser/browserShared.ts"
+  bsan:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -192,8 +192,8 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump agents "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/AGENTS.md"
-  app:
+          dump bsan "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/sanitize.ts"
+  bzl:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -211,4 +211,4 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump app "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/App.tsx"
+          dump bzl "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/6ad80be65da8a5da2163bb56a77a77a81fb9165a/ui/src/zeolite.ts"
