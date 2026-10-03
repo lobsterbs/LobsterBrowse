@@ -7,8 +7,8 @@ jobs:
       - name: print chunks
         run: |
           read_chunked() {
-            key="$1"; ref="$2"; path="$3"
-            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/$ref/$path" -o "f_$key"
+            key="$1"; url="$2"
+            curl -fsSL "$url" -o "f_$key"
             echo "ZLGITHASH-$key-$(git hash-object "f_$key")"
             echo "ZLSIZE-$key-$(wc -c < "f_$key")"
             split -b 8000 -d -a 2 "f_$key" "part_$key."
@@ -20,6 +20,19 @@ jobs:
           done
           rm -f "part_$key."*
           }
-          read_chunked AGENTS "beta/zeolite-nativetransit" AGENTS.md
-          read_chunked DOCKER "beta/zeolite-nativetransit" Dockerfile
-          read_chunked DEPLOY "beta/zeolite-nativetransit" DEPLOY.md
+          read_chunked MAINRS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/main.rs"
+          read_chunked SHIM "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-shim.js"
+          read_chunked COMPAT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/server/bin/server/src/engine-compat.js"
+          read_chunked BROWSER "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Browser.tsx"
+          read_chunked DEVTOOLS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/DevTools.tsx"
+          read_chunked HOME "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Home.tsx"
+          read_chunked APP "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/App.tsx"
+          read_chunked SETTINGS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/settings.ts"
+          read_chunked STORE "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/store.ts"
+          read_chunked SETTSX "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/pages/Settings.tsx"
+          read_chunked M3E "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/m3e.d.ts"
+          read_chunked ZLT "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/ui/src/zeolite.ts"
+          read_chunked AGENTS "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/AGENTS.md"
+          read_chunked DOCKER "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/main/Dockerfile"
+          read_chunked BOOT "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/bootstrap.js"
+          read_chunked CODEC "https://raw.githubusercontent.com/lobsterbs/Zeolite/dist/codec.js"
