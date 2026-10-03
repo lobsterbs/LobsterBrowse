@@ -1,39 +1,63 @@
-name: repro-tmp
-on: push
+name: repro
+on:
+  push:
+    branches: [tmp-fileread]
 jobs:
   repro:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      - name: probe-ome
+        run: |
+          echo "ZLREPRO curl-begin"
+          curl -sS -o /dev/null -w 'ZLREPRO ome-root code=%{http_code} redirect=%{redirect_url}
+' -L --max-redirs 0 https://m.ome.tv/ || echo "ZLREPRO ome-root curl-failed"
+          curl -sS -o /dev/null -w 'ZLREPRO ome-blank code=%{http_code} redirect=%{redirect_url}
+' --max-redirs 0 https://m.ome.tv/blank || echo "ZLREPRO ome-blank curl-failed"
+          echo "ZLREPRO html-head-begin"
+          curl -sS https://m.ome.tv/ | head -c 2500 | sed 's/^/ZLREPRO html /'
+          echo ""
+          echo "ZLREPRO html-head-end"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm init -y >/dev/null && npm i playwright@1.49.1 >/dev/null 2>&1
-      - run: npx playwright install chromium --with-deps >/dev/null 2>&1
-      - name: run repro
+      - run: npm i playwright@1.49.1
+      - run: npx playwright install chromium --with-deps
+      - name: run-repro
         run: |
-          cat > repro.js <<'ZLEOF'
-          const { chromium } = require('playwright');
-          (async () => {
-            const browser = await chromium.launch({ args: ['--disable-blink-features=AutomationControlled'] });
-            const page = await browser.newPage();
-            const navs = []; const fails = []; const reqs = [];
-            page.on('framenavigated', f => { try { navs.push(f.url()); } catch (e) {} });
-            page.on('requestfailed', r => { try { fails.push(r.url().slice(0, 220)); } catch (e) {} });
-            page.on('request', r => { try { const u = r.url(); if (u.includes('/lj/') || u.includes('/r/') || u.includes('__zl_nav__')) reqs.push(r.method() + ' ' + u.slice(0, 220)); } catch (e) {} });
-            await page.goto('https://lobsterbrowse-server.onrender.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
-            await page.waitForTimeout(6000);
-            await page.fill('#lb-search-input', 'https://m.ome.tv/');
-            await page.press('#lb-search-input', 'Enter');
-            for (let i = 0; i < 14; i++) {
-              await page.waitForTimeout(5000);
-              const frames = page.frames().map(f => f.url().slice(0, 200));
-              console.log('ZLREPRO T+' + ((i + 1) * 5) + 's NAVCOUNT ' + navs.length + ' FAILCOUNT ' + fails.length);
-              console.log('ZLREPRO frames ' + JSON.stringify(frames));
-            }
-            console.log('ZLREPRO allnavs ' + JSON.stringify(navs));
-            console.log('ZLREPRO allfails ' + JSON.stringify(fails.slice(0, 40)));
-            console.log('ZLREPRO reqsample ' + JSON.stringify(reqs.slice(0, 60)));
-            await browser.close();
-          })().catch(e => { console.log('ZLREPRO error ' + e); process.exit(1); });
+          cat > repro.mjs <<'ZLEOF'
+          import { chromium } from 'playwright';
+          const log = (...a) => console.log('ZLREPRO', ...a);
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+          page.on('console', (m) => log('console', m.type(), m.text().slice(0, 300)));
+          page.on('requestfailed', (r) => log('reqfail', r.url().slice(0, 220), (r.failure() && r.failure().errorText) || ''));
+          page.on('framenavigated', (f) => log('framenav', f.url().slice(0, 250)));
+          page.on('request', (r) => { const u = r.url(); if (u.includes('/lj/') || u.includes('/r/') || u.includes('__zl_nav__')) log('req', u.slice(0, 250)); });
+          for (let i = 0; i < 10; i++) {
+            try { await page.goto('https://lobsterbrowse-server.onrender.com/', { waitUntil: 'load', timeout: 60000 }); break; }
+            catch (e) { log('goto-retry', String(e).slice(0, 120)); await page.waitForTimeout(5000); }
+          }
+          log('app-title', await page.title());
+          await page.waitForTimeout(4000);
+          await page.fill('#lb-search-input', 'https://m.ome.tv/');
+          await page.press('#lb-search-input', 'Enter');
+          await page.waitForTimeout(30000);
+          const state = await page.evaluate(() => {
+            const ifr = document.querySelector('iframe');
+            let loc = null, ready = null, err = null;
+            try { loc = ifr && ifr.contentWindow && ifr.contentWindow.location.href; ready = ifr && ifr.contentDocument && ifr.contentDocument.readyState; } catch (e) { err = String(e).slice(0, 120); }
+            return { src: ifr && ifr.src, loc, ready, err, title: document.title };
+          });
+          log('STATE ' + JSON.stringify(state));
+          const dumps = await page.evaluate(() => ({
+            logs: localStorage.getItem('lobsterbrowse-logs'),
+            tabs: localStorage.getItem('lobsterbrowse-tabs'),
+          }));
+          log('LOGS-BEGIN');
+          if (dumps.logs) for (const l of JSON.parse(dumps.logs)) log('LOG ' + JSON.stringify(l));
+          log('LOGS-END');
+          log('TABS ' + (dumps.tabs || 'null'));
+          await browser.close();
           ZLEOF
-          node repro.js 2>&1
+          node repro.mjs
