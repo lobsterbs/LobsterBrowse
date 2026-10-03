@@ -9,8 +9,8 @@ jobs:
       - name: print chunks
         run: |
           read_chunked() {
-            f="$1"; p="$2"
-            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/beta/zeolite-nativetransit/$p" -o "$f"
+            f="$1"; ref="$2"
+            curl -fsSL "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/$ref/AGENTS.md" -o "$f"
             echo "ZLGITHASH-$f-$(git hash-object "$f")"
             echo "ZLSIZE-$f-$(wc -c < "$f")"
             split -b 8000 -d -a 2 "$f" "part_$f."
@@ -22,6 +22,5 @@ jobs:
             done
             rm -f "part_$f."*
           }
-          read_chunked Dockerfile Dockerfile
-          read_chunked DEPLOY.md DEPLOY.md
-          read_chunked AGENTS.md AGENTS.md
+          read_chunked b404 AGENTS.md
+          read_chunked main main
