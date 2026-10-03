@@ -20,4 +20,5 @@ jobs:
               echo "ZLFILE-$key-$n-END"
             done
           }
-          dump fyml "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/8c0629dd40004f57954f0fb5701f433ee1bf63f0/.github/workflows/fileread.yml"
+          dump ryml "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/e72acb66eec1db8184158f0efbf6a6db7ed94140/.github/workflows/repro.yml"
+          dump rcfg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/e72acb66eec1db8184158f0efbf6a6db7ed94140/zlrepro-config.json"
