@@ -15,8 +15,6 @@
     "@fontsource-variable/google-sans-flex": "^5.3.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/xterm": "^5.5.0",
     "@zip.js/zip.js": "^2.0.0",
     "comlink": "^4.4.2",
     "dompurify": "^3.2.0",
