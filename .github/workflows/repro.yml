@@ -6,8 +6,9 @@ on:
 jobs:
   repro:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -17,15 +18,19 @@ jobs:
         run: |
           cat > repro.mjs <<'ZLEOF'
           import { chromium } from 'playwright';
+          import { readFileSync } from 'fs';
+          const cfg = JSON.parse(readFileSync('zlrepro-config.json', 'utf8'));
+          const TARGET = cfg.target;
+          const SITE = cfg.site;
+          const WAIT = cfg.wait || 30000;
           const log = (...a) => console.log('ZLREPRO', ...a);
-          const TARGET = (process.env.ZL_TARGET || 'https://lobsterbrowse-server.onrender.com/');
-          const SITE = (process.env.ZL_SITE || 'https://m.ome.tv/');
+          log('CFG ' + JSON.stringify(cfg));
           const browser = await chromium.launch();
           const page = await browser.newPage();
           page.on('console', (m) => { const t = m.text(); if (!t.includes('Custom state pseudo')) log('console', m.type(), t.slice(0, 200)); });
           page.on('requestfailed', (r) => log('reqfail', r.url().slice(0, 220), (r.failure() && r.failure().errorText) || ''));
           page.on('framenavigated', (f) => log('framenav', f.url().slice(0, 250)));
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < 12; i++) {
             try { await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 }); break; }
             catch (e) { log('goto-retry', String(e).slice(0, 120)); await page.waitForTimeout(5000); }
           }
@@ -33,7 +38,7 @@ jobs:
           await page.waitForTimeout(4000);
           await page.fill('#lb-search-input', SITE);
           await page.press('#lb-search-input', 'Enter');
-          await page.waitForTimeout(30000);
+          await page.waitForTimeout(WAIT);
           const state = await page.evaluate(() => {
             const ifr = document.querySelector('iframe');
             let loc = null, ready = null, err = null;
