@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { getLogs, type Tab } from "../store";
 import M3eSelect from "../M3eSelect";
 import { zlSend } from "../zeolite";
-import DevTerminal from "../browser/DevTerminal";
+import { sanitizeText, sanitizeUrl } from "../sanitize";
 
 export type ConsoleEntry = {
   id: number;
@@ -81,7 +81,7 @@ function fallbackText(code: string): string {
 
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "diagnostics" | "terminal";
+  page: "console" | "network" | "diagnostics";
   console: ConsoleEntry[];
   net: NetEntry[];
   fails: ResFailEntry[];
@@ -134,7 +134,7 @@ function ts(t: number): string {
 type Props = {
   tab: Tab;
   dt: DtState;
-  setDt: (patch: Partial<DtState>) => void;
+  setDt: (patch: Partial<DtState> | ((prev: DtState) => Partial<DtState>)) => void;
   frame: () => HTMLIFrameElement | null;
   onClose: () => void;
   onOpenLogs: () => void;
@@ -146,7 +146,6 @@ const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
   ["diagnostics", "Diagnostics", "bug_report"],
-  ["terminal", "Terminal", "console"],
 ];
 
 /* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
@@ -398,6 +397,113 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     }
   };
 
+  /* ---- Engine control-plane commands (zl:*), the useful half of the
+     removed Terminal page. No shell, no remote execution: every
+     command talks to the engine control plane and every reply passes
+     the diagnostics sanitizer before it enters console state. These
+     run in DevTools, not the page, so they never need a proxied frame.
+     Async replies append through the functional setDt patch so they
+     cannot race the render-time state snapshot. ---- */
+  const echo = (text: string) =>
+    setDt((prev) => ({
+      console: [...prev.console, { id: nextEntryId(), kind: "input", text, ts: Date.now() }],
+      history: [...prev.history, text].slice(-100),
+    }));
+  const emit = (lines: string[], kind: ConsoleEntry["kind"] = "result") => {
+    if (!lines.length) return;
+    setDt((prev) => ({
+      console: [
+        ...prev.console,
+        ...lines.map((text) => ({ id: nextEntryId(), kind, text: sanitizeText(text), ts: Date.now() })),
+      ],
+    }));
+  };
+  const runZlCommand = (code: string): boolean => {
+    if (!code.startsWith("zl:")) return false;
+    void (async () => {
+      echo(code);
+      if (code === "zl:help") {
+        emit([
+          "zl:status    engine summary (extensions, downloads, transit)",
+          "zl:ping      engine round-trip latency",
+          "zl:transit   native vs rewrite-fallback routing counts",
+          "zl:netlog    latest transport fallback records",
+          "zl:ext [id]  extension list, or detail for one id",
+          "zl:downloads engine download registry",
+          "zl:storage   storage diagnostic (not exposed by the engine)",
+          "zl:workers   worker diagnostic (not exposed by the engine)",
+        ]);
+        return;
+      }
+      if (code === "zl:ping") {
+        const t0 = Date.now();
+        const res = await zlSend({ type: "zl:getDiag", since: 0 }, 8000);
+        emit([res ? "engine replied in " + (Date.now() - t0) + " ms" : "engine unreachable (no reply within 8 s)"]);
+        return;
+      }
+      if (code === "zl:status") {
+        const [ext, dl, nl] = await Promise.all([
+          zlSend({ type: "zl:listExt" }, 8000),
+          zlSend({ type: "zl:downloads" }, 8000),
+          zlSend({ type: "zl:getNetLog", since: 0 }, 8000),
+        ]);
+        const extList: unknown[] = Array.isArray(ext?.exts) ? ext.exts : [];
+        const dlList: unknown[] = Array.isArray(dl?.downloads) ? dl.downloads : [];
+        emit([
+          "extensions: " + (ext ? String(extList.length) : "engine unreachable"),
+          "downloads in registry: " + (dl ? String(dlList.length) : "engine unreachable"),
+          "transit: " + (nl?.stats ? "native " + String(nl.stats.native) + ", fallback " + String(nl.stats.fallback) : "engine unreachable"),
+        ]);
+        return;
+      }
+      if (code === "zl:transit" || code === "zl:netlog") {
+        const nl = await zlSend({ type: "zl:getNetLog", since: 0 }, 8000);
+        if (!nl?.stats) { emit(["engine unreachable"]); return; }
+        const st = nl.stats as { native: number; fallback: number; fallbacks?: { ts: number; url: string; reason: string }[] };
+        const lines = ["native transit: " + String(st.native) + "  rewrite fallbacks: " + String(st.fallback)];
+        if (code === "zl:netlog") {
+          const fb = st.fallbacks ?? [];
+          lines.push(fb.length ? "latest fallback records:" : "no fallback records");
+          for (const f of fb.slice(-10).reverse()) {
+            lines.push("  " + new Date(f.ts).toISOString().slice(11, 19) + "  " + sanitizeUrl(f.url) + "  (" + f.reason + ")");
+          }
+        }
+        emit(lines);
+        return;
+      }
+      if (code === "zl:ext" || code.startsWith("zl:ext ")) {
+        const id = code.slice(7).trim();
+        if (id) {
+          const res = await zlSend({ type: "zl:extInfo", id }, 8000);
+          let s: string;
+          try { s = JSON.stringify(res, null, 2) ?? "undefined"; } catch { s = String(res); }
+          emit(["extension " + id + ":", s]);
+        } else {
+          const res = await zlSend({ type: "zl:listExt" }, 8000);
+          const extList: { id?: string; name?: string; enabled?: boolean }[] = Array.isArray(res?.exts) ? res.exts : [];
+          if (!res) emit(["engine unreachable"]);
+          else if (!extList.length) emit(["no extensions installed"]);
+          else emit(extList.map((x) => "  " + String(x.id ?? "?") + "  " + String(x.name ?? "?") + (x.enabled === false ? "  (disabled)" : "")));
+        }
+        return;
+      }
+      if (code === "zl:downloads") {
+        const res = await zlSend({ type: "zl:downloads" }, 8000);
+        const dlList: { filename?: string; status?: string; received?: number }[] = Array.isArray(res?.downloads) ? res.downloads : [];
+        if (!res) emit(["engine unreachable"]);
+        else if (!dlList.length) emit(["download registry empty"]);
+        else emit(dlList.map((x) => "  " + String(x.filename ?? "?") + "  " + String(x.status ?? "?") + "  " + String(x.received ?? "?") + " bytes"));
+        return;
+      }
+      if (code === "zl:storage" || code === "zl:workers") {
+        emit([code + ": no such diagnostic surface in the engine control plane (honest no-op)"]);
+        return;
+      }
+      emit(["unknown command: " + code + " - try zl:help"], "error");
+    })();
+    return true;
+  };
+
   const submit = () => {
     const code = cmd.trim();
     if (!code) return;
@@ -406,9 +512,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       setDt({ console: [] });
       return;
     }
-    runCode(code);
     setCmd("");
     setHistIdx(-1);
+    /* Engine commands run here; everything else is page eval. */
+    if (runZlCommand(code)) return;
+    runCode(code);
   };
 
   const keyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -462,7 +570,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     console: dt.console.length,
     network: dt.net.length,
     diagnostics: dt.fails.length,
-    terminal: 0,
   };
 
   return (
@@ -631,6 +738,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               <m3e-icon name="content_copy" aria-hidden={true} />
               {logsCopied ? "Copied" : "Copy logs"}
             </m3e-button>
+            <m3e-button
+              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank")}
+            >
+              <m3e-icon name="bug_report" aria-hidden={true} />
+              Report
+            </m3e-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
@@ -678,12 +791,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {dt.page === "terminal" && (
-        <div className="lb-dt-body">
-          <DevTerminal />
         </div>
       )}
 
