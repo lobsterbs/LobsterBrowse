@@ -1551,9 +1551,9 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",
@@ -2033,7 +2033,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "wisp-core"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=780ff6f1c8a05867d1d9999213d87dc35a6eec3a#780ff6f1c8a05867d1d9999213d87dc35a6eec3a"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=9716390887eb47754702142b8da778ccdd522923#9716390887eb47754702142b8da778ccdd522923"
 dependencies = [
  "bytes",
  "thiserror 1.0.69",
@@ -2042,7 +2042,7 @@ dependencies = [
 [[package]]
 name = "wisp-extensions"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=780ff6f1c8a05867d1d9999213d87dc35a6eec3a#780ff6f1c8a05867d1d9999213d87dc35a6eec3a"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=9716390887eb47754702142b8da778ccdd522923#9716390887eb47754702142b8da778ccdd522923"
 dependencies = [
  "ed25519-dalek",
  "rand 0.8.8",
@@ -2083,7 +2083,7 @@ dependencies = [
 [[package]]
 name = "zeolite-server"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=780ff6f1c8a05867d1d9999213d87dc35a6eec3a#780ff6f1c8a05867d1d9999213d87dc35a6eec3a"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=9716390887eb47754702142b8da778ccdd522923#9716390887eb47754702142b8da778ccdd522923"
 dependencies = [
  "axum",
  "bytes",
