@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { getLogs, type Tab } from "../store";
 import M3eSelect from "../M3eSelect";
 import { zlSend } from "../zeolite";
+import DevTerminal from "../browser/DevTerminal";
 
 export type ConsoleEntry = {
   id: number;
@@ -80,7 +81,7 @@ function fallbackText(code: string): string {
 
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "diagnostics";
+  page: "console" | "network" | "diagnostics" | "terminal";
   console: ConsoleEntry[];
   net: NetEntry[];
   fails: ResFailEntry[];
@@ -145,6 +146,7 @@ const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
   ["diagnostics", "Diagnostics", "bug_report"],
+  ["terminal", "Terminal", "console"],
 ];
 
 /* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
@@ -460,6 +462,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     console: dt.console.length,
     network: dt.net.length,
     diagnostics: dt.fails.length,
+    terminal: 0,
   };
 
   return (
@@ -675,6 +678,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {dt.page === "terminal" && (
+        <div className="lb-dt-body">
+          <DevTerminal />
         </div>
       )}
 
