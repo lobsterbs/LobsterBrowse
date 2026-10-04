@@ -1,24 +1,56 @@
-name: fileread-tmp
-on: push
+name: fileread
+on:
+  push:
+    branches: [tmp-fileread]
+  workflow_dispatch: {}
 
 jobs:
-  reprodump:
+  dump:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - name: dump files
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/lobsterbs/LobsterBrowse.git /tmp/repo
+          cd /tmp/repo
+          git fetch --quiet --depth 1 origin 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 d8bae4475a5165d9451d0c14b7e75c530aea353a
           dump() {
-            key="$1"; url="$2"
-            curl -fsSL "$url" -o "tmp_$key" || { echo "ZLFAIL-$key-curl"; exit 0; }
-            echo "ZLGITHASH-$key-$(git hash-object "tmp_$key")"
-            echo "ZLSIZE-$key-$(wc -c < "tmp_$key")"
-            split -b 8000 -d -a 2 "tmp_$key" "part_$key."
-            for p in part_$key.*; do
-              n="$(basename "$p" | sed "s/^part_${key}.//")"
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$p"
+            key="$1"; sha="$2"; path="$3"
+            if ! git show "$sha:$path" > "/tmp/$key" 2>/dev/null; then
+              echo "ZLERR-$key NOTFOUND"
+              return 0
+            fi
+            size=$(wc -c < "/tmp/$key")
+            echo "ZLGITHASH-$key $(git hash-object "/tmp/$key")"
+            echo "ZLSIZE-$key $size"
+            n=0
+            chunks=$(( (size + 7999) / 8000 ))
+            while [ "$n" -lt "$chunks" ]; do
+              echo "ZLFILE-$key-$(printf %02d "$n")-BEGIN"
+              dd if="/tmp/$key" bs=8000 skip="$n" count=1 2>/dev/null | base64 -w 0
               echo ""
-              echo "ZLFILE-$key-$n-END"
+              echo "ZLFILE-$key-$(printf %02d "$n")-END"
+              n=$(( n + 1 ))
             done
           }
-          dump ryml "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/e72acb66eec1db8184158f0efbf6a6db7ed94140/.github/workflows/repro.yml"
-          dump rcfg "https://raw.githubusercontent.com/lobsterbs/LobsterBrowse/e72acb66eec1db8184158f0efbf6a6db7ed94140/zlrepro-config.json"
+          dump mpoll 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/browser/pollRecovery.ts
+          dump mbrw 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/Browser.tsx
+          dump mhome 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/Home.tsx
+          dump mdt 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/DevTools.tsx
+          dump mcheck 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 tests/poll-recovery/check.mjs
+          dump mci 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 .github/workflows/ci.yml
+          dump bdt d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/DevTools.tsx
+          dump bbrw d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/Browser.tsx
+          dump bhome d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/Home.tsx
+          dump bpkg d8bae4475a5165d9451d0c14b7e75c530aea353a ui/package.json
+      - name: grep refs beta
+        run: |
+          cd /tmp/repo
+          git checkout --quiet --detach d8bae4475a5165d9451d0c14b7e75c530aea353a
+          echo "ZLGREP-BETA-START"
+          grep -rn "xterm" ui/ && echo "ZLGREP-XTERM-FOUND" || echo "ZLGREP-XTERM-NONE"
+          grep -rn "DevTerminal" ui/ && echo "ZLGREP-DEVTERM-FOUND" || echo "ZLGREP-DEVTERM-NONE"
+          echo "ZLFILES-BETA-UI-SRC"
+          git ls-tree -r --name-only d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src
+          echo "ZLFILES-BETA-UI-SRC-END"
+          echo "ZLGREP-BETA-END"
