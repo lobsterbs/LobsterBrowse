@@ -50,6 +50,19 @@ import M3eSelect from "../M3eSelect";
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
 
+/* meta[zl-error] / meta[lb-load-error] text is UNTRUSTED: the engine
+   emits these metas on its own error pages, but nothing proves a
+   document carrying them came from the engine - a proxied page can
+   ship the same tag or inject it at runtime. Strip control
+   characters, cap the length and redact credentials before the text
+   reaches trusted chrome (overlay, app log, DevTools). Residual
+   (accepted): a hostile page can still force a clean error card for
+   its own tab; closing that needs error state from the SW control
+   plane, not the page DOM. */
+function sanitizeMetaErrorText(s: string): string {
+  return sanitizeText(s.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 300));
+}
+
 type Props = {
   settings: Settings;
   rules: SiteRule[];
@@ -779,11 +792,12 @@ export default function BrowserView(props: Props) {
       blankPolls.current.delete(t.id);
       blankLogged.current.delete(t.id);
       /* Detailed error page: the server renders meta[lb-load-error]
-         at the same /r/ path; surface it and stop the spinner. */
+         at the same /r/ path; surface it and stop the spinner. The
+         content is untrusted page DOM: sanitize before display. */
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
       if (errMeta) {
         setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        const msg = errMeta.content || "unknown error";
+        const msg = sanitizeMetaErrorText(errMeta.content) || "unknown error";
         setErrors((prev) =>
           prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
             ? prev
@@ -795,26 +809,38 @@ export default function BrowserView(props: Props) {
       /* Zeolite engine error page (#31): the SW answers engine-side
          navigation failures (bad or stranded route, blocked site,
          transport death) with its own card and a meta[zl-error] JSON
-         payload (category, reason, traceId, status). Same
-         surface-and-stop treatment as lb-load-error; the reason is
-         URL-redacted by the engine (#32), so it is safe to show. */
+         payload (category, reason, traceId, status); the reason is
+         URL-redacted by the engine (#32). The meta is UNTRUSTED page
+         DOM (see sanitizeMetaErrorText): only the engine's own
+         category enum earns a surface, and the reason is sanitized
+         before it lands in trusted chrome. A forged or unparsable
+         payload gets nothing. */
       const zlMeta = doc.querySelector<HTMLMetaElement>('meta[name="zl-error"]');
       if (zlMeta) {
-        let msg = "zeolite: navigation error";
+        let parsed: string | null = null;
         try {
-          const zl = JSON.parse(zlMeta.content) as { category?: string; reason?: string };
-          if (zl.category) msg = "zeolite: " + zl.category + (zl.reason ? ": " + zl.reason : "");
+          const zl = JSON.parse(zlMeta.content) as { category?: unknown; reason?: unknown };
+          if (
+            typeof zl.category === "string" &&
+            /^(dns|tls|timeout|blocked|stream|route)$/.test(zl.category)
+          ) {
+            const reason = typeof zl.reason === "string" ? sanitizeMetaErrorText(zl.reason) : "";
+            parsed = "zeolite: " + zl.category + (reason ? ": " + reason : "");
+          }
         } catch {
-          /* unparsable payload: keep the generic line */
+          /* unparsable payload: no surface */
         }
-        setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        setErrors((prev) =>
-          prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
-            ? prev
-            : { ...prev, [t.id]: { url: t.url, message: msg } }
-        );
-        pushLog("error", "load failed: " + msg);
-        return;
+        const msg = parsed;
+        if (msg) {
+          setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
+          setErrors((prev) =>
+            prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
+              ? prev
+              : { ...prev, [t.id]: { url: t.url, message: msg } }
+          );
+          pushLog("error", "load failed: " + msg);
+          return;
+        }
       }
       /* 74.7 CSP/SRI diagnostics: the rewriter strips CSP meta tags and
          integrity attributes from proxied documents and reports the
