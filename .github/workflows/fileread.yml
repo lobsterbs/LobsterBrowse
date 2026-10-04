@@ -1,40 +1,35 @@
 name: fileread
-on:
-  push:
-    branches: [tmp-fileread]
-  workflow_dispatch: {}
-
+on: push
 jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: beta workflows
+      - name: audit and dump
         run: |
-          set -euo pipefail
-          git clone --quiet https://github.com/lobsterbs/LobsterBrowse.git /tmp/repo
-          cd /tmp/repo
-          git fetch --quiet --depth 1 origin d8bae4475a5165d9451d0c14b7e75c530aea353a
-          git checkout --quiet --detach d8bae4475a5165d9451d0c14b7e75c530aea353a
-          echo "ZLWF-DIR-BEGIN"
-          ls -1 .github/workflows/
-          echo "ZLWF-DIR-END"
+          git clone --depth 1 --branch main https://github.com/lobsterbs/LobsterBrowse.git /tmp/lbmain >/dev/null 2>&1
+          git clone --depth 1 --branch beta/zeolite-nativetransit https://github.com/lobsterbs/LobsterBrowse.git /tmp/lbbeta >/dev/null 2>&1
+          for d in /tmp/lbmain /tmp/lbbeta; do
+            tag=MAIN
+            if [ "$d" = "/tmp/lbbeta" ]; then tag=BETA; fi
+            echo "ZLGREP-$tag-BEGIN"
+            grep -rn "window.open" "$d/ui" 2>/dev/null || echo "(no window.open hits in ui)"
+            grep -rn 'target="_blank"' "$d/ui/src" 2>/dev/null || echo "(no target=_blank hits in ui/src)"
+            echo "ZLGREP-$tag-END"
+          done
           dump() {
-            key="$1"; path="$2"
-            if [ ! -f "$path" ]; then
-              echo "ZLERR-$key NOTFOUND"
-              return 0
-            fi
-            size=$(wc -c < "$path")
-            echo "ZLGITHASH-$key $(git hash-object "$path")"
-            echo "ZLSIZE-$key $size"
-            n=0
-            chunks=$(( (size + 7999) / 8000 ))
-            while [ "$n" -lt "$chunks" ]; do
-              echo "ZLFILE-$key-$(printf %02d "$n")-BEGIN"
-              dd if="$path" bs=8000 skip="$n" count=1 2>/dev/null | base64 -w 0
+            key=$1; f=$2; dir=$3
+            echo "ZLGITHASH-$key $(cd "$dir" && git hash-object "$f")"
+            echo "ZLSIZE-$key $(stat -c%s "$dir/$f")"
+            rm -f /tmp/chunk-$key-*
+            split -b 8000 -d "$dir/$f" /tmp/chunk-$key-
+            i=0
+            for c in /tmp/chunk-$key-*; do
+              echo "ZLFILE-$key-$(printf %02d $i)-BEGIN"
+              base64 -w 0 "$c"
               echo ""
-              echo "ZLFILE-$key-$(printf %02d "$n")-END"
-              n=$(( n + 1 ))
+              echo "ZLFILE-$key-$(printf %02d $i)-END"
+              i=$((i+1))
             done
           }
-          dump bci .github/workflows/ci.yml
+          dump mdt2 ui/src/pages/DevTools.tsx /tmp/lbmain
+          dump mbrw2 ui/src/pages/Browser.tsx /tmp/lbmain
