@@ -45,6 +45,8 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
+      - name: Navigation poll regression check
+        run: node --experimental-strip-types ../tests/poll-recovery/check.mjs
 
   transit:
     runs-on: ubuntu-latest
