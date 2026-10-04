@@ -703,7 +703,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
             <m3e-button
-              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank")}
+              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
             >
               <m3e-icon name="bug_report" aria-hidden={true} />
               Report
