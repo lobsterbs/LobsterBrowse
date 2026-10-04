@@ -11,20 +11,23 @@ jobs:
           repository: lobsterbs/LobsterBrowse
       - run: |
           set -e
-          git clone --depth 50 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -1
-          cd /tmp/zeolite
-          echo "=== B2A151F STAT ==="
-          git show b2a151f --stat | head -20
-          echo "=== B2A151F DIFF ==="
-          git show b2a151f | head -180
-          echo "=== PASSCHALLENGE LOG ==="
-          git log -S "pass-challenge" --oneline | head -10
-          echo "=== SW 956-1010 ==="
-          sed -n '956,1010p' app/src/sw.ts
-          echo "=== SW 1262-1430 ==="
-          sed -n '1262,1430p' app/src/sw.ts
-          echo "=== COOKIES 760-860 ==="
-          sed -n '760,860p' app/src/cookies.ts
-          echo "=== BOOTSTRAP LOCATION GREP ==="
-          grep -n "location\|Location" app/src/bootstrap.ts | head -25
-          echo "=== DONE7 ==="
+          cd /home/runner/work/LobsterBrowse/LobsterBrowse
+          echo "=== HEADS ==="
+          git rev-parse origin/main origin/beta/zeolite-nativetransit
+          git rev-parse origin/main:ui/src/pages/Browser.tsx origin/beta/zeolite-nativetransit:ui/src/pages/Browser.tsx
+          echo "=== MAIN BROWSER DIFF c46ed0a7..731a88bb ==="
+          git diff c46ed0a7 731a88bb -- ui/src/pages/Browser.tsx
+          echo "=== BETA BROWSER DIFF 7238b542..45f10dff ==="
+          git diff 7238b542 45f10dff -- ui/src/pages/Browser.tsx
+          echo "=== SETTINGS DEFAULTS ==="
+          grep -n "proxyEngine" ui/src/settings.ts | head -8
+          sed -n '120,152p' ui/src/settings.ts
+          echo "=== THEME LB-LOADING MAIN ==="
+          grep -n "lb-loading\|m3e-loading-indicator\|m3e-circular" ui/src/theme.css
+          echo "=== THEME LB-LOADING BETA ==="
+          git show origin/beta/zeolite-nativetransit:ui/src/theme.css | grep -n "lb-loading\|m3e-loading-indicator\|m3e-circular"
+          echo "=== M3E.D.TS BETA ==="
+          git show origin/beta/zeolite-nativetransit:ui/src/m3e.d.ts | grep -n "loading-indicator\|progress-indicator"
+          echo "=== M3E.D.TS MAIN ==="
+          grep -n "loading-indicator\|progress-indicator" ui/src/m3e.d.ts
+          echo "=== DONE8 ==="
