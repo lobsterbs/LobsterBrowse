@@ -1,35 +1,36 @@
 name: fileread
-on: push
+
+on:
+  push:
+    branches: [tmp-fileread]
+
 jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: audit and dump
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: dump files
         run: |
-          git clone --depth 1 --branch main https://github.com/lobsterbs/LobsterBrowse.git /tmp/lbmain >/dev/null 2>&1
-          git clone --depth 1 --branch beta/zeolite-nativetransit https://github.com/lobsterbs/LobsterBrowse.git /tmp/lbbeta >/dev/null 2>&1
-          for d in /tmp/lbmain /tmp/lbbeta; do
-            tag=MAIN
-            if [ "$d" = "/tmp/lbbeta" ]; then tag=BETA; fi
-            echo "ZLGREP-$tag-BEGIN"
-            grep -rn "window.open" "$d/ui" 2>/dev/null || echo "(no window.open hits in ui)"
-            grep -rn 'target="_blank"' "$d/ui/src" 2>/dev/null || echo "(no target=_blank hits in ui/src)"
-            echo "ZLGREP-$tag-END"
-          done
+          set -e
+          mkdir -p /tmp/dump
           dump() {
-            key=$1; f=$2; dir=$3
-            echo "ZLGITHASH-$key $(cd "$dir" && git hash-object "$f")"
-            echo "ZLSIZE-$key $(stat -c%s "$dir/$f")"
-            rm -f /tmp/chunk-$key-*
-            split -b 8000 -d "$dir/$f" /tmp/chunk-$key-
+            key=$1; sha=$2; path=$3
+            git show "$sha:$path" > /tmp/dump/$key
+            echo "ZLGITHASH-$key $(git rev-parse "$sha:$path")"
+            echo "ZLSIZE-$key $(wc -c < /tmp/dump/$key)"
+            rm -f /tmp/dump/$key.part.*
+            split -b 8000 -d -a 2 /tmp/dump/$key /tmp/dump/$key.part.
             i=0
-            for c in /tmp/chunk-$key-*; do
-              echo "ZLFILE-$key-$(printf %02d $i)-BEGIN"
-              base64 -w 0 "$c"
+            for f in $(ls /tmp/dump/$key.part.* | sort); do
+              n=$(printf "%02d" $i)
+              echo "ZLFILE-$key-$n-BEGIN"
+              base64 -w 0 "$f"
               echo ""
-              echo "ZLFILE-$key-$(printf %02d $i)-END"
+              echo "ZLFILE-$key-$n-END"
               i=$((i+1))
             done
           }
-          dump mdt2 ui/src/pages/DevTools.tsx /tmp/lbmain
-          dump mbrw2 ui/src/pages/Browser.tsx /tmp/lbmain
+          dump mbrw2 c46ed0a78360f0531c4b470fbd42f98c405a3a2b ui/src/pages/Browser.tsx
+          dump bbrw2 7238b542b631393f3c7a65463a971e7d9e6e6170 ui/src/pages/Browser.tsx
