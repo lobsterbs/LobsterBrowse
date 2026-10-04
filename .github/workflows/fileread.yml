@@ -1,9 +1,6 @@
 name: fileread
-
 on:
   push:
-    branches: [tmp-fileread]
-
 jobs:
   dump:
     runs-on: ubuntu-latest
@@ -11,32 +8,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: recon3
-        run: |
+          repository: lobsterbs/LobsterBrowse
+      - run: |
           set -e
-          echo "=== BLOB CHECK ==="
-          echo "tmp main.rs: $(git rev-parse HEAD:server/bin/server/src/main.rs)"
-          echo "main main.rs: $(git rev-parse origin/main:server/bin/server/src/main.rs)"
-          echo "tmp settings: $(git rev-parse HEAD:ui/src/settings.ts)"
-          echo "main settings: $(git rev-parse origin/main:ui/src/settings.ts)"
-          echo "=== LOG -S linear progress ==="
-          git log -S "m3e-linear-progress-indicator" --oneline origin/main -- ui/src | head -8
-          echo "=== LOG -S circular progress ==="
-          git log -S "m3e-circular-progress-indicator" --oneline origin/main -- ui/src | head -8
-          echo "=== LOG -S spinner ==="
-          git log -S "spinner" --oneline origin/main -- ui/src | head -8
-          echo "=== Browser.tsx lb-load grep ==="
-          grep -n "lb-load\|setStatus\|loading" ui/src/pages/Browser.tsx | head -40
-          echo "=== theme.css lb-load grep ==="
-          grep -n "lb-load\|lb-progress\|lb-busy" ui/src/theme.css | head -20
-          echo "=== ZEO CLONE ==="
-          git clone --depth 1 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -2
-          echo "=== ZEO malformed ==="
-          grep -rn "malformed" /tmp/zeolite --include="*.ts" --include="*.js" --include="*.html" 2>/dev/null | grep -v node_modules | head -15
-          echo "=== ZEO engine route ==="
-          grep -rni "engine route" /tmp/zeolite/src 2>/dev/null | head -15
-          echo "=== ZEO loading files ==="
-          grep -rln "progress\|loading" /tmp/zeolite/src 2>/dev/null | head -12
-          echo "=== MAIN.RS 2140-2360 ==="
-          sed -n "2140,2360p" server/bin/server/src/main.rs
-          echo "=== DONE3 ==="
+          git clone --depth 50 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -1
+          cd /tmp/zeolite
+          echo "ZLGITHASH-zeo $(git rev-parse HEAD)"
+          echo "=== ZLOG ==="
+          git log --oneline -20
+          echo "=== ZLOGAPP ==="
+          git log --oneline -15 -- app/src
+          echo "=== WF ==="
+          ls .github/workflows
+          echo "=== ERRORPAGE REFS ==="
+          grep -rn "errorpage" app/src --include="*.ts" | grep -v __tests__ | head -20
+          echo "=== SW GREP ==="
+          grep -n "route\|loading\|progress\|indicator\|interstitial\|errorPage" app/src/sw.ts | head -100
+          echo "=== M3E GREP ==="
+          grep -rn "m3e\|Google Sans\|material" app/src --include="*.ts" | grep -v __tests__ | head -20
+          echo "=== BLOB SHA ERRPAGE ==="
+          git rev-parse HEAD:app/src/errorpage.ts
+          git cat-file -s $(git rev-parse HEAD:app/src/errorpage.ts)
+          echo "=== DUMP ERRPAGE ==="
+          split -b 8000 <(base64 -w 0 app/src/errorpage.ts) /tmp/zerr_
+          i=0
+          for f in /tmp/zerr_*; do
+            i=$((i+1))
+            echo "ZLFILE-zerr-$i-BEGIN"
+            cat "$f"
+            echo ""
+            echo "ZLFILE-zerr-$i-END"
+          done
+          echo "=== MAINRS ANUBIS 3560-3790 ==="
+          cd /home/runner/work/LobsterBrowse/LobsterBrowse
+          sed -n '3560,3790p' server/bin/server/src/main.rs
+          echo "=== DONE4 ==="
