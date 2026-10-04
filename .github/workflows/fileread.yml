@@ -8,21 +8,36 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: session diffs
+      - name: main browser diff + module dumps
         run: |
           set -euo pipefail
           git clone --quiet https://github.com/lobsterbs/LobsterBrowse.git /tmp/repo
           cd /tmp/repo
-          git fetch --quiet --depth 1 origin a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a
-          echo "ZLDIFF-MAIN-STAT-BEGIN"
-          git diff --stat a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12
-          echo "ZLDIFF-MAIN-STAT-END"
-          echo "ZLDIFF-MAIN-BEGIN"
-          git diff a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12
-          echo "ZLDIFF-MAIN-END"
-          echo "ZLDIFF-BETA-STAT-BEGIN"
-          git diff --stat 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a -- . ':(exclude)ui/package-lock.json'
-          echo "ZLDIFF-BETA-STAT-END"
-          echo "ZLDIFF-BETA-BEGIN"
-          git diff 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a -- . ':(exclude)ui/package-lock.json'
-          echo "ZLDIFF-BETA-END"
+          git fetch --quiet --depth 1 origin a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 d8bae4475a5165d9451d0c14b7e75c530aea353a
+          echo "ZLDIFF-MBRW-STAT-BEGIN"
+          git diff --stat a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 -- ui/src/pages/Browser.tsx
+          echo "ZLDIFF-MBRW-STAT-END"
+          echo "ZLDIFF-MBRW-BEGIN"
+          git diff a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 -- ui/src/pages/Browser.tsx
+          echo "ZLDIFF-MBRW-END"
+          dump() {
+            key="$1"; sha="$2"; path="$3"
+            if ! git show "$sha:$path" > "/tmp/$key" 2>/dev/null; then
+              echo "ZLERR-$key NOTFOUND"
+              return 0
+            fi
+            size=$(wc -c < "/tmp/$key")
+            echo "ZLGITHASH-$key $(git hash-object "/tmp/$key")"
+            echo "ZLSIZE-$key $size"
+            n=0
+            chunks=$(( (size + 7999) / 8000 ))
+            while [ "$n" -lt "$chunks" ]; do
+              echo "ZLFILE-$key-$(printf %02d "$n")-BEGIN"
+              dd if="/tmp/$key" bs=8000 skip="$n" count=1 2>/dev/null | base64 -w 0
+              echo ""
+              echo "ZLFILE-$key-$(printf %02d "$n")-END"
+              n=$(( n + 1 ))
+            done
+          }
+          dump bzeolite d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/zeolite.ts
+          dump bsanitize d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/sanitize.ts
