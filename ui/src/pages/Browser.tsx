@@ -146,6 +146,13 @@ export default function BrowserView(props: Props) {
      document; past four the pending navigation is declared stuck and
      the poll surfaces an honest error (see the poll effect). */
   const blankPolls = useRef<Map<number, number>>(new Map());
+  /* Tabs whose blank-frame error was already logged: the overlay
+     state is idempotent, the log must fire once per blank episode. */
+  const blankLogged = useRef<Set<number>>(new Set());
+  /* Per-tab loading state mirrored into a ref: the poll interval's
+     closure would otherwise read a stale render-time status. */
+  const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
+  statusRef.current = status;
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
@@ -739,13 +746,19 @@ export default function BrowserView(props: Props) {
          escaped-navigation recovery fabricated <site>/blank, aborted
          the real in-flight navigation and reloaded the tab in a loop
          (m.ome.tv after the org-block bypass). Wait for the
-         navigation to commit; past four ticks surface a real error
-         instead of a silent white frame. The routing decision itself
-         lives in pollAction(). */
+         navigation to commit; surface a real error only when no
+         navigation is pending (Zeolite #31: bootstrap never
+         attached) or the pending one outlived the engine's 20s
+         transport timeout - a slow upstream fetch legitimately holds
+         the frame on about:blank for many ticks (observed live: a
+         slow site sat blank ~20s and the old 4-tick threshold
+         errored mid-load). The routing decision itself lives in
+         pollAction(). */
       if (f.contentWindow!.location.protocol === "about:") {
         const n = (blankPolls.current.get(t.id) || 0) + 1;
         blankPolls.current.set(t.id, n);
-        if (n >= 4) {
+        const navPending = !!statusRef.current[t.id]?.loading;
+        if ((n >= 4 && !navPending) || n >= 20) {
           const msg = "The page was left on a blank document (engine bootstrap did not attach).";
           setStatus((prev) => {
             const cur = prev[t.id];
@@ -756,11 +769,15 @@ export default function BrowserView(props: Props) {
               ? prev
               : { ...prev, [t.id]: { url: t.url, message: msg } }
           );
-          if (n === 4) pushLog("error", "blank frame stuck: " + sanitizeUrl(t.url));
+          if (!blankLogged.current.has(t.id)) {
+            blankLogged.current.add(t.id);
+            pushLog("error", "blank frame stuck: " + sanitizeUrl(t.url));
+          }
         }
         return;
       }
       blankPolls.current.delete(t.id);
+      blankLogged.current.delete(t.id);
       /* Detailed error page: the server renders meta[lb-load-error]
          at the same /r/ path; surface it and stop the spinner. */
       const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
@@ -1283,6 +1300,7 @@ export default function BrowserView(props: Props) {
       frames.current.delete(id);
       lastNav.current.delete(id);
       blankPolls.current.delete(id);
+      blankLogged.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
       lastDiag.current.delete(id);
