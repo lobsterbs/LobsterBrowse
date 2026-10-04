@@ -120,6 +120,20 @@ docs/zeolite-integration.md), the build/deploy reliability checklist
 lives in DEPLOY.md, and README/AGENTS/DEPLOY agree on the current
 Zeolite pin (e3f1a171 / dist 3080d559).
 
+Recorded browser pass (2026-10-04, live beta origin, engine mode
+`/zl/`, Playwright): PASS antiframe fixture framed through the engine
+(frame survives, status flips to "script ran"); PASS in-page fetch to
+the site's own API through the shim (200, valid JSON); PASS
+localStorage/sessionStorage virtualization roundtrip; PASS
+history.pushState + history.back without a document reload; PASS
+WebSocket from a proxied page (open + echo roundtrip); PASS heavy
+real site (en.wikipedia.org: 300KB rewritten document, CSS present,
+1530 links, cross-language link navigation through keyed routes);
+PASS engine error card surfacing in the UI overlay. Still open
+without a deterministic fixture: dynamic imports, module workers.
+Challenge-flow verification was blocked by upstream datacenter-IP
+denials (startpage Access Denied, DDG TLS reset) during the pass.
+
 ---
 
 # 0.4 — Vanadium
@@ -187,6 +201,24 @@ server-side live verification is CI-recorded rather than a one-off.
 Execution-level behavior (XHR, dynamic imports, iframe subresource
 routing, SPA navigation, reloads, cross-origin navigation) needs the
 recorded browser pass and stays open.
+
+Execution-level pass + reload findings (2026-10-04, live beta origin,
+recorded in the Titanium note above): fetch through the shim, storage,
+history/pushState, WebSocket, cross-origin link navigation and heavy
+real sites all pass. The reload work item produced three verified
+findings. (1) Long or looping upstream redirect chains: the engine
+follows up to 10 hops inside one fetch, then surfaces the 3xx with a
+mapped Location the browser follows as a visible reload - a looping
+chain repeats in 10-hop batches until the browser's own redirect cap
+errors out. The engine now emits a TRANSPORT diag event on every
+surfaced redirect so DevTools explains the cycle. (2) The UI poll's
+blank-frame guard fired a false "blank document" error about 5s into
+any slow navigation while the engine allows 20s; fixed to fire only
+when no navigation is pending or past the 20s transport timeout.
+(3) Challenge/consent escapes reload through escaped-navigation
+recovery by design, once per distinct URL. Still open: a deterministic
+dynamic-import fixture; auth-tier probes (blocked on the engine
+cookie-jar pass against real providers).
 
 ---
 
