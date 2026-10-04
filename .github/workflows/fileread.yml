@@ -13,33 +13,32 @@ jobs:
           set -e
           git clone --depth 50 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -1
           cd /tmp/zeolite
-          echo "ZLGITHASH-zeo $(git rev-parse HEAD)"
-          echo "=== ZLOG ==="
-          git log --oneline -20
-          echo "=== ZLOGAPP ==="
-          git log --oneline -15 -- app/src
-          echo "=== WF ==="
-          ls .github/workflows
-          echo "=== ERRORPAGE REFS ==="
-          grep -rn "errorpage" app/src --include="*.ts" | grep -v __tests__ | head -20
-          echo "=== SW GREP ==="
-          grep -n "route\|loading\|progress\|indicator\|interstitial\|errorPage" app/src/sw.ts | head -100
-          echo "=== M3E GREP ==="
-          grep -rn "m3e\|Google Sans\|material" app/src --include="*.ts" | grep -v __tests__ | head -20
-          echo "=== BLOB SHA ERRPAGE ==="
-          git rev-parse HEAD:app/src/errorpage.ts
-          git cat-file -s $(git rev-parse HEAD:app/src/errorpage.ts)
-          echo "=== DUMP ERRPAGE ==="
-          split -b 8000 <(base64 -w 0 app/src/errorpage.ts) /tmp/zerr_
-          i=0
-          for f in /tmp/zerr_*; do
-            i=$((i+1))
-            echo "ZLFILE-zerr-$i-BEGIN"
-            cat "$f"
-            echo ""
-            echo "ZLFILE-zerr-$i-END"
+          git clone --depth 1 -b dist https://github.com/lobsterbs/Zeolite /tmp/zdist 2>&1 | tail -1
+          echo "ZLGITHASH-zdist $(git -C /tmp/zdist rev-parse HEAD)"
+          echo "=== ANUBIS HITS APP.SRC ==="
+          grep -rn "anubis\|pass-challenge\|within.website" app/src --include="*.ts" | grep -v __tests__ | head -25
+          echo "=== SW ANUBIS SECTIONS ==="
+          for ln in $(grep -n "anubis\|pass-challenge\|within.website" app/src/sw.ts | cut -d: -f1); do
+            s=$((ln-6)); [ $s -lt 1 ] && s=1
+            e=$((ln+20))
+            echo "--- sw.ts lines $s-$e (hit $ln) ---"
+            sed -n "${s},${e}p" app/src/sw.ts
           done
-          echo "=== MAINRS ANUBIS 3560-3790 ==="
+          echo "=== SW 700-765 ==="
+          sed -n '700,765p' app/src/sw.ts
+          echo "=== SW 1000-1065 ==="
+          sed -n '1000,1065p' app/src/sw.ts
+          echo "=== SW 1129-1262 ==="
+          sed -n '1129,1262p' app/src/sw.ts
+          echo "=== ROUTEKEY.TS ==="
+          cat app/src/routekey.ts
+          echo "=== CODEC DECODE ==="
+          grep -n "decode\|b64u\|token" app/src/codec.ts | head -30
+          echo "=== ERRORPAGES DOC ==="
+          head -60 docs/error-pages.md
+          echo "=== LB ROUTE REG 3440-3558 ==="
           cd /home/runner/work/LobsterBrowse/LobsterBrowse
-          sed -n '3560,3790p' server/bin/server/src/main.rs
-          echo "=== DONE4 ==="
+          sed -n '3440,3558p' server/bin/server/src/main.rs
+          echo "=== LB IS_ANUBIS 2700-2810 ==="
+          sed -n '2700,2810p' server/bin/server/src/main.rs
+          echo "=== DONE5 ==="
