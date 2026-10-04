@@ -111,6 +111,26 @@ declare module "react" {
       "m3e-menu-item-radio": M3eBase & { checked?: boolean | string; disabled?: boolean };
       "m3e-dialog-action": M3eBase & { "return-value"?: string };
       "m3e-fab": M3eBase & { size?: string; variant?: string };
+      "m3e-button-group": M3eBase & { variant?: string; size?: string; multi?: boolean | string };
+      "m3e-checkbox": M3eBase & {
+        checked?: boolean | string;
+        indeterminate?: boolean | string;
+        disabled?: boolean;
+        name?: string;
+        value?: string;
+      };
+      "m3e-textarea-autosize": M3eBase & {
+        for?: string;
+        "min-rows"?: string | number;
+        "max-rows"?: string | number;
+        disabled?: boolean;
+      };
+      "m3e-paginator": M3eBase & {
+        length?: string | number;
+        "page-size"?: string | number;
+        "page-sizes"?: string;
+        "show-first-last-buttons"?: boolean | string;
+      };
     }
   }
 }

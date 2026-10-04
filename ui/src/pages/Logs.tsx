@@ -13,11 +13,15 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
   const [client, setClient] = useState<LogEntry[]>([]);
   const [server, setServer] = useState<ServerLog[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
+  /* Copy feedback goes through the real M3E snackbar (the global
+     M3eSnackbar API the theme already repositions to the top): one
+     transient surface for the whole app instead of a hand-rolled
+     toast div. */
   const notify = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2000);
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(msg, { duration: 2000 });
+    }
   };
 
   const copyText = (label: string, text: string) => {
@@ -38,7 +42,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
        server-side, so say so instead of showing a confusing 403. */
     if (!sess) {
       setServer([]);
-      setErr("No active tab — server logs are scoped to a browsing session.");
+      setErr("No active tab â server logs are scoped to a browsing session.");
       return () => {};
     }
     const refresh = () =>
@@ -76,7 +80,8 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
       </m3e-heading>
       <p className="lb-muted">Client and server-side proxy events. No sensitive request data is logged.</p>
 
-      <div className="lb-logs-toolbar">
+      {/* Related log actions grouped in a real M3E button group. */}
+      <m3e-button-group aria-label="Log actions" {...{ class: "lb-logs-toolbar" }}>
         <m3e-button
           onClick={() => {
             clearLogs();
@@ -106,7 +111,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
         >
           <m3e-icon name="content_copy" aria-hidden={true} /> Copy server logs
         </m3e-button>
-      </div>
+      </m3e-button-group>
 
       <div className="lb-log-section">
         <div className="lb-setting-label">Server proxy log (/logs)</div>
@@ -132,8 +137,6 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
           ))}
         </div>
       </div>
-
-      {toast && <div className="lb-toast" role="status">{toast}</div>}
     </section>
   );
 }

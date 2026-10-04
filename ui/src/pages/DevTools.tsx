@@ -1,4 +1,4 @@
-/* DevTools panel — console / network / inspector for the currently
+/* DevTools panel â console / network / inspector for the currently
    selected proxy tab. Each tab keeps its own state.
 
    Proxied pages are served from the LobsterBrowse origin (/r), rendered
@@ -104,7 +104,7 @@ function formatValue(v: unknown): string {
   if (v === undefined) return "undefined";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
-  if (typeof v === "function") return "ƒ " + (v.name || "anonymous") + "()";
+  if (typeof v === "function") return "Æ " + (v.name || "anonymous") + "()";
   if (typeof v === "symbol") return v.toString();
   try {
     return JSON.stringify(v, null, 2) ?? "undefined";
@@ -208,7 +208,7 @@ function ZeoliteDiagnostics() {
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip">NativeTransit: {stats.native}</span>
-        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} — Alpha</span>
+        <span className="lb-diag-chip">RewriteFallback: {stats.fallback} â Alpha</span>
       </div>
       {stats.fallbacks
         .slice(-10)
@@ -325,7 +325,6 @@ function ZeoliteDownloads() {
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
-  const [multi, setMulti] = useState(false);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<{ el: HTMLElement; info: Picked } | null>(null);
   const [textDraft, setTextDraft] = useState("");
@@ -451,7 +450,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
        dt.console would drop them; prev is always the fresh state. */
     const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
     if (!w) {
-      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab â navigate to a site first.", ts: Date.now() }].slice(-500) }));
       return;
     }
     try {
@@ -534,6 +533,32 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
   );
 
+  /* Network log pagination (m3e-paginator): the page event is the
+     component's only output, so mirror it into state like the M3eSelect
+     change wiring. Clamped at render so shrinking logs never leave a
+     page index past the end. */
+  const [netPage, setNetPage] = useState(0);
+  const [netPageSize, setNetPageSize] = useState(25);
+  const pagerRef = useRef<HTMLElement & { pageSize: number | "all" } | null>(null);
+  useEffect(() => {
+    const el = pagerRef.current;
+    if (!el) return;
+    const onPage = (e: Event) => {
+      const d = (e as CustomEvent<{ pageIndex?: number; pageSize?: number | "all" }>).detail;
+      if (typeof d?.pageIndex === "number") setNetPage(d.pageIndex);
+      if (typeof d?.pageSize === "number") setNetPageSize(d.pageSize);
+    };
+    el.addEventListener("page", onPage);
+    return () => el.removeEventListener("page", onPage);
+  }, []);
+  useEffect(() => {
+    setNetPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dt.netFilter]);
+  const netPages = Math.max(1, Math.ceil(netEntries.length / netPageSize));
+  const netPageClamped = Math.min(netPage, netPages - 1);
+  const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
+
   /* Failure counts by resource type for the diagnostics summary. */
   const failCounts = dt.fails.reduce<Record<string, number>>((acc, f) => {
     acc[f.kind] = (acc[f.kind] ?? 0) + 1;
@@ -552,7 +577,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
     >
       <div className="lb-devtools-head">
         <span className="lb-devtools-title">
-          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools — {tab.title || "tab"}
+          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools â {tab.title || "tab"}
         </span>
         <span className="lb-devtools-head-actions">
           <m3e-icon-button aria-label="View app logs" onClick={onOpenLogs}>
@@ -625,31 +650,28 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
-                <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
+                <span className="lb-console-arrow">{c.kind === "input" ? "âº" : c.kind === "result" ? "â¹" : levelOf(c.kind)}</span>
                 <span className="lb-console-text">{c.text}</span>
               </div>
             ))}
           </div>
           <div className="lb-console-input">
+            {/* m3e-textarea-autosize grows the console input to fit
+                multi-line expressions (Shift+Enter), replacing the old
+                manual rows=4 toggle. */}
+            <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
             <textarea
               ref={inputRef}
+              id="lb-dt-console-in"
               className="lb-input lb-console-area"
               aria-label="Console input"
-              placeholder="Run JavaScript in this page — e.g. document.title"
+              placeholder="Run JavaScript in this page â e.g. document.title"
               value={cmd}
-              rows={multi ? 4 : 1}
+              rows={1}
               onChange={(e) => setCmd(e.target.value)}
               onKeyDown={keyDown}
             />
             <m3e-button variant="filled" onClick={submit}>Run</m3e-button>
-            <m3e-icon-button
-              toggle
-              selected={multi ? "" : undefined}
-              aria-label="Toggle multiline input"
-              onClick={() => setMulti(!multi)}
-            >
-              <m3e-icon name="expand" aria-hidden={true} />
-            </m3e-icon-button>
           </div>
         </div>
       )}
@@ -670,12 +692,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Requests made by the page's JavaScript (fetch/XHR/WebSocket). Headers and byte sizes are not
-            exposed to the page context by the browser — this is a page-level view, not a network tap.
+            exposed to the page context by the browser â this is a page-level view, not a network tap.
           </p>
           <ZeoliteDownloads />
           <div className="lb-net">
             {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
-            {netEntries.map((n) => (
+            {pagedNet.map((n) => (
               <details key={n.id} className="lb-net-row">
                 <summary className="lb-net-summary">
                   <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
@@ -691,11 +713,20 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
                   <div>Status: {n.error ? n.error : n.status}</div>
                   {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
                   <div>Time: {ts(n.ts)}</div>
-                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable — the page context cannot read them.</div>
+                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable â the page context cannot read them.</div>
                 </div>
               </details>
             ))}
           </div>
+          {netEntries.length > netPageSize && (
+            <m3e-paginator
+              length={netEntries.length}
+              page-size={netPageSize}
+              page-sizes="25,50,100"
+              aria-label="Network log pages"
+              {...{ class: "lb-dt-pager", ref: pagerRef }}
+            />
+          )}
         </div>
       )}
 
@@ -726,7 +757,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               <div className="lb-diag-counts">
                 {Object.entries(failCounts).map(([kind, n]) => (
                   <span key={kind} className="lb-diag-chip">
-                    {n} × {kind}
+                    {n} Ã {kind}
                   </span>
                 ))}
               </div>
@@ -767,7 +798,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
               onClick={() => setPicking(!picking)}
             >
               <m3e-icon name="highlight_alt" aria-hidden={true} />
-              {picking ? "Click an element…" : "Pick element"}
+              {picking ? "Click an elementâ¦" : "Pick element"}
             </m3e-button>
             {picked && (
               <>
