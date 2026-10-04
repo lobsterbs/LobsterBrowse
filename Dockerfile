@@ -25,9 +25,9 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 09297e27 (Zeolite CI build 37204843343), 2026-10-04.
+# Current pin: dist 0c592ba (Zeolite main 6a322ed, CI run 37223074987), 2026-10-04.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=09297e272ab01259cab074e32fbcb2a37a27e0b3
+ARG ZEOLITE_COMMIT=0c592ba73bf69171381a051a22da971ee23d40e6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -38,7 +38,8 @@ RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.t
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
- && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
+ && cp -r /zlvendor/node_modules/@mercurywo
+rkshop/libcurl-transport/dist/. /bundle/libcurl/
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -49,5 +50,9 @@ COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
 EXPOSE 6001
-ENV PORT=6001 WISP_PATH=/wisp/
+# Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
+# ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
+# at startup and flags /build stale when the zl-builder layer cache
+# serves an older tarball.
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f587c84dc554035d ZEOLITE_BOOTSTRAP_SHA=8f4cc3bdf3f3bd20
 ENTRYPOINT ["/app/lobster-server"]
