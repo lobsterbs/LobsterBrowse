@@ -12,22 +12,39 @@ jobs:
       - run: |
           set -e
           cd /home/runner/work/LobsterBrowse/LobsterBrowse
-          echo "=== HEADS ==="
-          git rev-parse origin/main origin/beta/zeolite-nativetransit
-          git rev-parse origin/main:ui/src/pages/Browser.tsx origin/beta/zeolite-nativetransit:ui/src/pages/Browser.tsx
-          echo "=== MAIN BROWSER DIFF c46ed0a7..731a88bb ==="
-          git diff c46ed0a7 731a88bb -- ui/src/pages/Browser.tsx
-          echo "=== BETA BROWSER DIFF 7238b542..45f10dff ==="
-          git diff 7238b542 45f10dff -- ui/src/pages/Browser.tsx
-          echo "=== SETTINGS DEFAULTS ==="
-          grep -n "proxyEngine" ui/src/settings.ts | head -8
-          sed -n '120,152p' ui/src/settings.ts
-          echo "=== THEME LB-LOADING MAIN ==="
-          grep -n "lb-loading\|m3e-loading-indicator\|m3e-circular" ui/src/theme.css
-          echo "=== THEME LB-LOADING BETA ==="
-          git show origin/beta/zeolite-nativetransit:ui/src/theme.css | grep -n "lb-loading\|m3e-loading-indicator\|m3e-circular"
-          echo "=== M3E.D.TS BETA ==="
-          git show origin/beta/zeolite-nativetransit:ui/src/m3e.d.ts | grep -n "loading-indicator\|progress-indicator"
-          echo "=== M3E.D.TS MAIN ==="
-          grep -n "loading-indicator\|progress-indicator" ui/src/m3e.d.ts
-          echo "=== DONE8 ==="
+          echo "=== CURL /r/ INCognito CHALLENGE ==="
+          curl -sS --max-time 45 -D /tmp/h.txt -o /tmp/body.html "https://lobsterbrowse-server.onrender.com/r/aHR0cHM6Ly93d3cuc3RhcnRwYWdlLmNvbS9zcC9zZWFyY2g_cXVlcnk9dGVzdA?lb_inc=1" || echo CURLFAIL
+          head -25 /tmp/h.txt || true
+          wc -c /tmp/body.html || true
+          grep -c 'id="anubis_challenge"' /tmp/body.html || echo no-marker
+          grep -o 'within.website[^"\\ ]*' /tmp/body.html | head -5 || true
+          echo "--- challenge context ---"
+          grep -n -m1 -B2 -A12 'anubis_challenge' /tmp/body.html || echo no-challenge-served
+          echo "=== ZEO FACTS ==="
+          cd /tmp 2>/dev/null || cd /home/runner/work/LobsterBrowse/LobsterBrowse
+          git clone --depth 50 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -1 || true
+          cd /tmp/zeolite
+          for f in app/src/sw.ts app/src/codec.ts app/src/routekey.ts app/src/__tests__/challenge.test.ts docs/error-pages.md docs/cookies.md AGENTS.md; do
+            echo "BLOB $(git rev-parse HEAD:$f) SIZE $(git cat-file -s $(git rev-parse HEAD:$f)) $f"
+          done
+          echo "=== GREPS SW.TS ==="
+          grep -n "no-store\|cache.match\|caches.match\|ZL_PAGE_LIMIT\|ZL_PAGE_CACHE\|NetEntry\|ZEOLITE_VERSION =" app/src/sw.ts | head -25
+          echo "=== GREPS AGENTS ==="
+          grep -n "route key\|errorpage\|error page\|challenge\|pass-challenge" AGENTS.md | head -15
+          echo "=== DUMP CODEC ==="
+          split -b 8000 <(base64 -w 0 app/src/codec.ts) /tmp/zcd_
+          i=0
+          for f in /tmp/zcd_*; do
+            i=$((i+1))
+            echo "ZLFILE-zcd-$i-BEGIN"
+            cat "$f"
+            echo ""
+            echo "ZLFILE-zcd-$i-END"
+          done
+          echo "=== DUMP ROUTEKEY ==="
+          base64 -w 0 app/src/routekey.ts
+          echo ""
+          echo "=== DUMP CHALLENGE TEST ==="
+          base64 -w 0 app/src/__tests__/challenge.test.ts
+          echo ""
+          echo "=== DONE9 ==="
