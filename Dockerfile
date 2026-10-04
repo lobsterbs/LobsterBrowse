@@ -39,7 +39,8 @@ RUN mkdir -p /bundle/libcurl \
     && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
     && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
 
-FROM debian:bookworm-slim
+FROM d
+ebian:bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -52,5 +53,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATN=/wisp/ ZEOLITE_SW_SHA=f587c84dc554035d ZEOLITE_BOUTSTRAP_SHA=8f4cc3bdf3f3bd20
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f587c84dc554035d ZEOLITE_BOOTSTRAP_SHA=8f4cc3bdf3f3bd20
 ENTRYPOINT ["/app/lobster-server"]
