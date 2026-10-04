@@ -37,10 +37,10 @@ synthesis (#23), HTML entity decoding in rewritten attributes (#24),
 navguard + WebRTC gate (#28), zl:find (#29), netLog passthrough rows
 (#30), per-client virtual-context routing (#33), opaque page identity
 and mirror scheme removal (#32), cross-origin subresource routing
-(#34)), dist bundle d3d969ae (route-key decode history + pass-challenge
+(#34)), dist bundle 09297e27 (route-key decode history + pass-challenge
 redir repair + M3E error page redesign + nav-strand netLog + the
-redirect-surfaced diag event, built from Zeolite main b6b9ac2; sw.js
-changes, so ZEOLITE_SW_SHA moves to dc03b34121e95df0). This matches the Dockerfile
+redirect-surfaced diag event + concatenated-route-tail recoverPath + escaped relative-subresource recovery, built from Zeolite main e581d07; sw.js
+changes, so ZEOLITE_SW_SHA moves to c4182b6ce1e8b493). This matches the Dockerfile
 ZEOLITE_COMMIT and the zeolite-server git rev in
 server/bin/server/Cargo.toml; server/Cargo.lock is consistent with
 the pin.
