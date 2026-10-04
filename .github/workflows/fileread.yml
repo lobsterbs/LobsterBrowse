@@ -13,21 +13,18 @@ jobs:
           set -e
           git clone --depth 50 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -1
           cd /tmp/zeolite
-          git clone --depth 1 -b dist https://github.com/lobsterbs/Zeolite /tmp/zdist 2>&1 | tail -1
-          echo "ZLGITHASH-zdist $(git -C /tmp/zdist rev-parse HEAD)"
-          echo "=== ANUBIS HITS ==="
-          grep -rn "anubis\|pass-challenge\|within.website" app/src --include="*.ts" | grep -v __tests__ | head -25
-          echo "=== SW ANUBIS SECTIONS ==="
-          for ln in $(grep -n "anubis\|pass-challenge\|within.website" app/src/sw.ts | cut -d: -f1); do
-            s=$((ln-8)); [ $s -lt 1 ] && s=1
-            e=$((ln+24))
-            echo "--- sw.ts $s-$e (hit $ln) ---"
-            sed -n "${s},${e}p" app/src/sw.ts
-          done
-          echo "=== SW 700-770 ==="
-          sed -n '700,770p' app/src/sw.ts
-          echo "=== SW 1000-1068 ==="
-          sed -n '1000,1068p' app/src/sw.ts
-          echo "=== SW 1129-1262 ==="
-          sed -n '1129,1262p' app/src/sw.ts
-          echo "=== DONE6 ==="
+          echo "=== B2A151F STAT ==="
+          git show b2a151f --stat | head -20
+          echo "=== B2A151F DIFF ==="
+          git show b2a151f | head -180
+          echo "=== PASSCHALLENGE LOG ==="
+          git log -S "pass-challenge" --oneline | head -10
+          echo "=== SW 956-1010 ==="
+          sed -n '956,1010p' app/src/sw.ts
+          echo "=== SW 1262-1430 ==="
+          sed -n '1262,1430p' app/src/sw.ts
+          echo "=== COOKIES 760-860 ==="
+          sed -n '760,860p' app/src/cookies.ts
+          echo "=== BOOTSTRAP LOCATION GREP ==="
+          grep -n "location\|Location" app/src/bootstrap.ts | head -25
+          echo "=== DONE7 ==="
