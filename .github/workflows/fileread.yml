@@ -11,26 +11,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: dump files
+      - name: recon
         run: |
           set -e
-          mkdir -p /tmp/dump
-          dump() {
-            key=$1; sha=$2; path=$3
-            git show "$sha:$path" > /tmp/dump/$key
-            echo "ZLGITHASH-$key $(git rev-parse "$sha:$path")"
-            echo "ZLSIZE-$key $(wc -c < /tmp/dump/$key)"
-            rm -f /tmp/dump/$key.part.*
-            split -b 8000 -d -a 2 /tmp/dump/$key /tmp/dump/$key.part.
-            i=0
-            for f in $(ls /tmp/dump/$key.part.* | sort); do
-              n=$(printf "%02d" $i)
-              echo "ZLFILE-$key-$n-BEGIN"
-              base64 -w 0 "$f"
-              echo ""
-              echo "ZLFILE-$key-$n-END"
-              i=$((i+1))
-            done
-          }
-          dump mbrw2 c46ed0a78360f0531c4b470fbd42f98c405a3a2b ui/src/pages/Browser.tsx
-          dump bbrw2 7238b542b631393f3c7a65463a971e7d9e6e6170 ui/src/pages/Browser.tsx
+          echo "ZLGITHASH-main $(git rev-parse origin/main)"
+          echo "=== LOG MAIN ==="
+          git log --oneline -12 origin/main
+          echo "=== GREP malformed ==="
+          grep -rn "malformed" --include="*.rs" --include="*.ts" --include="*.tsx" --include="*.css" --include="*.html" . | grep -v node_modules | head -30
+          echo "=== GREP lb-load-error ==="
+          grep -rn "lb-load-error" --include="*.rs" --include="*.ts" --include="*.tsx" . | head -30
+          echo "=== GREP engine_error_page ==="
+          grep -n "engine_error_page\|error_html\|error page" server/bin/server/src/main.rs | head -30
+          echo "=== GREP progress/loading in ui ==="
+          grep -rn "progress\|Progress" ui/src --include="*.tsx" --include="*.ts" --include="*.css" | head -60
+          echo "=== GREP m3e components used ==="
+          grep -rn "m3e-" ui/src --include="*.tsx" -o | grep -o "m3e-[a-z-]*" | sort | uniq -c | sort -rn | head -40
+          echo "=== GREP startpage ==="
+          grep -rni "startpage" ui/src server/bin/server/src server/crates 2>/dev/null | head -20
+          echo "=== LOG theme.css ==="
+          git log --oneline -8 origin/main -- ui/src/theme.css
+          echo "=== LOG main.rs ==="
+          git log --oneline -8 origin/main -- server/bin/server/src/main.rs
+          echo "=== LOG Browser.tsx ==="
+          git log --oneline -8 origin/main -- ui/src/pages/Browser.tsx
+          echo "=== DONE ==="
