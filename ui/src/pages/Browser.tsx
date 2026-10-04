@@ -884,7 +884,7 @@ export default function BrowserView(props: Props) {
         } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
           patch = { url: real, idx: idx + 1 };
         } else {
-          patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+          patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
           if (!props.incognito) props.onHistory(real);
         }
         props.updateTab(t.id, patch);
@@ -1120,7 +1120,7 @@ export default function BrowserView(props: Props) {
           } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
             patch = { url: real, idx: idx + 1 };
           } else {
-            patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx };
+            patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
             if (!L.incognito) L.onHistory(real);
           }
           L.updateTab(tabId, patch);
@@ -1257,6 +1257,10 @@ export default function BrowserView(props: Props) {
       blankPolls.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
+      lastDiag.current.delete(id);
+      for (const k of lastEscape.current) {
+        if (k.startsWith(id + "|")) lastEscape.current.delete(k);
+      }
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
         if (!(id in prev)) return prev;
         const n = { ...prev };
