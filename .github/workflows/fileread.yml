@@ -11,34 +11,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: recon2
+      - name: recon3
         run: |
           set -e
-          git clone --depth 1 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>/dev/null || true
-          echo "=== ZEO malformed ==="
-          grep -rn "malformed" /tmp/zeolite --include="*.ts" --include="*.js" --include="*.html" --include="*.rs" 2>/dev/null | grep -v node_modules | head -20
-          echo "=== ZEO engine route ==="
-          grep -rn "engine route" /tmp/zeolite -i 2>/dev/null | grep -v node_modules | head -20
-          echo "=== ZEO loading templates ==="
-          grep -rln "progress\|loading" /tmp/zeolite/src 2>/dev/null | head -10
-          echo "=== ZEO m3e in src ==="
-          grep -rn "m3e-" /tmp/zeolite/src 2>/dev/null | grep -v node_modules | head -20
-          echo "=== LB log -S linear progress ==="
-          git log -S "m3e-linear-progress-indicator" --oneline -- ui/src | head -10
-          echo "=== LB log -S circular progress ==="
-          git log -S "m3e-circular-progress-indicator" --oneline -- ui/src | head -10
-          echo "=== Browser.tsx lb-load/busy/loading ==="
-          grep -n "lb-load\|Loading\|busy\|skeleton" ui/src/pages/Browser.tsx | head -40
-          echo "=== theme.css lb-load ==="
+          echo "=== BLOB CHECK ==="
+          echo "tmp main.rs: $(git rev-parse HEAD:server/bin/server/src/main.rs)"
+          echo "main main.rs: $(git rev-parse origin/main:server/bin/server/src/main.rs)"
+          echo "tmp settings: $(git rev-parse HEAD:ui/src/settings.ts)"
+          echo "main settings: $(git rev-parse origin/main:ui/src/settings.ts)"
+          echo "=== LOG -S linear progress ==="
+          git log -S "m3e-linear-progress-indicator" --oneline origin/main -- ui/src | head -8
+          echo "=== LOG -S circular progress ==="
+          git log -S "m3e-circular-progress-indicator" --oneline origin/main -- ui/src | head -8
+          echo "=== LOG -S spinner ==="
+          git log -S "spinner" --oneline origin/main -- ui/src | head -8
+          echo "=== Browser.tsx lb-load grep ==="
+          grep -n "lb-load\|setStatus\|loading" ui/src/pages/Browser.tsx | head -40
+          echo "=== theme.css lb-load grep ==="
           grep -n "lb-load\|lb-progress\|lb-busy" ui/src/theme.css | head -20
-          echo "=== main.rs engine_error_page 2140-2360 ==="
+          echo "=== ZEO CLONE ==="
+          git clone --depth 1 https://github.com/lobsterbs/Zeolite /tmp/zeolite 2>&1 | tail -2
+          echo "=== ZEO malformed ==="
+          grep -rn "malformed" /tmp/zeolite --include="*.ts" --include="*.js" --include="*.html" 2>/dev/null | grep -v node_modules | head -15
+          echo "=== ZEO engine route ==="
+          grep -rni "engine route" /tmp/zeolite/src 2>/dev/null | head -15
+          echo "=== ZEO loading files ==="
+          grep -rln "progress\|loading" /tmp/zeolite/src 2>/dev/null | head -12
+          echo "=== MAIN.RS 2140-2360 ==="
           sed -n "2140,2360p" server/bin/server/src/main.rs
-          echo "=== main.rs 1280,1360 startpage js ==="
-          sed -n "1280,1360p" server/bin/server/src/main.rs
-          echo "=== main.rs anubis grep ==="
-          grep -n "anubis" server/bin/server/src/main.rs | head -20
-          echo "=== Browser.tsx 500-580 ==="
-          sed -n "500,580p" ui/src/pages/Browser.tsx
-          echo "=== Browser.tsx 700-790 ==="
-          sed -n "700,790p" ui/src/pages/Browser.tsx
-          echo "=== DONE2 ==="
+          echo "=== DONE3 ==="
