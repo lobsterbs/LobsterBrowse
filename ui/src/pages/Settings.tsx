@@ -286,13 +286,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         Saved on this device only. Toggles marked server-side change how the engine fetches pages.
       </p>
 
+      {/* Real M3E accordion coordinating the panels. multi keeps the
+          current behavior (several panels open at once); without it
+          the accordion would collapse all but one. */}
+      <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
             <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              Zeolite — default
+              Zeolite â default
             </m3e-button-segment>
             <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
               ScramJet
@@ -464,7 +468,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted">
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
             you return, the cloak covers LobsterBrowse until you click "Return". Browsers do not let a
-            page re-render while hidden — this is the strongest behavior a normal web page can offer.
+            page re-render while hidden â this is the strongest behavior a normal web page can offer.
           </p>
         </div>
       </Panel>
@@ -574,7 +578,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               {rules.map((r) => (
                 <div key={r.domain} className="lb-rule-row">
                   <code>{r.domain}</code>
-                  <span className="lb-muted">{r.uaPreset ?? "default UA"} · adblock {r.adblock === false ? "off" : "on"}</span>
+                  <span className="lb-muted">{r.uaPreset ?? "default UA"} Â· adblock {r.adblock === false ? "off" : "on"}</span>
                   <m3e-icon-button aria-label="Remove rule" onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}>
                     <m3e-icon name="delete" aria-hidden={true} />
                   </m3e-icon-button>
@@ -628,7 +632,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Keyboard shortcuts</div>
           <p className="lb-muted">
-            Alt+T new tab · Alt+W close tab · Alt+Shift+T reopen closed tab.
+            Alt+T new tab Â· Alt+W close tab Â· Alt+Shift+T reopen closed tab.
             Ctrl+T and Ctrl+W are reserved by the host browser and can never reach the app.
           </p>
         </div>
@@ -663,6 +667,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </m3e-dialog>
         </div>
       </Panel>
+      </m3e-accordion>
 
       <div className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>

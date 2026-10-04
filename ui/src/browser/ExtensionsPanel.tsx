@@ -76,6 +76,9 @@ export default function ExtensionsPanel(props: {
                 if (ev.key === "Enter" || ev.key === " ") props.onOpenDetail(e.id);
               }}
             >
+              <m3e-avatar {...{ class: "lb-ext-ava" }} aria-hidden={true}>
+                {e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
+              </m3e-avatar>
               <span className="lb-ext-name">{e.name}</span>
               <span className="lb-ext-ver">{e.version}</span>
               <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
@@ -89,8 +92,13 @@ export default function ExtensionsPanel(props: {
       {props.detail && (
         <div className="lb-ext-detail">
           <div className="lb-ext-dhead">
-            <span className="lb-ext-dname">
-              {props.detail.name} <span className="lb-ext-ver">{props.detail.version}</span>
+            <span className="lb-ext-dtitle">
+              <m3e-avatar {...{ class: "lb-ext-ava" }} aria-hidden={true}>
+                {props.detail.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
+              </m3e-avatar>
+              <span className="lb-ext-dname">
+                {props.detail.name} <span className="lb-ext-ver">{props.detail.version}</span>
+              </span>
             </span>
             <m3e-icon-button aria-label="Close extension details" onClick={props.onCloseDetail}>
               <m3e-icon name="close" aria-hidden={true} />
@@ -108,9 +116,11 @@ export default function ExtensionsPanel(props: {
           </div>
           <div className="lb-ext-trow">
             <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-            <m3e-switch
+            {/* Permission grant: a checkbox (not an instant-apply switch)
+               reads as opt-in consent, matching the grant-and-notice
+               pattern below. */}
+            <m3e-checkbox
               checked={props.incognito[props.detail.id] ? "" : undefined}
-              icons="selected"
               aria-label="Allow extension in incognito tabs"
               onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
             />

@@ -36,7 +36,7 @@ function buildSuggests(
   for (const s of opts.remote ?? []) {
     push("search", s, opts.searchFor(s));
   }
-  push("search", q + " · " + opts.engineName + " search", opts.search);
+  push("search", q + " Â· " + opts.engineName + " search", opts.search);
   return out;
 }
 
@@ -146,7 +146,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
         </m3e-search-bar>
         {suggLoading && (
           <span className="lb-sugg-load" aria-hidden={true}>
-            <m3e-loading-indicator aria-label="Loading suggestions" />
+            <m3e-circular-progress-indicator indeterminate aria-label="Loading suggestions" />
           </span>
         )}
         {open && suggestions.length > 0 && (
@@ -166,7 +166,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
                 <span className="lb-ac-text">{s.text}</span>
               </button>
             ))}
-            <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
+            <div className="lb-ac-hint">Enter to open Â· Up/Down to browse Â· Esc to dismiss</div>
           </div>
         )}
       </div>
