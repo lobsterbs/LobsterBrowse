@@ -775,6 +775,30 @@ export default function BrowserView(props: Props) {
         pushLog("error", "load failed: " + msg);
         return;
       }
+      /* Zeolite engine error page (#31): the SW answers engine-side
+         navigation failures (bad or stranded route, blocked site,
+         transport death) with its own card and a meta[zl-error] JSON
+         payload (category, reason, traceId, status). Same
+         surface-and-stop treatment as lb-load-error; the reason is
+         URL-redacted by the engine (#32), so it is safe to show. */
+      const zlMeta = doc.querySelector<HTMLMetaElement>('meta[name="zl-error"]');
+      if (zlMeta) {
+        let msg = "zeolite: navigation error";
+        try {
+          const zl = JSON.parse(zlMeta.content) as { category?: string; reason?: string };
+          if (zl.category) msg = "zeolite: " + zl.category + (zl.reason ? ": " + zl.reason : "");
+        } catch {
+          /* unparsable payload: keep the generic line */
+        }
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
+        setErrors((prev) =>
+          prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
+            ? prev
+            : { ...prev, [t.id]: { url: t.url, message: msg } }
+        );
+        pushLog("error", "load failed: " + msg);
+        return;
+      }
       /* 74.7 CSP/SRI diagnostics: the rewriter strips CSP meta tags and
          integrity attributes from proxied documents and reports the
          counts in meta[lb-diag]. Surface each report once in DevTools
