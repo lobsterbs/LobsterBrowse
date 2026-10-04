@@ -38,8 +38,7 @@ RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.t
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
- && cp -r /zlvendor/node_modules/@mercurywo
-rkshop/libcurl-transport/dist/. /bundle/libcurl/
+ && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
 
 FROM debian:bookworm-slim
 RUN apt-get update \
