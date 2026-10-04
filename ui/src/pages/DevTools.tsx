@@ -363,37 +363,40 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
   const runCode = (code: string) => {
     const f = frame();
     const w = f?.contentWindow;
+    /* Functional setDt in every branch, and one append per branch:
+       an async zl: reply (echo/emit) can land between this render
+       and the submit click, so a patch built from the render-time
+       dt.console would drop it; prev is always the fresh state. */
+    const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
     if (!w) {
-      setDt({ console: [...dt.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }] });
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
       return;
     }
-    /* One setDt for input echo AND result: two calls in the same tick
-       (the second reads the render-time dt.console) would drop the
-       first entry; a single append cannot. */
-    const base = [...dt.console, { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() }];
     try {
       const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
-      setDt({
+      setDt((prev) => ({
         console: [
-          ...base,
+          ...prev.console,
+          entry,
           { id: nextEntryId(), kind: "result", text: formatValue(result), ts: Date.now() },
-        ],
-        history: [...dt.history, code].slice(-100),
-      });
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     } catch (err) {
       const e = err as Error;
-      setDt({
+      setDt((prev) => ({
         console: [
-          ...base,
+          ...prev.console,
+          entry,
           {
             id: nextEntryId(),
             kind: "error",
             text: (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
             ts: Date.now(),
           },
-        ],
-        history: [...dt.history, code].slice(-100),
-      });
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     }
   };
 
@@ -406,7 +409,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
      cannot race the render-time state snapshot. ---- */
   const echo = (text: string) =>
     setDt((prev) => ({
-      console: [...prev.console, { id: nextEntryId(), kind: "input", text, ts: Date.now() }],
+      console: [...prev.console, { id: nextEntryId(), kind: "input", text, ts: Date.now() }].slice(-500),
       history: [...prev.history, text].slice(-100),
     }));
   const emit = (lines: string[], kind: ConsoleEntry["kind"] = "result") => {
@@ -415,7 +418,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       console: [
         ...prev.console,
         ...lines.map((text) => ({ id: nextEntryId(), kind, text: sanitizeText(text), ts: Date.now() })),
-      ],
+      ].slice(-500),
     }));
   };
   const runZlCommand = (code: string): boolean => {
@@ -739,7 +742,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               {logsCopied ? "Copied" : "Copy logs"}
             </m3e-button>
             <m3e-button
-              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank")}
+              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
             >
               <m3e-icon name="bug_report" aria-hidden={true} />
               Report

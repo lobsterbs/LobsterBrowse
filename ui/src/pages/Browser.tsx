@@ -48,6 +48,9 @@ import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
 import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
 import M3eSelect from "../M3eSelect";
+/* Navigation-poll routing decision, kept pure so the regression
+   check (tests/poll-recovery/check.mjs) can run the real logic. */
+import { pollAction } from "../browser/pollRecovery";
 
 /* Engine handoff payloads (Zeolite #43 notifications, #45 menu
    listing): the shapes the service worker broadcasts / replies with.
@@ -1150,19 +1153,10 @@ export default function BrowserView(props: Props) {
          URL, reconstruct the intended target and reload it through the
          engine. Each distinct URL is recovered once per tab (lastEscape
          guard), so a site that genuinely 404s into the fallback does
-         not loop. */
-      const appPrefixes = [
-        "/zlsw", "/libcurl", "/zl-ext", "/zl-cs", "/suggest", "/cert",
-        "/logs", "/build", "/wisp", "/favicon",
-      ];
-      const isAppPath = appPrefixes.some((p) => path === p || path.startsWith(p + "/"));
-      if (
-        !path.startsWith("/r/") &&
-        !path.startsWith("/lj/") &&
-        !path.startsWith("/zl/") &&
-        !path.startsWith("/__zl_nav__/")
-      ) {
-        if (!t.url || path === "/" || isAppPath) return;
+         not loop. The routing decision lives in pollAction()
+         (ui/src/browser/pollRecovery.ts). */
+      const act = pollAction(f.contentWindow!.location.protocol, path, t.url);
+      if (act === "recover") {
         try {
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
@@ -1184,6 +1178,7 @@ export default function BrowserView(props: Props) {
         }
         return;
       }
+      if (act !== "sync") return;
       const real = decodeRoute(path);
       if (!real) return;
       setErrors((prev) => {
