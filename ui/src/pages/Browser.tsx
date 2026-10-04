@@ -485,7 +485,7 @@ export default function BrowserView(props: Props) {
   const toggleExtIncognito = (id: string, on: boolean) =>
     saveExtIncognito({ ...extIncognito, [id]: on });
   const openExtOptions = (d: ExtDetail) => {
-    if (d.optionsPath) window.open("/zl-ext/" + d.id + "/" + d.optionsPath, "_blank");
+    if (d.optionsPath) window.open("/zl-ext/" + d.id + "/" + d.optionsPath, "_blank", "noopener");
   };
   const loadExtensions = async () => {
     setExtError(null);
@@ -569,10 +569,14 @@ export default function BrowserView(props: Props) {
     else rootRef.current?.requestFullscreen?.().catch(() => {});
   };
 
-  const setDt = (id: number, patch: Partial<DtState>) => {
+  const setDt = (
+    id: number,
+    patch: Partial<DtState> | ((prev: DtState) => Partial<DtState>),
+  ) => {
     setDtState((prev) => {
       const base = prev[id] ?? emptyDt();
-      return { ...prev, [id]: { ...base, ...patch } };
+      const p = typeof patch === "function" ? patch(base) : patch;
+      return { ...prev, [id]: { ...base, ...p } };
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();

@@ -141,7 +141,7 @@ function describe(el: Element): Picked {
 type Props = {
   tab: Tab;
   dt: DtState;
-  setDt: (patch: Partial<DtState>) => void;
+  setDt: (patch: Partial<DtState> | ((prev: DtState) => Partial<DtState>)) => void;
   frame: () => HTMLIFrameElement | null;
   onClose: () => void;
   onOpenLogs: () => void;
@@ -445,37 +445,40 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs }:
   const runCode = (code: string) => {
     const f = frame();
     const w = f?.contentWindow;
+    /* Functional setDt in every branch, and one append per branch:
+       page console/net entries arrive asynchronously through the
+       message handler, so a patch built from the render-time
+       dt.console would drop them; prev is always the fresh state. */
+    const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
     if (!w) {
-      setDt({ console: [...dt.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }] });
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
       return;
     }
-    /* One setDt for input echo AND result: two calls in the same tick
-       (the second reads the render-time dt.console) would drop the
-       first entry; a single append cannot. */
-    const base = [...dt.console, { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() }];
     try {
       const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
-      setDt({
+      setDt((prev) => ({
         console: [
-          ...base,
-          { id: nextEntryId(), kind: "result", text: formatValue(result), ts: Date.now() },
-        ],
-        history: [...dt.history, code].slice(-100),
-      });
+          ...prev.console,
+          entry,
+          { id: nextEntryId(), kind: "result" as const, text: formatValue(result), ts: Date.now() },
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     } catch (err) {
       const e = err as Error;
-      setDt({
+      setDt((prev) => ({
         console: [
-          ...base,
+          ...prev.console,
+          entry,
           {
             id: nextEntryId(),
-            kind: "error",
+            kind: "error" as const,
             text: (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
             ts: Date.now(),
           },
-        ],
-        history: [...dt.history, code].slice(-100),
-      });
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     }
   };
 
