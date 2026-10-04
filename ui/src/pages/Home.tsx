@@ -146,7 +146,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
         </m3e-search-bar>
         {suggLoading && (
           <span className="lb-sugg-load" aria-hidden={true}>
-            <m3e-loading-indicator aria-label="Loading suggestions" />
+            <m3e-circular-progress-indicator indeterminate aria-label="Loading suggestions" />
           </span>
         )}
         {open && suggestions.length > 0 && (

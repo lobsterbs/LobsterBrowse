@@ -85,6 +85,7 @@
   justify-content: space-between;
   padding: var(--md-sys-measurement-space25, 2px) 0 var(--md-sys-measurement-space75, 6px);
 }
+.lb-ext-dtitle { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lb-ext-dname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ext-desc { margin: var(--md-sys-measurement-space50, 4px) 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.4; opacity: 0.85; }
 .lb-ext-perms { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); margin: var(--md-sys-measurement-space75, 6px) 0; }
@@ -161,4 +162,12 @@
   border-radius: 6px;
   object-fit: contain;
   flex-shrink: 0;
+}
+/* Extension identity: real m3e-avatar with the add-on's initials.
+   Sized down from the 40px default so it fits the 320px panel rows. */
+.lb-ext-ava {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
 }
