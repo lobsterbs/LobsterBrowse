@@ -26,7 +26,7 @@ RUN npm run build
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=78704d612807caa3113014240d2ca7e26b9f031c
+ARG ZEOLITE_COMMIT=d3d969aeeb010120397f18e9f47feaddca1700b3
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates npm \
     && rm -rf /var/lib/apt/lists/*
@@ -52,5 +52,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8c7dedf9d9cbf354 ZEOLITE_BOOTSTRAP_SHA=efcef3fb30909a45
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=dc03b34121e95df0 ZEOLITE_BOOTSTRAP_SHA=8f4cc3bdf3f3bd20
 ENTRYPOINT ["/app/lobster-server"]
