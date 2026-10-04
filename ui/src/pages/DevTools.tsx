@@ -369,7 +369,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
        dt.console would drop it; prev is always the fresh state. */
     const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
     if (!w) {
-      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error", text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
       return;
     }
     try {
@@ -378,7 +378,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
         console: [
           ...prev.console,
           entry,
-          { id: nextEntryId(), kind: "result", text: formatValue(result), ts: Date.now() },
+          { id: nextEntryId(), kind: "result" as const, text: formatValue(result), ts: Date.now() },
         ].slice(-500),
         history: [...prev.history, code].slice(-100),
       }));
@@ -390,7 +390,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           entry,
           {
             id: nextEntryId(),
-            kind: "error",
+            kind: "error" as const,
             text: (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
             ts: Date.now(),
           },
@@ -409,7 +409,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
      cannot race the render-time state snapshot. ---- */
   const echo = (text: string) =>
     setDt((prev) => ({
-      console: [...prev.console, { id: nextEntryId(), kind: "input", text, ts: Date.now() }].slice(-500),
+      console: [...prev.console, { id: nextEntryId(), kind: "input" as const, text, ts: Date.now() }].slice(-500),
       history: [...prev.history, text].slice(-100),
     }));
   const emit = (lines: string[], kind: ConsoleEntry["kind"] = "result") => {
