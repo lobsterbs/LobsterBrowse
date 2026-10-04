@@ -31,7 +31,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlSend } from "../zeolite";
+import { zlNavHandle, zlSend } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -963,6 +963,13 @@ export default function BrowserView(props: Props) {
   );
 
   /* ---- Navigation ---- */
+  /* LB#53 (Zeolite#63): opaque initial route. Ask the worker for a
+     navigation handle (keyed token, short TTL) and fall back to the
+     legacy b64u route when it cannot - same fallback chain for every
+     initial navigation, restored sessions included. Short timeout:
+     a healthy worker answers in tens of ms; a wedged one degrades
+     to the legacy route instead of hanging the tab. */
+  const initialRoute = (url: string) => zlNavHandle(url, 3000).then((h) => h ?? routeUrl(url));
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
@@ -998,9 +1005,18 @@ export default function BrowserView(props: Props) {
     const frame = frames.current.get(tab.id);
     /* 74.9: incognito tabs ride the engine's throwaway jar profile
        (zl:jarProfile) so their cookies never mix into the default
-       one. */
-    const href = routeUrl(url);
-    if (frame) frame.src = href;
+       one.
+       LB#53 (Zeolite#63): the initial navigation rides an opaque
+       zl:navHandle route when the worker can mint one - the
+       destination appears nowhere browser-visible. The legacy b64u
+       routeUrl stays the fallback (worker predates #63, no route
+       key, timeout), which is also why the src assignment moved
+       async. The navGen guard drops a stale mint: a newer load()
+       owns the tab. */
+    void initialRoute(url).then((href) => {
+      if (navGen.current.get(tab.id) !== gen) return;
+      if (frame) frame.src = href;
+    });
     pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
   /* Stable handle to the current load(): the mount-once message
@@ -1227,7 +1243,11 @@ export default function BrowserView(props: Props) {
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
-          f.src = routeUrl(intended);
+          /* LB#53 (Zeolite#63): the re-drive rides the same opaque
+             initial-route helper (handle first, legacy fallback). */
+          void initialRoute(intended).then((href) => {
+            f.src = href;
+          });
           /* Record the recovered URL as this tab's last navigation so
              the URL sync (once the frame loads it) never triggers a
              duplicate auto-load of the same target. */

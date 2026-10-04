@@ -106,3 +106,14 @@ export function zlSend(
     return zlSendTo(fresh, msg, timeoutMs);
   });
 }
+
+/* #53 (#63 adoption): ask the Zeolite worker for an opaque
+   initial-navigation handle. The engine (Zeolite #63) answers
+   { ok, url } where url is /__zl_navh__/<keyed token> - a route that
+   carries the destination nowhere decodable, unlike the legacy
+   routeUrl b64u tail. Null on refusal (worker without the feature,
+   no route key) or timeout: the caller falls back to routeUrl. */
+export async function zlNavHandle(dest: string, timeoutMs = 5000): Promise<string | null> {
+  const r = await zlSend({ type: "zl:navHandle", dest }, timeoutMs);
+  return r && r.ok === true && typeof r.url === "string" ? r.url : null;
+}
