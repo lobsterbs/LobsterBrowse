@@ -25,9 +25,9 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 52f24fed (Zeolite CI build 37150719063), 2026-10-03.
+# Current pin: dist d3d969ae (Zeolite CI build 37202468428), 2026-10-04.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=52f24fed4b7a52c41560e0a4e03457027e93ab17
+ARG ZEOLITE_COMMIT=d3d969aeeb010120397f18e9f47feaddca1700b3
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
