@@ -138,6 +138,16 @@ NOT part of this beta.
   toolchain exists; CI plus the Render build are the compile gates.
 - /zl/ shares the Zeolite worker's single runtime prefix: switching
   engines re-pushes zl:config; already-open tabs keep their route prefix.
+- LB#53 / Zeolite#63 adoption (2026-10-04): initial navigations now ride
+  opaque zl:navHandle routes. App.tsx pushes navHandles: true with
+  zl:config (the plaintext ?url= embed shape is refused engine-side), and
+  Browser.tsx initialRoute() asks the worker for a keyed /__zl_navh__/
+  handle per navigation, falling back to the legacy b64u routeUrl when
+  the worker cannot mint (predates #63, no route key, timeout - 3s cap,
+  navGen-guarded so a stale mint cannot clobber a newer navigation).
+  The destination of an initial navigation is no longer decodable from
+  any browser-visible URL on this branch; the legacy route shape
+  remains the documented degrade, same class as the navguard marker.
 - Incognito isolation on the beta path inherits the engine's cookie-jar
   model (per virtual origin, not per browsing session) - same honest gap
   as /lj/ today.

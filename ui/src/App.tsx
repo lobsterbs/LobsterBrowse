@@ -233,6 +233,12 @@ export default function App() {
         type: "zl:config",
         prefix: engineRoutePrefix(),
         scheme: "b64u",
+        /* LB#53 (Zeolite#63): refuse the plaintext ?url= embed shape
+           on this deployment - initial navigations ride opaque
+           zl:navHandle routes (Browser.tsx initialRoute). A worker
+           predating #63 ignores the field, so the push stays
+           compatible. */
+        navHandles: true,
       };
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
