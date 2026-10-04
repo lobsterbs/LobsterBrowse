@@ -760,7 +760,7 @@ export default function BrowserView(props: Props) {
       return;
     }
     pushLog("info", "ext options open " + p);
-    window.open(p, "_blank");
+    window.open(p, "_blank", "noopener");
   };
   const loadExtensions = async () => {
     setExtError(null);
