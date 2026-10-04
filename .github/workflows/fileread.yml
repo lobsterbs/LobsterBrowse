@@ -8,49 +8,21 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: dump files
+      - name: session diffs
         run: |
           set -euo pipefail
           git clone --quiet https://github.com/lobsterbs/LobsterBrowse.git /tmp/repo
           cd /tmp/repo
-          git fetch --quiet --depth 1 origin 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 d8bae4475a5165d9451d0c14b7e75c530aea353a
-          dump() {
-            key="$1"; sha="$2"; path="$3"
-            if ! git show "$sha:$path" > "/tmp/$key" 2>/dev/null; then
-              echo "ZLERR-$key NOTFOUND"
-              return 0
-            fi
-            size=$(wc -c < "/tmp/$key")
-            echo "ZLGITHASH-$key $(git hash-object "/tmp/$key")"
-            echo "ZLSIZE-$key $size"
-            n=0
-            chunks=$(( (size + 7999) / 8000 ))
-            while [ "$n" -lt "$chunks" ]; do
-              echo "ZLFILE-$key-$(printf %02d "$n")-BEGIN"
-              dd if="/tmp/$key" bs=8000 skip="$n" count=1 2>/dev/null | base64 -w 0
-              echo ""
-              echo "ZLFILE-$key-$(printf %02d "$n")-END"
-              n=$(( n + 1 ))
-            done
-          }
-          dump mpoll 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/browser/pollRecovery.ts
-          dump mbrw 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/Browser.tsx
-          dump mhome 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/Home.tsx
-          dump mdt 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 ui/src/pages/DevTools.tsx
-          dump mcheck 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 tests/poll-recovery/check.mjs
-          dump mci 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 .github/workflows/ci.yml
-          dump bdt d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/DevTools.tsx
-          dump bbrw d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/Browser.tsx
-          dump bhome d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src/pages/Home.tsx
-          dump bpkg d8bae4475a5165d9451d0c14b7e75c530aea353a ui/package.json
-      - name: grep refs beta
-        run: |
-          cd /tmp/repo
-          git checkout --quiet --detach d8bae4475a5165d9451d0c14b7e75c530aea353a
-          echo "ZLGREP-BETA-START"
-          grep -rn "xterm" ui/ && echo "ZLGREP-XTERM-FOUND" || echo "ZLGREP-XTERM-NONE"
-          grep -rn "DevTerminal" ui/ && echo "ZLGREP-DEVTERM-FOUND" || echo "ZLGREP-DEVTERM-NONE"
-          echo "ZLFILES-BETA-UI-SRC"
-          git ls-tree -r --name-only d8bae4475a5165d9451d0c14b7e75c530aea353a ui/src
-          echo "ZLFILES-BETA-UI-SRC-END"
-          echo "ZLGREP-BETA-END"
+          git fetch --quiet --depth 1 origin a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a
+          echo "ZLDIFF-MAIN-STAT-BEGIN"
+          git diff --stat a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12
+          echo "ZLDIFF-MAIN-STAT-END"
+          echo "ZLDIFF-MAIN-BEGIN"
+          git diff a526de15ce9efa83951db3d4a1b9b68eef64de82 2fe4a0da061283a4ecabd3cb6c0b5b18cc82fc12
+          echo "ZLDIFF-MAIN-END"
+          echo "ZLDIFF-BETA-STAT-BEGIN"
+          git diff --stat 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a -- . ':(exclude)ui/package-lock.json'
+          echo "ZLDIFF-BETA-STAT-END"
+          echo "ZLDIFF-BETA-BEGIN"
+          git diff 6ad80be65da8a5da2163bb56a77a77a81fb9165a d8bae4475a5165d9451d0c14b7e75c530aea353a -- . ':(exclude)ui/package-lock.json'
+          echo "ZLDIFF-BETA-END"
