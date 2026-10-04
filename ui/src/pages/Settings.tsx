@@ -285,6 +285,10 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         Saved on this device only.
       </p>
 
+      {/* Real M3E accordion coordinating the panels. multi keeps the
+          current behavior (several panels open at once); without it
+          the accordion would collapse all but one. */}
+      <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
@@ -630,6 +634,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </m3e-dialog>
         </div>
       </Panel>
+      </m3e-accordion>
 
       <div className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>

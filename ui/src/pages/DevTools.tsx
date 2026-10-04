@@ -322,7 +322,6 @@ function ZeoliteDownloads() {
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
-  const [multi, setMulti] = useState(false);
   const [logsCopied, setLogsCopied] = useState(false);
   const consoleRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -561,6 +560,32 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
   );
 
+  /* Network log pagination (m3e-paginator): the page event is the
+     component's only output, so mirror it into state like the M3eSelect
+     change wiring. Clamped at render so shrinking logs never leave a
+     page index past the end. */
+  const [netPage, setNetPage] = useState(0);
+  const [netPageSize, setNetPageSize] = useState(25);
+  const pagerRef = useRef<HTMLElement & { pageSize: number | "all" } | null>(null);
+  useEffect(() => {
+    const el = pagerRef.current;
+    if (!el) return;
+    const onPage = (e: Event) => {
+      const d = (e as CustomEvent<{ pageIndex?: number; pageSize?: number | "all" }>).detail;
+      if (typeof d?.pageIndex === "number") setNetPage(d.pageIndex);
+      if (typeof d?.pageSize === "number") setNetPageSize(d.pageSize);
+    };
+    el.addEventListener("page", onPage);
+    return () => el.removeEventListener("page", onPage);
+  }, []);
+  useEffect(() => {
+    setNetPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dt.netFilter]);
+  const netPages = Math.max(1, Math.ceil(netEntries.length / netPageSize));
+  const netPageClamped = Math.min(netPage, netPages - 1);
+  const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
+
   /* Failure counts by resource type for the diagnostics summary. */
   const failCounts = dt.fails.reduce<Record<string, number>>((acc, f) => {
     acc[f.kind] = (acc[f.kind] ?? 0) + 1;
@@ -664,24 +689,21 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             ))}
           </div>
           <div className="lb-console-input">
+            {/* m3e-textarea-autosize grows the console input to fit
+                multi-line expressions (Shift+Enter), replacing the old
+                manual rows=4 toggle. */}
+            <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
             <textarea
               ref={inputRef}
+              id="lb-dt-console-in"
               className="lb-input lb-console-area"
               aria-label="Console input"
               value={cmd}
-              rows={multi ? 4 : 1}
+              rows={1}
               onChange={(e) => setCmd(e.target.value)}
               onKeyDown={keyDown}
             />
             <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
-            <m3e-icon-button
-              toggle
-              selected={multi ? "" : undefined}
-              aria-label="Toggle multiline input"
-              onClick={() => setMulti(!multi)}
-            >
-              <m3e-icon name="expand" aria-hidden={true} />
-            </m3e-icon-button>
           </div>
         </div>
       )}
@@ -707,7 +729,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           <ZeoliteDownloads />
           <div className="lb-net">
             {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
-            {netEntries.map((n) => (
+            {pagedNet.map((n) => (
               <details key={n.id} className="lb-net-row">
                 <summary className="lb-net-summary">
                   <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
@@ -728,6 +750,15 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               </details>
             ))}
           </div>
+          {netEntries.length > netPageSize && (
+            <m3e-paginator
+              length={netEntries.length}
+              page-size={netPageSize}
+              page-sizes="25,50,100"
+              aria-label="Network log pages"
+              {...{ class: "lb-dt-pager", ref: pagerRef }}
+            />
+          )}
         </div>
       )}
 

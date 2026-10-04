@@ -2003,21 +2003,27 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
-            <m3e-icon name="arrow_back" aria-hidden={true} />
-          </m3e-icon-button>
+          {/* Back / Forward / Reload are one navigation cluster: a real
+              M3E button group (standard variant) ties the three
+              icon buttons together. Tooltips anchor by for= id and stay
+              outside the group so the group only arranges buttons. */}
+          <m3e-button-group aria-label="Page navigation">
+            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
+              <m3e-icon name="arrow_back" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
+              <m3e-icon name="arrow_forward" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button
+              id="lb-reload-btn"
+              aria-label="Reload"
+              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+            >
+              <m3e-icon name="refresh" aria-hidden={true} />
+            </m3e-icon-button>
+          </m3e-button-group>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
-          <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
-            <m3e-icon name="arrow_forward" aria-hidden={true} />
-          </m3e-icon-button>
           <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
-          <m3e-icon-button
-            id="lb-reload-btn"
-            aria-label="Reload"
-            onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
-          >
-            <m3e-icon name="refresh" aria-hidden={true} />
-          </m3e-icon-button>
           <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands

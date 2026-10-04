@@ -139,22 +139,65 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
     );
   }
 
-  /* Directory listing for the current prefix. */
-  const prefix = dir ? dir + "/" : "";
-  const rows: { name: string; entry: Entry }[] = [];
-  const seen = new Set<string>();
+  /* Full hierarchy in one pass: every path creates its directory
+     chain on demand, so archives without explicit dir entries still
+     nest correctly. */
+  type Node = { name: string; path: string; isDir: boolean; size: number; date?: string; children: Node[] };
+  const root: Node = { name: "", path: "", isDir: true, size: 0, children: [] };
+  const byPath = new Map<string, Node>([["", root]]);
+  const dirNode = (p: string): Node => {
+    let n = byPath.get(p);
+    if (!n) {
+      n = { name: baseName(p), path: p, isDir: true, size: 0, children: [] };
+      byPath.set(p, n);
+      const slash = p.lastIndexOf("/");
+      dirNode(slash < 0 ? "" : p.slice(0, slash)).children.push(n);
+    }
+    return n;
+  };
   for (const e of entries ?? []) {
-    if (!e.path.startsWith(prefix)) continue;
-    const rest = e.path.slice(prefix.length);
-    if (!rest) continue;
-    const seg = rest.split("/")[0];
-    const isDirHere = rest.includes("/") || e.isDir;
-    const key = isDirHere ? seg + "/" : seg;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push({ name: key, entry: { ...e, path: prefix + key, isDir: isDirHere } });
+    if (e.isDir) {
+      dirNode(e.path.replace(/\/$/, ""));
+      continue;
+    }
+    const slash = e.path.lastIndexOf("/");
+    const parent = slash < 0 ? "" : e.path.slice(0, slash);
+    dirNode(parent).children.push({ name: baseName(e.path), path: e.path, isDir: false, size: e.size, date: e.date, children: [] });
   }
-  rows.sort((a, b) => (a.entry.isDir === b.entry.isDir ? a.name.localeCompare(b.name) : a.entry.isDir ? -1 : 1));
+  const sortNodes = (ns: Node[]) => {
+    ns.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+    for (const n of ns) sortNodes(n.children);
+  };
+  sortNodes(root.children);
+
+  /* The tree keeps the ancestors of the visited folder expanded so
+     the breadcrumb trail and the tree agree on where you are. */
+  const isOpen = (p: string) => dir === p || dir.startsWith(p + "/");
+  const renderNode = (n: Node) =>
+    n.isDir ? (
+      <m3e-tree-item key={n.path} open={isOpen(n.path) ? "" : undefined}>
+        <span slot="label" className="lb-fv-dir" onClick={() => setDir(n.path)}>
+          <m3e-icon name="folder" aria-hidden={true} /> {n.name}
+        </span>
+        {n.children.map(renderNode)}
+      </m3e-tree-item>
+    ) : (
+      <m3e-tree-item key={n.path}>
+        <span slot="label">
+          <m3e-icon name="draft" aria-hidden={true} /> {n.name}
+          <span className="lb-fv-meta">{fmtBytes(n.size)}</span>
+          {n.date && <span className="lb-fv-meta">{n.date}</span>}
+          <m3e-icon-button
+            aria-label={"Download " + n.name}
+            disabled={busy ? true : undefined}
+            onClick={() => void downloadEntry(n.path)}
+          >
+            <m3e-icon name="download" aria-hidden={true} />
+          </m3e-icon-button>
+        </span>
+      </m3e-tree-item>
+    );
+  const segs = dir ? dir.split("/") : [];
 
   return (
     <div>
@@ -163,39 +206,40 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
       {entries && entries.length === 0 && <p className="lb-muted">The archive is empty.</p>}
       {entries && entries.length > 0 && (
         <div>
-          <p className="lb-fv-crumb" onClick={() => setDir("")}>
-            /{dir} <span className="lb-muted">({engine === "fflate" ? "fflate fast path" : "zip.js ZIP64 path"})</span>
+          <p className="lb-fv-crumb">
+            <m3e-breadcrumb aria-label="Archive folder">
+              <m3e-breadcrumb-item
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setDir("");
+                }}
+              >
+                {props.name}
+              </m3e-breadcrumb-item>
+              {segs.map((s, i) => {
+                const p = segs.slice(0, i + 1).join("/");
+                return i === segs.length - 1 ? (
+                  <m3e-breadcrumb-item key={p}>{s}</m3e-breadcrumb-item>
+                ) : (
+                  <m3e-breadcrumb-item
+                    key={p}
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setDir(p);
+                    }}
+                  >
+                    {s}
+                  </m3e-breadcrumb-item>
+                );
+              })}
+            </m3e-breadcrumb>{" "}
+            <span className="lb-muted">({engine === "fflate" ? "fflate fast path" : "zip.js ZIP64 path"})</span>
           </p>
-          <table className="lb-fv-entries">
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.name}>
-                  <td>
-                    {r.entry.isDir ? (
-                      <span className="lb-fv-dir" onClick={() => setDir(prefix + r.name.replace(/\/$/, ""))}>
-                        <m3e-icon name="folder" aria-hidden={true} /> {r.name}
-                      </span>
-                    ) : (
-                      <span><m3e-icon name="draft" aria-hidden={true} /> {r.name}</span>
-                    )}
-                  </td>
-                  <td>{r.entry.isDir ? "" : fmtBytes(r.entry.size)}</td>
-                  <td>{r.entry.date ?? ""}</td>
-                  <td>
-                    {!r.entry.isDir && (
-                      <m3e-icon-button
-                        aria-label={"Download " + r.name}
-                        disabled={busy ? true : undefined}
-                        onClick={() => void downloadEntry(r.entry.path)}
-                      >
-                        <m3e-icon name="download" aria-hidden={true} />
-                      </m3e-icon-button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <m3e-tree className="lb-fv-tree" aria-label="Archive contents">
+            {root.children.map(renderNode)}
+          </m3e-tree>
         </div>
       )}
     </div>
