@@ -38,7 +38,17 @@ RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.t
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
+ && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/epoxy-tls@2.1.18-1 \
  && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
+# The epoxy transport (selectable second engine, Zeolite #64):
+# same pinned-version, never-committed vendoring rule as libcurl.
+# Full variant: the WebSocket bridge + gzip/brotli + HTTP/2 sit
+# behind the package "full" build. The SW resolves it at the origin
+# root (/epoxy/epoxy.js + epoxy.wasm); the server serves /epoxy from
+# this bundle directory.
+RUN mkdir -p /bundle/epoxy \
+ && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.js /bundle/epoxy/epoxy.js \
+ && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.wasm /bundle/epoxy/epoxy.wasm
 
 FROM debian:bookworm-slim
 RUN apt-get update \
