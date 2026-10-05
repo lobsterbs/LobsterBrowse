@@ -25,7 +25,7 @@ const APP_PREFIXES = [
   "/logs", "/build", "/wisp", "/favicon",
 ];
 
-const ENGINE_PREFIXES = ["/r/", "/lj/", "/zl/", "/__zl_nav__/"];
+const ENGINE_PREFIXES = ["/r/", "/lj/", "/zl/", "/__zl_nav__/", "/__zl_navh__"];
 
 export function pollAction(protocol: string, path: string, tabUrl: string): PollAction {
   if (protocol.startsWith("about:")) return "wait";

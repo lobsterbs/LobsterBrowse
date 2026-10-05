@@ -1258,7 +1258,13 @@ export default function BrowserView(props: Props) {
         return;
       }
       if (act !== "sync") return;
-      const real = decodeRoute(path);
+      /* #55: a frame parked on an opaque Zeolite nav handle
+         (/__zl_navh__/<keyed token>) legacy-decodes to "" — the token
+         is keyed and must never be decoded as plain b64u (mojibake ->
+         garbage url sync -> undecodable-route loop). The tab already
+         holds the real destination, so fall back to it and keep
+         title/status/favicon syncing; the URL-sync block no-ops. */
+      const real = decodeRoute(path) || t.url;
       if (!real) return;
       setErrors((prev) => {
         if (!prev[t.id]) return prev;
