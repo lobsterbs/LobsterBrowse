@@ -449,6 +449,23 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
         <div className="lb-setting-group">
+          <div className="lb-setting-label">Transport engine</div>
+          <div className="lb-seg-wrap">
+          <m3e-segmented-button aria-label="Transport engine">
+            <m3e-button-segment checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
+              libcurl (default)
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
+              epoxy (experimental)
+            </m3e-button-segment>
+          </m3e-segmented-button>
+          </div>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes — that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
+          </p>
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
           <div className="lb-setting-label">Zeolite cache</div>
           <p className="lb-muted">
             Cached proxied pages live on this device in the service worker
