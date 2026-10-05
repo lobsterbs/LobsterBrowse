@@ -24,6 +24,9 @@ const cases = [
   ["http:", "/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "sync"],
   ["http:", "/zl/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "sync"],
   ["http:", "/__zl_nav__/x", "https://example.com/", "sync"],
+  /* #55: the opaque initial-navigation handle route must sync (no-op
+     decode), never "recover" into a reload loop. */
+  ["http:", "/__zl_navh__/Ae4YgFO-token", "https://example.com/", "sync"],
   /* App-shell routes and the root wait for the engine to move on. */
   ["http:", "/", "https://example.com/", "wait"],
   ["http:", "/zlsw/sw.js", "https://example.com/", "wait"],
