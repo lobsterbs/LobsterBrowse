@@ -17,6 +17,9 @@ const SECRET_QUERY_KEYS =
 export function sanitizeUrl(u: string): string {
   let s = String(u ?? "");
   if (!s) return s;
+  /* Raw C0/DEL control bytes (e.g. a keyed nav token mis-decoded as
+     b64u mojibake) must not inject into log/diagnostics surfaces. */
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   s = s.replace(
     new RegExp(`([?&])(${SECRET_QUERY_KEYS})=[^&]*`, "gi"),
     "$1$2=[redacted]",
@@ -30,6 +33,9 @@ export function sanitizeUrl(u: string): string {
 export function sanitizeText(t: string): string {
   let s = String(t ?? "");
   if (!s) return s;
+  /* Raw C0/DEL control bytes (e.g. a keyed nav token mis-decoded as
+     b64u mojibake) must not inject into log/diagnostics surfaces. */
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   s = s.replace(/(bearer|basic)\s+[a-z0-9._+/=-]{16,}/gi, "$1 [redacted]");
   s = s.replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}/g, "[redacted-jwt]");
   s = s.replace(/(api[_-]?key|apikey|password|secret|token)\s*[:=]\s*"?[a-z0-9._+/=-]{8,}"?/gi, "$1=[redacted]");

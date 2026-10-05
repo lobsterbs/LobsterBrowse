@@ -348,18 +348,19 @@ export default function App() {
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {
-      if (settings.cloakEnabled) {
-        if (document.hidden) {
-          prevTitle.current = document.title;
-          document.title = settings.cloakTitle;
-          setCloaked(true);
-          store.pushLog("info", "auto cloak engaged");
-        }
+      /* #56: capture the real title only on the first hide; a second
+         hide while already cloaked would clobber prevTitle with the
+         cloak title and lose the real one forever. */
+      if (settings.cloakEnabled && document.hidden && !cloaked) {
+        prevTitle.current = document.title;
+        document.title = settings.cloakTitle;
+        setCloaked(true);
+        store.pushLog("info", "auto cloak engaged");
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [settings]);
+  }, [settings, cloaked]);
 
   const uncloak = () => {
     setCloaked(false);
