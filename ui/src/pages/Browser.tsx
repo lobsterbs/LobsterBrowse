@@ -1904,12 +1904,14 @@ export default function BrowserView(props: Props) {
 
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
+            <m3e-shape name="flower" aria-hidden={true} style={{ width: 48, height: 48, color: "var(--md-sys-color-primary)" }} />
             <m3e-loading-indicator variant="contained" aria-label="Loading page" />
           </div>
         )}
 
         {errors[active.id] && (
           <div className="lb-error" role="alertdialog" aria-label="Page failed to load">
+            <m3e-shape name="ghost-ish" aria-hidden={true} style={{ width: 56, height: 56, color: "var(--md-sys-color-error)", margin: "0 auto var(--md-sys-measurement-space150)" }} />
             <m3e-heading variant="title" size="medium" level={2}>This page could not be loaded</m3e-heading>
             <p className="lb-error-url">{errors[active.id].url}</p>
             <p className="lb-error-msg">{errors[active.id].message}</p>
