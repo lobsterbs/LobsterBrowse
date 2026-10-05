@@ -135,7 +135,6 @@ declare module "react" {
       "m3e-tree-item": M3eBase & { open?: boolean | string; selected?: boolean | string };
       "m3e-breadcrumb": M3eBase;
       "m3e-breadcrumb-item": M3eBase & { href?: string; target?: string; rel?: string; "item-label"?: string };
-      "m3e-shape": M3eBase & { name?: string };
     }
   }
 }
