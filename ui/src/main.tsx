@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@m3e/web/all";
+import "@m3e/web/shape";
 import "material-symbols/outlined.css";
 /* Typography is self-hosted too: Google Sans Flex variable (wght + wdth
    axes) bundled from npm, no Google Fonts CDN request at runtime. */
