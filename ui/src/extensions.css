@@ -163,11 +163,22 @@
   object-fit: contain;
   flex-shrink: 0;
 }
-/* Extension identity: real m3e-avatar with the add-on's initials.
-   Sized down from the 40px default so it fits the 320px panel rows. */
+/* Extension identity badge: a plain div with the add-on's initials.
+   m3e-avatar ignores external width/height (the component owns its
+   box, the same quirk class as the rail), so the avatar never
+   rendered inside these 28px rows. Real extension icons need an
+   engine-provided iconPath (zl:listExt) - honest gap, not faked. */
 .lb-ext-ava {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #cfbfe0) 30%, transparent);
+  color: var(--md-sys-color-on-surface, #e6e1e5);
+  user-select: none;
 }

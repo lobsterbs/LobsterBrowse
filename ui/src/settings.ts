@@ -146,8 +146,8 @@ export const DEFAULT_SETTINGS: Settings = {
   adblock: true,
   uaPreset: "chrome-win",
   uaCustom: "",
-  sameSitePolicy: "off",
-  fingerprintSpoof: false,
+  sameSitePolicy: "approx",
+  fingerprintSpoof: true,
   transport: "libcurl",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
@@ -175,8 +175,16 @@ export function loadSettings(): Settings {
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
-      sameSitePolicy: parsed.sameSitePolicy === "approx" ? "approx" : "off",
-      fingerprintSpoof: parsed.fingerprintSpoof === undefined ? false : Boolean(parsed.fingerprintSpoof),
+      sameSitePolicy:
+        parsed.sameSitePolicy === undefined
+          ? DEFAULT_SETTINGS.sameSitePolicy
+          : parsed.sameSitePolicy === "approx"
+            ? "approx"
+            : "off",
+      fingerprintSpoof:
+        parsed.fingerprintSpoof === undefined
+          ? DEFAULT_SETTINGS.fingerprintSpoof
+          : Boolean(parsed.fingerprintSpoof),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       density: parsed.density === "compact" ? "compact" : "normal",
     };
