@@ -1,6 +1,6 @@
-/* Persisted settings. Stored on-device in localStorage — nothing is ever
-   sent to the server except the route query parameters the user's
-   settings genuinely control. */
+/* Persisted settings. Stored on-device in localStorage; nothing is
+   sent to the server through routes. Settings that shape engine
+   behavior reach the engine through the zl:rules push. */
 
 /* Cookie-session id (issue #1): the server keeps one cookie jar per
    lb_sid, so deployment users no longer share a single jar. Stable per
@@ -17,6 +17,11 @@ function freshSid(): string {
 /* Called when a new incognito window opens: its jar starts empty. */
 export function resetIncognitoSid(): void {
   incSid = "";
+}
+/* The current incognito session id (created lazily). Used as the
+   Zeolite engine's throwaway jar profile while incognito is on. */
+export function incognitoSid(): string {
+  return cookieSid(true);
 }
 function cookieSid(incognito: boolean): string {
   if (incognito) {
@@ -49,9 +54,9 @@ export const ENGINES: Record<EngineId, { name: string; url: string }> = {
   mojeek: { name: "Mojeek", url: "https://www.mojeek.com/search?q={q}" },
 };
 
-/* User-Agent presets. The chosen UA string is sent on the /r route as
-   the "ua" query parameter and applied by the server for every proxied
-   request. */
+/* User-Agent presets. The chosen UA string reaches the engine
+   through the zl:rules push (global or per-site) and applies from
+   the next navigation. */
 export type UaPresetId =
   | "server-default"
   | "chrome-win"
@@ -91,37 +96,39 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
 };
 
 /* Per-site rules. A rule only overrides the global setting for the
-   fields it explicitly configures; the UI passes the effective values
-   on the /r route for every navigation, so these genuinely change
-   engine behavior. */
+   fields it explicitly configures; the UI pushes the effective values
+   to the engine (zl:rules), so they genuinely change engine
+   behavior. */
 export type SiteRule = {
   domain: string;
   uaPreset?: UaPresetId;
   adblock?: boolean;
 };
 
-export type ProxyEngineId = "scramjet" | "lobsterjet";
-
 export type Settings = {
   seed: string;
   engine: EngineId;
-  /* Which proxy engine routes navigations: the built-in server-side
-     rewriter (scramjet) or a deployed LobsterJet service. */
-  proxyEngine: ProxyEngineId;
   /* Strip known ad and tracker hosts from proxied documents
-     (server-side). */
+     (engine-side). */
   adblock: boolean;
-  /* Reject plain-http targets (server-side). */
-  httpsOnly: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
+  /* Zeolite engine jar SameSite policy (#48): "approx" has the
+     engine jar emit SameSite hints it cannot know natively. */
+  sameSitePolicy: "off" | "approx";
+  /* Zeolite document-surface spoofing on engine-routed pages (#48). */
+  fingerprintSpoof: boolean;
+  /* Zeolite transport engine (#54): libcurl (default wasm stack) or
+     epoxy (rustls+hyper, different TLS fingerprint). Applied on the
+     next engine init; no mid-session swap. */
+  transport: "libcurl" | "epoxy";
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
   cloakTitle: string;
   /* Engine-queried completions in the search fields. */
   suggestQueries: boolean;
-  /* Warm the LobsterJet cache when links are hovered. */
+  /* Warm the engine cache when links are hovered. */
   prefetchLinks: boolean;
   /* Tuck the toolbar and tab strip when the app is idle. */
   autoHideChrome: boolean;
@@ -136,19 +143,20 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#E8552F",
   engine: "startpage",
-  proxyEngine: "lobsterjet",
   adblock: true,
-  httpsOnly: true,
   uaPreset: "chrome-win",
   uaCustom: "",
+  sameSitePolicy: "off",
+  fingerprintSpoof: false,
+  transport: "libcurl",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
-  diagnostics: false,
-  density: "normal",
+  diagnostics: true,
+  density: "compact",
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -163,14 +171,13 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
-      proxyEngine:
-        parsed.proxyEngine === "lobsterjet" || parsed.proxyEngine === "scramjet"
-          ? parsed.proxyEngine
-          : DEFAULT_SETTINGS.proxyEngine,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
+      sameSitePolicy: parsed.sameSitePolicy === "approx" ? "approx" : "off",
+      fingerprintSpoof: parsed.fingerprintSpoof === undefined ? false : Boolean(parsed.fingerprintSpoof),
+      transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       density: parsed.density === "compact" ? "compact" : "normal",
     };
   } catch {
@@ -218,42 +225,6 @@ export function resolveUa(s: Settings, rules: SiteRule[], domain: string): strin
   return ua || null;
 }
 
-/* Build the engine option query string for a target URL, applying
-   global settings and per-site rules. */
-export function proxyParams(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
-  let domain = "";
-  try {
-    domain = new URL(target).hostname;
-  } catch {
-    domain = "";
-  }
-  const rule = rules.find((r) => r.domain === domain);
-  const parts: string[] = [];
-  /* Engine options carry the lb_ prefix so the target page can keep
-     query keys of its own (like ?ua= or ?ab=) without the engine
-     swallowing them. */
-  if (s.adblock && rule?.adblock !== false) {
-    parts.push("lb_ab=1");
-    parts.push("lb_trk=1");
-  }
-  if (s.httpsOnly) parts.push("lb_https=1");
-  parts.push("lb_img=1");
-  /* Incognito (74.9): the engine keeps a separate cookie jar for
-     lb_inc routes, so incognito browsing never mixes cookies with the
-     normal shared jar. */
-  if (incognito) parts.push("lb_inc=1");
-  /* Cookie-session id (#1): routes this tab's engine traffic through
-     its own server-side jar (the rewriter threads it onto every
-     rewritten subresource and link). */
-  parts.push("lb_sid=" + encodeURIComponent(cookieSid(incognito)));
-  /* Per-tab session token: server-side /logs is scoped to it, so
-     diagnostics from one tab never leak into another session's view. */
-  if (sess) parts.push("lb_sess=" + encodeURIComponent(sess));
-  const ua = resolveUa(s, rules, domain);
-  if (ua) parts.push("lb_ua=" + encodeURIComponent(ua));
-  return parts.join("&");
-}
-
 /* base64url of a UTF-8 string (manual, no dependencies). */
 export function b64urlEncode(s: string): string {
   const bytes = new TextEncoder().encode(s);
@@ -280,30 +251,30 @@ export function b64urlDecode(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-/* Route prefix of the active proxy engine. This is the single place
-   engine-specific route shapes live; everywhere else resolves through
-   it so engine branching does not spread through the UI. */
-export function engineRoutePrefix(engine: ProxyEngineId): string {
-  return engine === "lobsterjet" ? "/lj/" : "/r/";
+/* Route prefix of the Zeolite engine. This is the single place the
+   engine route shape lives; everywhere else resolves through it. */
+export function engineRoutePrefix(): string {
+  return "/zl/";
 }
 
-/* Build the navigation route for a target URL. Zeolite is the
-   client-side engine: its service worker owns /lj/ routes, and it
-   forwards the route's query string to the target, so no server-side
-   option params may ride on them. ScramJet routes through the server
-   engine and keeps the lb_ options. */
-export function routeUrl(s: Settings, rules: SiteRule[], target: string, incognito = false, sess?: string): string {
-  if (s.proxyEngine === "lobsterjet") return "/lj/" + b64urlEncode(target);
-  const params = proxyParams(s, rules, target, incognito, sess);
-  return "/r/" + b64urlEncode(target) + (params ? "?" + params : "");
+/* Build the navigation route for a target URL. Zeolite is the only
+   engine: its service worker owns /zl/ routes and forwards the
+   route's query string to the target, so no option params ride on
+   them (settings reach the engine through the zl:rules push). */
+export function routeUrl(target: string): string {
+  return engineRoutePrefix() + b64urlEncode(target);
 }
 
-/* Recover the real URL from a /r/<b64> pathname ("" when invalid). */
+/* Recover the real URL from an engine route pathname ("" when
+   invalid). */
 export function decodeRoute(pathname: string): string {
-  /* Accepts both engine prefixes: /r/ (ScramJet) and /lj/ (LobsterJet). */
+  /* Accepts /zl/ plus the legacy /r/ and /lj/ prefixes, which the
+     server now 302s to /zl/ (old history entries may still hold
+     them). */
   let seg = "";
   if (pathname.startsWith("/r/")) seg = pathname.slice(3);
   else if (pathname.startsWith("/lj/")) seg = pathname.slice(4);
+  else if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
   seg = seg.split("?")[0].split("#")[0];
   try {
@@ -347,18 +318,28 @@ export function looksLikeUrl(s: string): boolean {
    the server's /suggest endpoint (server-side to avoid CORS). Never
    throws; an aborted signal rejects with the AbortError that the
    caller swallows. Public entry: fetchSuggestions, below. */
-export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
+/* Suggestion round trip: the items plus the provider that actually
+   answered (the server owns the fallback chain, so the asked-for
+   engine is not necessarily the source). */
+export type SuggestResult = { items: string[]; source: string };
+
+export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {
   const query = q.trim();
-  if (!query) return [];
+  if (!query) return { items: [], source: "" };
   try {
     const r = await fetch("/suggest?engine=" + encodeURIComponent(engine) + "&q=" + encodeURIComponent(query) + (sess ? "&lb_sess=" + encodeURIComponent(sess) : ""), { signal });
-    if (!r.ok) return [];
-    const data = (await r.json()) as { suggestions?: unknown };
-    return Array.isArray(data.suggestions)
-      ? data.suggestions.filter((x): x is string => typeof x === "string").slice(0, 8)
-      : [];
+    if (!r.ok) return { items: [], source: "" };
+    const data = (await r.json()) as { suggestions?: unknown; source?: unknown };
+    const src = typeof data.source === "string" ? data.source : "";
+    return {
+      items: Array.isArray(data.suggestions)
+        ? data.suggestions.filter((x): x is string => typeof x === "string").slice(0, 8)
+        : [],
+      /* Engine display name when the provider id is a known one. */
+      source: (ENGINES as Record<string, { name: string }>)[src]?.name ?? src,
+    };
   } catch {
-    return [];
+    return { items: [], source: "" };
   }
 }
 
@@ -367,6 +348,6 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
    network — DuckDuckGo rate-limits the Render egress — so the server
    retries Brave then Bing before answering empty). One round trip per
    keystroke; the client no longer double-fetches. */
-export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<string[]> {
+export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {
   return suggestFrom(engine, q, signal, sess);
 }
