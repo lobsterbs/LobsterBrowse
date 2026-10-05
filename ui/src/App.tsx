@@ -345,6 +345,20 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
 
+  /* ---- Zeolite transport engine (#54): push the persisted choice
+     (zl:transport). The engine switches on the NEXT transport init,
+     not mid-session, and resets to the deployment default on worker
+     restart, so re-send on change and on controllerchange (the
+     jarProfile pattern above). ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:transport", engine: settings.transport }, 8000);
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.transport]);
+
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {
