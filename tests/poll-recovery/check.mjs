@@ -12,6 +12,7 @@
 
 import assert from "node:assert/strict";
 import { pollAction } from "../../ui/src/browser/pollRecovery.ts";
+import { decodeRoute } from "../../ui/src/settings.ts";
 
 const cases = [
   /* The regression: about: frames must never be treated as escapes. */
@@ -50,5 +51,14 @@ for (const [protocol, path, tabUrl, want] of cases) {
       ") should be " + want + ", got " + got
   );
 }
+
+/* #58: decodeRoute must fail closed on keyed route tails
+   instead of returning binary garbage the poll sync re-navigates to. */
+assert.equal(decodeRoute("/zl/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
+assert.equal(decodeRoute("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
+assert.equal(decodeRoute("/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
+assert.equal(decodeRoute("/__zl_navh__/Ae4YgFO74dqswiEjLIjZlA"), "");
+assert.equal(decodeRoute("/zl/Ae4YgFO74dqswiEjLIjZlA3DjVoQ4UjI5"), "");
+assert.equal(decodeRoute("/not-a-route"), "");
 
 console.log("poll-recovery check: " + cases.length + " cases ok");
