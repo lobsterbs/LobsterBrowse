@@ -40,25 +40,6 @@ function buildSuggests(
   return out;
 }
 
-/* Decorative morphing M3E shape beside the tagline: purely visual,
-   cycles the Material 3 shape library names on an interval and lets the
-   component's clip-path transition do the morphing. */
-const LB_SHAPES = ["4-leaf-clover", "6-sided-cookie", "flower", "gem", "puffy-diamond", "sunny", "soft-boom"];
-function HomeShape() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setI((p) => (p + 1) % LB_SHAPES.length), 2400);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <m3e-shape
-      name={LB_SHAPES[i]}
-      aria-hidden={true}
-      style={{ width: 44, height: 44, display: "inline-block", flexShrink: 0, color: "var(--md-sys-color-secondary)" }}
-    />
-  );
-}
-
 export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
@@ -145,10 +126,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
                                                                            `}</pre>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--md-sys-measurement-space150)", marginTop: 4 }}>
-        <HomeShape />
-        <p className="lb-muted" style={{ marginTop: 8, marginBottom: 0 }}>Browse the web through a private proxy.</p>
-      </div>
+      <p className="lb-muted" style={{ marginTop: 8 }}>Browse the web through a private proxy.</p>
 
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
