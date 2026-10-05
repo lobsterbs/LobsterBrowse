@@ -10,7 +10,7 @@
    the wide scope. With no controller on the page (Home, Settings,
    plain tabs) this module is the control plane client. */
 
-async function zlReg(): Promise<ServiceWorkerRegistration | null> {
+async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
     /* Always (re-)register: this also fetches the registration for the
@@ -35,6 +35,24 @@ async function zlReg(): Promise<ServiceWorkerRegistration | null> {
     console.warn("[lb] Zeolite worker registration failed:", err);
     return null;
   }
+}
+
+/* #61: zlSend fires every few seconds (DevTools polls netLog/diag
+   at 5s, downloads at 2s), and register() + update() on every call
+   meant a sw.js revalidation request each time. One acquisition per
+   app boot is enough: the registration handle stays live. A null
+   result (registration refused) is NOT cached, so a transient
+   failure still retries on the next control message. */
+let zlRegCache: Promise<ServiceWorkerRegistration | null> | null = null;
+
+async function zlReg(): Promise<ServiceWorkerRegistration | null> {
+  if (!zlRegCache) {
+    zlRegCache = zlRegFresh().then((r) => {
+      if (!r) zlRegCache = null;
+      return r;
+    });
+  }
+  return zlRegCache;
 }
 
 /* Worker preference: the one controlling this page (or active) first.

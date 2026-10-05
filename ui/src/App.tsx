@@ -282,21 +282,30 @@ export default function App() {
        worker resets both on restart, so re-send on boot and on
        change. ---- */
   useEffect(() => {
-    void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
-    void zlSend(
-      {
-        type: "zl:rules",
-        /* Global UA default: hosts without a rule get the resolved
-           global UA (resolveUa with no rule hit). */
-        ua: resolveUa(settings, rules, "") ?? undefined,
-        rules: rules.map((r) => ({
-          host: r.domain,
-          adblock: r.adblock === false ? false : undefined,
-          ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
-        })),
-      },
-      8000,
-    );
+    /* #60: same controllerchange re-push pattern as the jarProfile /
+       sameSite / transport effects below - the worker resets adblock
+       and the rules on restart, so a mid-session restart must
+       re-send both, not just the next settings edit. */
+    const post = () => {
+      void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
+      void zlSend(
+        {
+          type: "zl:rules",
+          /* Global UA default: hosts without a rule get the resolved
+             global UA (resolveUa with no rule hit). */
+          ua: resolveUa(settings, rules, "") ?? undefined,
+          rules: rules.map((r) => ({
+            host: r.domain,
+            adblock: r.adblock === false ? false : undefined,
+            ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
+          })),
+        },
+        8000,
+      );
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings, rules]);
 
   /* ---- Zeolite incognito jar: while incognito is on, the engine's
