@@ -78,9 +78,9 @@ export default function ExtensionsPanel(props: {
                 if (ev.key === "Enter" || ev.key === " ") props.onOpenDetail(e.id);
               }}
             >
-              <m3e-avatar {...{ class: "lb-ext-ava" }} aria-hidden={true}>
+              <div className="lb-ext-ava" aria-hidden={true}>
                 {e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
-              </m3e-avatar>
+              </div>
               <span className="lb-ext-name">{e.name}</span>
               <span className="lb-ext-ver">{e.version}</span>
               <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
@@ -95,9 +95,9 @@ export default function ExtensionsPanel(props: {
         <div className="lb-ext-detail">
           <div className="lb-ext-dhead">
             <span className="lb-ext-dtitle">
-              <m3e-avatar {...{ class: "lb-ext-ava" }} aria-hidden={true}>
+              <div className="lb-ext-ava" aria-hidden={true}>
                 {props.detail.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
-              </m3e-avatar>
+              </div>
               <span className="lb-ext-dname">
                 {props.detail.name} <span className="lb-ext-ver">{props.detail.version}</span>
               </span>

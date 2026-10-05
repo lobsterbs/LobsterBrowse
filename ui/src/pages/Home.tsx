@@ -33,11 +33,59 @@ function buildSuggests(
     if (h.toLowerCase().includes(ql)) push("history", h, h);
   }
   if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
-  for (const s of opts.remote ?? []) {
+  /* Rank engine suggestions by relevance to the query: prefix hits
+     first, then substring matches, then word-start matches, then
+     the rest - the most probable completions lead the list. */
+  const rel = (t: string): number => {
+    const tl = t.toLowerCase();
+    if (tl.startsWith(ql)) return 0;
+    if (tl.includes(ql)) return 1;
+    if (tl.includes(" " + ql)) return 2;
+    return 3;
+  };
+  for (const s of [...(opts.remote ?? [])].sort((a, b) => rel(a.text) - rel(b.text))) {
     push("search", s.text, opts.searchFor(s.text), s.src);
   }
   push("search", q + " · " + opts.engineName + " search", opts.search);
   return out;
+}
+
+/* Damped-spring animation for the suggestion card (real spring
+   physics: stiffness 170 / damping 22 integrated per frame - CSS
+   easings are not springs). The card slides down out of the search
+   bar on open and springs back before it unmounts. */
+function useSpringCard(open: boolean): { visible: boolean; progress: number } {
+  const [state, setState] = useState({ visible: false, progress: 0 });
+  const s = useRef({ x: 0, v: 0 });
+  useEffect(() => {
+    if (open && !state.visible) setState({ visible: true, progress: s.current.x });
+    if (!open && state.visible && s.current.x <= 0.01) setState({ visible: false, progress: 0 });
+    let raf = 0;
+    let last = 0;
+    const target = open ? 1 : 0;
+    const step = (now: number) => {
+      const dt = last ? Math.min((now - last) / 1000, 0.05) : 0.016;
+      last = now;
+      const a = 170 * (target - s.current.x) - 22 * s.current.v;
+      s.current.v += a * dt;
+      s.current.x += s.current.v * dt;
+      if (!open && s.current.x < 0.01 && s.current.v < 0.05) {
+        s.current = { x: 0, v: 0 };
+        setState({ visible: false, progress: 0 });
+        return;
+      }
+      if (open && s.current.x > 0.999 && Math.abs(s.current.v) < 0.01) {
+        s.current = { x: 1, v: 0 };
+        setState({ visible: true, progress: 1 });
+        return;
+      }
+      setState({ visible: true, progress: s.current.x });
+      raf = requestAnimationFrame(step);
+    };
+    if (state.visible || open) raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+  return state;
 }
 
 export default function HomePage({ settings, history, onNavigate }: Props) {
@@ -48,32 +96,26 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
   /* Engine-queried completions, fetched through the server's /suggest
      endpoint and merged below the local matches. */
   const [remote, setRemote] = useState<{ text: string; src: string }[]>([]);
-  /* Suggest fetch in flight: shows the M3E loading indicator in the
-     search bar so a slow engine is visibly working. */
-  const [suggLoading, setSuggLoading] = useState(false);
-
   useEffect(() => {
     const q = url.trim();
     if (!q || q.length < 2 || looksLikeUrl(q) || !settings.suggestQueries) {
       setRemote([]);
-      setSuggLoading(false);
       return;
     }
     const ac = new AbortController();
-    setSuggLoading(true);
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, q, ac.signal).then((res) => {
         setRemote(res.items.map((text) => ({ text, src: res.source })));
-        setSuggLoading(false);
         if (res.items.length === 0) {
           pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + (res.source ? ", via " + res.source : "") + ")");
         }
-      }).catch(() => setSuggLoading(false));
+      }).catch(() => {
+        /* a failed suggest fetch keeps the previous list */
+      });
     }, 160);
     return () => {
       ac.abort();
       clearTimeout(t);
-      setSuggLoading(false);
     };
   }, [url, settings.engine, settings.suggestQueries]);
 
@@ -84,6 +126,10 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
     remote,
     searchFor: (q: string) => searchUrl(settings, q),
   });
+
+  /* The card springs in and out; while it animates out, clicks pass
+     through (pointerEvents gated on progress below). */
+  const spring = useSpringCard(open && suggestions.length > 0);
 
   const commit = (target: string) => {
     onNavigate(target);
@@ -126,8 +172,6 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
                                                                            `}</pre>
-      <p className="lb-muted" style={{ marginTop: 8 }}>Browse the web through a private proxy.</p>
-
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
@@ -152,13 +196,17 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
             autoComplete="off"
           />
         </m3e-search-bar>
-        {suggLoading && (
-          <span className="lb-sugg-load" aria-hidden={true}>
-            <m3e-circular-progress-indicator indeterminate aria-label="Loading suggestions" />
-          </span>
-        )}
-        {open && suggestions.length > 0 && (
-          <div className="lb-ac" role="listbox" aria-label="Suggestions">
+        {spring.visible && suggestions.length > 0 && (
+          <div
+            className="lb-ac"
+            role="listbox"
+            aria-label="Suggestions"
+            style={{
+              opacity: spring.progress,
+              transform: "translateY(" + (1 - spring.progress) * -10 + "px)",
+              pointerEvents: spring.progress > 0.5 ? "auto" : "none",
+            }}
+          >
             {suggestions.map((s, i) => (
               <button
                 key={s.url + i}
