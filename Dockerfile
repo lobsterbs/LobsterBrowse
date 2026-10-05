@@ -25,9 +25,9 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 0c592ba (Zeolite main 6a322ed, CI run 37223074987), 2026-10-04.
+# Current pin: dist c0583f (Zeolite main 354dbedd, CI run 37346209648), 2026-10-05.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=0c592ba73bf69171381a051a22da971ee23d40e6
+ARG ZEOLITE_COMMIT=c0583fce48b58f3fbc63ac6c89415360596fd2bf
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -53,5 +53,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f587c84dc554035d ZEOLITE_BOOTSTRAP_SHA=8f4cc3bdf3f3bd20
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a47a5a0d31eb491d ZEOLITE_BOOTSTRAP_SHA=8f4cc3bdf3f3bd20
 ENTRYPOINT ["/app/lobster-server"]
