@@ -1,8 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 7">
-<rect width="10" height="7" fill="#000000"/>
-<text xml:space="preserve" x="0.4" y="1.2" font-family="Courier New,monospace" font-size="1.1" fill="#ffffff">    __    __  </text>
-<text xml:space="preserve" x="0.4" y="2.3" font-family="Courier New,monospace" font-size="1.1" fill="#ffffff">   / /   / /_ </text>
-<text xml:space="preserve" x="0.4" y="3.4" font-family="Courier New,monospace" font-size="1.1" fill="#ffffff">  / /   / __ \</text>
-<text xml:space="preserve" x="0.4" y="4.5" font-family="Courier New,monospace" font-size="1.1" fill="#ffffff"> / /___/ /_/ /</text>
-<text xml:space="preserve" x="0.4" y="5.6" font-family="Courier New,monospace" font-size="1.1" fill="#ffffff">/_____/_.___/ </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8.4 5.3">
+  <g font-family="Courier New,monospace" font-size="1" fill="#ffffff">
+    <text xml:space="preserve" x="0" y="1">    __    __  </text>
+    <text xml:space="preserve" x="0" y="2">   / /   / /_ </text>
+    <text xml:space="preserve" x="0" y="3">  / /   / __ \</text>
+    <text xml:space="preserve" x="0" y="4"> / /___/ /_/ /</text>
+    <text xml:space="preserve" x="0" y="5">/_____/_.___/ </text>
+  </g>
 </svg>

@@ -118,10 +118,6 @@ export type Settings = {
   sameSitePolicy: "off" | "approx";
   /* Zeolite document-surface spoofing on engine-routed pages (#48). */
   fingerprintSpoof: boolean;
-  /* Zeolite transport engine (#54): libcurl (default wasm stack) or
-     epoxy (rustls+hyper, different TLS fingerprint). Applied on the
-     next engine init; no mid-session swap. */
-  transport: "libcurl" | "epoxy";
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -148,7 +144,6 @@ export const DEFAULT_SETTINGS: Settings = {
   uaCustom: "",
   sameSitePolicy: "off",
   fingerprintSpoof: false,
-  transport: "libcurl",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -177,7 +172,6 @@ export function loadSettings(): Settings {
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
       sameSitePolicy: parsed.sameSitePolicy === "approx" ? "approx" : "off",
       fingerprintSpoof: parsed.fingerprintSpoof === undefined ? false : Boolean(parsed.fingerprintSpoof),
-      transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       density: parsed.density === "compact" ? "compact" : "normal",
     };
   } catch {
@@ -278,7 +272,16 @@ export function decodeRoute(pathname: string): string {
   else return "";
   seg = seg.split("?")[0].split("#")[0];
   try {
-    return b64urlDecode(seg);
+    const url = b64urlDecode(seg);
+    /* #58: keyed (encrypted) route tails b64-decode into binary
+       garbage. Fail closed unless the result is a plain http(s)
+       URL with no control characters, so the poll sync falls
+       back to the caller tab-URL instead of re-navigating to
+       mojibake. */
+    if (!/^https?:\/\//i.test(url) || /[\x00-\x1f\x7f]/.test(url)) {
+      return "";
+    }
+    return url;
   } catch {
     return "";
   }
