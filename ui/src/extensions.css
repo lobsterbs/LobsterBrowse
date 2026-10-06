@@ -121,3 +121,31 @@
   height: 28px;
   font-size: 12px;
 }
+
+/* Skeleton rows while zl:listExt resolves (#64): the real-row metrics
+   (28px avatar, name bar, version bar) so the list never reads as
+   "no extensions" while pending and nothing shifts when it lands. */
+.lb-ext-skel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px);
+}
+.lb-ext-skel-ava {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.lb-ext-skel-name {
+  flex: 1;
+  width: 40%;
+  height: 12px;
+  border-radius: var(--m3e-shape-xs, 8px);
+}
+.lb-ext-skel-ver {
+  flex-shrink: 0;
+  width: 48px;
+  height: 12px;
+  border-radius: var(--m3e-shape-xs, 8px);
+}
