@@ -1,7 +1,29 @@
 # LobsterBrowse
-![LobsterBrowse banner](assets/lobsterbrowse-banner.svg)
-**Open-source proxy browser · Rust + React + Material 3 Expressive**
-LobsterBrowse is a browser-style proxy application built around Rust/Axum, React/M3E, Wisp transport, structured DevTools diagnostics and Zeolite integration.
+```text
+    __          __         __            __            ____                             
+   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
+  / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
+ / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
+/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
+```
+**Open-source browser-style proxy · Rust + React + Material 3 Expressive**
+LobsterBrowse is a browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics and Zeolite integration.
+
+## Status
+
+This branch, `beta/zeolite-nativetransit`, is the experimental **Zeolite NativeTransit-first** line. Zeolite is the only engine on this branch; `/zl/` is the primary engine route, while `/r/` and `/lj/` are legacy redirects kept for compatibility.
+
+This branch is experimental and should not be treated as the stable LobsterBrowse release.
+## What it includes
+
+- Browser-style UI with tabs, settings, incognito sessions, DevTools and extension controls
+- Rust/Axum application server
+- Zeolite service-worker engine integration
+- NativeTransit-first transport/interception architecture
+- Wisp transport
+- Search suggestions and link prefetching
+- Structured, privacy-safe diagnostics
+
 ## Roadmap
 
 The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemical element codenames for LobsterBrowse releases, distinct from Zeolite's compound/material naming system.
@@ -50,10 +72,32 @@ No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink ra
 ## Privacy
 LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
-cd server && cargo test && cargo build --release
-cd ui && npm install && npm run build
+
+### Server
+
+```bash
+cd server
+cargo test
+cargo build --release
+```
+
+### UI
+
+```bash
+cd ui
+npm install
+npm run build
+```
+
+For development:
+
+```bash
+cd ui
+npm run dev
+```
 ## Deployment
-The application is deployed on Render. After deployment changes verify /healthz, UI, /zl/ (and the /r/, /lj/ redirects), /zlsw/, Wisp and extension routes when relevant.
+
+The application is deployed on Render. This beta branch should be verified against the actually served Zeolite revision after deployment; do not assume every branch push automatically updates the running instance. After deployment changes verify /healthz, UI, /zl/ (and the /r/, /lj/ redirects), /zlsw/, Wisp and extension routes when relevant.
 ## Contributing
 Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
 ## Architecture goal
