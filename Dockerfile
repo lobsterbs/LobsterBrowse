@@ -32,7 +32,7 @@ RUN npm run build
 # f7465c8b. Cargo-side pin stays 602b660 (no server-side crate
 # changes since; epoxy subprotocol echo already in).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=2bc86f7ba746b74da8f59c0e2c7d1e00247c2e4e
+ARG ZEOLITE_COMMIT=13ae7da856931b47a03ddf0fffe16b7218579cb8
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -68,5 +68,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4f097735757ef884 ZEOLITE_BOOTSTRAP_SHA=f7465c8b173f6e57
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=08482db8a02e0d5b ZEOLITE_BOOTSTRAP_SHA=f7465c8b173f6e57
 ENTRYPOINT ["/app/lobster-server"]
