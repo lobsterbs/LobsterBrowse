@@ -495,9 +495,9 @@ export default function BrowserView(props: Props) {
      downloads.download() hands the save to the UI — the engine
      broadcasts zl:downloadOp to its window clients and owns nothing
      after that. Feed it into the same transfer machinery the
-     a[download] capture uses. ponytail: the broadcast reaches every
-     LB window (clients.matchAll), so two open windows would both save;
-     elect a single receiver if that ever bites. State flows back over
+     a[download] capture uses. The broadcast reaches every LB window
+     (clients.matchAll); a localStorage claim elects the single
+     receiver that acts (#63). State flows back over
      zl:downloadState so the engine's registry and the extension's
      downloads.onChanged stay truthful. ---- */
   const startDlRef = useRef(startDownload);
@@ -515,9 +515,29 @@ export default function BrowserView(props: Props) {
           name = "";
         }
       }
+      /* #63: the broadcast reaches every LB window; elect a single
+         receiver so two open windows do not both save. Claim keyed
+         by the engine op id + url, first write wins, claims expire
+         after 60s so a dead claimer cannot wedge a retry. Honest
+         gap: the getItem/setItem pair is not atomic across
+         processes, so a microscopic race can still double-claim;
+         single-origin localStorage is the cheapest election
+         available client-side. */
+      const engId = typeof d.op.id === "number" ? d.op.id : -1;
+      try {
+        const key = "lobsterbrowse-dl-claim-" + engId + "-" + d.op.url.length;
+        const prevRaw = localStorage.getItem(key);
+        if (prevRaw !== null) {
+          const prev = JSON.parse(prevRaw) as { at: number };
+          if (Date.now() - prev.at < 60000) return;
+        }
+        localStorage.setItem(key, JSON.stringify({ at: Date.now() }));
+      } catch {
+        /* storage unavailable: save rather than silently drop. */
+      }
       /* The numeric id keys the engine's download state; thread it so
          progress and completion can flow back (zl:downloadState). */
-      startDlRef.current(d.op.url, name.slice(0, 120) || "download", typeof d.op.id === "number" ? d.op.id : undefined);
+      startDlRef.current(d.op.url, name.slice(0, 120) || "download", engId >= 0 ? engId : undefined);
     };
     navigator.serviceWorker?.addEventListener("message", onSwMsg);
     return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
@@ -721,6 +741,22 @@ export default function BrowserView(props: Props) {
       /* storage unavailable (private mode quirks) */
     }
   };
+  /* #62: snapshot the persisted grants when an incognito session
+     starts and restore them when it ends, so session-only toggles
+     never survive into the normal-profile state (and can never
+     ride along into the next persist). */
+  const extIncognitoSnapshot = useRef<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (props.incognito) {
+      if (extIncognitoSnapshot.current === null) extIncognitoSnapshot.current = { ...extIncognito };
+    } else {
+      const snap = extIncognitoSnapshot.current;
+      if (snap !== null) {
+        extIncognitoSnapshot.current = null;
+        setExtIncognito(snap);
+      }
+    }
+  }, [props.incognito]);
   const openExtDetail = async (id: string) => {
     setExtDetailError(null);
     setExtDetail(null);
