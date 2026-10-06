@@ -10,7 +10,7 @@ name = "lobster-server"
 path = "src/main.rs"
 
 [dependencies]
-zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "b2a151f01032b53490f7326137b5cb7820741671" }
+zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "602b660979fd68c10f78c9ec04c8cb9c78f38dc3" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
