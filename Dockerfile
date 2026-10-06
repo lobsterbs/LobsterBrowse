@@ -39,8 +39,7 @@ RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.t
  | tar xz --strip-components=1
 # The libcurl transport (TLS termination for the wisp hop): pulled
 # from npm at build time, same pinned version the Zeolite CI vendors.
-RUN m
-kdir -p /bundle/libcurl \
+RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/epoxy-tls@2.1.18-1 \
  && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
