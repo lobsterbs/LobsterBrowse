@@ -1126,9 +1126,16 @@ async fn main() {
     // SSRF policy (DNS-rebinding safe), real UDP datagram relay, credit
     // windows, connection/stream limits and extension auth all live there.
     // The old local wisp handler (proxy.rs) was removed.
-    let mut zl_cfg = zeolite_server::Config::from_env();
+    // from_env went fail-closed in the 2026-10-07 Zeolite audit round:
+    // a half-set or malformed auth env is a startup error, not a
+    // silently disabled auth (zeolite-server exits 2 for the same
+    // class of config error).
+    let mut zl_cfg = zeolite_server::Config::from_env().unwrap_or_else(|e| {
+        eprintln!("zeolite-server auth config error: {}", e);
+        std::process::exit(2);
+    });
     if zl_cfg.password.is_none() {
-        // Preserve the previous WISP_PASSWORD / WISP_PASSWORD deployment
+        // Preserve the previous WISP_USERNAME / WISP_PASSWORD deployment
         // knobs for existing deployments.
         if let Some(pw) = auth_password.filter(|p| !p.is_empty()) {
             let user = std::env::var("WISP_USERNAME").unwrap_or_else(|_| "user".into());
@@ -1194,9 +1201,11 @@ async fn main() {
             &wisp_path,
             get({
                 let state = wisp_state.clone();
-                move |ws: axum::extract::ws::WebSocketUpgrade, headers: axum::http::HeaderMap| {
+                move |ws: axum::extract::ws::WebSocketUpgrade,
+                      headers: axum::http::HeaderMap,
+                      peer: axum::extract::connect_info::ConnectInfo<SocketAddr>| {
                     let state = state.clone();
-                    async move { zeolite_server::wisp_handler(State(state), ws, headers).await }
+                    async move { zeolite_server::wisp_handler(State(state), peer, ws, headers).await }
                 }
             }),
         )
