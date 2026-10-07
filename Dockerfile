@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist e841520f (Zeolite main 5ef3d14, CI run 37679055019)
+# Current pin: dist b9c9f160 (Zeolite main 30ba01c, CI run 37692712601)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -44,8 +44,16 @@ RUN npm run build
 # the proxy origin. sw.js stays f90129af (SW bundle untouched),
 # bootstrap.js 84c8ec97 -> 413a7bd7. Cargo-side pin stays 483aa0f
 # (no crates changed since).
+# 2026-10-07 (7): #110 - the SW re-establishes the client virtual
+# context from the post-redirect destination once the hop chain
+# resolves (google.com -> www.google.com left runtime-relative
+# URLs resolving against the apex, whose 404 on /async/hpba meant
+# Google's AI Mode panel never initialized and the button pressed
+# with no effect). sw.js f90129af -> 9c5ead20; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=e841520fadc95b345b7f44ede0da3a20918b535a
+ARG ZEOLITE_COMMIT=b9c9f16087056f52e9834017f91ba8c1a3847401
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -81,5 +89,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f90129af9b49c463 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9c5ead20a87f2f24 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
