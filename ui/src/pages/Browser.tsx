@@ -31,7 +31,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlNavHandle, zlSend } from "../zeolite";
+import { zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -1004,8 +1004,13 @@ export default function BrowserView(props: Props) {
      legacy b64u route when it cannot - same fallback chain for every
      initial navigation, restored sessions included. Short timeout:
      a healthy worker answers in tens of ms; a wedged one degrades
-     to the legacy route instead of hanging the tab. */
-  const initialRoute = (url: string) => zlNavHandle(url, 3000).then((h) => h ?? routeUrl(url));
+     to the legacy route instead of hanging the tab. LB#66: on a
+     cold app load the worker is still installing, so the mint
+     would time out to the legacy route and land the SW-less
+     "Load failed" page; wait for an active worker once per boot
+     first. */
+  const initialRoute = (url: string) =>
+    zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);

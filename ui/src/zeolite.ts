@@ -125,6 +125,37 @@ export function zlSend(
   });
 }
 
+/* LB#66 cold-start gate: the engine only serves a doc route once an
+   ACTIVE worker intercepts it. On the first app load the worker is
+   still installing, so the nav-handle mint times out and the tab
+   falls back to the legacy b64u route - which lands the SW-less
+   "Load failed" page until poll recovery re-drives seconds later.
+   Wait for an active registration once per app boot before the
+   first mint; the per-mint zlNavHandle timeout stays short. Resolves
+   (never rejects) so the fallback chain is unchanged. */
+let zlActiveWait: Promise<void> | null = null;
+
+export function zlWaitActive(timeoutMs = 10000): Promise<void> {
+  if (!zlActiveWait) {
+    zlActiveWait = (async () => {
+      if (!("serviceWorker" in navigator)) return;
+      try {
+        await navigator.serviceWorker.register("/zlsw/sw.js", {
+          scope: "/",
+          type: "module",
+        });
+      } catch {
+        return;
+      }
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    })();
+  }
+  return zlActiveWait;
+}
+
 /* #53 (#63 adoption): ask the Zeolite worker for an opaque
    initial-navigation handle. The engine (Zeolite #63) answers
    { ok, url } where url is /__zl_navh__/<keyed token> - a route that
