@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 0d558025 (Zeolite main f6fc6b4, CI run 37771117003)
+# Current pin: dist 046ef2f7 (Zeolite main d49a6ca, CI run 37784786747)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -61,8 +61,16 @@ RUN npm run build
 # rides in rewriter_wasm_bg.wasm, so the alarm pins cannot distinguish
 # this bump from the previous pin - deploy with a cleared build cache.
 # Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-08 (9): #112 follow-up - subresource requests from a navh-
+# served document carry the navh route as referrer, which does not
+# decode as an engine path, so forwardedHeaders omitted the Referer
+# upstream; google's reCAPTCHA anchor validates the site key against
+# that header and rendered "Invalid domain for site key" on /sorry.
+# The SW now decodes the navh token and forwards its destination as
+# the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged
+# (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=0d558025112a6706f013ff148efcb3d9e63df5c5
+ARG ZEOLITE_COMMIT=046ef2f74eff757d09a35274ea1445788d4f9213
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -98,5 +106,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9c5ead20a87f2f24 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ae06e841d22f2d7a ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
