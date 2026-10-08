@@ -1049,11 +1049,18 @@ export default function BrowserView(props: Props) {
        key, timeout), which is also why the src assignment moved
        async. The navGen guard drops a stale mint: a newer load()
        owns the tab. */
+    /* #66: the route mint is the UI-side hop (worker registration/
+       claim wait + handle mint), not engine time. Logging it
+       separately keeps entry-nav numbers honest: the app log shows
+       the hop, the engine's own netlog keeps reporting the real
+       upstream TTFB. */
+    const mintT0 = Date.now();
     void initialRoute(url).then((href) => {
       if (navGen.current.get(tab.id) !== gen) return;
+      const hopMs = Date.now() - mintT0;
       if (frame) frame.src = href;
+      pushLog("info", "engine nav " + url + " (" + nid + ", route mint " + hopMs + " ms)");
     });
-    pushLog("info", "engine nav " + url + " (" + nid + ")");
   };
   /* Stable handle to the current load(): the mount-once message
      listener calls this instead of capturing a render-time closure. */
