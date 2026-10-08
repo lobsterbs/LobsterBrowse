@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist b9c9f160 (Zeolite main 30ba01c, CI run 37692712601)
+# Current pin: dist 0d558025 (Zeolite main f6fc6b4, CI run 37771117003)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -52,8 +52,17 @@ RUN npm run build
 # with no effect). sw.js f90129af -> 9c5ead20; bootstrap.js
 # unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
 # changed).
+# 2026-10-08 (8): #112 - directory-shaped JS literal destinations
+# under the keyed codec keep the last path segment visible after the
+# token (the sorry page's recaptcha enterprise loader appends "api2/"
+# unless its api base ends with "enterprise/", and the opaque token
+# broke every tail check, sending the anchor iframe to google's 404).
+# sw.js and bootstrap.js unchanged (9c5ead20 / 413a7bd7): the fix
+# rides in rewriter_wasm_bg.wasm, so the alarm pins cannot distinguish
+# this bump from the previous pin - deploy with a cleared build cache.
+# Cargo-side pin stays 483aa0f (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=b9c9f16087056f52e9834017f91ba8c1a3847401
+ARG ZEOLITE_COMMIT=0d558025112a6706f013ff148efcb3d9e63df5c5
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
