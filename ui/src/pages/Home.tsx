@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 
+/* One suggest warning per engine: empty providers do not spam the log. */
+const suggestWarned = new Set<string>();
+
 type Props = {
   settings: Settings;
   history: string[];
@@ -106,8 +109,9 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, q, ac.signal).then((res) => {
         setRemote(res.items.map((text) => ({ text, src: res.source })));
-        if (res.items.length === 0) {
-          pushLog("warn", "home suggest: no suggestions for \"" + q + "\" (engine " + settings.engine + (res.source ? ", via " + res.source : "") + ")");
+        if (res.items.length === 0 && !suggestWarned.has(settings.engine)) {
+          suggestWarned.add(settings.engine);
+          pushLog("warn", "home suggest: no suggestions (engine " + settings.engine + (res.source ? ", via " + res.source : "") + ") - further warnings for this engine suppressed");
         }
       }).catch(() => {
         /* a failed suggest fetch keeps the previous list */

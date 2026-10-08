@@ -12,7 +12,7 @@
    edit fields. */
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { getLogs, type Tab } from "../store";
+import { type Tab } from "../store";
 import M3eSelect from "../M3eSelect";
 import { zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
@@ -348,11 +348,15 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
   }, [dt.console.length]);
 
-  /* ---- Copy logs: the client ring plus this session's server ring
-     (/logs needs the tab's lb_sess token). One click, plain text. ---- */
+  /* ---- Copy logs: THIS TAB's errors only - console error/warn
+     entries plus captured resource failures, then this session's
+     server ring (/logs needs the tab's lb_sess token). ---- */
   const copyLogs = async () => {
     const line = (t: number, level: string, msg: string) => new Date(t).toISOString() + " " + level + " " + msg;
-    let text = getLogs().map((l) => line(l.ts, l.level, l.msg)).join("\n");
+    let text = [
+      ...dt.console.filter((e) => e.kind === "error" || e.kind === "warn").map((e) => line(e.ts, e.kind, e.text)),
+      ...dt.fails.map((f) => line(f.ts, "FAIL", (f.kind ? f.kind + " " : "") + (f.url || "unknown resource") + ": " + reasonText(f.reason) + (f.nav ? " (" + f.nav + ")" : ""))),
+    ].join("\n");
     if (sess) {
       try {
         const r = await fetch("/logs?lb_sess=" + encodeURIComponent(sess));
