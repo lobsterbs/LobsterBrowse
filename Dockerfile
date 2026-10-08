@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 046ef2f7 (Zeolite main d49a6ca, CI run 37784786747)
+# Current pin: dist d302fda9 (Zeolite main fd5a83eb, CI run 37794138321)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -69,17 +69,17 @@ RUN npm run build
 # The SW now decodes the navh token and forwards its destination as
 # the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged
 # (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).
-# 2026-10-08 (10): #112 follow-up 2 - the Referer fix alone
-# did not repair the widget: its JS computes co= from
-# window.location.origin (LegacyUnforgeable), so upstream kept
-# receiving the engine origin and the site-key domain check kept
-# failing ("Invalid domain for site key"). A co= naming this
-# deployment is now rewritten to the embedding page's virtual origin
-# at the fetch seam. sw.js ae06e841 -> 247f8349; bootstrap.js
-# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
-# changed).
+# 2026-10-08 (10): #112 follow-up - the sorry doc's page JS builds
+# absolute URLs as real origin + location.pathname, and pathname is
+# the opaque engine route token, so the engine fetched
+# www.google.com/j/<token> upstream and google's 404 replaced the
+# document. The SW now dereferences embedded self-route tokens in
+# upstream destinations when the token decodes to the same origin
+# (MAC-verified, fails closed). sw.js ae06e841 -> 9fa58b72;
+# bootstrap.js unchanged (413a7bd7). Cargo-side pin stays 483aa0f
+# (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=30283cb825daec4180d6f52a7736d5a32e09f2b0
+ARG ZEOLITE_COMMIT=d302fda92534dff830e4cf028d2ae9795560d729
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -115,5 +115,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=247f8349d0d1138b ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9fa58b72fdcd8be6 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
