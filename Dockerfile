@@ -69,13 +69,23 @@ RUN npm run build
 # The SW now decodes the navh token and forwards its destination as
 # the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged
 # (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).
-# 2026-10-08 (10): #112 follow-up - the sorry doc's page JS builds
+# 2026-10-08 (10): #112 follow-up 2 - the Referer fix alone
+# did not repair the widget: its JS computes co= from
+# window.location.origin (LegacyUnforgeable), so upstream kept
+# receiving the engine origin and the site-key domain check kept
+# failing ("Invalid domain for site key"). A co= naming this
+# deployment is now rewritten to the embedding page's virtual origin
+# at the fetch seam. sw.js ae06e841 -> 247f8349; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
+# 2026-10-08 (11): #112 follow-up 3 - the sorry doc's page JS builds
 # absolute URLs as real origin + location.pathname, and pathname is
 # the opaque engine route token, so the engine fetched
 # www.google.com/j/<token> upstream and google's 404 replaced the
-# document. The SW now dereferences embedded self-route tokens in
-# upstream destinations when the token decodes to the same origin
-# (MAC-verified, fails closed). sw.js ae06e841 -> 9fa58b72;
+# document (the captcha vanished behind a 404 error page). The SW
+# now dereferences embedded self-route tokens in upstream
+# destinations when the token decodes to the same origin
+# (MAC-verified, fails closed). sw.js 247f8349 -> 9fa58b72;
 # bootstrap.js unchanged (413a7bd7). Cargo-side pin stays 483aa0f
 # (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
