@@ -171,12 +171,30 @@ function ZeoliteDiagnostics() {
   const [stats, setStats] = useState<ZlStats | null>(null);
   const [events, setEvents] = useState<ZlDiagEvent[]>([]);
   const diagSeq = useRef(0);
+  /* #65: the engine stamps a netLog generation per worker evaluation
+     and carries it on every zl:getNetLog reply. The diag seq ring
+     lives in worker memory and resets on every restart (idle kill,
+     update, crash), so on a generation change the buffered rows and
+     the cursor are dropped before the next delta merges - otherwise
+     the new ring's rows collide with buffered seqs and the dedup
+     silently eats them. The first sighting just records it. */
+  const netGen = useRef<number | null>(null);
 
   useEffect(() => {
     let dead = false;
     const tick = async () => {
       const nl = await zlSend({ type: "zl:getNetLog", since: 0 });
-      if (!dead && nl && nl.stats) setStats(nl.stats as ZlStats);
+      if (!dead && nl) {
+        if (typeof nl.generation === "number" && nl.generation !== netGen.current) {
+          const restarted = netGen.current !== null;
+          netGen.current = nl.generation;
+          if (restarted) {
+            diagSeq.current = 0;
+            setEvents([]);
+          }
+        }
+        if (nl.stats) setStats(nl.stats as ZlStats);
+      }
       const dg = await zlSend({ type: "zl:getDiag", since: diagSeq.current });
       if (!dead && dg && dg.ok && Array.isArray(dg.events)) {
         if (typeof dg.lastSeq === "number" && dg.lastSeq > diagSeq.current) diagSeq.current = dg.lastSeq;
