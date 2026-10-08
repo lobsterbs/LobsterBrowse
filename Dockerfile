@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 2c414855 (Zeolite main 732b2dd6, CI run 37824342298)
+# Current pin: dist a875f516 (Zeolite main 1350f7d5, CI run 37834814352)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -98,8 +98,17 @@ RUN npm run build
 # routes never captured). sw.js 9fa58b72 -> b5f0f84c; bootstrap.js
 # unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
 # changed).
+# 2026-10-08 (13): #99 - every wisp fetch now carries a 30s
+# first-byte deadline in the transport seam (the vendored request
+# promise resolves on headers, so a stalled subresource - a
+# silently dropped wisp websocket - never settled and the page
+# spinner ran forever). A stall is transport state like a
+# connect-class error: singleton reset, re-init, single retry on
+# a fresh connection, then honest failure. sw.js b5f0f84c ->
+# bb61d441; bootstrap.js unchanged (413a7bd7). Cargo-side pin
+# stays 483aa0f (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=2c414855591bd5d9729f71f4f153ce779ef10e85
+ARG ZEOLITE_COMMIT=a875f516d8e52d25fc7370c95e55b50aa6842107
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -135,5 +144,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b5f0f84c1f41b0c8 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=bb61d441d09ce8c7 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
