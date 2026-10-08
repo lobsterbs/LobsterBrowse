@@ -131,6 +131,35 @@ function ts(t: number): string {
   return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
 
+/* Honest clipboard write: navigator.clipboard can be absent or reject
+   (permissions policy, window not focused) while the page is still
+   usable, so fall back to a hidden textarea + execCommand inside the
+   same user gesture. Returns true only when the bytes landed. */
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to execCommand */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 type Props = {
   tab: Tab;
   dt: DtState;
@@ -166,6 +195,20 @@ type ZlDiagEvent = {
   url?: string;
   technicalReason?: string;
 };
+
+const zlNotable = (e: ZlDiagEvent) =>
+  e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK";
+
+/* The rows ZeoliteDiagnostics renders live in component state that
+   dies on unmount; Copy logs needs them after the section is gone or
+   before its first poll completes, so the component mirrors them
+   into this module-level snapshot on every state change. */
+const zlDiagSnapshot: {
+  native: number | null;
+  fallbackCount: number;
+  fallbacks: ZlFallback[];
+  notable: ZlDiagEvent[];
+} = { native: null, fallbackCount: 0, fallbacks: [], notable: [] };
 
 function ZeoliteDiagnostics() {
   const [stats, setStats] = useState<ZlStats | null>(null);
@@ -211,11 +254,15 @@ function ZeoliteDiagnostics() {
     };
   }, []);
 
+  useEffect(() => {
+    zlDiagSnapshot.native = stats?.native ?? null;
+    zlDiagSnapshot.fallbackCount = stats?.fallback ?? 0;
+    zlDiagSnapshot.fallbacks = stats?.fallbacks ?? [];
+    zlDiagSnapshot.notable = events.filter(zlNotable).slice(-25).reverse();
+  }, [stats, events]);
+
   if (!stats) return null;
-  const notable = events
-    .filter((e) => e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK")
-    .slice(-25)
-    .reverse();
+  const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
@@ -340,7 +387,7 @@ function ZeoliteDownloads() {
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
-  const [logsCopied, setLogsCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
   const consoleRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -349,14 +396,34 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
   }, [dt.console.length]);
 
   /* ---- Copy logs: THIS TAB's errors only - console error/warn
-     entries plus captured resource failures, then this session's
-     server ring (/logs needs the tab's lb_sess token). ---- */
+     entries, captured resource failures and the Zeolite diagnostics
+     rows shown on this page (mirrored in zlDiagSnapshot), then this
+     session's server ring (/logs needs the tab's lb_sess token). ---- */
   const copyLogs = async () => {
     const line = (t: number, level: string, msg: string) => new Date(t).toISOString() + " " + level + " " + msg;
     let text = [
       ...dt.console.filter((e) => e.kind === "error" || e.kind === "warn").map((e) => line(e.ts, e.kind, e.text)),
       ...dt.fails.map((f) => line(f.ts, "FAIL", (f.kind ? f.kind + " " : "") + (f.url || "unknown resource") + ": " + reasonText(f.reason) + (f.nav ? " (" + f.nav + ")" : ""))),
     ].join("\n");
+    const zl: string[] = [];
+    if (zlDiagSnapshot.native !== null)
+      zl.push("Zeolite NativeTransit requests: " + zlDiagSnapshot.native + ", rewrite fallbacks: " + zlDiagSnapshot.fallbackCount);
+    for (const f of zlDiagSnapshot.fallbacks.slice(-10).reverse())
+      zl.push(line(f.ts, "FB", fallbackText(f.reason) + " " + f.url));
+    for (const e of zlDiagSnapshot.notable)
+      zl.push(
+        line(
+          e.ts,
+          e.severity,
+          e.category +
+            ": " +
+            e.message +
+            (e.stage ? " stage=" + e.stage : "") +
+            (e.url ? " " + e.url : "") +
+            (e.technicalReason ? " (" + e.technicalReason + ")" : ""),
+        ),
+      );
+    if (zl.length) text += (text ? "\n" : "") + zl.join("\n");
     if (sess) {
       try {
         const r = await fetch("/logs?lb_sess=" + encodeURIComponent(sess));
@@ -371,13 +438,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
         /* offline or session gone: the client ring is still copied */
       }
     }
-    try {
-      await navigator.clipboard?.writeText(text);
-      setLogsCopied(true);
-      window.setTimeout(() => setLogsCopied(false), 2000);
-    } catch {
-      /* clipboard unavailable */
-    }
+    const ok = await writeClipboard(text);
+    setCopyState(ok ? "ok" : "fail");
+    window.setTimeout(() => setCopyState(""), 2000);
   };
 
   /* ---- Console: real JS eval in the proxied page context. ---- */
@@ -696,7 +759,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             </m3e-icon-button>
             <m3e-icon-button
               aria-label="Copy console output"
-              onClick={() => navigator.clipboard?.writeText(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n"))}
+              onClick={() => void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n"))}
             >
               <m3e-icon name="content_copy" aria-hidden={true} />
             </m3e-icon-button>
@@ -792,7 +855,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             </m3e-icon-button>
             <m3e-button onClick={() => void copyLogs()}>
               <m3e-icon name="content_copy" aria-hidden={true} />
-              {logsCopied ? "Copied" : "Copy logs"}
+              {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
             </m3e-button>
             <m3e-button
               onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
