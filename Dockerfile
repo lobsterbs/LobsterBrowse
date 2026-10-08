@@ -69,8 +69,17 @@ RUN npm run build
 # The SW now decodes the navh token and forwards its destination as
 # the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged
 # (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-08 (10): #112 follow-up 2 - the Referer fix alone
+# did not repair the widget: its JS computes co= from
+# window.location.origin (LegacyUnforgeable), so upstream kept
+# receiving the engine origin and the site-key domain check kept
+# failing ("Invalid domain for site key"). A co= naming this
+# deployment is now rewritten to the embedding page's virtual origin
+# at the fetch seam. sw.js ae06e841 -> 247f8349; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=046ef2f74eff757d09a35274ea1445788d4f9213
+ARG ZEOLITE_COMMIT=30283cb825daec4180d6f52a7736d5a32e09f2b0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -106,5 +115,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ae06e841d22f2d7a ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=247f8349d0d1138b ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
