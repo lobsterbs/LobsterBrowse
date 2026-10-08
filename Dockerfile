@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist d302fda9 (Zeolite main fd5a83eb, CI run 37794138321)
+# Current pin: dist 2c414855 (Zeolite main 732b2dd6, CI run 37824342298)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -88,8 +88,18 @@ RUN npm run build
 # (MAC-verified, fails closed). sw.js 247f8349 -> 9fa58b72;
 # bootstrap.js unchanged (413a7bd7). Cargo-side pin stays 483aa0f
 # (no crates changed).
+# 2026-10-08 (12): #113 - a cold-start session can race the boot
+# config: the first engine navigation is minted under the legacy
+# /zl/ prefix before the SW route shape is configured, decodePath
+# cannot see the tail, and the request escaped to the proxy origin
+# (the server answers it with the misleading no-worker notice).
+# The escape seam now recovers decodable legacy routes (configured
+# prefix or the reserved zl segment; keyed tails refused, host
+# routes never captured). sw.js 9fa58b72 -> b5f0f84c; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=d302fda92534dff830e4cf028d2ae9795560d729
+ARG ZEOLITE_COMMIT=2c414855591bd5d9729f71f4f153ce779ef10e85
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -125,5 +135,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9fa58b72fdcd8be6 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b5f0f84c1f41b0c8 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
