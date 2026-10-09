@@ -1,5 +1,10 @@
 # Compatibility & Mock Audit (2026-09-27)
 
+Historical record: this audit predates the 2026-10-01 server-side
+engine removal. The /r/ reproduction instructions and lb_* option
+rows below describe the removed engine; /r/ and /lj/ now answer the
+honest gone-notice (#67). Kept as the pre-removal reference.
+
 Full-repository audit of mocked/stubbed/spoofed/hardcoded browser
 behavior, the guest-origin threat model, and the honest-compatibility
 policy. This is the reference for what LobsterBrowse fakes, why, and

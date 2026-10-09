@@ -4,11 +4,14 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import {
+  engineRoutePrefix,
   loadSettings,
   saveSettings,
   loadSiteRules,
   saveSiteRules,
   resetIncognitoSid,
+  incognitoSid,
+  resolveUa,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -209,11 +212,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tabs, activeId, newTab, closeTab]);
 
-  /* ---- Zeolite service worker: it IS the /lj/ engine (client-side
+  /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
      legacy v3 page-cache worker is gone: it owned the "/" scope and
      kept the Zeolite worker from ever registering, so unregister it
-     and drop its caches when found, then push the /lj/ route shape —
+     and drop its caches when found, then push the engine route prefix —
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
@@ -226,11 +229,21 @@ export default function App() {
        since Zeolite#17 the worker persists the route shape and
        restores it before the first fetch. */
     const push = async () => {
-      const msg = { type: "zl:config", prefix: "/lj/", scheme: "b64u" };
+      const msg = {
+        type: "zl:config",
+        prefix: engineRoutePrefix(),
+        scheme: "b64u",
+        /* LB#53 (Zeolite#63): refuse the plaintext ?url= embed shape
+           on this deployment - initial navigations ride opaque
+           zl:navHandle routes (Browser.tsx initialRoute). A worker
+           predating #63 ignores the field, so the push stays
+           compatible. */
+        navHandles: true,
+      };
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(msg, 8000);
-        if (r && r.ok) return;
+        if (r && r.ok) return true;
       }
       store.pushLog(
         "warn",
@@ -239,49 +252,154 @@ export default function App() {
     };
     void (async () => {
       try {
+        /* #68: unregister any worker that is not the engine bundle, so a
+           stale registration (whatever its script) cannot hold the "/"
+           scope and silently block the Zeolite SW. */
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const p = r.active || r.installing || r.waiting;
-          if (p && new URL(p.scriptURL).pathname === "/lobsterjet.js") {
+          if (p && new URL(p.scriptURL).pathname !== "/zlsw/sw.js") {
             await r.unregister();
           }
-        }
-        if ("caches" in window) {
-          await caches.delete("lobsterjet-v3");
-          await caches.delete("lobsterjet-decentraleyes-v1");
         }
       } catch {
         /* best effort: the Zeolite push below still runs */
       }
       await push();
+      /* #66: pre-dial the wisp transport at app boot instead of
+         billing the first entry navigation. The worker's wisp client
+         initializes lazily on the first upstream fetch, so mint a
+         route to a tiny well-known destination and fetch it HEAD
+         through the engine while the user is still on Home. Best
+         effort: any failure logs once and is ignored. */
+      try {
+        const mint = await zlSend({ type: "zl:mint", dest: "https://example.com/robots.txt" }, 8000);
+        if (mint && mint.ok && typeof mint.route === "string") {
+          const resp = await fetch(mint.route, { method: "HEAD", cache: "no-store" });
+          store.pushLog("info", "wisp warm: HEAD example.com/robots.txt -> HTTP " + resp.status);
+        } else {
+          store.pushLog("warn", "wisp warm skipped: engine did not mint a route");
+        }
+      } catch (err) {
+        store.pushLog("warn", "wisp warm failed: " + String(err));
+      }
     })();
   }, []);
 
-  /* ---- Zeolite adblock: the engine's /rules.json (the migrated
-       ad/tracker host lists) is evaluated client-side in its worker;
-       keep it in sync with the Ad & tracker blocking setting. The
-       worker resets the toggle to enabled on restart, so re-send on
-       boot and on change. Per-site adblock overrides still apply to
-       the server-side engine only (documented gap). ---- */
+  /* ---- Zeolite adblock + per-site rules: the engine's /rules.json
+       (the migrated ad/tracker host lists) is evaluated client-side in
+       its worker; keep the toggle in sync with the Ad & tracker
+       blocking setting. The per-site rules (rules chip / Settings:
+       host-scoped adblock switch, UA preset) ride along as a zl:rules
+       push built from the same loadSiteRules() store the Settings and
+       lock-card UI read, so the engine applies them per target host
+       with the same semantics (adblock can only disable per site; the
+       global setting still wins). The
+       worker resets both on restart, so re-send on boot and on
+       change. ---- */
   useEffect(() => {
-    void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
-  }, [settings.adblock]);
+    /* #60: same controllerchange re-push pattern as the jarProfile /
+       sameSite / transport effects below - the worker resets adblock
+       and the rules on restart, so a mid-session restart must
+       re-send both, not just the next settings edit. */
+    const post = () => {
+      void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
+      void zlSend(
+        {
+          type: "zl:rules",
+          /* Global UA default: hosts without a rule get the resolved
+             global UA (resolveUa with no rule hit). */
+          ua: resolveUa(settings, rules, "") ?? undefined,
+          rules: rules.map((r) => ({
+            host: r.domain,
+            adblock: r.adblock === false ? false : undefined,
+            ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
+          })),
+        },
+        8000,
+      );
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings, rules]);
+
+  /* ---- Zeolite incognito jar: while incognito is on, the engine's
+       cookie jar must be a throwaway (the zl:jarProfile push):
+       requests and document.cookie reads/writes
+       use a session profile that never touches IndexedDB and dies the
+       moment incognito ends. The SW resets the profile to default on
+       restart, so re-send on the incognito toggle and on
+       controllerchange (a restart mid-incognito can briefly admit
+       cookies into the default jar until this re-push lands; known,
+       documented in docs/cookies.md). ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:jarProfile", profile: incognito ? incognitoSid() : null }, 8000);
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [incognito]);
+
+  /* ---- Zeolite jar knobs (#48): SameSite policy on the engine cookie
+     jar, and document-surface fingerprint spoofing on engine-routed
+     pages. Both are worker-global and reset on restart, so re-send on
+     change and on controllerchange (the jarProfile pattern above). The
+     spoof profile is a single field — the same UA the engine sends
+     on requests — and the engine derives platform, languages and the
+     canvas seed from it; timezone and hardware stay native so local
+     times and page layout keep working. ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
+      const profile = settings.fingerprintSpoof
+        ? { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent }
+        : null;
+      void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
+        /* A rejected profile must not silently read as spoofed: the
+           engine answers ok:false (e.g. a custom UA it cannot derive a
+           platform from) and the toggle would lie. */
+        if (settings.fingerprintSpoof && r && r.ok === false) {
+          store.pushLog("warn", "zeolite rejected the fingerprint profile: " + String(r.error ?? "unknown reason"));
+        }
+      });
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
+
+  /* ---- Zeolite transport engine (#54): push the persisted choice
+     (zl:transport). The engine switches on the NEXT transport init,
+     not mid-session, and resets to the deployment default on worker
+     restart, so re-send on change and on controllerchange (the
+     jarProfile pattern above). ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend({ type: "zl:transport", engine: settings.transport }, 8000);
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.transport]);
 
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {
-      if (settings.cloakEnabled) {
-        if (document.hidden) {
-          prevTitle.current = document.title;
-          document.title = settings.cloakTitle;
-          setCloaked(true);
-          store.pushLog("info", "auto cloak engaged");
-        }
+      /* #56: capture the real title only on the first hide; a second
+         hide while already cloaked would clobber prevTitle with the
+         cloak title and lose the real one forever. */
+      if (settings.cloakEnabled && document.hidden && !cloaked) {
+        prevTitle.current = document.title;
+        document.title = settings.cloakTitle;
+        setCloaked(true);
+        store.pushLog("info", "auto cloak engaged");
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [settings]);
+  }, [settings, cloaked]);
 
   const uncloak = () => {
     setCloaked(false);
@@ -313,13 +431,13 @@ export default function App() {
     );
   }
 
-/* m3e-theme's density is a Number attribute on the M3E side (Lit
-   converts it with Number()): the app setting is the string
-   "normal" | "compact", so it must be mapped to the numeric M3E
-   density scale before it reaches the element. Passing "normal"
-   made Number("normal") = NaN and the theme emitted
-   --md-sys-density-scale: NaN, which poisoned every
-   DensityToken.calc() in the density-aware components (#27). */
+  /* m3e-theme's density is a Number attribute on the M3E side (Lit
+     converts it with Number()): the app setting is the string
+     "normal" | "compact", so it must be mapped to the numeric M3E
+     density scale before it reaches the element. Passing "normal"
+     made Number("normal") = NaN and the theme emitted
+     --md-sys-density-scale: NaN, which poisoned every
+     DensityToken.calc() in the density-aware components (#27). */
   return (
     <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density === "compact" ? "-1" : undefined}>
       <div className="lb-shell">
@@ -364,7 +482,7 @@ export default function App() {
           {/* The browser view gets every pixel: no header there. */}
           {view !== "browser" && (
             <m3e-app-bar>
-              <span slot="title" className="lb-app-title">LobsterBrowse</span>
+              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
             </m3e-app-bar>
           )}
 
@@ -402,7 +520,6 @@ export default function App() {
                   onRulesChange={updateRules}
                   onOpenLogs={() => setView("logs")}
                   onDeleteAll={deleteAll}
-                  onNavigate={(url) => newTab(url)}
                 />
               )}
               {view === "logs" && (

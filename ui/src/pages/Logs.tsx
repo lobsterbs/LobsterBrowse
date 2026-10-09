@@ -42,7 +42,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
        server-side, so say so instead of showing a confusing 403. */
     if (!sess) {
       setServer([]);
-      setErr("No active tab â server logs are scoped to a browsing session.");
+      setErr("No active tab — server logs are scoped to a browsing session.");
       return () => {};
     }
     const refresh = () =>
@@ -78,7 +78,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
         </m3e-icon-button>{" "}
         Logs
       </m3e-heading>
-      <p className="lb-muted">Client and server-side proxy events. No sensitive request data is logged.</p>
+      <p className="lb-muted">Client and engine proxy events. No sensitive request data is logged.</p>
 
       {/* Related log actions grouped in a real M3E button group. */}
       <m3e-button-group aria-label="Log actions" {...{ class: "lb-logs-toolbar" }}>

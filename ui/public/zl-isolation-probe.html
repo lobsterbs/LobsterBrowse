@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zeolite beta: origin isolation probe</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background: #141218; color: #e6e0e9; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.3rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #2b2631; font-size: 13px; vertical-align: top; }
+  th { color: #cac4d0; }
+  code, pre { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .reach { color: #ffb4ab; font-weight: 600; }
+  .blocked { color: #7ddb8a; }
+  button { padding: 8px 16px; border-radius: 16px; border: 1px solid #938f99; background: #1d1b20; color: #e6e0e9; cursor: pointer; }
+  .muted { color: #cac4d0; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Origin isolation probe (Zeolite beta)</h1>
+<p class="muted">
+  Every check below runs with the exact privileges any same-origin script has on
+  this origin. That includes JavaScript from websites proxied through the
+  same-origin /zl/ frames: they execute on this origin, same as this
+  page. A row reading <span class="reach">reachable</span> is something target-site
+  JS can do today. The beta isolation phase must decide which of these to revoke
+  deliberately - never by blindly sandboxing the frame.
+</p>
+<table>
+  <thead><tr><th>check</th><th>result</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<button id="copy">Copy results as JSON</button>
+<p class="muted" id="note"></p>
+<script>
+(function () {
+  var results = [];
+  function row(name, verdict, detail) {
+    results.push({ check: name, verdict: verdict, detail: String(detail).slice(0, 300) });
+    var tr = document.createElement("tr");
+    var td1 = document.createElement("td");
+    td1.textContent = name;
+    var td2 = document.createElement("td");
+    var span = document.createElement("span");
+    span.className = verdict === "reachable" ? "reach" : "blocked";
+    span.textContent = verdict;
+    td2.appendChild(span);
+    if (detail !== undefined && detail !== "") {
+      var pre = document.createElement("pre");
+      pre.textContent = String(detail).slice(0, 300);
+      td2.appendChild(pre);
+    }
+    tr.appendChild(td1); tr.appendChild(td2);
+    document.getElementById("rows").appendChild(tr);
+  }
+  function attempt(name, fn) {
+    try {
+      var v = fn();
+      row(name, v && v.blocked ? "blocked" : "reachable", v && v.detail !== undefined ? v.detail : "");
+    } catch (e) {
+      row(name, "blocked", e && e.message ? e.message : String(e));
+    }
+  }
+  attempt("localStorage read/write", function () {
+    localStorage.setItem("zl-isolation-probe", "1");
+    var v = localStorage.getItem("zl-isolation-probe") === "1";
+    localStorage.removeItem("zl-isolation-probe");
+    return { detail: v ? "write + read + remove ok" : "unexpected value" };
+  });
+  attempt("localStorage keys visible", function () {
+    return { detail: Object.keys(localStorage).join(", ").slice(0, 280) };
+  });
+  attempt("sessionStorage read/write", function () {
+    sessionStorage.setItem("zl-isolation-probe", "1");
+    var v = sessionStorage.getItem("zl-isolation-probe");
+    sessionStorage.removeItem("zl-isolation-probe");
+    return { detail: v ? "ok" : "unexpected" };
+  });
+  attempt("document.cookie write/read", function () {
+    document.cookie = "zlprobe=1; path=/; max-age=60";
+    return { detail: document.cookie.indexOf("zlprobe=1") !== -1 ? "ok" : "write did not round-trip" };
+  });
+  attempt("IndexedDB API", function () {
+    if (typeof indexedDB === "undefined") return { blocked: true, detail: "no indexedDB" };
+    return { detail: "present (open attempted below)" };
+  });
+  attempt("Cache API", function () {
+    if (!("caches" in window)) return { blocked: true, detail: "no caches API" };
+    return { detail: "present (keys listed below)" };
+  });
+  attempt("serviceWorker API", function () {
+    if (!("serviceWorker" in navigator)) return { blocked: true, detail: "no SW API" };
+    return { detail: "present (registrations listed below)" };
+  });
+  attempt("fetch /build (app internals)", function () {
+    return { detail: "fetch allowed (status below)" };
+  });
+  attempt("parent frame access", function () {
+    if (window.parent === window) return { detail: "not framed (top-level): same privileges as a proxied frame on this origin" };
+    var t = window.parent.document.title;
+    return { detail: "framed: parent document.title readable: " + t };
+  });
+  attempt("BroadcastChannel to other tabs", function () {
+    var ch = new BroadcastChannel("zl-isolation-probe");
+    ch.close();
+    return { detail: "channel opens; other tabs on this origin receive messages" };
+  });
+
+  (async function () {
+    try {
+      var req = indexedDB.open("zl-isolation-probe", 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore("p"); };
+      req.onsuccess = function () { row("IndexedDB open (async)", "reachable", "opened, name: " + req.result.name); req.result.close(); };
+      req.onerror = function () { row("IndexedDB open (async)", "blocked", req.error && req.error.message); };
+    } catch (e) { row("IndexedDB open (async)", "blocked", String(e)); }
+    try {
+      var keys = await caches.keys();
+      row("Cache API keys (async)", "reachable", keys.join(", ").slice(0, 280));
+    } catch (e) { row("Cache API keys (async)", "blocked", String(e)); }
+    try {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      row("SW registrations (async)", "reachable", regs.map(function (r) { return new URL(r.scope).pathname + " -> " + new URL(r.active ? r.active.scriptURL : r.scope).pathname; }).join(" | ").slice(0, 280));
+    } catch (e) { row("SW registrations (async)", "blocked", String(e)); }
+    try {
+      var r = await fetch("/build", { cache: "no-store" });
+      var t = (await r.text()).slice(0, 280);
+      row("fetch /build (async)", "reachable", "HTTP " + r.status + " " + t);
+    } catch (e) { row("fetch /build (async)", "blocked", String(e)); }
+    document.getElementById("note").textContent = "Done. Copy the JSON into the isolation record in docs/BETA-ZEOLITE-NATIVETRANSIT.md.";
+  })();
+
+  document.getElementById("copy").addEventListener("click", function () {
+    navigator.clipboard.writeText(JSON.stringify(results, null, 2)).then(function () {
+      document.getElementById("copy").textContent = "Copied";
+    });
+  });
+})();
+</script>
+</body>
+</html>
