@@ -177,6 +177,33 @@ export default function BrowserView(props: Props) {
      closure would otherwise read a stale render-time status. */
   const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
   statusRef.current = status;
+  /* Loading-indicator settle probe: the old code flipped loading
+     off the moment readyState left "loading" while XHRs and
+     subresources were still fetching. Settled = document done
+     parsing AND the frame's resource-timing entry count held
+     steady for two consecutive poll ticks; a 45s ceiling keeps the
+     spinner from ever sticking. Unreachable frames settle at once. */
+  const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
+  const pageSettled = (tabId: number, f?: HTMLIFrameElement | null) => {
+    const s = settleRef.current[tabId];
+    if (!s) return true;
+    let count = 0;
+    let done = true;
+    try {
+      const w = f?.contentWindow;
+      count = w?.performance?.getEntriesByType("resource")?.length ?? 0;
+      done = w?.document?.readyState !== "loading";
+    } catch {
+      return true;
+    }
+    if (count !== s.last) {
+      s.last = count;
+      s.streak = 0;
+      return false;
+    }
+    s.streak += 1;
+    return (done && s.streak >= 2) || Date.now() - s.t0 > 45000;
+  };
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Site info card: open state plus the cookies the page can read. */
@@ -1038,6 +1065,7 @@ export default function BrowserView(props: Props) {
     });
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
+    settleRef.current[tab.id] = { last: -1, streak: 0, t0: Date.now() };
     const frame = frames.current.get(tab.id);
     /* 74.9: incognito tabs ride the engine's throwaway jar profile
        (zl:jarProfile) so their cookies never mix into the default
@@ -1338,10 +1366,11 @@ export default function BrowserView(props: Props) {
       }
       const title = (doc.title || "").trim();
       if (title && title !== t.title) props.updateTab(t.id, { title });
-      setStatus((prev) => {
-        const cur = prev[t.id];
-        return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
-      });
+      if (pageSettled(t.id, f))
+        setStatus((prev) => {
+          const cur = prev[t.id];
+          return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
+        });
       loadFavicon(t.id, real, doc);
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
@@ -1544,7 +1573,8 @@ export default function BrowserView(props: Props) {
         if (lastNav.current.get(tabId) !== tab.url) return;
         const title = cap(d.title, 300);
         if (title) L.updateTab(tabId, { title });
-        setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
+        if (pageSettled(tabId as number, frames.current.get(tabId as number)))
+          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
         if (tab.url && !L.incognito) L.onHistory(tab.url);
       } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
@@ -1729,6 +1759,7 @@ export default function BrowserView(props: Props) {
          (The favicon blob URL itself is shared through iconCache, so
          it is only revoked when no tab uses it anymore.) */
       frames.current.delete(id);
+      delete settleRef.current[id];
       lastNav.current.delete(id);
       navGen.current.delete(id);
       navId.current.delete(id);
