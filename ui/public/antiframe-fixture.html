@@ -9,8 +9,7 @@
 <p id="status">script did not run</p>
 <script>
   // classic frame buster, sunk by the antiframe pass:
-  // the Zeolite wasm rewriter (the /r/ ScramJet parity side is gone
-  // since the 2026-10-01 removal; the engine pass still must sink it).
+  // the Zeolite wasm rewriter (the engine pass must sink it).
   if (top !== self) { top.location = self.location; }
   try {
     if (window.top !== window.self) { window.top.location.href = window.self.location.href; }

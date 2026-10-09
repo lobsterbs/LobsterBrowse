@@ -20,8 +20,10 @@ const cases = [
   ["about:", "blank", "https://example.com/page", "wait"],
   ["about:srcdoc", "srcdoc", "https://example.com/", "wait"],
   /* Engine routes sync, including the SW's navigation marker path. */
-  ["http:", "/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "sync"],
-  ["http:", "/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "sync"],
+  /* #67: the legacy /lj/ and /r/ prefixes are gone; a tab left on
+     the gone-notice page must recover, not sync. */
+  ["http:", "/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "recover"],
+  ["http:", "/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "recover"],
   ["http:", "/zl/aHR0cHM6Ly9leGFtcGxlLmNvbS8", "https://example.com/", "sync"],
   ["http:", "/__zl_nav__/x", "https://example.com/", "sync"],
   /* #55: the opaque initial-navigation handle route must sync (no-op
@@ -55,8 +57,9 @@ for (const [protocol, path, tabUrl, want] of cases) {
 /* #58: decodeRoute must fail closed on keyed route tails
    instead of returning binary garbage the poll sync re-navigates to. */
 assert.equal(decodeRoute("/zl/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
-assert.equal(decodeRoute("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
-assert.equal(decodeRoute("/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
+/* #67: the legacy prefixes are gone and must decode to "". */
+assert.equal(decodeRoute("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "");
+assert.equal(decodeRoute("/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "");
 assert.equal(decodeRoute("/__zl_navh__/Ae4YgFO74dqswiEjLIjZlA"), "");
 assert.equal(decodeRoute("/zl/Ae4YgFO74dqswiEjLIjZlA3DjVoQ4UjI5"), "");
 assert.equal(decodeRoute("/not-a-route"), "");

@@ -4,8 +4,9 @@
 //! to the Wisp protocol. Zeolite is the only proxy engine: its service
 //! worker owns /zl/<base64url target> (client-side interception, native
 //! wisp transport, in-worker rewriting). The server never rewrites
-//! pages; the ScramJet-era /r/ and /lj/ prefixes 302 to /zl/ so stale
-//! bookmarks keep working. Also serves the Zeolite worker bundle
+//! pages; the legacy /r/ and /lj/ prefixes answer the honest
+//! gone-notice (stale bookmarks break by design). Also serves the
+//! Zeolite worker bundle
 //! (/zlsw/), the osjson suggest proxy, per-session /logs diagnostics
 //! and certificate transparency lookups (/cert).
 
@@ -458,25 +459,23 @@ async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>
     )
 }
 
-/// ScramJet is gone (this branch): /r/ and /lj/ were its route prefixes.
-/// Bounce them to the /zl/ engine route (same base64url target, query
-/// preserved) so stale bookmarks and old cached pages keep working; the
-/// worker owns /zl/ from there.
-async fn redirect_to_zl(
+/// Legacy engine route prefixes are unowned (#67): stale /r/ and /lj/
+/// bookmarks must break honestly instead of being rescued by a 302.
+/// Answer with the engine_error_page gone-notice (502, like every
+/// engine failure card), never the SPA fallback (index.html with 200
+/// would be a silent lie about the route).
+async fn legacy_engine_route_gone(
     axum::extract::Path(target): axum::extract::Path<String>,
-    RawQuery(raw): RawQuery,
 ) -> Response {
-    // The path segment arrives percent-decoded: a target like /r/a%0Db
-    // would put a control byte into the Location header below and panic
-    // the handler while building the 302 (HeaderValue rejects it).
-    if target.is_empty() || b64url_decode(&target).is_none() {
-        return (StatusCode::NOT_FOUND, "malformed engine route target").into_response();
-    }
-    let loc = match raw {
-        Some(q) if !q.is_empty() => format!("/zl/{target}?{q}"),
-        _ => format!("/zl/{target}"),
-    };
-    (StatusCode::FOUND, [(header::LOCATION, loc)]).into_response()
+    let real = b64url_decode(&target)
+        .and_then(|b| String::from_utf8(b).ok())
+        .unwrap_or_default();
+    engine_error_page(
+        &real,
+        "The legacy engine route prefix is gone. The engine lives at \
+         /zl/; update the stale bookmark or history entry.",
+        true,
+    )
 }
 
 /// The honest HTML error card (the full error chain goes to /logs).
@@ -1146,10 +1145,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        // ScramJet is gone: /r/ and /lj/ were its prefixes. Bounce stale
-        // bookmarks to the /zl/ engine route.
-        .route("/r/:target", any(redirect_to_zl))
-        .route("/lj/:target", any(redirect_to_zl))
+        // Legacy prefixes are unowned (#67): stale /r/ and /lj/
+        // bookmarks get the honest gone-notice, never the SPA fallback.
+        .route("/r/:target", any(legacy_engine_route_gone))
+        .route("/lj/:target", any(legacy_engine_route_gone))
         // The Zeolite engine uses the /zl/ prefix (engineRoutePrefix in
         // settings.ts): its worker owns those routes, so a /zl/ request
         // that reaches the server means no worker controls the page and

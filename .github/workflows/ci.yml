@@ -60,10 +60,12 @@ jobs:
 
   # Deployed-pair gate: runs the full check against the LIVE Render
   # pair (fixture + beta). This gates the deployed service, which can
-  # lag this commit while Render rebuilds - the /zl/ and legacy
-  # redirect surfaces it asserts change only with server commits, so a lag here means the
-  # previous deploy is verified, not that this push is live. The
-  # next beta push re-gates whatever is live then.
+  # lag this commit while Render rebuilds. When a push changes a server
+  # gate row (like the #67 gone-notice), the run can fail until Render
+  # serves the new build; rerun the job after the deploy goes live. A
+  # lag on an unchanged row means the previous deploy is verified, not
+  # that this push is live. The next beta push re-gates whatever is
+  # live then.
   transit-live:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/beta/zeolite-nativetransit'

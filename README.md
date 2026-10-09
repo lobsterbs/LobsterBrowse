@@ -11,7 +11,7 @@ LobsterBrowse is a browser-style proxy application built around Rust/Axum, React
 
 ## Status
 
-This branch, `beta/zeolite-nativetransit`, is the experimental **Zeolite NativeTransit-first** line. Zeolite is the only engine on this branch; `/zl/` is the primary engine route, while `/r/` and `/lj/` are legacy redirects kept for compatibility.
+This branch, `beta/zeolite-nativetransit`, is the experimental **Zeolite NativeTransit-first** line. Zeolite is the only engine on this branch; `/zl/` is the engine route. The legacy `/r/` and `/lj/` prefixes are gone (#67): the server answers them with the honest gone-notice, so stale bookmarks break by design.
 
 This branch is experimental and should not be treated as the stable LobsterBrowse release.
 ## What it includes
@@ -41,7 +41,7 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
 - server/bin/server — Tokio + Axum HTTP/WSS entrypoint.
 - server/crates/adblock — network filtering (workspace member).
 - /zl/<base64url target> — Zeolite engine route (worker-owned; the server answers only with the honest no-worker notice).
-- /r/, /lj/ — legacy prefixes, 302 to /zl/.
+- /r/, /lj/ — gone legacy prefixes; the server answers the honest gone-notice (502).
 - /wisp/ — Wisp endpoint.
 - /logs — bounded diagnostics.
 - /healthz — liveness.
@@ -97,7 +97,7 @@ npm run dev
 ```
 ## Deployment
 
-The application is deployed on Render. This beta branch should be verified against the actually served Zeolite revision after deployment; do not assume every branch push automatically updates the running instance. After deployment changes verify /healthz, UI, /zl/ (and the /r/, /lj/ redirects), /zlsw/, Wisp and extension routes when relevant.
+The application is deployed on Render. This beta branch should be verified against the actually served Zeolite revision after deployment; do not assume every branch push automatically updates the running instance. After deployment changes verify /healthz, UI, /zl/, /zlsw/, Wisp and extension routes when relevant.
 ## Contributing
 Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
 ## Architecture goal
