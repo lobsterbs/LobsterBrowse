@@ -38,13 +38,14 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main e581d07 (route-key decode history +
-pass-challenge redir repair + M3E error page redesign + nav-strand
-netLog + the redirect-surfaced diag event + concatenated-route-tail recoverPath + escaped relative-subresource recovery, on top of the netLog/tracing
-generation epoch and keyed-route 404 reason), dist bundle 09297e27
-(Zeolite CI build 37204843343, all-green).
+Current pin: Zeolite main ed23eb46 (the #113 legacy-referrer decode
+chain, with regression tests pinning the reCAPTCHA co= seam across
+keyed, navh and legacy route referrers, on top of the #99 transport
+first-byte deadline and the #112 referer/co=/self-route series),
+dist bundle 0093252a
+(Zeolite CI build 37908392043, all-green).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
-git rev stays b2a151f0 because no crate change shipped since it,
+git rev stays 483aa0f because no crate change shipped since it,
 and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
