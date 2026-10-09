@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 4d9ec7c (Zeolite main 784d059, CI run 37974381263)
+# Current pin: dist 72c5077 (Zeolite main deccb43, CI run 37979865992)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -167,8 +167,24 @@ RUN npm run build
 # 888f6c84; bootstrap.js stays 30e040f1; the wasm is untouched
 # (78dd3ce206ab7f27, verify the served file). Cargo-side pin stays
 # 3d170f7 (no crates changed).
+
+# 2026-10-09 (19): #125 + #126 - zeolite-server upstream DNS is
+# DoH by default now: the pinned Quad9 (default) or Cloudflare IPs
+# answer over HTTPS/443 with the resolver certificate validated
+# against its DNS name (dns.quad9.net / cloudflare-dns.com, Mozilla
+# webpki roots), and there is deliberately no plaintext port-53
+# fallback - a host that blocks the DoH handshake fails closed. This
+# is the LB server's own outbound resolution too (main.rs PolicyDns
+# delegates to zeolite_server::dns). Cargo-side pin 3d170f7 ->
+# deccb43 (zeolite-server changed). #126: the wasm rewriter routes
+# inline module import specifiers (bare package names stay bare;
+# already-routed specifiers unwrap to one route). sw.js stays
+# 888f6c84, bootstrap.js stays 30e040f1; the ride is in
+# rewriter_wasm_bg.wasm, 78dd3ce206ab7f27 -> c5fe41724b40bae0 -
+# the /build zlswSha cannot distinguish this bump, verify the served
+# wasm hash instead.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=4d9ec7c35dc664a7e6435a3338de7758b1826ad5
+ARG ZEOLITE_COMMIT=72c507700e4c9d298e8c9d08c02f8def8e08a54e
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
