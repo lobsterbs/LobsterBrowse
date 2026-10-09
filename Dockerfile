@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 11c032a (Zeolite main b3540b5, CI run 37970573545)
+# Current pin: dist 4d9ec7c (Zeolite main 784d059, CI run 37974381263)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -155,8 +155,20 @@ RUN npm run build
 # Cargo-side pin stays 3d170f7 (zeolite-server unchanged; the
 # rewriter crate is not a server dependency).
 
+# 2026-10-09 (18): #124 - the script-serve import-specifier pass was
+# a raw regex and could bridge two string literals, swallowing the
+# code between them as a "specifier" and replacing it with an engine
+# route (Twitch player-core: "No matches from ".concat(w," payloads")
+# became a syntax error and the whole 387KB chunk failed to parse;
+# ChunkLoadError, the player never booted). The matcher is now a
+# quote-parity-aware scanner with the wasm literal pass context rules
+# (strings, comments, regex discrimination); template bodies are
+# opaque and property-name heads are skipped. sw.js a7bb36c3 ->
+# 888f6c84; bootstrap.js stays 30e040f1; the wasm is untouched
+# (78dd3ce206ab7f27, verify the served file). Cargo-side pin stays
+# 3d170f7 (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=11c032a8828562fa4a90e08e7616d36b37233df8
+ARG ZEOLITE_COMMIT=4d9ec7c35dc664a7e6435a3338de7758b1826ad5
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -192,5 +204,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a7bb36c33e260642 ZEOLITE_BOOTSTRAP_SHA=30e040f1ee7abc2f
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=888f6c8462ae5f4c ZEOLITE_BOOTSTRAP_SHA=30e040f1ee7abc2f
 ENTRYPOINT ["/app/lobster-server"]
