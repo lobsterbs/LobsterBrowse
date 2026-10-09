@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist c2f8e1b (Zeolite main c7b45bc, CI run 37964237690)
+# Current pin: dist 11c032a (Zeolite main b3540b5, CI run 37970573545)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -140,8 +140,23 @@ RUN npm run build
 # 413a7bd7 -> ee2c30cf, so the /build zlswSha cannot distinguish
 # this bump - verify the served /zlsw/bootstrap.js hash instead.
 # Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-09 (17): #122/#123 - regex-aware JS scanner in the wasm
+# rewriter: quotes inside regex literals were parsed as string
+# delimiters, so the engine-route rewrite of a URL embedded in a
+# YouTube base.js messageRegExp injected slashes that terminated
+# the pattern and the whole 10.9 MB script failed to parse (empty
+# SPA body, video loads forever; Twitch the same class). Turnstile
+# script srcs now stay provider-direct so api.js can self-locate
+# its tag and the widget injects (#120 still owns the frames).
+# Rust-only: sw.js stays a7bb36c3, bootstrap.js stays 30e040f1;
+# the ride is in rewriter_wasm_bg.wasm, so the /build zlswSha
+# cannot distinguish this bump - verify the served
+# /zlsw/rewriter_wasm_bg.wasm hash instead.
+# Cargo-side pin stays 3d170f7 (zeolite-server unchanged; the
+# rewriter crate is not a server dependency).
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=c2f8e1b77509706091f51ad160b11a6df0231839
+ARG ZEOLITE_COMMIT=11c032a8828562fa4a90e08e7616d36b37233df8
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
