@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 72c5077 (Zeolite main deccb43, CI run 37979865992)
+# Current pin: dist 722963d (Zeolite main 53e639c, CI run 37982983829)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -183,8 +183,19 @@ RUN npm run build
 # rewriter_wasm_bg.wasm, 78dd3ce206ab7f27 -> c5fe41724b40bae0 -
 # the /build zlswSha cannot distinguish this bump, verify the served
 # wasm hash instead.
+# 2026-10-09 (20): #127 - google.com (origin-only Referrer-Policy)
+# sent Referer: <engine-origin>/ for every subresource, decodePath
+# could not recover a page URL from it, the Referer was dropped, and
+# the /sorry reCAPTCHA anchor rejected the site key ("Invalid
+# domain for site key"). The worker now restores the upstream
+# Referer from the per-client virtual initiator origin
+# (virtualRefererFallback) before giving up. App-side only:
+# sw.js 888f6c84 -> 12ac9193; bootstrap.js stays 30e040f1; wasm
+# untouched (c5fe41724b40bae0, verify the served file). Cargo-side
+# pin stays deccb43 (no crates changed).
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=72c507700e4c9d298e8c9d08c02f8def8e08a54e
+ARG ZEOLITE_COMMIT=722963d851ed4027c1e91003d0b674ef010e2ba0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -220,5 +231,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=888f6c8462ae5f4c ZEOLITE_BOOTSTRAP_SHA=30e040f1ee7abc2f
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=12ac9193824fe074 ZEOLITE_BOOTSTRAP_SHA=30e040f1ee7abc2f
 ENTRYPOINT ["/app/lobster-server"]
