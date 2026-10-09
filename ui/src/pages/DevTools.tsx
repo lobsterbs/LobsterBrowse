@@ -319,9 +319,11 @@ type ZlDownload = {
   received: number;
   startedAt: number;
   endedAt: number;
-  status: "active" | "done" | "error" | "cancelled";
+  status: "active" | "done" | "error" | "cancelled" | "paused";
   source: string;
   speed: number;
+  /* #118: engine-set; false above the resume cap or without buffered bytes. */
+  resumable?: boolean;
   error?: string;
 };
 
@@ -351,11 +353,29 @@ function ZeoliteDownloads() {
   }, []);
 
   if (!dls || dls.length === 0) return null;
-  const cancel = async (id: string) => {
+  const act = async (id: string, type: "zl:cancelDownload" | "zl:pauseDownload" | "zl:resumeDownload") => {
     setBusy(id);
-    await zlSend({ type: "zl:cancelDownload", id });
+    await zlSend({ type, id }, 15000);
     setBusy(null);
-    /* The next poll tick (2 s) picks up the cancelled state. */
+    /* The next poll tick (2 s) picks up the new state. */
+  };
+  /* #118: the engine hands back the assembled partial (the blob
+     crosses the MessageChannel by structured clone); the UI host owns
+     the actual save, same rule as the extension download handoff. */
+  const save = async (id: string) => {
+    setBusy(id);
+    const r = await zlSend({ type: "zl:saveDownload", id }, 15000);
+    setBusy(null);
+    if (r && r.ok && r.blob instanceof Blob) {
+      const url = URL.createObjectURL(r.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = typeof r.filename === "string" && r.filename ? r.filename : "download";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
   };
   return (
     <div className="lb-net" style={{ marginBottom: "12px" }}>
@@ -364,7 +384,16 @@ function ZeoliteDownloads() {
       </div>
       {dls.map((d) => (
         <div key={d.id} className="lb-net-summary" style={{ alignItems: "center" }}>
-          <span className={"lb-net-status " + (d.status === "done" || d.status === "active" ? "lb-ok" : "lb-bad")}>
+          <span
+            className={
+              "lb-net-status " +
+              (d.status === "paused"
+                ? "lb-paused"
+                : d.status === "done" || d.status === "active"
+                  ? "lb-ok"
+                  : "lb-bad")
+            }
+          >
             {d.status}
           </span>
           <span className="lb-net-url">{d.filename}</span>
@@ -373,8 +402,23 @@ function ZeoliteDownloads() {
             {d.size >= 0 ? " / " + fmtBytes(d.size) : ""}
             {d.status === "active" ? " (" + fmtBytes(d.speed) + "/s)" : ""}
           </span>
+          {d.status === "active" && d.resumable === true && (
+            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void act(d.id, "zl:pauseDownload")}>
+              Pause
+            </m3e-button>
+          )}
+          {d.status === "paused" && d.resumable === true && (
+            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void act(d.id, "zl:resumeDownload")}>
+              Resume
+            </m3e-button>
+          )}
+          {d.status === "paused" && d.resumable === true && (
+            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void save(d.id)}>
+              Save partial
+            </m3e-button>
+          )}
           {d.status === "active" && (
-            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void cancel(d.id)}>
+            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void act(d.id, "zl:cancelDownload")}>
               Cancel
             </m3e-button>
           )}

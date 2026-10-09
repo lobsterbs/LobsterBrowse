@@ -584,6 +584,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
 .lb-net-status.lb-ok { opacity: 0.7; }
 .lb-net-status.lb-bad { color: var(--md-sys-color-error); }
+.lb-net-status.lb-paused { color: var(--md-sys-color-tertiary); }
 .lb-net-method { flex-shrink: 0; opacity: 0.6; }
 .lb-net-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-net-dur { margin-left: auto; opacity: 0.5; flex-shrink: 0; }
