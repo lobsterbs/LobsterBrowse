@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 7067b559 (Zeolite main f2d62f64, CI run 37918471121)
+# Current pin: dist 510c949 (Zeolite main d34aab7, CI run 37928215450)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -125,8 +125,23 @@ RUN npm run build
 # failed revalidation bypassing to the live path honestly.
 # sw.js edf104c0 -> e4402f7d; bootstrap.js unchanged (413a7bd7).
 # Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-09 (16): #116 - the child-document residuals: created
+# shadow roots get their own MutationObserver through an
+# attachShadow hook (parser-inserted frames inside them loaded
+# browser-direct - the live /j/<token> google 404 class),
+# contentWindow/contentDocument reads install the child realm
+# guard synchronously (closing the same-task write race that
+# beat the observer microtask), unquoted srcdoc attribute values
+# rewrite too, and guarded children re-emit fetch/XHR through
+# the #101 parent-relative marker. The shadow-root registry the
+# first cut shipped was dead code; the trimmed hooks fit the
+# 20 KiB bootstrap budget (20429 bytes). sw.js unchanged
+# (e4402f7d): the ride is entirely in bootstrap.js,
+# 413a7bd7 -> ee2c30cf, so the /build zlswSha cannot distinguish
+# this bump - verify the served /zlsw/bootstrap.js hash instead.
+# Cargo-side pin stays 483aa0f (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=7067b559fbc99291adc5d4b53720c38eafa31a60
+ARG ZEOLITE_COMMIT=510c949adeb04acffdf81e26575a282d55e737ed
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -162,5 +177,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e4402f7dabae9b51 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e4402f7dabae9b51 ZEOLITE_BOOTSTRAP_SHA=ee2c30cf99b2b9d0
 ENTRYPOINT ["/app/lobster-server"]
