@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 8b1fa1c (Zeolite main 284a4bd, CI run 37986663053)
+# Current pin: dist 6523331 (Zeolite main 2f924d6, CI run 37992768652)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -210,8 +210,21 @@ RUN npm run build
 # (21491 of the 21504 budget); wasm unchanged (c5fe41724b40bae0,
 # verify the served file). Cargo-side pin stays deccb43.
 
+# 2026-10-09 (22): #129 - the #120 provider-direct 302 for
+# challenge frames leaked the user IP (the frame committed at
+# the real provider origin) and broke the reCAPTCHA messaging
+# the #128 bootstrap fix had just repaired (cross-origin anchor,
+# postMessage targetOrigin dropped by the browser). Challenge
+# frames now stay engine-routed; the 302 is gone and a DIAG
+# event records the routing verdict. Plus the error page
+# redesign: Zeolite ASCII logo, category row back in the facts
+# list, retry is a form button. sw.js a3eff568 -> b6221208;
+# bootstrap.js stays 9cfdbb8f (21491 of the 21504 budget); wasm
+# unchanged (c5fe41724b40bae0, verify the served file).
+# Cargo-side pin stays deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=8b1fa1c24e7b5f356a544b69d5bf1b971bdb1a38
+ARG ZEOLITE_COMMIT=652333190bb0135adbaee91acf4804bf3ef85b12
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -247,5 +260,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a3eff5683b13ac5c ZEOLITE_BOOTSTRAP_SHA=9cfdbb8fd0c512c6
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b622120890886625 ZEOLITE_BOOTSTRAP_SHA=9cfdbb8fd0c512c6
 ENTRYPOINT ["/app/lobster-server"]
