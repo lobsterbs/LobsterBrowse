@@ -276,13 +276,11 @@ export function routeUrl(target: string): string {
 /* Recover the real URL from an engine route pathname ("" when
    invalid). */
 export function decodeRoute(pathname: string): string {
-  /* Accepts /zl/ plus the legacy /r/ and /lj/ prefixes, which the
-     server now 302s to /zl/ (old history entries may still hold
-     them). */
+  /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
+     prefixes are gone, so they decode to "" and the poll sync falls
+     back to the caller tab URL. */
   let seg = "";
-  if (pathname.startsWith("/r/")) seg = pathname.slice(3);
-  else if (pathname.startsWith("/lj/")) seg = pathname.slice(4);
-  else if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
+  if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
   seg = seg.split("?")[0].split("#")[0];
   try {

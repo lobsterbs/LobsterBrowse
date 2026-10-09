@@ -3,8 +3,8 @@
    lobster-server or a deployed beta origin) it additionally asserts:
    - /zl/<b64url> answers with the honest "no worker controls this
      page" notice (the engine route, server side);
-   - the legacy /r/ and /lj/ prefixes 302 to /zl/ with the target and
-     query preserved (ScramJet is gone from this branch).
+   - the legacy /r/ and /lj/ prefixes answer the honest gone-notice
+     (502 engine_error_page), never a redirect or the SPA fallback.
    This proves fixture + route behavior. It can NOT prove the
    SW -> NativeTransit -> Wisp chain: no browser runs in CI. The
    browser-level run is a separate, recorded step (see
@@ -306,17 +306,16 @@ try {
     const rwb = Buffer.from(await rw.arrayBuffer());
     ok("wasm alias magic", rwb.subarray(0, 4).toString("latin1") === "\0asm", "len " + rwb.length);
 
-    /* Legacy prefixes: ScramJet is gone, so /r/ and /lj/ must bounce to
-       the /zl/ engine route (302, same base64url target, query kept) so
-       stale bookmarks and old history entries keep working. */
+    /* Legacy prefixes are unowned (#67): /r/ and /lj/ must break
+       honestly with the engine_error_page gone-notice (502), never a
+       302 rescue and never the SPA fallback (index.html 200). */
     const lt = base + "/data.json?say=hi%20there&flag";
     for (const p of ["/r/", "/lj/"]) {
       const res = await fetch(lb + p + b64u(lt), { redirect: "manual" });
-      ok(p + " legacy redirect 302", res.status === 302, "got " + res.status);
-      ok(p + " legacy redirect target", res.headers.get("location") === "/zl/" + b64u(lt), String(res.headers.get("location")));
+      ok(p + " gone-notice 502", res.status === 502, "got " + res.status);
+      const body = await res.text();
+      ok(p + " gone-notice text", body.includes("legacy engine route prefix is gone"), body.slice(0, 120));
     }
-    const bare = await fetch(lb + "/r/" + b64u(base + "/data.json"), { redirect: "manual" });
-    ok("r legacy redirect no query", bare.status === 302 && bare.headers.get("location") === "/zl/" + b64u(base + "/data.json"), String(bare.headers.get("location")));
   }
 } finally {
   /* One-shot CI process: awaiting server.close() can leave this

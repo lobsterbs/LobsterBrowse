@@ -2,7 +2,7 @@
 
 Experimental branch: beta/zeolite-nativetransit (the retired unstable line was migrated here 2026-09-29)
 at 31bdc9e. ScramJet is now REMOVED from this branch (2026-10-01, see the section below): Zeolite is the
-only engine, /r/ and /lj/ 302 to /zl/, and main is the only branch that still has the server rewriter.
+only engine, the legacy /r/ and /lj/ prefixes answer the honest gone-notice (2026-10-09, #67), and main is the only branch that still has the server rewriter.
 
 ## ScramJet removal (2026-10-01)
 
@@ -12,14 +12,15 @@ ScramJet (the server-side rewriting engine) is fully removed from this branch.
   Anubis bridge, the AMO Firefox-UA spoof, the shim/compat injection and every lb_ route option are
   deleted from main.rs. Cargo.toml/lock drop the adblock/bytes/futures-util/image server deps. What
   remains: /zlsw/ serving, the wisp endpoint, /suggest, /logs, /cert, /build, /healthz, the honest
-  no-worker notice for /zl/, and 302s from /r/ and /lj/ to /zl/ (target + query preserved) so stale
-  bookmarks keep working.
+  no-worker notice for /zl/, and the honest gone-notice for the
+  legacy /r/ and /lj/ prefixes (2026-10-09, #67: stale bookmarks
+  break by design).
 - UI: proxyEngine/decentraleyes/httpsOnly settings and the Proxy engine segment are gone;
   routeUrl(target) always builds /zl/ routes; settings reach the engine only through the zl:* control
   plane (zl:adblock, zl:rules, zl:jarProfile, zl:sameSite, zl:fingerprint). engine-shim.js,
   engine-compat.js, ui/public/lobsterjet.js and the scramjet/ legacy deployment directory are deleted.
 - Tests: the /r/ server-side transit gates are replaced with /zl/ notice gates, wasm-alias gates and
-  legacy-redirect gates; the Tier-8/9/10 fixtures stay for the browser-level engine pass.
+  legacy-prefix gone-notice gates (302s deleted 2026-10-09, #67); the Tier-8/9/10 fixtures stay for the browser-level engine pass.
 
 Honest gaps created by the removal (do not paper over):
 
@@ -39,7 +40,7 @@ Honest gaps created by the removal (do not paper over):
     LobsterBrowse (React UI, tabs, DevTools capture)
       -> Zeolite service worker (zlsw/sw.js, root scope, prefix "/zl/")
          -> request classification: only /zl/ engine paths are claimed;
-            everything else (app routes, /r/, /lj/, cross-origin) passes through
+            everything else (app routes, cross-origin) passes through
          -> NativeTransit: vendored libcurl transport over Wisp v2.1
             (wss /wisp/). Streaming both ways, no full-body buffering,
             status/headers preserved, honest network errors, per-origin

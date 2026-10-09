@@ -252,16 +252,15 @@ export default function App() {
     };
     void (async () => {
       try {
+        /* #68: unregister any worker that is not the engine bundle, so a
+           stale registration (whatever its script) cannot hold the "/"
+           scope and silently block the Zeolite SW. */
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const p = r.active || r.installing || r.waiting;
-          if (p && new URL(p.scriptURL).pathname === "/lobsterjet.js") {
+          if (p && new URL(p.scriptURL).pathname !== "/zlsw/sw.js") {
             await r.unregister();
           }
-        }
-        if ("caches" in window) {
-          await caches.delete("lobsterjet-v3");
-          await caches.delete("lobsterjet-decentraleyes-v1");
         }
       } catch {
         /* best effort: the Zeolite push below still runs */

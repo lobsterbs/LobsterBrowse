@@ -241,13 +241,10 @@ export default function BrowserView(props: Props) {
       if (engId === undefined) return;
       void zlSend({ type: "zl:downloadState", id: engId, status, ...extra }, 8000);
     };
-    /* Engine-routed hrefs (/zl/, plus legacy /r/ and /lj/ that the
-       server bounces) are fetched as-is; anything else goes through
-       routeUrl so it rides the engine like a navigation. */
-    const target =
-      href.startsWith("/r/") || href.startsWith("/lj/") || href.startsWith("/zl/")
-      ? href
-      : routeUrl(href);
+    /* Engine-routed hrefs (/zl/) are fetched as-is; anything else
+       goes through routeUrl so it rides the engine like a
+       navigation. */
+    const target = href.startsWith("/zl/") ? href : routeUrl(href);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
@@ -920,9 +917,7 @@ export default function BrowserView(props: Props) {
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
     if (attr) {
-      if (
-        attr.startsWith("/r/") || attr.startsWith("/lj/") || attr.startsWith("/zl/")
-      ) {
+      if (attr.startsWith("/zl/")) {
         href = attr;
       } else {
         try {

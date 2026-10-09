@@ -68,9 +68,10 @@ With LB_ORIGIN set it also checks the server side of the beta:
   page" notice, never a server-side proxied or rewritten body. The
   notice is the engine_error_page cold-start card and answers HTTP
   502, like every engine failure card.
-- the legacy /r/<b64url> and /lj/<b64url> prefixes must 302 to
-  /zl/<b64url> with the target and query preserved (ScramJet is gone
-  from this branch; stale bookmarks and history entries keep working).
+- the legacy /r/<b64url> and /lj/<b64url> prefixes must answer the
+  honest gone-notice (502 engine_error_page): stale bookmarks and
+  history entries break by design (#67), never a 302 and never the
+  SPA fallback.
 - /rewriter_wasm_bg.wasm must answer 200 with application/wasm and
   the \0asm magic (the origin-root alias of the vendored engine
   rewriter wasm, same pattern as /bootstrap.js).

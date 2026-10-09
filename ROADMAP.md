@@ -88,7 +88,7 @@ Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, e
 ### Engine architecture
 
 - Make the LobsterBrowse ↔ Zeolite boundary explicit.
-- Keep one authoritative decision point for the engine route prefix (`/zl/`; legacy `/r/` and `/lj/` 302 to it since the ScramJet removal, 2026-10-01).
+- Keep one authoritative decision point for the engine route prefix (`/zl/`; the legacy `/r/` and `/lj/` prefixes answer the honest gone-notice since 2026-10-09, #67).
 - Avoid duplicate networking, cookie, rewriting or interception infrastructure.
 - Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only hacks.
 - Keep NativeTransit and rewriting behavior accurately repre
@@ -184,14 +184,14 @@ Test real behavior involving:
 HTTP 200 alone does not constitute compatibility.
 
 
-Status (2026-09-30, updated 2026-10-01): started. Tier-8/9/10 probes
+Status (2026-09-30, updated 2026-10-09): started. Tier-8/9/10 probes
 were first gated through the server-side /r/ engine (navigation
 surfaces and the auth-redirect flow; inline import maps; CSS
 url()/@import with data: URLs verbatim, srcset routing, page-query
 forwarding with lb_ keys stripped, per-sid session jar, conditional
-GET). The ScramJet removal (2026-10-01) deleted the server-side
+GET). The 2026-10-01 server-side engine removal deleted the server-side
 engine, so those gates went with it: check.mjs now gates the /zl/
-honest notice, the legacy /r/ and /lj/ 302s, and the wasm alias,
+honest notice, the legacy-prefix gone-notices (#67), and the wasm alias,
 while the Tier-8/9/10 fixtures remain for the recorded browser-level
 engine pass (in-worker rewriting owns those surfaces now). The
 deployed-pair gate
@@ -601,7 +601,7 @@ Before expanding into more browser features:
 
 1. audit the old RewriteFallback architecture;
 2. reconcile LobsterBrowse and Zeolite responsibilities;
-3. verify `/zl/` (and the legacy `/r/`, `/lj/` redirects), Wisp and NativeTransit behavior;
+3. verify `/zl/`, Wisp and NativeTransit behavior;
 4. verify reproducible engine builds/deployments;
 5. establish the first real-site compatibility regression suite;
 6. update documentation to describe the actual architecture;
