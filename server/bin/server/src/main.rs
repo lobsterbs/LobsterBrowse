@@ -259,6 +259,9 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
 /// answer that passes a pre-fetch check has no window between check
 /// and connect. Literal-IP destinations bypass the resolver; suggest
 /// and cert hosts are domain names, so the resolver covers them.
+/// The underlying lookup rides the engine's pinned resolver
+/// (zeolite_server::dns): these lookups leave through Quad9 by
+/// default, not the host resolver.
 struct PolicyDns;
 
 fn boxed_err<E: std::error::Error + Send + Sync + 'static>(
@@ -271,16 +274,11 @@ impl reqwest::dns::Resolve for PolicyDns {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().trim_end_matches('.').to_string();
         Box::pin(async move {
-            let h = host.clone();
-            let addrs = tokio::task::spawn_blocking(move || {
-                use std::net::ToSocketAddrs;
-                (h.as_str(), 0u16)
-                    .to_socket_addrs()
-                    .map(|it| it.collect::<Vec<std::net::SocketAddr>>())
-            })
-            .await
-            .map_err(boxed_err)?
-            .map_err(boxed_err)?;
+            // Pinned upstream DNS (Quad9 by default): the host resolver
+            // is not consulted for these lookups either.
+            let addrs = zeolite_server::dns::lookup(&host, 0u16)
+                .await
+                .map_err(boxed_err)?;
             let policy = zeolite_server::policy::DestinationPolicy::default();
             let allowed: Vec<std::net::SocketAddr> = addrs
                 .into_iter()
@@ -1214,6 +1212,10 @@ async fn main() {
         into a CORS-stripping relay any web page could read. */
         .with_state(state);
 
+    info!(
+        "wisp upstream DNS: {}",
+        zeolite_server::dns::mode_description()
+    );
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!(
         "LobsterBrowse native engine server listening on {} at {}",

@@ -135,6 +135,9 @@ The shim's diagnostics postMessage uses `targetOrigin: location.origin` (never `
 ## Anubis and challenge pages (honest gap, ScramJet removal 2026-10-01)
 ScramJet's anubis_bridge and the /.within.website/ server route are gone. The Zeolite engine is challenge-DETECT only (no solve verb), so PoW-protected hosts — Anubis; Startpage, the DEFAULT search engine, fronts every page with one — show the honest engine error instead of solving. Filed against Zeolite as a challenge-cookie handoff surface. Third-party widget frames must stay genuinely cross-origin; the engine's navguard owns that decision (Zeolite #28). Never fake a solved challenge, and never claim challenge support the code does not have.
 
+## Upstream DNS (privacy pin)
+All upstream name resolution is pinned through the engine's resolver: the wisp relay (every proxied connection) and the /suggest and /cert lookup clients resolve via Quad9 by default (ZL_DNS=quad9; 9.9.9.9, 149.112.112.112), with cloudflare (ZL_DNS=cloudflare) as the documented alternative and system (ZL_DNS=system) as an explicit operator opt-out for restricted egress. The host resolver and Google DNS are never used by default, and the startup log names the active resolver. Do not add a code path that resolves an upstream hostname around zeolite_server::dns.
+
 ## Reproducible builds
 - `server/Cargo.lock` is committed. CI runs `cargo build/test/clippy --locked` and `cargo fmt --all --check`; the ui job runs `npm ci`. Never add `|| cargo build` style fallbacks or swap `npm ci` for `npm install`.
 - `zeolite-server` is pinned by `rev` in `server/bin/server/Cargo.toml` (not a branch). The Dockerfile pins `ARG ZEOLITE_COMMIT` (immutable Zeolite dist revision) instead of `refs/heads/dist`. To update either: bump the rev/ARG, run the `generate-rust-lockfile` workflow (or push under `server/`), commit the refreshed `server/Cargo.lock`, and deploy with `clearCache: true`.
