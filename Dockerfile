@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 2e051a0 (Zeolite main 6932c1e, CI run 37957955334)
+# Current pin: dist c2f8e1b (Zeolite main c7b45bc, CI run 37964237690)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -141,7 +141,7 @@ RUN npm run build
 # this bump - verify the served /zlsw/bootstrap.js hash instead.
 # Cargo-side pin stays 483aa0f (no crates changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=2e051a0bff49771de94ba01dcc6825ec36772b1d
+ARG ZEOLITE_COMMIT=c2f8e1b77509706091f51ad160b11a6df0231839
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -177,5 +177,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=896005b7e8f401e7 ZEOLITE_BOOTSTRAP_SHA=ee2c30cf99b2b9d0
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a7bb36c33e260642 ZEOLITE_BOOTSTRAP_SHA=30e040f1ee7abc2f
 ENTRYPOINT ["/app/lobster-server"]
