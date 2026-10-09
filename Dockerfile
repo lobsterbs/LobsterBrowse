@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 6523331 (Zeolite main 2f924d6, CI run 37992768652)
+# Current pin: dist 211c22b (Zeolite main 3622fc5, CI run 37995153055)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -223,8 +223,26 @@ RUN npm run build
 # unchanged (c5fe41724b40bae0, verify the served file).
 # Cargo-side pin stays deccb43.
 
+# 2026-10-09 (23): #128 follow-up - with challenge frames
+# engine-routed, reCAPTCHA's anchor protocol reached the
+# messaging stage and died on the frame's bare two-argument port
+# post: postMessage(msg, [port]) is the legacy WebKit overload
+# (targetOrigin defaults to *). The #128 wrapper re-emitted every
+# delegated call as (msg, targetOrigin, transfer), so the binding
+# saw a phantom third undefined argument, picked the standard
+# overload and threw "Invalid target origin '[object
+# MessagePort]'". The wrapper now normalizes both call shapes
+# and replays the caller's exact argument list at the native
+# boundary; the synthetic delivery keeps transfer ports live
+# (structuredClone with a transfer list neutered them into an
+# unreachable clone). sw.js stays b6221208 (198072 bytes);
+# bootstrap.js 9cfdbb8f -> 7f299840 (21551 of the 22528 budget,
+# raised with the fix, rationale recorded in the Zeolite gate);
+# wasm unchanged (c5fe41724b40bae0, verify the served file).
+# Cargo-side pin stays deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=652333190bb0135adbaee91acf4804bf3ef85b12
+ARG ZEOLITE_COMMIT=211c22be3ee96e4d843be692f86151a4a6737b51
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -260,5 +278,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b622120890886625 ZEOLITE_BOOTSTRAP_SHA=9cfdbb8fd0c512c6
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b622120890886625 ZEOLITE_BOOTSTRAP_SHA=7f299840bc9c35aa
 ENTRYPOINT ["/app/lobster-server"]
