@@ -9,10 +9,11 @@ export type Tab = {
   /* Navigation stack: stack[idx] is the current URL. */
   stack: string[];
   idx: number;
-  /* Server-side session token: threads onto /r/ routes as lb_sess so
-     /logs returns only this tab's diagnostics. Generated client-side
-     (crypto.randomUUID), never persisted, regenerated on restore —
-     guest pages cannot read it (it lives in UI state, not the page). */
+  /* Session token: /logs is scoped to it server-side, so diagnostics
+     from one tab never leak into another session's view. Generated
+     client-side (crypto.randomUUID), never persisted, regenerated on
+     restore — guest pages cannot read it (it lives in UI state, not
+     the page). */
   sess: string;
 };
 

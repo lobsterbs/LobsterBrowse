@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>antiframe parity fixture</title>
+</head>
+<body>
+<h1>antiframe parity fixture</h1>
+<p id="status">script did not run</p>
+<script>
+  // classic frame buster, sunk by the antiframe pass:
+  // the Zeolite wasm rewriter (the engine pass must sink it).
+  if (top !== self) { top.location = self.location; }
+  try {
+    if (window.top !== window.self) { window.top.location.href = window.self.location.href; }
+  } catch (e) {}
+  document.getElementById("status").textContent = "script ran";
+</script>
+</body>
+</html>

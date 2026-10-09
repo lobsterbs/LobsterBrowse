@@ -10,16 +10,12 @@ name = "lobster-server"
 path = "src/main.rs"
 
 [dependencies]
-zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "79d3559ea48d07e7d5de404959d4824febadd5e8" }
-adblock = { path = "../../crates/adblock" }
+zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "3d170f788e5e6d3b074fab111ac7a6f53424f640" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
-futures-util = "0.3"
-bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }
 serde_json = "1"
 sha2 = { workspace = true }
-image = { version = "0.25", default-features = false, features = ["jpeg"] }

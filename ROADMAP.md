@@ -50,7 +50,8 @@ Planned sequence:
 | 0.5 | **Cobalt** | Difficult modern websites |
 | 0.6 | **Nickel** | Diagnostics and DevTools |
 | 0.7 | **Zirconium** | Browser state and persistence |
-| 0.8 | **Tungsten** | Extensions |
+| 0.8 | **Tungsten** | Extension
+s |
 | 0.9 | **Iridium** | Stabilization and compatibility freeze |
 | 1.0 | **Osmium** | Stable LobsterBrowse |
 
@@ -82,13 +83,16 @@ Search source, tests, configuration and documentation for:
 
 If RewriteFallback is genuinely obsolete, remove remaining implementation and documentation references. If a piece is still required, identify the exact dependency instead of deleting working compatibility infrastructure blindly.
 
+Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README/AGENTS), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed LobsterBrowse component. Nothing to delete; recorded here per the audit instruction.
+
 ### Engine architecture
 
 - Make the LobsterBrowse ↔ Zeolite boundary explicit.
-- Keep one authoritative decision point for `/r/` vs `/lj/`.
+- Keep one authoritative decision point for the engine route prefix (`/zl/`; the legacy `/r/` and `/lj/` prefixes answer the honest gone-notice since 2026-10-09, #67).
 - Avoid duplicate networking, cookie, rewriting or interception infrastructure.
 - Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only hacks.
-- Keep NativeTransit and rewriting behavior accurately represented as implemented, partial, experimental or planned.
+- Keep NativeTransit and rewriting behavior accurately repre
+sented as implemented, partial, experimental or planned.
 
 ### Build and deployment reliability
 
@@ -105,6 +109,30 @@ Bring README, AGENTS.md and architecture documentation into agreement with the i
 ### Titanium gate
 
 Complete only when the architecture is understood, obsolete fallback references are resolved, builds are reproducible, deployed engine assets can be verified, and core browsing still works.
+
+Status (2026-09-30): all Titanium items are in place except the recorded
+browser pass, which is deferred until a browser session is free. The
+deterministic transit suite (tests/transit, Tiers 0-7) gates everything
+CI can gate; the browser pass against a live beta origin is the one
+remaining step. The RewriteFallback audit is resolved above, the
+LB/Zeolite boundary is documented (AGENTS.md,
+docs/zeolite-integration.md), the build/deploy reliability checklist
+lives in DEPLOY.md, and README/AGENTS/DEPLOY agree on the current
+Zeolite pin (e3f1a171 / dist 3080d559).
+
+Recorded browser pass (2026-10-04, live beta origin, engine mode
+`/zl/`, Playwright): PASS antiframe fixture framed through the engine
+(frame survives, status flips to "script ran"); PASS in-page fetch to
+the site's own API through the shim (200, valid JSON); PASS
+localStorage/sessionStorage virtualization roundtrip; PASS
+history.pushState + history.back without a document reload; PASS
+WebSocket from a proxied page (open + echo roundtrip); PASS heavy
+real site (en.wikipedia.org: 300KB rewritten document, CSS present,
+1530 links, cross-language link navigation through keyed routes);
+PASS engine error card surfacing in the UI overlay. Still open
+without a deterministic fixture: dynamic imports, module workers.
+Challenge-flow verification was blocked by upstream datacenter-IP
+denials (startpage Access Denied, DDG TLS reset) during the pass.
 
 ---
 
@@ -154,6 +182,43 @@ Test real behavior involving:
 - authentication
 
 HTTP 200 alone does not constitute compatibility.
+
+
+Status (2026-09-30, updated 2026-10-09): started. Tier-8/9/10 probes
+were first gated through the server-side /r/ engine (navigation
+surfaces and the auth-redirect flow; inline import maps; CSS
+url()/@import with data: URLs verbatim, srcset routing, page-query
+forwarding with lb_ keys stripped, per-sid session jar, conditional
+GET). The 2026-10-01 server-side engine removal deleted the server-side
+engine, so those gates went with it: check.mjs now gates the /zl/
+honest notice, the legacy-prefix gone-notices (#67), and the wasm alias,
+while the Tier-8/9/10 fixtures remain for the recorded browser-level
+engine pass (in-worker rewriting owns those surfaces now). The
+deployed-pair gate
+(transit-live CI job) runs the full transit check against the live
+beta + fixture Render services on every beta push, so the
+server-side live verification is CI-recorded rather than a one-off.
+Execution-level behavior (XHR, dynamic imports, iframe subresource
+routing, SPA navigation, reloads, cross-origin navigation) needs the
+recorded browser pass and stays open.
+
+Execution-level pass + reload findings (2026-10-04, live beta origin,
+recorded in the Titanium note above): fetch through the shim, storage,
+history/pushState, WebSocket, cross-origin link navigation and heavy
+real sites all pass. The reload work item produced three verified
+findings. (1) Long or looping upstream redirect chains: the engine
+follows up to 10 hops inside one fetch, then surfaces the 3xx with a
+mapped Location the browser follows as a visible reload - a looping
+chain repeats in 10-hop batches until the browser's own redirect cap
+errors out. The engine now emits a TRANSPORT diag event on every
+surfaced redirect so DevTools explains the cycle. (2) The UI poll's
+blank-frame guard fired a false "blank document" error about 5s into
+any slow navigation while the engine allows 20s; fixed to fire only
+when no navigation is pending or past the 20s transport timeout.
+(3) Challenge/consent escapes reload through escaped-navigation
+recovery by design, once per distinct URL. Still open: a deterministic
+dynamic-import fixture; auth-tier probes (blocked on the engine
+cookie-jar pass against real providers).
 
 ---
 
@@ -223,7 +288,8 @@ Important failures should identify:
 4. why it failed
 5. a request/trace identifier where available
 
-Keep diagnostics privacy-safe. Never expose or persist passwords, bearer tokens, API keys, authorization headers, raw cookies or equivalent secrets.
+Keep diagnostics privacy-safe. Never
+ expose or persist passwords, bearer tokens, API keys, authorization headers, raw cookies or equivalent secrets.
 
 Add privacy-safe diagnostic export when appropriate.
 
@@ -343,7 +409,8 @@ Test:
 
 - upstream failures
 - timeouts
-- malformed responses
+- malformed
+ responses
 - redirects
 - connection resets
 - WebSocket disconnects
@@ -426,12 +493,21 @@ README, AGENTS.md, architecture documentation and DevTools documentation must ag
 
 # Phase: Zeolite Integration — Deferred
 
-Status: **planned, not started.** None of the items below are
-implemented. Zeolite is currently under heavy development and its
-APIs and behavior may change; LobsterBrowse stays pinned to the
-currently working Zeolite version and does not chase moving Zeolite
-internals. Start this phase only after Zeolite's current development
-cycle has stabilized and its 2.x contract is final.
+Status: **started on the beta line, 2026-09-30.** Zeolite's engine
+API has stabilized (3.0 Diamond). Deep integration now lands on
+beta/zeolite-nativetransit per docs/zeolite-integration-plan.md and
+promotes to main via PR #12 only when green and live-verified.
+The plan's items are implemented on beta (2026-09-30): per-site
+rule push into the engine (zl:rules, Zeolite f3268eff), incognito
+throwaway jar (zl:jarProfile, Zeolite cf2d0400),
+ per-origin virtual
+WebSocket identities (Zeolite e3f1a171; beta pinned at e3f1a171 /
+dist 3080d559), and js_antiframe parity confirmed already ported
+(the earlier "no counterpart pass" claim was stale). Live
+behavioral verification of the engine-mode items rides the recorded
+browser pass. Still open beyond the plan: proxied WebSockets pending
+the final transport API. main stays pinned to verified dist
+releases and does not chase Zeolite internals.
 
 Planned work:
 
@@ -484,7 +560,8 @@ The canonical roadmap is:
 
 README and AGENTS.md should point here.
 
-## Zeolite remains separate
+## Zeolite remains
+ separate
 
 Do not merge Zeolite's roadmap into this file.
 
@@ -517,13 +594,14 @@ Where applicable, completion requires implementation, tests, and real browser/de
 
 ## Immediate priority
 
-The immediate roadmap milestone is **0.3 — Titanium**.
+The immediate roadmap milestone is **0.4 — Vanadium** (0.3 — Titanium
+is complete except its recorded browser pass).
 
 Before expanding into more browser features:
 
 1. audit the old RewriteFallback architecture;
 2. reconcile LobsterBrowse and Zeolite responsibilities;
-3. verify `/r/`, `/lj/`, Wisp and NativeTransit behavior;
+3. verify `/zl/`, Wisp and NativeTransit behavior;
 4. verify reproducible engine builds/deployments;
 5. establish the first real-site compatibility regression suite;
 6. update documentation to describe the actual architecture;

@@ -1,135 +1,76 @@
 # LobsterBrowse
-
 ```text
-    __          __         __            ____
-   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
+    __          __         __            __            ____                             
+   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
-/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/
+ /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
 ```
-
 **Open-source browser-style proxy · Rust + React + Material 3 Expressive**
-
-LobsterBrowse is a browser-style proxy application built around **Rust/Axum**, **React + TypeScript**, **Material 3 Expressive**, **Wisp transport**, structured diagnostics, and **Zeolite** integration.
+LobsterBrowse is a browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics and Zeolite integration.
 
 ## Status
 
-LobsterBrowse is actively developed and is **not a Chromium or Firefox replacement**. The project prioritizes working browser behavior, compatibility, and a clean LobsterBrowse/Zeolite boundary over feature count.
+This branch, `beta/zeolite-nativetransit`, is the experimental **Zeolite NativeTransit-first** line. Zeolite is the only engine on this branch; `/zl/` is the engine route. The legacy `/r/` and `/lj/` prefixes are gone (#67): the server answers them with the honest gone-notice, so stale bookmarks break by design.
 
-The current workspace version is **0.2.0**. The next roadmap milestone is **0.3 — Titanium**.
-
+This branch is experimental and should not be treated as the stable LobsterBrowse release.
 ## What it includes
 
-- Tabbed browser UI with Material 3 Expressive styling
-- Rust/Axum proxy server
+- Browser-style UI with tabs, settings, incognito sessions, DevTools and extension controls
+- Rust/Axum application server
+- Zeolite service-worker engine integration
+- NativeTransit-first transport/interception architecture
 - Wisp transport
-- Zeolite engine integration
-- Incognito sessions
-- DevTools and privacy-safe diagnostics
-- Extension controls and WebExtension compatibility work
 - Search suggestions and link prefetching
-- Network filtering and proxy options
-- Health and deployment endpoints
+- Structured, privacy-safe diagnostics
+
+## Roadmap
+
+The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemical element codenames for LobsterBrowse releases, distinct from Zeolite's compound/material naming system.
 
 ## Architecture
-
-The intended architecture keeps the browser application separate from the reusable interception and transport engine:
-
-```text
-LobsterBrowse
-    |
-    v
- Zeolite
-    |
-    +-- interception
-    +-- rewriting
-    +-- transport decisions
-    +-- browser-state primitives
-    |
-    v
- Network / Wisp / native transport
-```
-
-**LobsterBrowse** owns the browser/application experience.
-
-**Zeolite** owns reusable interception and transport functionality so it can be used by other host applications.
-
-**Wisp** remains a transport foundation.
-
-NativeTransit is the direction for native transport/interception. The project is moving away from treating server-side rewriting as the primary architecture, but compatibility paths must not be removed until real compatibility testing shows they are no longer needed.
-
+    LobsterBrowse UI
+          |
+        Zeolite
+       engine SW
+          |
+        Wisp
+          |
+       upstream
 ## Server
-
-The server lives under `server/` and uses Tokio + Axum.
-
-Important routes include:
-
-| Route | Purpose |
-| --- | --- |
-| `/wisp/` | Wisp endpoint |
-| `/healthz` | Liveness/health check |
-| `/zlsw/` | Published Zeolite bundle |
-| `/zl-ext/` | Extension-related route |
-| `/zl-cs/` | Content-script-related route |
-| `/suggest` | Search suggestion proxy |
-
-Compatibility routing and rewriting are implementation details that are still being actively evolved. Do not assume an older `/r/` or `/lj/` architecture is the long-term design.
-
+- server/bin/server — Tokio + Axum HTTP/WSS entrypoint.
+- server/crates/adblock — network filtering (workspace member).
+- /zl/<base64url target> — Zeolite engine route (worker-owned; the server answers only with the honest no-worker notice).
+- /r/, /lj/ — gone legacy prefixes; the server answers the honest gone-notice (502).
+- /wisp/ — Wisp endpoint.
+- /logs — bounded diagnostics.
+- /healthz — liveness.
+- /zlsw/ — published Zeolite bundle.
+- /zl-ext/ and /zl-cs/ — extension routes.
+- /suggest — search suggestion proxy.
 ## UI
-
-The UI lives under `ui/` and uses:
-
-- React
-- TypeScript
-- Vite
-- Material 3 Expressive
-- Google Sans Flex
-- Material Symbols
-
-The browser UI includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions, and browser-state handling.
-
+React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions and link prefetch.
 ## Zeolite integration
-
-Zeolite is maintained in its own repository and roadmap. LobsterBrowse consumes a published Zeolite bundle without making Zeolite depend on LobsterBrowse's UI.
-
-Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only workarounds.
-
-See [Zeolite](https://github.com/lobsterbs/Zeolite) for the engine itself.
-
+Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code. On the beta branch, Zeolite is the only engine: browsing routes over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
+## NativeTransit direction
+NativeTransit is the next transport/interception architecture:
+    LobsterBrowse -> Zeolite -> Transport
+                              |-> NativeTransit
+                              |-> RewriteFallback -> Wisp -> Network
+> Do not rewrite website content unless the engine needs to.
+This is a design direction, not a claim that NativeTransit has already replaced rewriting.
+When implemented, DevTools should show transport path, NativeTransit vs RewriteFallback, fallback reason, and whether a failure is upstream, transport, browser/runtime, policy or rewriting related.
+## Current rewriting behavior
+The Zeolite service worker owns every proxied navigation and subresource: in-worker rewriting handles URL-bearing HTML attributes and CSS, runtime fetch/XHR and element properties, history and window.open, with transport over Wisp. Redirects are followed and relative URLs resolved against the final URL.
+Known limitations include client-side cookie differences, challenge-protected sites (Anubis), limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps.
 ## Proxy options
-
-| Option | Purpose |
-| --- | --- |
-| `lb_ab=1` | Ad filtering |
-| `lb_trk=1` | Tracker filtering |
-| `lb_https=1` | Reject plain HTTP |
-| `lb_img=1` | JPEG re-encoding |
-| `lb_ua=` | User-agent override |
-
-## DevTools and diagnostics
-
-DevTools is a real diagnostic surface, not just a UI log viewer.
-
-Diagnostics should expose useful context such as:
-
-- trace/request IDs
-- redacted URLs
-- subsystem
-- severity
-- lifecycle stage
-- concrete failure causes
-- transport/interception decisions
-
-Diagnostics must remain privacy-safe. Passwords, bearer tokens, API keys, authorization headers, raw cookies, and equivalent secrets must never be exposed or persisted.
-
-A normal WebSocket close is not automatically an error.
-
+Settings reach the engine through the zl:rules control-plane push (adblock, per-site adblock and User-Agent overrides), not through route query parameters; the route path carries only the base64url target.
+## DevTools
+DevTools is a real diagnostic surface. Events should identify trace/request ID, redacted URL, subsystem, severity, lifecycle stage and concrete cause where known. A normal WebSocket close is not an error. NativeTransit diagnostics should expose native-vs-fallback behavior.
+## UI rules
+No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
 ## Privacy
-
-LobsterBrowse is a proxy, so the server necessarily sees traffic that it proxies. It should **not** be described as server-blind.
-
-Browser UI state is stored locally where applicable. Diagnostic output must redact credentials, cookies, authorization data, and other secrets.
-
+LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
 
 ### Server
@@ -148,64 +89,19 @@ npm install
 npm run build
 ```
 
-For development, the UI also provides the standard Vite development command:
+For development:
 
 ```bash
 cd ui
 npm run dev
 ```
-
 ## Deployment
 
-LobsterBrowse is deployed on **Render**.
-
-After deployment changes, verify the deployed UI and relevant server functionality, especially:
-
-- `/healthz`
-- browser navigation
-- Zeolite bundle loading
-- Wisp
-- extension routes
-- compatibility behavior
-
-The deployed Zeolite revision should remain pinned and verifiable rather than silently following moving engine code.
-
-## Roadmap
-
-The authoritative roadmap is [ROADMAP.md](./ROADMAP.md).
-
-Current roadmap direction:
-
-1. **0.3 — Titanium:** architecture and foundation
-2. **0.4 — Vanadium:** navigation and compatibility foundation
-3. **0.5 — Cobalt:** difficult modern websites
-4. **0.6 — Nickel:** diagnostics and DevTools
-5. **0.7 — Zirconium:** browser state and persistence
-6. **0.8 — Tungsten:** extensions
-7. **0.9 — Iridium:** stabilization and compatibility freeze
-8. **1.0 — Osmium:** stable LobsterBrowse
-
-Roadmap details are intentionally kept in `ROADMAP.md` rather than duplicated here.
-
+The application is deployed on Render. This beta branch should be verified against the actually served Zeolite revision after deployment; do not assume every branch push automatically updates the running instance. After deployment changes verify /healthz, UI, /zl/, /zlsw/, Wisp and extension routes when relevant.
 ## Contributing
-
-Before changing code:
-
-1. Inspect the existing implementation and request/state flow.
-2. Identify the correct repository boundary.
-3. Make the smallest coherent change.
-4. Run the relevant tests and builds.
-5. Inspect the final diff.
-6. Update documentation when behavior changes.
-
-If a fix belongs in Zeolite, fix it in Zeolite instead of creating a LobsterBrowse-specific workaround.
-
-## Project boundaries
-
-```text
-LobsterBrowse = browser/application + host integration
-Zeolite       = reusable interception + transport engine
-Wisp          = transport foundation
-```
-
-The goal is a modular browser application with real compatibility, not a second browser engine.
+Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
+## Architecture goal
+LobsterBrowse = host application + browser UI
+Zeolite = reusable interception/transport engine
+Wisp = transport foundation
+RewriteFallback = compatibility escape hatch

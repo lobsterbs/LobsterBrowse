@@ -131,6 +131,10 @@ declare module "react" {
         "page-sizes"?: string;
         "show-first-last-buttons"?: boolean | string;
       };
+      "m3e-tree": M3eBase;
+      "m3e-tree-item": M3eBase & { open?: boolean | string; selected?: boolean | string };
+      "m3e-breadcrumb": M3eBase;
+      "m3e-breadcrumb-item": M3eBase & { href?: string; target?: string; rel?: string; "item-label"?: string };
     }
   }
 }

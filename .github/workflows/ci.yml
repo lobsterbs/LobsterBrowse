@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: ["main", "beta/zeolite-nativetransit"]
   pull_request:
   workflow_dispatch:
 
@@ -47,3 +47,49 @@ jobs:
       - run: npm run build
       - name: Navigation poll regression check
         run: node --experimental-strip-types ../tests/poll-recovery/check.mjs
+
+  transit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tier-0 fixture checks
+        run: node tests/transit/check.mjs
+
+  # Deployed-pair gate: runs the full check against the LIVE Render
+  # pair (fixture + beta). This gates the deployed service, which can
+  # lag this commit while Render rebuilds. When a push changes a server
+  # gate row (like the #67 gone-notice), the run can fail until Render
+  # serves the new build; rerun the job after the deploy goes live. A
+  # lag on an unchanged row means the previous deploy is verified, not
+  # that this push is live. The next beta push re-gates whatever is
+  # live then.
+  transit-live:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/beta/zeolite-nativetransit'
+    env:
+      FIXTURE_ORIGIN: https://lobsterbrowse-fixture.onrender.com
+      LB_ORIGIN: https://lobsterbrowse-beta.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Render free tier spins the pair down after idle; the edge answers
+      # 503 while the instance wakes. Warm both origins (any non-503 code
+      # counts, including the honest /zl/ 503 notice route) before the
+      # strict check runs.
+      - name: Wake the deployed pair
+        run: |
+          for url in "$FIXTURE_ORIGIN/data.json" "$LB_ORIGIN/healthz"; do
+            for i in $(seq 1 24); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url" || true)
+              if [ "$code" != "503" ] && [ "$code" != "000" ]; then echo "$url awake (HTTP $code)"; break; fi
+              echo "$url cold (HTTP $code), retry $i"; sleep 5
+            done
+            if [ "$code" = "503" ] || [ "$code" = "000" ]; then echo "::error::WARMUP failed for $url (HTTP $code)"; exit 1; fi
+          done
+      - name: Deployed-pair checks (live fixture + beta)
+        run: node tests/transit/check.mjs

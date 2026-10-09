@@ -10,6 +10,7 @@ import {
 import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
+import AmoSearch from "../browser/AmoSearch";
 
 type Props = {
   settings: Settings;
@@ -18,9 +19,6 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
-  /* Navigate the active proxy surface in-app (used for the add-ons
-     store: it must load through the engine, not the external browser). */
-  onNavigate: (url: string) => void;
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -95,7 +93,7 @@ function TextInput(props: {
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onNavigate }: Props) {
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     search: true,
     ua: true,
@@ -188,13 +186,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       return;
     }
     const blob = new Blob([JSON.stringify(rep.blob)], { type: "application/json" });
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = blobUrl;
     a.download = "lobsterbrowse-session.json";
     a.click();
     /* Revoke late: an immediate revoke can abort the download before
        the browser takes ownership of the blob (seen on Firefox). */
-    window.setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
     setSessStatus("Session exported. Without the passphrase the file is unreadable.");
   };
   const importSessionFile = async (file: File) => {
@@ -246,7 +245,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           ok: boolean;
           lb?: string;
           zeolite?: string;
-          lobsterjet?: string;
+          zlswSha?: string;
           build?: string;
           buildShort?: string;
         }>;
@@ -283,7 +282,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
       <p className="lb-muted" style={{ marginTop: 4 }}>
-        Saved on this device only. Toggles marked server-side change how the engine fetches pages.
+        Saved on this device only.
       </p>
 
       {/* Real M3E accordion coordinating the panels. multi keeps the
@@ -291,28 +290,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           the accordion would collapse all but one. */}
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Proxy engine</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={settings.proxyEngine === "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "lobsterjet" })}>
-              Zeolite â default
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine !== "lobsterjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              ScramJet
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Zeolite is the project default: a service worker that caches proxied pages on your
-            device (cache-first, 10-minute freshness, network fallback), so repeat visits load
-            without touching the server. There is no server-side fallback for /lj/ routes:
-            without the worker they return an honest notice page asking you to reload so the
-            worker can activate (or switch the engine to ScramJet). ScramJet does adblock/tracker
-            stripping, HTTPS-only enforcement, privacy signals (Sec-GPC / DNT), image compression
-            and AMP de-amping on every upstream request.
-          </p>
-        </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
@@ -326,7 +303,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-list>
-          <Row label="HTTPS-only (server-side)" icon="https" on={settings.httpsOnly} toggle={() => onChange({ httpsOnly: !settings.httpsOnly })} />
           <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
       </Panel>
@@ -352,7 +328,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           )}
         </div>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Custom User-Agent (server-side)</div>
+          <div className="lb-setting-label">Custom User-Agent</div>
           <TextInput
             label="Manual User-Agent string"
             value={uaDraft}
@@ -375,21 +351,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad & tracker blocking (server-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row label="Ad & tracker blocking (engine-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row label="SameSite≈ cookies (engine jar)" icon="public" on={settings.sameSitePolicy === "approx"} toggle={() => onChange({ sameSitePolicy: settings.sameSitePolicy === "approx" ? "off" : "approx" })} />
+          <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
         </m3e-list>
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Get extensions</div>
-          {/* The store loads INSIDE LobsterBrowse, through the active
-             proxy engine, exactly like any other site. */}
-          <m3e-button onClick={() => onNavigate("https://addons.mozilla.org/")}>
-            <m3e-icon name="storefront" aria-hidden={true} /> Browse the Mozilla add-ons store
-          </m3e-button>
-          <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            The store opens in a proxied tab. Downloads land in your Downloads folder as .xpi; import that file below.
-          </p>
+          <div className="lb-setting-label">Find and install add-ons</div>
+          {/* AMO web pages are blocked from this deployment's egress;
+             the public API is not, so search and install run over the
+             API instead of the store site. */}
+          <AmoSearch />
         </div>
         <div className="lb-setting-group">
           <div className="lb-setting-label">Import locally</div>
@@ -467,20 +441,36 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
-            you return, the cloak covers LobsterBrowse until you click "Return". Browsers do not let a
-            page re-render while hidden â this is the strongest behavior a normal web page can offer.
+            you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
+            page re-render while hidden — this is the strongest behavior a normal web page can offer.
           </p>
         </div>
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
         <div className="lb-setting-group">
+          <div className="lb-setting-label">Transport engine</div>
+          <div className="lb-seg-wrap">
+          <m3e-segmented-button aria-label="Transport engine">
+            <m3e-button-segment checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
+              libcurl (default)
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
+              epoxy (experimental)
+            </m3e-button-segment>
+          </m3e-segmented-button>
+          </div>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes — that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
+          </p>
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
           <div className="lb-setting-label">Zeolite cache</div>
           <p className="lb-muted">
-            Cached proxied pages and local libraries live on this device in the service worker
+            Cached proxied pages live on this device in the service worker
             cache. Clearing drops every entry; pages reload from the server on the next visit.
           </p>
-          <div className={settings.proxyEngine !== "lobsterjet" ? "lb-off" : ""}>
           <m3e-button
             onClick={() => {
               (async () => {
@@ -498,12 +488,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           >
             <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
           </m3e-button>
-          </div>
-          {settings.proxyEngine !== "lobsterjet" && (
-            <p className="lb-muted" style={{ fontSize: 12 }}>
-              Cache options apply when Zeolite is the proxy engine.
-            </p>
-          )}
         </div>
 
         <div className="lb-setting-group">
@@ -578,7 +562,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               {rules.map((r) => (
                 <div key={r.domain} className="lb-rule-row">
                   <code>{r.domain}</code>
-                  <span className="lb-muted">{r.uaPreset ?? "default UA"} Â· adblock {r.adblock === false ? "off" : "on"}</span>
+                  <span className="lb-muted">{r.uaPreset ?? "default UA"} · adblock {r.adblock === false ? "off" : "on"}</span>
                   <m3e-icon-button aria-label="Remove rule" onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}>
                     <m3e-icon name="delete" aria-hidden={true} />
                   </m3e-icon-button>
@@ -632,7 +616,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Keyboard shortcuts</div>
           <p className="lb-muted">
-            Alt+T new tab Â· Alt+W close tab Â· Alt+Shift+T reopen closed tab.
+            Alt+T new tab · Alt+W close tab · Alt+Shift+T reopen closed tab.
             Ctrl+T and Ctrl+W are reserved by the host browser and can never reach the app.
           </p>
         </div>
@@ -674,7 +658,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>
