@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist a875f516 (Zeolite main 1350f7d5, CI run 37834814352)
+# Current pin: dist 0093252a (Zeolite main ed23eb46, CI run 37908392043)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -107,8 +107,18 @@ RUN npm run build
 # a fresh connection, then honest failure. sw.js b5f0f84c ->
 # bb61d441; bootstrap.js unchanged (413a7bd7). Cargo-side pin
 # stays 483aa0f (no crates changed).
+# 2026-10-09 (14): #113 follow-up - legacy /zl/ referrers (cold
+# starts, pre-#113 dists) now decode in forwardedHeaders and
+# referrerOrigin through the decodePath -> nav handle ->
+# decodeLegacyRoute chain, so subresources from any route family
+# carry a real upstream Referer again and the reCAPTCHA co= seam
+# resolves the page origin deterministically. Regression tests
+# pin the co= chain across keyed, navh and legacy referrers
+# (Zeolite ed23eb46). sw.js bb61d441 -> edf104c0; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=a875f516d8e52d25fc7370c95e55b50aa6842107
+ARG ZEOLITE_COMMIT=0093252af45608bc6a80db579ea1175f2d30741f
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -144,5 +154,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=bb61d441d09ce8c7 ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=edf104c075c67c3b ZEOLITE_BOOTSTRAP_SHA=413a7bd790615e51
 ENTRYPOINT ["/app/lobster-server"]
