@@ -881,7 +881,7 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
-    let lb_version = format!("{} Vanadium", env!("CARGO_PKG_VERSION"));
+    let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,

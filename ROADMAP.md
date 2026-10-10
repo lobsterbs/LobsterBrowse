@@ -594,8 +594,8 @@ Where applicable, completion requires implementation, tests, and real browser/de
 
 ## Immediate priority
 
-The immediate roadmap milestone is **0.4 — Vanadium** (0.3 — Titanium
-is complete except its recorded browser pass).
+The immediate roadmap milestone is **0.5 — Cobalt** (0.4 — Vanadium
+is complete; the difficult-modern-websites push begins).
 
 Before expanding into more browser features:
 
