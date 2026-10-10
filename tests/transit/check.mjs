@@ -1,10 +1,11 @@
 /* Tier-0 check: spawns the deterministic fixture and asserts every
    endpoint over plain HTTP. With LB_ORIGIN set (a locally running
    lobster-server or a deployed beta origin) it additionally asserts:
-   - /zl/<b64url> answers with the honest "no worker controls this
-     page" notice (the engine route, server side);
+   - /zl/<b64url> answers with the embedder engine-offline notice
+     (503, the no-controller case from Zeolite docs/error-pages.md;
+     meta[zl-error] payload, no destination URL in the body);
    - the legacy /r/ and /lj/ prefixes answer the honest gone-notice
-     (502 engine_error_page), never a redirect or the SPA fallback.
+     (502), never a redirect or the SPA fallback.
    This proves fixture + route behavior. It can NOT prove the
    SW -> NativeTransit -> Wisp chain: no browser runs in CI. The
    browser-level run is a separate, recorded step (see
@@ -290,11 +291,15 @@ try {
   if (lb) {
     const rz = await fetch(lb + "/zl/" + b64u(base + "/data.json"));
     const zt = await rz.text();
-    /* The route reuses engine_error_page (the honest load-failure
-       card), which answers 502 Bad Gateway - it is a cold-start
-       notice, not a 503. */
-    ok("zl honest notice status 502", rz.status === 502, "got " + rz.status);
-    ok("zl honest notice text", zt.includes("Zeolite runs in its service worker"), zt.slice(0, 120));
+    /* Zeolite owns every error page a live engine can answer
+       (app/src/errorpage.ts); this notice is the embedder case
+       from Zeolite docs/error-pages.md: 503 (the failure is on
+       the engine side of the route), a zl-error meta payload, and
+       no destination URL in the body (#32). */
+    ok("zl offline notice status 503", rz.status === 503, "got " + rz.status);
+    ok("zl offline notice text", zt.includes("not controlling this origin"), zt.slice(0, 120));
+    ok("zl offline notice carries zl-error meta", zt.includes("zl-error"), zt.slice(0, 200));
+    ok("zl offline notice hides destination", !zt.includes(base), "body leaks the fixture origin!");
     ok("zl does not proxy server-side", zt.indexOf("\"ok\":true") === -1, "body contains fixture json!");
 
     /* The engine dist resolves rewriter_wasm_bg.wasm root-absolute,

@@ -857,8 +857,6 @@ export default function BrowserView(props: Props) {
     }
     setExtList(Array.isArray(rep.extensions) ? (rep.extensions as ExtInfo[]) : []);
   };
-  /* Load errors surfaced from the server's meta[lb-load-error]. */
-  const [errors, setErrors] = useState<Record<number, { url: string; message: string }>>({});
 
   /* Compact browse pass: with density "compact" the collapsed pill
      shows the site host instead of the page title, and the idle dock
@@ -1057,12 +1055,6 @@ export default function BrowserView(props: Props) {
       delete n[tab.id];
       return n;
     });
-    setErrors((prev) => {
-      if (!prev[tab.id]) return prev;
-      const n = { ...prev };
-      delete n[tab.id];
-      return n;
-    });
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
     settleRef.current[tab.id] = { last: -1, streak: 0, t0: Date.now() };
@@ -1144,61 +1136,39 @@ export default function BrowserView(props: Props) {
             const cur = prev[t.id];
             return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
           });
-          setErrors((prev) =>
-            prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
-              ? prev
-              : { ...prev, [t.id]: { url: t.url, message: msg } }
-          );
           if (!blankLogged.current.has(t.id)) {
             blankLogged.current.add(t.id);
             pushLog("error", "blank frame stuck: " + sanitizeUrl(t.url));
+            /* The LB error overlay is gone (Zeolite owns the error
+               pages); the stuck-blank case has no page to show, so
+               the DevTools console entry is the user surface. */
+            setDtState((prev) => {
+              const base = prev[t.id] ?? emptyDt();
+              return {
+                ...prev,
+                [t.id]: {
+                  ...base,
+                  console: [
+                    ...base.console,
+                    { id: nextEntryId(), kind: "error" as const, text: "[LobsterBrowse] " + msg + " (" + sanitizeUrl(t.url) + ")", ts: Date.now() },
+                  ].slice(-500),
+                },
+              };
+            });
           }
         }
         return;
       }
       blankPolls.current.delete(t.id);
       blankLogged.current.delete(t.id);
-      /* Detailed error page: the engine serves the honest error card
-         at the same /zl/ path; surface it and stop the spinner. */
-      const errMeta = doc.querySelector<HTMLMetaElement>('meta[name="lb-load-error"]');
-      if (errMeta) {
-        setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        const msg = errMeta.content || "unknown error";
-        setErrors((prev) =>
-          prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
-            ? prev
-            : { ...prev, [t.id]: { url: t.url, message: msg } }
-        );
-        pushLog("error", "load failed: " + msg);
-        /* The error must also surface in the DevTools console, not just
-           the error overlay. */
-        setDtState((prev) => {
-          const base = prev[t.id] ?? emptyDt();
-          return {
-            ...prev,
-            [t.id]: {
-              ...base,
-              console: [
-                ...base.console,
-                {
-                  id: nextEntryId(),
-                  kind: "error" as const,
-                  text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
-                  ts: Date.now(),
-                },
-              ].slice(-500),
-            },
-          };
-        });
-        return;
-      }
       /* Zeolite engine error page (#31): the SW answers engine-side
          navigation failures (bad or stranded route, blocked site,
          transport death) with its own card and a meta[zl-error] JSON
-         payload (category, reason, traceId, status). Same
-         surface-and-stop treatment as lb-load-error, plus the
-         DevTools console mirror; the reason is URL-redacted by the
-         engine (#32), so it is safe to show. */
+         payload (category, reason, traceId, status). The card in the
+         frame IS the user surface now (the LB error overlay is
+         gone); this poll only stops the spinner and mirrors the
+         failure into the log and the DevTools console. The reason
+         is URL-redacted by the engine (#32), so it is safe to show. */
       const zlMeta = doc.querySelector<HTMLMetaElement>('meta[name="zl-error"]');
       if (zlMeta) {
         let msg = "zeolite: navigation error";
@@ -1209,11 +1179,6 @@ export default function BrowserView(props: Props) {
           /* unparsable payload: keep the generic line */
         }
         setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        setErrors((prev) =>
-          prev[t.id] && prev[t.id].message === msg && prev[t.id].url === t.url
-            ? prev
-            : { ...prev, [t.id]: { url: t.url, message: msg } }
-        );
         pushLog("error", "load failed: " + msg);
         setDtState((prev) => {
           const base = prev[t.id] ?? emptyDt();
@@ -1337,12 +1302,6 @@ export default function BrowserView(props: Props) {
          title/status/favicon syncing; the URL-sync block no-ops. */
       const real = decodeRoute(path) || t.url;
       if (!real) return;
-      setErrors((prev) => {
-        if (!prev[t.id]) return prev;
-        const n = { ...prev };
-        delete n[t.id];
-        return n;
-      });
       if (real !== t.url) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
@@ -1755,7 +1714,7 @@ export default function BrowserView(props: Props) {
     window.setTimeout(() => {
       setClosingIds((prev) => prev.filter((x) => x !== id));
       /* Full per-tab state cleanup: status, DevTools, drafts, icons,
-         errors, mute set, navigation bookkeeping and the frame handle.
+         mute set, navigation bookkeeping and the frame handle.
          (The favicon blob URL itself is shared through iconCache, so
          it is only revoked when no tab uses it anymore.) */
       frames.current.delete(id);
@@ -1778,7 +1737,6 @@ export default function BrowserView(props: Props) {
       setStatus(drop);
       setDrafts(drop);
       setIcons(drop);
-      setErrors(drop);
       setDtState((prev) => {
         if (!prev[id]) return prev;
         const n = { ...prev };
@@ -1979,58 +1937,6 @@ export default function BrowserView(props: Props) {
         {st.loading && (
           <div className="lb-loading" aria-busy="true">
             <m3e-loading-indicator variant="contained" aria-label="Loading page" />
-          </div>
-        )}
-
-        {errors[active.id] && (
-          <div className="lb-error" role="alertdialog" aria-label="Page failed to load">
-            <m3e-heading variant="title" size="medium" level={2}>This page could not be loaded</m3e-heading>
-            <p className="lb-error-url">{errors[active.id].url}</p>
-            <p className="lb-error-msg">{errors[active.id].message}</p>
-            <div className="lb-error-logs">
-              <div className="lb-error-logs-title">Technical log</div>
-              <div className="lb-error-logline">
-                engine zeolite · route {routeUrl(errors[active.id].url)}
-              </div>
-              <div className="lb-error-logline">
-                navigation {status[active.id]?.nav ?? navId.current.get(active.id) ?? "unknown"}
-              </div>
-              {activeDt.fails.length > 0 && (
-                <div className="lb-error-logline">
-                  resource failures: {activeDt.fails.length} (
-                  {Object.entries(
-                    activeDt.fails.reduce<Record<string, number>>((a, f) => {
-                      a[f.kind] = (a[f.kind] ?? 0) + 1;
-                      return a;
-                    }, {}),
-                  )
-                    .map(([k, n]) => n + " × " + k)
-                    .join(", ")}
-                  )
-                </div>
-              )}
-              {[
-                ...activeDt.fails.slice(-10).map((f) => "fail: [" + f.kind + "] " + (f.status ? f.status + " " : "") + f.url + " — " + f.reason + (f.note ? " (" + f.note + ")" : "")),
-                ...activeDt.console.filter((e) => e.kind === "error").slice(-5).map((e) => "console: " + e.text),
-                ...activeDt.net.slice(-10).map((n) => n.method + " " + n.status + " " + n.url),
-              ].map((line, i) => (
-                <div key={i} className="lb-error-logline">{line}</div>
-              ))}
-            </div>
-            <m3e-button
-              variant="filled"
-              onClick={() => {
-                const target = errors[active.id].url;
-                setErrors((prev) => {
-                  const n = { ...prev };
-                  delete n[active.id];
-                  return n;
-                });
-                load(active, target, { push: false });
-              }}
-            >
-              <m3e-icon name="refresh" aria-hidden={true} /> Try again
-            </m3e-button>
           </div>
         )}
 
