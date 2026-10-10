@@ -2,6 +2,7 @@
    down; the card stays mounted in the dock (its iframes must stay
    alive or tiles show blank frames). Presentational: tab state and
    selection stay in pages/Browser.tsx. */
+import { useEffect, useState } from "react";
 import { routeUrl } from "../settings";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
@@ -17,6 +18,19 @@ export default function TabSwitcherCard(props: {
   onSelect: (id: number) => void;
   onCloseTab: (id: number) => void;
 }) {
+  /* Preview tiles load a SECOND full page instance per tab (the
+     legacy b64u route), and the card stays mounted while closed,
+     so every tab navigation ran twice: doubled bandwidth, doubled
+     challenge solves on proof-of-work sites (two Anubis instances
+     race and the failing one can paint over the success), and a
+     stale preview could even paint a failure the real tab never
+     had. No tile navigates until the switcher has been opened at
+     least once; once shown, tiles stay mounted (they must stay
+     alive or re-opening shows blank frames). */
+  const [everOpened, setEverOpened] = useState(false);
+  useEffect(() => {
+    if (props.open) setEverOpened(true);
+  }, [props.open]);
   if (props.tabs.length === 0) return null;
   return (
     <m3e-card variant="elevated" aria-label="Tab switcher" {...{ class: "lb-tabs-card" + (props.open ? " open" : "") }}>
@@ -45,7 +59,7 @@ export default function TabSwitcherCard(props: {
             }}
           >
             <div className="lb-tab-preview">
-              {t.url ? (
+              {t.url && everOpened ? (
                 <iframe
                   src={routeUrl(t.url)}
                   title={"Preview of " + tabLabel(t)}
