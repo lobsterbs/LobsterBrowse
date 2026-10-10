@@ -1139,6 +1139,12 @@ async fn main() {
             zl_cfg.password = Some((user, pw));
         }
     }
+    // Zeolite #133: the crate default stream ceiling (24) starves sequential
+    // browsing - browsers hold keepalive sockets and Close(Throttled) has no
+    // client recovery yet. Raise the LB default unless the deploy set it.
+    if std::env::var("MAX_STREAMS_PER_CONNECTION").is_err() {
+        zl_cfg.max_streams_per_conn = 128;
+    }
     let wisp_state = zeolite_server::Shared::new(zl_cfg);
 
     let app = Router::new()
