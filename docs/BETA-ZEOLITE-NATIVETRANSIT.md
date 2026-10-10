@@ -609,3 +609,32 @@ Eruda inject, engine devtools link).
 - Rollback: deploy main.
 - /r/ removal stays a separate future phase, not part of this
   beta.
+
+## Rail geometry and Zeolite owned error pages at pin 39 (2026-10-10)
+
+Rail. ui/src/rail.css is deleted: the host padding, item margin and sticky
+or overflow overrides are gone, and the m3e-nav-rail component owns every
+geometry decision (mode auto, stock expand button). Live verification on
+the pin 39 build: collapsed width 96px, expanded width 220px via the stock
+expand button, top inset 44px, stock item spacing. No LobsterBrowse CSS
+touches the rail anymore.
+
+Error pages. LobsterBrowse no longer authors error UI. A /zl/ request that
+reaches the server answers 503 with the engine offline notice carrying
+meta zl-error and never the destination URL (the issue 32 rule). The
+legacy /r/ prefix answers 502 with the gone notice. A failed engine
+fetch (dead upstream) renders the Zeolite error card inside the engine
+frame: title, reason, category, trace id, Try again. No .lb-error overlay
+exists in the app DOM anymore; the app only mirrors the failure into the
+DevTools console. The contract is documented in Zeolite
+docs/error-pages.md, embedder implementation section.
+
+Verification (2026-10-10, live pin 39 build): /zl/ answers 503 with the
+notice and meta zl-error, destination absent from the body; /r/ answers
+502 with the gone notice; a dead upstream (nonexistent.invalid) shows the
+Zeolite TLS error card in the navHandle frame and no app overlay;
+wikipedia loads normally through the engine.
+
+The beta CI transit-live job failed once on push 9910819 because it ran
+while the matching deploy was still building (known deploy lag); this
+commit re-runs it against the live build.
