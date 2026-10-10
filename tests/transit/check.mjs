@@ -311,6 +311,21 @@ try {
     const rwb = Buffer.from(await rw.arrayBuffer());
     ok("wasm alias magic", rwb.subarray(0, 4).toString("latin1") === "\0asm", "len " + rwb.length);
 
+    /* The engine fetches its data files root-absolute (rules.ts,
+       siteconfig.ts, policy.ts): the origin-root aliases must serve
+       the vendored dist files, or the engine silently runs with no
+       adblock rules, site overrides or compatibility policy (the SPA
+       fallback answers index.html with 200 for unaliased paths, so
+       the content-type and body checks matter as much as status). */
+    const dfiles = [["rules.kdl", "/rules.kdl"], ["siteconfig.kdl", "/siteconfig.kdl"], ["policy.kdl", "/policy.kdl"]];
+    for (const [nm, p] of dfiles) {
+      const dr = await fetch(lb + p);
+      ok(nm + " alias status 200", dr.status === 200, "got " + dr.status);
+      ok(nm + " alias content type", (dr.headers.get("content-type") || "").includes("text/plain"), String(dr.headers.get("content-type")));
+      if (nm === "rules.kdl") {
+        ok(nm + " alias body", (await dr.text()).includes("doubleclick.net"), "body lacks the host list");
+      }
+    }
     /* Legacy prefixes are unowned (#67): /r/ and /lj/ must break
        honestly with the engine_error_page gone-notice (502), never a
        302 rescue and never the SPA fallback (index.html 200). */
