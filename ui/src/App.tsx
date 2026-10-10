@@ -12,6 +12,7 @@ import {
   resetIncognitoSid,
   incognitoSid,
   resolveUa,
+  UA_PRESETS,
   type Settings,
   type SiteRule,
 } from "./settings";
@@ -342,6 +343,27 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [incognito]);
 
+  /* ---- Zeolite engine page options: HTTPS upgrade (Zeolite #53) and
+     lazy images are worker-global zl:config fields that reset on
+     restart, so re-send on change and on controllerchange (the
+     jarProfile pattern above). ---- */
+  useEffect(() => {
+    const post = () => {
+      void zlSend(
+        {
+          type: "zl:config",
+          prefix: engineRoutePrefix(),
+          httpsUpgrade: settings.httpsUpgrade,
+          imageLazy: settings.imageLazy,
+        },
+        8000,
+      );
+    };
+    post();
+    navigator.serviceWorker?.addEventListener("controllerchange", post);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+  }, [settings.httpsUpgrade, settings.imageLazy]);
+
   /* ---- Zeolite jar knobs (#48): SameSite policy on the engine cookie
      jar, and document-surface fingerprint spoofing on engine-routed
      pages. Both are worker-global and reset on restart, so re-send on
@@ -353,14 +375,17 @@ export default function App() {
   useEffect(() => {
     const post = () => {
       void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
-      const profile = settings.fingerprintSpoof
-        ? { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent }
-        : null;
+      const profile =
+        settings.fingerprintProfile === "native"
+          ? null
+          : settings.fingerprintProfile === "ua"
+            ? { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent }
+            : { userAgent: UA_PRESETS[settings.fingerprintProfile].ua };
       void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
         /* A rejected profile must not silently read as spoofed: the
            engine answers ok:false (e.g. a custom UA it cannot derive a
            platform from) and the toggle would lie. */
-        if (settings.fingerprintSpoof && r && r.ok === false) {
+        if (profile && r && r.ok === false) {
           store.pushLog("warn", "zeolite rejected the fingerprint profile: " + String(r.error ?? "unknown reason"));
         }
       });
@@ -368,7 +393,7 @@ export default function App() {
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.fingerprintSpoof, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom]);
+  }, [settings.fingerprintProfile, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, rules]);
 
   /* ---- Zeolite transport engine (#54): push the persisted choice
      (zl:transport). The engine switches on the NEXT transport init,

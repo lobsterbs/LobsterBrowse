@@ -387,6 +387,106 @@ function ZeoliteDownloads() {
   );
 }
 
+/* Engine-side developer tools: the tracing toggle, deterministic
+   session recording, and Eruda (an embeddable console/network panel)
+   injected into the live proxied page - the iframe is same-origin,
+   so the script runs in the page JS context directly. All control
+   rides the engine plane (zlSend). */
+function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }) {
+  const [tracingOn, setTracingOn] = useState(false);
+  const [recId, setRecId] = useState("");
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    let dead = false;
+    void zlSend({ type: "zl:getTracing" }, 8000).then((r) => {
+      if (!dead && r && r.ok) setTracingOn(Boolean(r.enabled));
+    });
+    return () => { dead = true; };
+  }, []);
+  const toggleTracing = async () => {
+    const r = await zlSend({ type: "zl:tracing", enabled: !tracingOn }, 8000);
+    if (r && r.ok) setTracingOn(Boolean(r.enabled));
+  };
+  const startRec = async () => {
+    const id = "lb-" + Date.now();
+    const r = await zlSend({ type: "zl:recordStart", recId: id }, 8000);
+    if (r && r.ok) {
+      const rid = typeof r.record === "object" && r.record !== null && "id" in r.record ? String((r.record as { id?: unknown }).id) : id;
+      setRecId(rid);
+      setNote("Recording engine activity (tracing is forced on while recording).");
+    } else {
+      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
+    }
+  };
+  const stopRec = async () => {
+    const r = await zlSend({ type: "zl:recordStop" }, 15000);
+    if (r && r.ok) {
+      const blob = new Blob([JSON.stringify(r.record, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "zeolite-record.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setRecId("");
+      setNote("Recording saved as zeolite-record.json.");
+    } else {
+      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
+    }
+  };
+  const injectEruda = async () => {
+    const w = frame()?.contentWindow;
+    if (!w) { setNote("No proxied page in this tab."); return; }
+    const d = w.document;
+    if (d.querySelector("script[data-lb-eruda]")) {
+      const eruda = (w as unknown as { eruda?: { toggle?: () => void } }).eruda;
+      if (eruda && eruda.toggle) eruda.toggle();
+      return;
+    }
+    try {
+      /* Inline injection, not a src: the page shim rewrites URL
+         assignments, and eruda must load in the page realm as-is. */
+      const code = await (await fetch("/eruda.js")).text();
+      const s = d.createElement("script");
+      s.textContent = code;
+      s.setAttribute("data-lb-eruda", "1");
+      d.head.appendChild(s);
+      const eruda = (w as unknown as { eruda?: { init?: () => void } }).eruda;
+      if (eruda && eruda.init) { eruda.init(); setNote("Eruda loaded in the page."); }
+      else setNote("Eruda script ran but did not register; the page context may block it.");
+    } catch {
+      setNote("Could not load eruda.js.");
+    }
+  };
+  return (
+    <div className="lb-dt-toolbar" style={{ flexWrap: "wrap", rowGap: 8 }}>
+      <m3e-button onClick={() => void toggleTracing()}>
+        <m3e-icon name={tracingOn ? "pause_circle" : "play_circle"} aria-hidden={true} />
+        {tracingOn ? "Tracing on" : "Tracing off"}
+      </m3e-button>
+      {recId ? (
+        <m3e-button onClick={() => void stopRec()}>
+          <m3e-icon name="stop_circle" aria-hidden={true} />
+          Stop recording
+        </m3e-button>
+      ) : (
+        <m3e-button onClick={() => void startRec()}>
+          <m3e-icon name="radio_button_checked" aria-hidden={true} />
+          Record session
+        </m3e-button>
+      )}
+      <m3e-button onClick={() => void injectEruda()}>
+        <m3e-icon name="terminal" aria-hidden={true} />
+        Eruda in page
+      </m3e-button>
+      <m3e-button onClick={() => window.open("/zlsw/devtools.html", "_blank", "noopener")}>
+        <m3e-icon name="memory" aria-hidden={true} />
+        Engine DevTools
+      </m3e-button>
+      {note && <span className="lb-muted">{note}</span>}
+    </div>
+  );
+}
+
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
@@ -873,6 +973,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             transport section shows routing decisions, not failures: FB rows are expected rewrite
             fallbacks (every HTML and CSS load uses one).
           </p>
+          <ZeoliteEngineTools frame={frame} />
           <ZeoliteDiagnostics />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
