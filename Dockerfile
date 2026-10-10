@@ -409,10 +409,29 @@ RUN npm run build
 # bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
 # f5ad1126. Cargo-side pin stays deccb43 (app-only change).
 
+# 2026-10-10 (38): two engine fixes. (1) The Anubis
+# pass-challenge repair accepts the redir shape anubis >= 1.26
+# actually emits: window.location.href of the rewritten challenge
+# page, an ABSOLUTE engine-origin URL. The old code only decoded
+# bare route paths, isEnginePath failed on the absolute string,
+# the redir went upstream untouched and the deployment rejected
+# the cross-origin redirect target (startpage: the proof of work
+# completes, verification then fails 500). Absolute redirs are
+# accepted only from the engine origin. (2) The flat asset
+# recovery now also covers runtime-built BINARY names (image,
+# video, audio, font, bare fetch): the github homepage mints
+# glb/mp4 names at runtime that 404 at the page origin. Element
+# dests require their MIME family (or octet-stream), a bare
+# fetch must carry an extension so beacon-shaped misses do not
+# mint CDN retries, and HTML/plain-text candidates are refused.
+# sw.js 1785f26f -> 25dea7e1 (201702 bytes); bootstrap.js
+# unchanged 03cd3476; wasm unchanged f5ad1126. Cargo-side pin
+# stays deccb43 (app-only changes).
+
 
 
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=9fc0eb7e6f83e6b91155c0915be891259d18d176
+ARG ZEOLITE_COMMIT=76cbd0e76f2b0e66c8770fb04b105325d5acf97f
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -448,5 +467,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=1785f26f5ba73ed3 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=25dea7e1200bde07 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
