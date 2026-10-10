@@ -428,10 +428,17 @@ RUN npm run build
 # unchanged 03cd3476; wasm unchanged f5ad1126. Cargo-side pin
 # stays deccb43 (app-only changes).
 
+# 2026-10-10 (39): lazy-images opt-in rewriter pass (loading="lazy" on
+# img tags without one, additive only) + the zl:config imageLazy and
+# httpsUpgrade host toggles (Zeolite main 7dc5d8a, ci gate fix 0704011).
+# sw.js 25dea7e1 -> 21dc6e6c (201932 bytes); bootstrap.js unchanged
+# 03cd3476; rewriter wasm f5ad1126 -> d86f746e. Cargo-side pin stays
+# deccb43 (the LB server consumes no rewriter change; lazy images and
+# the https toggle ride the service worker).
 
 
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=76cbd0e76f2b0e66c8770fb04b105325d5acf97f
+ARG ZEOLITE_COMMIT=232748c041d637d7f91edba729ef2170d7d59688
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -467,5 +474,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=25dea7e1200bde07 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=21dc6e6c66ea23bd ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
