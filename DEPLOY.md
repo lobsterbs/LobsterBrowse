@@ -38,14 +38,12 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite main ed23eb46 (the #113 legacy-referrer decode
-chain, with regression tests pinning the reCAPTCHA co= seam across
-keyed, navh and legacy route referrers, on top of the #99 transport
-first-byte deadline and the #112 referer/co=/self-route series),
-dist bundle 0093252a
-(Zeolite CI build 37908392043, all-green).
+Current pin: Zeolite dist 232748c0 (pin 39: the opt-in lazy-images
+rewrite pass plus the zl:config imageLazy and httpsUpgrade host
+toggles, from Zeolite main 7dc5d8a, CI all-green), zlswSha
+21dc6e6c66ea23bd.
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
-git rev stays 483aa0f because no crate change shipped since it,
+git rev stays deccb43 because no crate change shipped since it,
 and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
@@ -54,10 +52,13 @@ and server/Cargo.lock is consistent with the pin.
   rev in server/bin/server/Cargo.toml, the regenerated
   server/Cargo.lock, this file's pin note and AGENTS.md's pin line
   move together. Never land half a pin.
-- Let the push-triggered Render autoDeploy do deploys. An API-triggered
-  deploy once built from a stale git ref (2026-09-30: deploy metadata
-  named the new commit, the image served the old one; /build proved it).
-  The webhook autoDeploy carries the exact SHA and has not done this.
+- Deploys are API-triggered: autoDeploy is off on both services.
+  Trigger with clearCache: true after every pin bump, then verify
+  /build: buildShort must equal the pushed SHA and zlswSha must equal
+  the Dockerfile ENV pin. A 2026-09-30 deploy once built from a
+  stale git ref (deploy metadata named the new commit, the image
+  served the old one; /build proved it); the /build check after
+  every deploy is the guard.
 - After every deploy, verify /build: buildShort must equal the pushed
   SHA, and zlswSha must change when the Zeolite pin moved. /healthz
   must answer ok. A "live" deploy status alone proves nothing.
