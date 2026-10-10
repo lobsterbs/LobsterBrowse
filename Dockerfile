@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 18759b0 (Zeolite main 6865afe, CI run 38051345699)
+# Current pin: dist f7b7c27 (Zeolite main ed62414, CI run 38053544637)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -321,8 +321,24 @@ RUN npm run build
 # a9aca861 (24172 bytes); wasm unchanged f5ad1126. Cargo-side pin
 # stays deccb43.
 
+# 2026-10-10 (31): #132 follow-up, the measured widget seam. The
+# #130 vorigin origin relabel (ev.origin -> the sender's __zlVO)
+# broke the widget: gstatic's channel establishers derive the
+# origin they expect from the rewritten src/co= URLs, which point
+# at the ENGINE, so every origin check failed, the setup port was
+# never taken, the click notification was lost, the bframe was
+# never created and the widget timed out on every anchor rebuild
+# (live probes rc45-rc53: identity, source and port checks all
+# passed, only the origin comparison failed). ev.origin now
+# deliberately stays the native engine origin; the ev.source
+# identity relabel and the __zlVO marker (postmsg sender-side
+# parity checks) stay. sw.js unchanged 9dcd3c18 (198177 bytes);
+# bootstrap.js 0b6b80e9 -> db25100b (24433 bytes, under the
+# 25088 budget); wasm unchanged f5ad1126. Cargo-side pin stays
+# deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=18759b0f68b2926d77a45372709096bb722d21ce
+ARG ZEOLITE_COMMIT=f7b7c271629af814ee406f94519c5dbe79626f0f
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -358,5 +374,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=0b6b80e9eb19c20d
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=db25100bad8b3aee
 ENTRYPOINT ["/app/lobster-server"]
