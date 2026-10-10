@@ -558,3 +558,54 @@ absolute-redir repair, runtime-built binary asset recovery).
   superseded by the ScramJet removal (no second engine exists on
   this branch to switch back to).
 - /r/ removal stays a separate future phase, not part of this beta.
+
+## Promotion conditions status (2026-10-10, pin 39)
+
+Dated re-check after the pin 39 engine drop: the opt-in lazy-images
+rewrite pass (imgs with no loading attribute gain loading=lazy;
+eager and lazy attributes pass through untouched), the zl:config
+imageLazy and httpsUpgrade host toggles, and the LB surfacing for
+them: Settings rows for HTTPS upgrade, the fingerprint profile
+picker (replacing the boolean spoof toggle) and lazy images, plus
+the DevTools engine tools row (tracing toggle, session recording,
+Eruda inject, engine devtools link).
+
+- CI green on all three heads: Zeolite main f760fd0 (lazy images
+  7dc5d8a plus CI-gate and docs commits), LB main a0e848e, LB
+  beta/zeolite-nativetransit d1e32b3. Deployed: main 81cec40,
+  beta d1e32b3, both answering zlswSha 21dc6e6c66ea23bd on /build.
+- Real-browser verification (Chromium via Playwright) repeated
+  against the deployed pin 39 beta:
+  the lazy fixture page proves the pass is additive (imgs with no
+  loading attribute gain loading=lazy, eager stays eager, lazy
+  stays lazy);
+  Startpage still completes the Anubis proof of work and returns
+  results (regression check on the pin 38 redir repair);
+  Settings shows the new rows with no Server default row and no
+  leftover Fingerprint spoofing row;
+  the DevTools engine tools row works end to end: the tracing
+  toggle round-trips through zl:getTracing (off, then on), all
+  four controls are present, and the Eruda inject button loads
+  eruda.js into the active proxied frame (script tag present,
+  eruda initialized, entry button reachable through its shadow
+  root; eruda v3 renders inside a shadow root, so plain document
+  queries miss it by design).
+- Wikipedia, GitHub, Startpage and the lazy fixture all render
+  through the engine. Mojeek refuses the datacenter egress IP
+  (environmental, same class as the Bing empty skeleton and the
+  Google sorry wall; not a client defect).
+- Firefox: honest fail, unchanged (no module service workers).
+- WebKit: still no recorded run, and the blocker is now concrete:
+  the WebKit runtime needs the GTK/GStreamer system stack (about
+  50 missing shared libraries, among them libgstreamer, libgtk-4,
+  libwayland, libsoup) and the sandbox container is non-root with
+  no package install available. No claim is made either way; the
+  condition stays open.
+- Cookie jar, streaming, range requests, downloads:
+  engine-verified, unchanged from pin 38.
+- Origin isolation: NOT shrunk. The shared-store model is
+  unchanged and remains the hard open condition (see the
+  isolation record above).
+- Rollback: deploy main.
+- /r/ removal stays a separate future phase, not part of this
+  beta.
