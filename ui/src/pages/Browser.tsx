@@ -1302,6 +1302,20 @@ export default function BrowserView(props: Props) {
       const act = pollAction(f.contentWindow!.location.protocol, path, t.url);
       if (act === "recover") {
         try {
+          /* Only the app shell is an escaped navigation. A frame
+             parked on a same-origin non-route path while showing
+             a real engine-served document is a healthy transient,
+             not an escape: the Anubis pass-challenge hop lives at
+             /.within.website/... on OUR origin (the challenge page
+             runs same-origin, so its origin-relative pass URL
+             resolves here) for the second its redirect takes, and
+             re-driving that path as the intended target replayed
+             the spent pass URL upstream - startpage answered 500
+             and its "Something went wrong" verification page.
+             Recover only when the SPA fallback (index.html) is
+             what the path actually served, which is this
+             branch reason for existing. */
+          if (!doc.querySelector(".lb-shell")) return;
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
           if (!intended.startsWith("http")) return;
