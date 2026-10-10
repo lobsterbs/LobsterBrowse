@@ -373,8 +373,28 @@ RUN npm run build
 # aea44290 (198656 bytes); bootstrap.js unchanged 03cd3476; wasm
 # unchanged f5ad1126. Cargo-side pin stays deccb43.
 
+# 2026-10-10 (36): Zeolite #134 + #133. The SW specifier pass
+# (fresh-serve import rewriting) desynced on real module bodies
+# with nested template substitutions: a backtick inside a
+# template expression closed the outer template early, and the
+# scanner then read a // inside template text as a line comment,
+# swallowing the rest of the chunk including the import
+# specifier - play2048.co's 364KB entry chunk served with a raw
+# import despite the (35) serve-parity fix. The pass now tracks
+# template/substitution nesting recursively (brace depth, nested
+# strings, comments and templates), so specifiers inside
+# template-heavy chunks fold correctly. #133: a wisp stream
+# beyond the server's max-stream ceiling wedges the transport
+# (instant error 7 afterwards, the WebSocket never fires close,
+# the #74 watcher is blind to it); errors 7/35 join the connect
+# class and reset() busts the vendored bundle's connection-cache
+# key with a wisp URL generation, so the reset+retry rides a
+# fresh WispTransport. sw.js aea44290 -> f8c69962 (199579 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged f5ad1126.
+# Cargo-side pin stays deccb43 (app-only change, no crates).
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=088fa512a53584ce956f06e222e0e24683ebf8fb
+ARG ZEOLITE_COMMIT=9a0aa69a4c482aa497791dfc8ed40768fb150233
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -410,5 +430,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=aea44290567c113c ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f8c69962ef0fcec5 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
