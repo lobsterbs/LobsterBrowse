@@ -95,6 +95,12 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
   },
 };
 
+/* Fingerprint profile picks: native/ua plus the fixed UA presets
+   (the removed "server-default" is not a fingerprint pick). */
+export const FP_PRESETS = (Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).filter(
+  (id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default",
+);
+
 /* Per-site rules. A rule only overrides the global setting for the
    fields it explicitly configures; the UI pushes the effective values
    to the engine (zl:rules), so they genuinely change engine
@@ -116,8 +122,18 @@ export type Settings = {
   /* Zeolite engine jar SameSite policy (#48): "approx" has the
      engine jar emit SameSite hints it cannot know natively. */
   sameSitePolicy: "off" | "approx";
-  /* Zeolite document-surface spoofing on engine-routed pages (#48). */
-  fingerprintSpoof: boolean;
+  /* Zeolite document-surface spoofing on engine-routed pages (#48).
+     Profile picker: "native" spoofs nothing, "ua" follows the
+     User-Agent setting (custom string and per-site rules included),
+     a preset id pins the fingerprint to that UA string instead. */
+  fingerprintProfile: "native" | "ua" | Exclude<UaPresetId, "custom" | "server-default">;
+  /* Zeolite engine-side HTTPS upgrade (Zeolite #53): opt in; a
+     target that cannot be fetched over https fails honestly, no
+     silent fallback to plain http. */
+  httpsUpgrade: boolean;
+  /* Engine-side lazy images: add loading="lazy" to page images so
+     off-screen images load on approach, not at first paint. */
+  imageLazy: boolean;
   /* Zeolite transport engine (#54): libcurl (default wasm stack) or
      epoxy (rustls+hyper, different TLS fingerprint). Applied on the
      next engine init; no mid-session swap. */
@@ -147,7 +163,9 @@ export const DEFAULT_SETTINGS: Settings = {
   uaPreset: "chrome-win",
   uaCustom: "",
   sameSitePolicy: "approx",
-  fingerprintSpoof: true,
+  fingerprintProfile: "ua",
+  httpsUpgrade: false,
+  imageLazy: true,
   transport: "libcurl",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
@@ -188,10 +206,19 @@ export function loadSettings(): Settings {
           : parsed.uaPreset === "custom" || UA_PRESETS[parsed.uaPreset as Exclude<UaPresetId, "custom">]
             ? parsed.uaPreset
             : DEFAULT_SETTINGS.uaPreset,
-      fingerprintSpoof:
-        parsed.fingerprintSpoof === undefined
-          ? DEFAULT_SETTINGS.fingerprintSpoof
-          : Boolean(parsed.fingerprintSpoof),
+      fingerprintProfile:
+        parsed.fingerprintProfile === "native" || parsed.fingerprintProfile === "ua"
+          ? parsed.fingerprintProfile
+          : /* A stored preset id, validated against the pick list (the
+             stored value could be anything). Old bool migrates:
+             off -> native, on -> ua. */
+            FP_PRESETS.includes(parsed.fingerprintProfile as Exclude<UaPresetId, "custom" | "server-default">)
+            ? (parsed.fingerprintProfile as Settings["fingerprintProfile"])
+            : (parsed as { fingerprintSpoof?: boolean }).fingerprintSpoof === false
+              ? "native"
+              : DEFAULT_SETTINGS.fingerprintProfile,
+      httpsUpgrade: parsed.httpsUpgrade === undefined ? false : Boolean(parsed.httpsUpgrade),
+      imageLazy: parsed.imageLazy === undefined ? true : Boolean(parsed.imageLazy),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       density: "normal",
     };
