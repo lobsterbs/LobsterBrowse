@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang=en>
+<title>lazy fixture</title>
+<meta charset=utf-8>
+<body>
+<!-- Two imgs with no loading attribute: the engine lazy pass must
+     inject loading=lazy on both. One eager and one lazy must stay
+     untouched (the pass is additive only). -->
+<img id=a src=/favicon.svg alt=a>
+<img id=b src=/favicon.svg alt=b>
+<img id=c src=/favicon.svg alt=c loading=eager>
+<img id=d src=/favicon.svg alt=d loading=lazy>
+</body>
+</html>
