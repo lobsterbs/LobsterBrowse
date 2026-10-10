@@ -1145,6 +1145,15 @@ async fn main() {
         // root-absolute too: serve the vendored copy at the origin root
         // so the rewriter's wasm init does not 404 silently.
         .route("/rewriter_wasm_bg.wasm", get(zl_rewriter_wasm))
+        // The engine worker fetches its data files root-absolute
+        // (rules.ts /rules.kdl, siteconfig.ts /siteconfig.kdl,
+        // policy.ts /policy.kdl), same pattern as /bootstrap.js: the
+        // SPA fallback would otherwise answer index.html with 200 and
+        // the engine would silently run with no adblock rules, site
+        // overrides or compatibility policy.
+        .route("/rules.kdl", get(zl_rules_kdl))
+        .route("/siteconfig.kdl", get(zl_siteconfig_kdl))
+        .route("/policy.kdl", get(zl_policy_kdl))
         // The engine worker's transport adapter resolves the vendored
         // libcurl bundle at the origin root (/libcurl/index.mjs);
         // serve the vendored copy from the bundle directory.
@@ -1270,6 +1279,37 @@ async fn zl_rewriter_wasm() -> Response {
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
     }
+}
+/// Engine data file at the origin root (vendored build, zlsw/<name>):
+/// the worker fetches /rules.kdl (adblock host lists), /siteconfig.kdl
+/// (per-site overrides) and /policy.kdl (transit compatibility policy)
+/// root-absolute, same pattern as /bootstrap.js. text/plain, no-cache
+/// so bundle updates are picked up promptly.
+async fn zl_data_file(name: &str) -> Response {
+    match tokio::fs::read(format!("zlsw/{name}")).await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite data file not vendored").into_response(),
+    }
+}
+
+/// Adblock host lists (the worker fetches this root-absolute).
+async fn zl_rules_kdl() -> Response {
+    zl_data_file("rules.kdl").await
+}
+
+/// Per-site compatibility overrides.
+async fn zl_siteconfig_kdl() -> Response {
+    zl_data_file("siteconfig.kdl").await
+}
+
+/// Transit compatibility policy (Zeolite #135/#136).
+async fn zl_policy_kdl() -> Response {
+    zl_data_file("policy.kdl").await
 }
 
 #[cfg(test)]
