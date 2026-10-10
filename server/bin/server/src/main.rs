@@ -312,36 +312,6 @@ fn build_engine_client() -> reqwest::Client {
 /// Firefox User-Agent for the /suggest provider fetches (Brave and
 /// some other providers reject requests without a browser UA).
 const FIREFOX_UA: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
-fn b64url_decode(s: &str) -> Option<Vec<u8>> {
-    let mut vals: Vec<u8> = Vec::with_capacity(s.len());
-    for ch in s.bytes() {
-        let v = match ch {
-            b'A'..=b'Z' => ch - b'A',
-            b'a'..=b'z' => ch - b'a' + 26,
-            b'0'..=b'9' => ch - b'0' + 52,
-            b'-' => 62,
-            b'_' => 63,
-            _ => return None,
-        };
-        vals.push(v);
-    }
-    let mut out = Vec::with_capacity(vals.len() * 3 / 4);
-    for chunk in vals.chunks(4) {
-        let n = ((chunk[0] as u32) << 18)
-            | (chunk.get(1).map_or(0, |&v| (v as u32) << 12))
-            | (chunk.get(2).map_or(0, |&v| (v as u32) << 6))
-            | chunk.get(3).map_or(0, |&v| v as u32);
-        out.push((n >> 16) as u8);
-        if chunk.len() > 2 {
-            out.push((n >> 8) as u8);
-        }
-        if chunk.len() > 3 {
-            out.push(n as u8);
-        }
-    }
-    Some(out)
-}
-
 /// Minimal RFC-3986 percent-encoding for query values we re-emit.
 fn pct_enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -441,121 +411,115 @@ mod redact_tests {
     }
 }
 
-/// Honest answer for /zl/ routes: Zeolite's service worker owns them
-/// (client-side interception, native wisp transport, in-worker document
-/// rewriting). Reaching the server means no worker controls the page:
-/// cold start, worker restart, or a browser without module service
-/// workers.
+/// Honest answer for /zl/ routes: Zeolite's service worker owns
+/// them (client-side interception, native wisp transport,
+/// in-worker document rewriting). Reaching the server means no
+/// worker controls the page: cold start, worker restart, or a
+/// browser without module service workers. Zeolite's
+/// docs/error-pages.md assigns this case to the embedding host:
+/// a minimal notice, 503 (the failure is on the engine side of
+/// the route, not an upstream failure) and one action (load the
+/// app once so the worker installs, then retry). The LB-authored
+/// error card is gone: every page a user can hit through a live
+/// engine is Zeolite's own (app/src/errorpage.ts); the embedder
+/// answers only the two cases the engine cannot. The notice
+/// carries meta[zl-error] so the embedder's DevTools mirror
+/// treats it like any engine failure, and it never prints the
+/// destination (#32: plaintext destinations never land on
+/// engine-origin documents).
 async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>) -> Response {
-    let real = b64url_decode(&target)
-        .and_then(|b| String::from_utf8(b).ok())
-        .unwrap_or_default();
-    engine_error_page(
-        &real,
-        "Zeolite runs in its service worker, and none controls this page yet. Open or reload the app so the worker installs, then retry.",
+    let _ = target;
+    embedder_notice(
+        "Engine offline",
+        "The Zeolite engine service worker is not controlling this origin yet.",
+        "Open the app once so the worker installs, then try again.",
+        "offline",
+        "no controlling service worker",
         true,
+        StatusCode::SERVICE_UNAVAILABLE,
     )
 }
 
-/// Legacy engine route prefixes are unowned (#67): stale /r/ and /lj/
-/// bookmarks must break honestly instead of being rescued by a 302.
-/// Answer with the engine_error_page gone-notice (502, like every
-/// engine failure card), never the SPA fallback (index.html with 200
-/// would be a silent lie about the route).
+/// Legacy engine route prefixes are unowned (#67): stale /r/ and
+/// /lj/ bookmarks must break honestly instead of being rescued by
+/// a 302. Zeolite owns the error pages users hit through the live
+/// engine; these LB-only prefixes keep the minimal embedder
+/// gone-notice (502), never a redirect and never the SPA fallback
+/// (index.html with 200 would be a silent lie about the route).
 async fn legacy_engine_route_gone(
     axum::extract::Path(target): axum::extract::Path<String>,
 ) -> Response {
-    let real = b64url_decode(&target)
-        .and_then(|b| String::from_utf8(b).ok())
-        .unwrap_or_default();
-    engine_error_page(
-        &real,
-        "The legacy engine route prefix is gone. The engine lives at \
-         /zl/; update the stale bookmark or history entry.",
-        true,
+    let _ = target;
+    embedder_notice(
+        "Gone",
+        "The legacy engine route prefix is gone.",
+        "The engine lives at /zl/ now: update the stale bookmark or history entry.",
+        "route",
+        "legacy engine route prefix is gone",
+        false,
+        StatusCode::BAD_GATEWAY,
     )
 }
 
-/// The honest HTML error card (the full error chain goes to /logs).
-/// Used by zl_sw_required for /zl/ navigations that reach the server
-/// with no controlling worker; the text/plain arm exists for
-/// non-HTML callers.
-fn engine_error_page(url: &str, detail: &str, wants_html: bool) -> Response {
-    if !wants_html {
-        return (
-            StatusCode::BAD_GATEWAY,
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-            format!("lobsterbrowse proxy error: {}\nurl: {}\n", detail, url),
-        )
-            .into_response();
-    }
-    // Honest, minimal failure card: the full error chain stays in the
-    // lb-load-error meta and the DevTools report; the visible card shows
-    // one line. No proxy-bypass actions: leaving the proxy is a deliberate
-    // user decision, not a recovery step this page advertises.
-    let detail_line: String = detail
-        .lines()
-        .next()
-        .unwrap_or("")
-        .chars()
-        .take(160)
-        .collect();
-    let detail = json_escape(detail);
-    let detail_line = json_escape(&detail_line);
-    let url_js = json_escape(url);
-    let url_json = format!("\"{}\"", url_js);
-    let detail_json = format!("\"{}\"", detail);
+/// The two notices the engine cannot answer by design
+/// (docs/error-pages.md): no controlling worker on an engine
+/// route, and LB-only legacy prefixes. Minimal, deterministic,
+/// scriptless, color-scheme aware, meta[zl-error] for the
+/// embedder's DevTools mirror, no destination URLs (#32). The
+/// retry flag adds a GET-form retry button back to the same
+/// route (the offline case can recover once the worker installs;
+/// a gone prefix cannot).
+fn embedder_notice(
+    title: &str,
+    line: &str,
+    action: &str,
+    category: &str,
+    reason: &str,
+    retry: bool,
+    code: StatusCode,
+) -> Response {
+    let meta = json_escape(&format!(
+        "{{\"category\":\"{}\",\"reason\":\"{}\"}}",
+        category, reason
+    ));
     let body = format!(
         r#"<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="lb-load-error" content="{detail}">
-<title>Load failed</title>
+<meta name="zl-error" content="{meta}">
+<title>{title}</title>
 <style>
 :root {{ color-scheme: light dark; }}
-* {{ box-sizing: border-box; }}
-body {{ margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-  font-family: "Google Sans Flex", Roboto, system-ui, sans-serif;
-  background: #f7f5ff; color: #1b1b1f; }}
-@media (prefers-color-scheme: dark) {{ body {{ background:#141218; color:#e6e1e9; }} }}
-.card {{ max-width: 480px; width:calc(100% - 48px); padding:32px; border-radius:28px;
-  background:rgba(127,127,140,.12); border:1px solid rgba(127,127,140,.25); }}
-h1 {{ font-size:20px; margin:0 0 4px; }}
-.muted {{ opacity:.65; font-size:13px; }}
-.url {{ font-family:ui-monospace,monospace; font-size:12px; word-break:break-all;
-  background:rgba(127,127,140,.18); padding:10px 12px; border-radius:12px; margin:14px 0 10px; }}
-.detail {{ font-size:13px; opacity:.8; word-break:break-word; margin:0 0 20px; }}
-button {{ appearance:none; border:none; cursor:pointer;
-  display:inline-flex; align-items:center; gap:6px; padding:10px 18px; border-radius:999px;
-  font:500 14px "Google Sans Flex", Roboto, system-ui, sans-serif;
-  background:#6750a4; color:#fff; }}
-@media (prefers-color-scheme: dark) {{ button {{ background:#cfbcff; color:#381e72; }} }}
-</style></head><body>
-<div class="card" role="alert">
-  <h1>This page could not load</h1>
-  <p class="muted">The proxy engine failed to fetch the destination.</p>
-  <div class="url">{url_js}</div>
-  <p class="detail">{detail_line}</p>
-  <button onclick="location.reload()">Retry</button>
-</div>
-<script>
-try {{ parent.postMessage({{ lb:"net", data:{{ url:{url_json}, method:"GET", status:0,
-  error:{detail_json}, dur:0, ts:Date.now() }} }}, location.origin); }} catch (e) {{}}
-</script>
-</body></html>"#,
-        detail = detail,
-        url_js = url_js,
-        detail_line = detail_line,
-        url_json = url_json,
-        detail_json = detail_json,
+body {{ margin:0; min-height:100vh; display:grid; place-items:center; text-align:center;
+  font:15px/1.6 system-ui,sans-serif; background:#fff; color:#1c1c1e; }}
+main {{ max-width:32em; padding:1.5em; }}
+h1 {{ font-size:1.0625rem; font-weight:600; margin:0 0 .4em; }}
+p {{ margin:0 0 1.2em; color:#6b6b70; }}
+button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
+  border:1px solid currentColor; border-radius:6px; cursor:pointer; }}
+@media (prefers-color-scheme: dark) {{ body {{ background:#0f0f10; color:#e8e8ea; }} p {{ color:#9b9ba0; }} }}
+</style></head><body><main>
+<h1>{title}</h1>
+<p>{line}</p>
+<p>{action}</p>
+{retry_form}
+</main></body></html>"#,
+        meta = meta,
+        title = json_escape(title),
+        line = json_escape(line),
+        action = json_escape(action),
+        retry_form = if retry {
+            r#"<form method="get" action=""><button type="submit">Try again</button></form>"#
+        } else {
+            ""
+        },
     );
     (
-        StatusCode::BAD_GATEWAY,
+        code,
         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
         body,
     )
         .into_response()
 }
-
 /// Search-engine suggestions, proxied server-side to dodge CORS.
 /// Every provider returns the same osjson shape: ["query", ["s1", ...]].
 async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): RawQuery) -> Response {
