@@ -1353,6 +1353,16 @@ export default function BrowserView(props: Props) {
           patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
           if (!props.incognito) props.onHistory(real);
         }
+        /* A polled URL change observes a navigation the frame
+           already performed (pushState, an in-page link, or an
+           engine-driven challenge hop); it is never a navigation
+           request. Record it, or the auto-load effect below
+           treats the synced URL as set without a navigation and
+           re-drives the frame: a spent challenge-pass URL
+           replayed this way answered 500 and startpage served
+           its verification-error page. Same record the recover
+           branch keeps. */
+        lastNav.current.set(t.id, real);
         props.updateTab(t.id, patch);
         pushLog("info", "url sync " + sanitizeUrl(real));
       }
@@ -1609,6 +1619,11 @@ export default function BrowserView(props: Props) {
             patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
             if (!L.incognito) L.onHistory(real);
           }
+          /* Event-driven SPA sync observes a navigation the
+             frame already performed; record it so the auto-load
+             effect never re-drives the URL (same reason as the
+             poll sync). */
+          lastNav.current.set(tabId as number, real);
           L.updateTab(tabId, patch);
           pushLog("info", "url sync " + sanitizeUrl(real));
         }
