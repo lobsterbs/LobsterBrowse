@@ -353,8 +353,28 @@ RUN npm run build
 # 03cd3476 (24521 bytes, under the 25088 budget); wasm unchanged
 # f5ad1126. Cargo-side pin stays deccb43.
 
+# 2026-10-10 (35): #134 - cache-hit serve re-ran the streaming
+# rewriter for HTML and CSS but served JS bodies verbatim (the
+# netlog row already claimed rewritten: js). Entries stored by
+# older dists hold raw upstream bodies, so a module-relative
+# import() in such a copy resolved against the engine route and
+# the escaped-path recovery answered the document root instead of
+# the module directory: play2048.co's lazy chunk loaded the site's
+# own SPA shell as JavaScript (200 text/html, MIME rejection, the
+# game never booted; github.com's CSS chunk the same class). The
+# browser flattens a dot-relative specifier to a root-relative
+# engine path, so the recovery cannot fix the class - the fix is
+# serve parity. The cache-hit JS branch runs the same two passes
+# the fresh path runs (specifier fold + literal pass, both
+# idempotent on composed copies) and writes the repaired copy back
+# only when a pass changed the body, so a stale raw entry heals
+# once. Worker destinations keep the raw serve (their cached
+# copies are composed by the fresh path). sw.js 9dcd3c18 ->
+# aea44290 (198656 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged f5ad1126. Cargo-side pin stays deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=e893ee6dd6d1a3dd7870d1f14f8f8fb01c4f925a
+ARG ZEOLITE_COMMIT=088fa512a53584ce956f06e222e0e24683ebf8fb
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -390,5 +410,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=aea44290567c113c ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
