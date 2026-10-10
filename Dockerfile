@@ -393,8 +393,26 @@ RUN npm run build
 # bootstrap.js unchanged 03cd3476; wasm unchanged f5ad1126.
 # Cargo-side pin stays deccb43 (app-only change, no crates).
 
+# 2026-10-10 (37): Zeolite #134 residual, global fix. React
+# apps (github.com) construct module.css asset names at RUNTIME
+# (flat names like xy4.86babbfb1b89d634.module.css), so no
+# serve-time pass can fold them: the flat specifier resolved
+# against the document base, escaped-path recovery answered the
+# page origin root, and the origin 404 (text/plain) was refused
+# as a stylesheet. New assetbases.ts records the CDN asset
+# directories of every successful cross-origin script/style load
+# per virtual page origin; a failed (>=400) flat-named script or
+# style request retries against those observed bases with minimal
+# safe headers (user-agent/accept/accept-language only; never
+# cookies/origin/referer). No per-site table: the heuristic is
+# global and fails closed. sw.js f8c69962 -> 1785f26f (201195
+# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
+# f5ad1126. Cargo-side pin stays deccb43 (app-only change).
+
+
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=9a0aa69a4c482aa497791dfc8ed40768fb150233
+ARG ZEOLITE_COMMIT=9fc0eb7e6f83e6b91155c0915be891259d18d176
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -430,5 +448,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f8c69962ef0fcec5 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=1785f26f5ba73ed3 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
