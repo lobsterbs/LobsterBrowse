@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist f7b7c27 (Zeolite main ed62414, CI run 38053544637)
+# Current pin: dist e893ee6 (Zeolite main da8c0c0, CI run 38056407768)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -337,8 +337,24 @@ RUN npm run build
 # 25088 budget); wasm unchanged f5ad1126. Cargo-side pin stays
 # deccb43.
 
+# 2026-10-10 (32): #132 follow-up 2, the window.name seam. The #37
+# isolation wrapper scoped window.name through the site-scoped
+# sessionStorage but initialized it EMPTY, dropping the browsing
+# context's real name; gstatic's bframe resolves its anchor channel
+# as parent.frames[its own name transformed to the anchor's name]
+# (recaptcha__en.js Y.o2), so the named lookup returned undefined,
+# the bframe's postMessage target was dead, and the anchor's 15s
+# establisher rejected (reCAPTCHA Timeout, challenge never opened,
+# live probes rc59/rc60: name correct at t=0, cleared by the
+# wrapper by t=200ms). A fresh scoped context now seeds its name
+# from its frameElement's name attribute; top-level windows still
+# start empty, so the #37 anti-bleed goal is preserved. sw.js
+# unchanged 9dcd3c18 (198177 bytes); bootstrap.js db25100b ->
+# 03cd3476 (24521 bytes, under the 25088 budget); wasm unchanged
+# f5ad1126. Cargo-side pin stays deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=f7b7c271629af814ee406f94519c5dbe79626f0f
+ARG ZEOLITE_COMMIT=e893ee6dd6d1a3dd7870d1f14f8f8fb01c4f925a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -374,5 +390,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=db25100bad8b3aee
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
