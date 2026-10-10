@@ -526,3 +526,35 @@ Zeolite#17 (persist the prefix or echo it in zl:ping).
   {"check":"fetch /build (async)","verdict":"reachable","detail":"HTTP 200 build 4614b57"}
 ]
 ```
+## Promotion conditions status (2026-10-10, pin 38)
+
+Dated re-check of every condition in the promotion conditions section,
+after the pin 36-38 engine fixes (template-aware specifier pass,
+wedged-transport heal, global flat module asset recovery, the anubis
+absolute-redir repair, runtime-built binary asset recovery).
+
+- CI green on all three heads: Zeolite main 7ff4f6b (run 38071757525,
+  five jobs), LB main 0584b01, LB beta/zeolite-nativetransit 0885161.
+- Real-browser verification (Chromium via Playwright) repeated and
+  current against the deployed pin 38 beta:
+  the nav rail is M3E-spec (96dp collapsed with persistent labels,
+  44dp top space, working expand/collapse, contents stable while
+  Settings panels open); the engine error page is centered with its
+  Retry button inside the overlay (no stray floating button);
+  Startpage, the DEFAULT search engine, completes its Anubis proof of
+  work in-engine and returns results through /zl/ (pin 38 redir repair);
+  github.com renders with 30 stylesheets applied including 7 recovered
+  runtime-built module.css links, no error boundary.
+- Firefox: honest fail, unchanged (no module service workers).
+- WebKit: still no recorded run; no claim is made either way.
+- Cookie jar: the challenge handoff now works engine-side; the
+  startpage Anubis flow completes its proof of work and stays
+  in-engine (pin 38).
+- Streaming, range requests, downloads: engine-verified, unchanged.
+- Origin isolation: NOT shrunk. The shared-store model is unchanged
+  and remains the hard open condition (see the isolation record
+  above).
+- Rollback: deploy main. The settings-toggle rollback condition is
+  superseded by the ScramJet removal (no second engine exists on
+  this branch to switch back to).
+- /r/ removal stays a separate future phase, not part of this beta.
