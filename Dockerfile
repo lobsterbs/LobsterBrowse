@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist f7e3081 (Zeolite main afbcf9c, CI run 38043266009)
+# Current pin: dist 97ae92d (Zeolite main 3f20ea4, CI run 38045256567)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -291,8 +291,29 @@ RUN npm run build
 # (22544 bytes); wasm unchanged f5ad1126. Cargo-side pin
 # stays deccb43.
 
+
+
+# 2026-10-10 (29): fourth widget break, the last measured seam.
+# The #130 wrapper re-emits from its own realm, so the anchor's
+# parent.postMessage landed on the page's wrapper and the
+# re-emission executed in the PAGE realm: ev.source was stamped
+# with the page window (from=self), the page's grecaptcha dropped
+# the anchor's setup, and the widget spun (reCAPTCHA Timeout,
+# anchor recreation loop, no bframe). bootstrap.js now stashes
+# each realm's native postMessage (__zlNativePM) and every child
+# realm shadows its configurable window.parent (top is
+# LegacyUnforgeable) with a Proxy that executes the parent's
+# stashed native from the CHILD realm, so the browser stamps the
+# genuine caller and the ports survive delivery; navguard's
+# guarded inline child realms get the same shim. The Zeolite
+# commit title mislabels the issue as #131; the widget work is
+# tracked in #130 and its follow-up. sw.js unchanged 9dcd3c18
+# (198177 bytes); bootstrap.js bc001db -> d6f6abba (23388
+# bytes); wasm unchanged f5ad1126. Cargo-side pin stays
+# deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=f7e308114bea1a8966423dd1dd33f5184fc1975f
+ARG ZEOLITE_COMMIT=97ae92da12e748e2f102ffe89b8b2bcdaff7c5d5
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -328,5 +349,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=bc001db563691917
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=d6f6abbae1785860
 ENTRYPOINT ["/app/lobster-server"]
