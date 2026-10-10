@@ -431,23 +431,22 @@ export default function App() {
     );
   }
 
-  /* m3e-theme's density is a Number attribute on the M3E side (Lit
-     converts it with Number()): the app setting is the string
-     "normal" | "compact", so it must be mapped to the numeric M3E
-     density scale before it reaches the element. Passing "normal"
-     made Number("normal") = NaN and the theme emitted
-     --md-sys-density-scale: NaN, which poisoned every
-     DensityToken.calc() in the density-aware components (#27). */
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true} density={settings.density === "compact" ? "-1" : undefined}>
+    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
       <div className="lb-shell">
-        {/* The rail is always fully visible in every view: no hiding,
-           no sliver, no click-to-toggle. */}
+        {/* Expressive wide rail: the M3E defaults are the spec
+           (96dp collapsed with persistent labels, 44dp top inset);
+           the menu button expands and collapses it. */}
         <m3e-nav-rail
           id="nav-rail"
-          mode="compact"
+          mode="auto"
           aria-label="LobsterBrowse"
         >
+          <m3e-icon-button toggle aria-label="Expand or collapse the navigation rail">
+            <m3e-icon name="menu" aria-hidden={true} />
+            <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
+            <m3e-nav-rail-toggle for="nav-rail" />
+          </m3e-icon-button>
           <m3e-nav-item
             id="nav-home"
             selected={view === "home" ? "" : undefined}
@@ -455,7 +454,6 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="home" aria-hidden={true} />Home
           </m3e-nav-item>
-          <m3e-tooltip for="nav-home" position="after">Home</m3e-tooltip>
           <m3e-nav-item
             id="nav-browse"
             selected={view === "browser" ? "" : undefined}
@@ -466,7 +464,6 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
           </m3e-nav-item>
-          <m3e-tooltip for="nav-browse" position="after">Proxy browser</m3e-tooltip>
           <m3e-nav-item
             id="nav-settings"
             selected={view === "settings" ? "" : undefined}
@@ -474,7 +471,6 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
-          <m3e-tooltip for="nav-settings" position="after">Preferences — saved on this device</m3e-tooltip>
         </m3e-nav-rail>
 
 

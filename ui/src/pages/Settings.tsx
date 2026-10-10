@@ -22,7 +22,6 @@ type Props = {
 };
 
 const SEEDS: Array<[string, string]> = [
-  ["#E8552F", "Lobster"],
   ["#6750A4", "Baseline"],
   ["#006A6A", "Teal"],
   ["#4F5B92", "Slate"],
@@ -352,7 +351,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (engine-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="SameSite≈ cookies (engine jar)" icon="public" on={settings.sameSitePolicy === "approx"} toggle={() => onChange({ sameSitePolicy: settings.sameSitePolicy === "approx" ? "off" : "approx" })} />
           <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
         </m3e-list>
       </Panel>
@@ -413,22 +411,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               ))}
             </m3e-chip-set>
           </div>
-        </div>
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Density</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Density">
-            <m3e-button-segment checked={settings.density !== "compact" ? "" : undefined} onClick={() => onChange({ density: "normal" })}>
-              Normal
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.density === "compact" ? "" : undefined} onClick={() => onChange({ density: "compact" })}>
-              Compact
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            Compact tightens spacing and shrinks touch targets across the app. Useful on narrow viewports.
-          </p>
         </div>
       </Panel>
 
@@ -553,10 +535,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Per-site rules</div>
-          <p className="lb-muted">
-            Overrides apply per domain: User-Agent preset and ad/tracker blocking for that site.
-          </p>
           {rules.length > 0 && (
             <div className="lb-rule-list">
               {rules.map((r) => (
@@ -611,14 +589,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               Enter a plain domain like example.com (scheme and path are stripped, spaces are not allowed).
             </p>
           )}
-        </div>
-        <m3e-divider />
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Keyboard shortcuts</div>
-          <p className="lb-muted">
-            Alt+T new tab · Alt+W close tab · Alt+Shift+T reopen closed tab.
-            Ctrl+T and Ctrl+W are reserved by the host browser and can never reach the app.
-          </p>
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
