@@ -458,8 +458,20 @@ RUN npm run build
 # (app-only change).
 
 
+# 2026-10-10 (42): the Anubis pass-challenge repair now decodes
+# navh handle redirs. The embedder's initial navigations ride navh
+# handles, so the redir anubis 1.26.4 echoes back is the absolute
+# handle URL, isEnginePath rejected it and the repair never fired
+# (startpage: the proof of work completes, the verification 500s
+# Something went wrong). The handle decodes with its own keyed
+# decoder (tag + TTL), engine-side only, so the redir upstream
+# carries the real destination. sw.js unchanged 8edc1a9b (205898
+# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# the fix rides codec.js (88437eb5 -> c29f5a19, verify the served
+# file). Cargo-side pin stays deccb43 (app-only change).
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=3bd0f1a775078f7d264bcd98ed31cff4c24a8cc0
+ARG ZEOLITE_COMMIT=7b0491770808062a24f2364dd4fce1c450a8949d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
