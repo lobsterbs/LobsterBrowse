@@ -177,6 +177,39 @@ export default function BrowserView(props: Props) {
      closure would otherwise read a stale render-time status. */
   const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
   statusRef.current = status;
+  /* Engine-side loading overlay (zl:loadState): the page-settle probe
+     only sees the frame's own resource timing; engine-mediated work
+     the frame never observes (the initial document fetch before the
+     bootstrap attaches, worker-relayed requests) kept the spinner
+     off while the site was still loading. Poll the engine's
+     in-flight count (TTFB semantics) and live rewrite streams for
+     the active tab's host: the indicator stays on while anything
+     for the site is still moving, off only when every task
+     settled. streams is engine-global, so a background tab still
+     pumping a document holds the spinner: all tabs' work counts. */
+  const [engineBusy, setEngineBusy] = useState(false);
+  useEffect(() => {
+    if (!active?.url) return;
+    let host = "";
+    try {
+      host = new URL(active.url).host;
+    } catch {
+      return;
+    }
+    if (!host) return;
+    let stop = false;
+    const iv = setInterval(() => {
+      void zlSend({ type: "zl:loadState", host }, 4000).then((rep) => {
+        const r = rep as { ok?: boolean; inflight?: number; streams?: number } | null;
+        if (stop) return;
+        setEngineBusy(!!(r && r.ok && ((r.inflight ?? 0) > 0 || (r.streams ?? 0) > 0)));
+      });
+    }, 700);
+    return () => {
+      stop = true;
+      clearInterval(iv);
+    };
+  }, [active?.id, active?.url]);
   /* Loading-indicator settle probe: the old code flipped loading
      off the moment readyState left "loading" while XHRs and
      subresources were still fetching. Settled = document done
@@ -1934,7 +1967,7 @@ export default function BrowserView(props: Props) {
           </div>
         ))}
 
-        {st.loading && (
+        {(st.loading || engineBusy) && (
           <div className="lb-loading" aria-busy="true">
             <m3e-loading-indicator variant="contained" aria-label="Loading page" />
           </div>
