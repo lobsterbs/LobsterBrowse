@@ -638,3 +638,46 @@ wikipedia loads normally through the engine.
 The beta CI transit-live job failed once on push 9910819 because it ran
 while the matching deploy was still building (known deploy lag); this
 commit re-runs it against the live build.
+
+## Startpage challenge-pass replay fixed at pin 42 (2026-10-10)
+
+Startpage searching works on the live beta. Two LobsterBrowse navigation
+bugs were the remaining cause of the captcha Something went wrong page;
+the engine challenge flow itself was already correct.
+
+Bug 1 (spent pass replay). The Anubis pass-challenge URL resolves on the
+LobsterBrowse origin (the challenge page runs same-origin inside the
+engine frame, so its origin-relative pass URL and the redirect hop both
+land here), and the frame sits on that non-route path for roughly the
+second its upstream redirect takes. The navigation poll classified that
+transient handoff hop as an escaped navigation and re-drove it as the
+intended target, resubmitting the same pass URL (identical id, nonce and
+elapsedTime) after its nonce was spent. Startpage answered 500 and served
+its verification-failure page over the already-loaded home. Netlog
+evidence: pass-challenge 200, full home asset load, then the identical
+pass-challenge URL again at 500.
+
+Bug 2 (sync re-drive). The poll and the page-hook SPA sync updated the
+tab URL without recording it as the tab last navigation, so the
+auto-load effect treated the synced URL as set without a navigation and
+reloaded the frame at it. Every polled URL change (pushState, in-page
+links, engine redirect hops) was a reload candidate.
+
+Fixes (both branches, main cf6a8cb / beta 028c239):
+- recover: only when the frame actually shows the SPA fallback
+  (index.html, .lb-shell). A frame parked on a same-origin non-route
+  path with a real engine-served document is a healthy transient.
+- poll sync and event sync record the synced URL as the tab last
+  navigation, matching the recover branch.
+
+Live verification on the beta deploy 028c239 (0.5.0 Cobalt, Zeolite pin 42,
+navh redirect fix riding codec.js): two independent probes, startpage
+home fully loads with the search box and no verification error; direct
+SERP load of /sp/search?query=weather+oslo renders real results (4910
+chars, title Startpage Search Results). The Anubis challenge passes once
+and is not replayed. Poll-recovery regression check: 15 cases ok. tsc
+clean.
+
+Mirror to GitLab failed on the simultaneous double-branch push twice
+(known race between the two mirror jobs); each later push mirrors
+successfully and no content diverges.
