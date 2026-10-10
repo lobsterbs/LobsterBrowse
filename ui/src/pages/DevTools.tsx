@@ -266,7 +266,10 @@ function ZeoliteDiagnostics() {
   return (
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
-        <span className="lb-diag-chip">NativeTransit: {stats.native}</span>
+        <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
+        {stats.fallbacks.length > 0 && (
+          <span className="lb-diag-chip lb-diag-bad">Rewrite fallbacks: {stats.fallbacks.length}</span>
+        )}
       </div>
       {stats.fallbacks
         .slice(-10)
@@ -274,7 +277,7 @@ function ZeoliteDiagnostics() {
         .map((f, i) => (
           <details key={f.ts + "-" + i} className="lb-net-row">
             <summary className="lb-net-summary">
-              <span className="lb-net-status">FB</span>
+              <span className="lb-net-status lb-bad">FB</span>
               <span className="lb-net-method">{fallbackText(f.reason)}</span>
               <span className="lb-net-url">{f.url}</span>
               <span className="lb-net-dur">{ts(f.ts)}</span>
