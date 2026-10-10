@@ -73,7 +73,7 @@ The Diagnostics toolbar carries a Report button that opens the project issue tra
 - Bookmarks and the old nav-rail badge are intentionally removed.
 - Settings are localStorage-backed and migration-safe.
 - Check `ui/src/m3e.d.ts` before adding M3E elements and follow existing custom-element ref/class patterns.
-- The tab switcher card is ALWAYS mounted; the `.open` class animates and gates interaction. Unmounting it destroys the preview iframes, which is why previews used to show blank tiles.
+- The tab switcher card is ALWAYS mounted; the `.open` class animates and gates interaction. Unmounting it destroys the preview iframes, which is why previews used to show blank tiles. The tile iframes do not navigate until the switcher has been opened at least once (everOpened gate in TabSwitcherCard): a closed-mounted card used to load every tab's page a second time, doubling bandwidth and racing proof-of-work challenges (two live page instances, one can fail and paint over the other).
 - M3E snackbars are repositioned to the top of the screen via document-level CSS (`m3e-snackbar`); the bottom slot belongs to the dock toolbar.
 - The site info (lock) card content rows carry their own padding inside the m3e-card surface; the card itself is `overflow: hidden`.
 
