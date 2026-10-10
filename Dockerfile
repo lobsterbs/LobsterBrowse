@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 211c22b (Zeolite main 3622fc5, CI run 37995153055)
+# Current pin: dist 86e394c (Zeolite main 58be3c2, CI run 38039145218)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -241,8 +241,24 @@ RUN npm run build
 # wasm unchanged (c5fe41724b40bae0, verify the served file).
 # Cargo-side pin stays deccb43.
 
+# 2026-10-09 (24): #130 - the synthetic postMessage dispatch from
+# #128 is gone. With challenge frames engine-routed, every frame
+# message now stays inside the real engine origin, so postmsg.ts
+# rewrites foreign/virtual targetOrigins to the real origin and
+# delivers natively (both call shapes normalized, exact-argument
+# replay, malformed keeps the honest SyntaxError; no synthetic
+# dispatch, transfer lists stay native). vorigin.ts is new: the
+# page asks the SW for its virtual origin (zl:getVirtualOrigin)
+# and a bootstrap-side message-event filter re-exposes ev.origin
+# as the sender virtual origin on same-origin-looking events. sw.js
+# b6221208 -> 568fc624 (198147 bytes); bootstrap.js 7f299840 ->
+# c5554b40 (22483 of the 23552 budget, raised with the rationale
+# recorded in the Zeolite CI gate); wasm unchanged
+# (c5fe41724b40bae0, verify the served file). Cargo-side pin
+# stays deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=211c22be3ee96e4d843be692f86151a4a6737b51
+ARG ZEOLITE_COMMIT=86e394c7bcf938d1fb33db5ec91fb0581ba79c7d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -278,5 +294,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b622120890886625 ZEOLITE_BOOTSTRAP_SHA=7f299840bc9c35aa
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=568fc6243d085a0c ZEOLITE_BOOTSTRAP_SHA=c5554b40311c90d9
 ENTRYPOINT ["/app/lobster-server"]
