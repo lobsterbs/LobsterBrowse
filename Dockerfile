@@ -447,10 +447,19 @@ RUN npm run build
 # from the vendored dist at the origin root. sw.js 21dc6e6c ->
 # 5b2df445 (205055 bytes); bootstrap.js unchanged 03cd3476; wasm
 # unchanged d86f746e. Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-10 (41): engine error pages now attribute engine bugs
+# (the error card names a Zeolite engine bug and asks for a report
+# with the Trace ID; upstream failures stay neutral), and the
+# zl:loadState control API reports in-flight upstream requests per
+# destination host plus live rewrite streams so the LB tab spinner
+# tracks engine work, not just frame resource timing. sw.js
+# 5b2df445 -> 8edc1a9b (205898 bytes); bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e. Cargo-side pin stays deccb43
+# (app-only change).
 
 
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=d4bc2ad1bdfbb532abdb320b66eeb20d3feef6c4
+ARG ZEOLITE_COMMIT=3bd0f1a775078f7d264bcd98ed31cff4c24a8cc0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -486,5 +495,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5b2df445203a9f57 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8edc1a9b7e9184a7 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
