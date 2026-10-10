@@ -568,9 +568,22 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   background: color-mix(in srgb, var(--md-sys-color-tertiary) 14%, transparent);
 }
 .lb-warn .lb-console-text { color: var(--md-sys-color-on-tertiary-container, var(--md-sys-color-tertiary)); }
+/* Error overlay (tab load failure): covers the page area like
+   .lb-loading, centered and scrollable. Without this the overlay
+   flowed inline and the Try Again button floated loose. */
 .lb-error {
-  background: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
-  color: var(--md-sys-color-error);
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: auto;
+  padding: var(--md-sys-measurement-space300);
+  background: color-mix(in srgb, var(--md-sys-color-error) 8%, var(--md-sys-color-surface));
+  color: var(--md-sys-color-on-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space100);
+  align-items: center;
+  text-align: center;
 }
 .lb-error .lb-console-text { color: var(--md-sys-color-error); }
 /* Shared error-colored inline text (used by Logs, error overlays). */
@@ -582,7 +595,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
-.lb-net-status.lb-ok { opacity: 0.7; }
+.lb-net-status.lb-ok { color: #1e8e3e; }
 .lb-net-status.lb-bad { color: var(--md-sys-color-error); }
 .lb-net-method { flex-shrink: 0; opacity: 0.6; }
 .lb-net-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -752,29 +765,10 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* ---- Feature batch: rail compaction/hiding, lock popup, tab preview,
    smooth tab close/switch, error page, segment wrapping, small screens. ---- */
 
-/* Rail geometry, via the component's own tokens (never width/overflow
-   overrides): tighter compact width, thin inline padding, and the
-   hamburger centered in the rail with no wasted space on the left. */
-m3e-nav-rail {
-  /* Slightly narrower, still symmetric: one token drives BOTH sides,
-     so left and right inset are pixel-identical by construction. */
-  /* Reserved rail space reduced by request: was 7rem + space100 sides.
-     5.5rem keeps labels readable but gives the browse view a good
-     bit more room. Never set width/overflow directly on the host. */
-  --m3e-nav-rail-compact-width: 4.8rem;
-  --m3e-nav-rail-inline-padding: var(--md-sys-measurement-space75);
-}
-m3e-nav-rail { transition: margin-left var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
-m3e-nav-rail m3e-nav-item { margin: var(--md-sys-measurement-space25) 0; }
-/* Browse view: the rail slides off-screen like the rest of the chrome,
-   but a sliver stays visible (space75 = 6dp) so the user can grab/click
-   it to bring it back. Clicking the visible rail hides it again. */
-m3e-nav-rail.lb-rail-hidden {
-  margin-left: calc(
-    -1 * var(--m3e-nav-rail-compact-width) + var(--md-sys-measurement-space75)
-  );
-  cursor: pointer;
-}
+/* Rail geometry comes from the component's own tokens (never
+   width/overflow overrides): the M3E defaults ARE the expressive
+   wide-rail spec - 96dp collapsed with persistent labels, 44dp top
+   inset (space550), 220dp expanded via the menu toggle. */
 
 /* Toolbar centering: the pill centers itself with auto margins. */
 
@@ -902,6 +896,8 @@ m3e-nav-rail.lb-rail-hidden {
   background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
   color: var(--md-sys-color-on-surface);
 }
+.lb-diag-chip.lb-diag-ok { background: color-mix(in srgb, #1e8e3e 18%, transparent); }
+.lb-diag-chip.lb-diag-bad { background: color-mix(in srgb, var(--md-sys-color-error) 18%, transparent); }
 
 /* ---- Compaction batch: toolbar tabs, diagnostics chip, suggest
    loading indicator ---- */

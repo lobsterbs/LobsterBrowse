@@ -136,12 +136,12 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
-  /* M3E density: normal or compact (tighter spacing UI-wide). */
+  /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  seed: "#E8552F",
+  seed: "#6750A4",
   engine: "startpage",
   adblock: true,
   uaPreset: "chrome-win",
@@ -156,7 +156,7 @@ export const DEFAULT_SETTINGS: Settings = {
   prefetchLinks: true,
   autoHideChrome: true,
   diagnostics: true,
-  density: "compact",
+  density: "normal",
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -171,22 +171,20 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
+      /* The Lobster scheme was removed: migrate stored picks to Baseline. */
+      seed: !parsed.seed || parsed.seed === "#E8552F" ? DEFAULT_SETTINGS.seed : parsed.seed,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
-      sameSitePolicy:
-        parsed.sameSitePolicy === undefined
-          ? DEFAULT_SETTINGS.sameSitePolicy
-          : parsed.sameSitePolicy === "approx"
-            ? "approx"
-            : "off",
+      /* SameSite option removed from Settings: pinned on (approx). */
+      sameSitePolicy: "approx",
       fingerprintSpoof:
         parsed.fingerprintSpoof === undefined
           ? DEFAULT_SETTINGS.fingerprintSpoof
           : Boolean(parsed.fingerprintSpoof),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
-      density: parsed.density === "compact" ? "compact" : "normal",
+      density: "normal",
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
