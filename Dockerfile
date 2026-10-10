@@ -436,9 +436,21 @@ RUN npm run build
 # deccb43 (the LB server consumes no rewriter change; lazy images and
 # the https toggle ride the service worker).
 
+# 2026-10-10 (40): the declarative compatibility policy engine
+# (Zeolite #135/#136): /policy.kdl rules upgrade narrowly scoped
+# requests (host/path/types) from native transport onto the rewrite
+# path, with a stable reason + ruleId in the fallback ring and the
+# TRANSPORT_FALLBACK trace; route "rewrite" is the only settable
+# route (native is already the default, required rewrites cannot be
+# demoted), and a rejected file keeps the defaults with a TRANSPORT
+# diag. The shipped policy.kdl is intentionally empty; LB serves it
+# from the vendored dist at the origin root. sw.js 21dc6e6c ->
+# 5b2df445 (205055 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged d86f746e. Cargo-side pin stays deccb43 (app-only change).
+
 
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=232748c041d637d7f91edba729ef2170d7d59688
+ARG ZEOLITE_COMMIT=d4bc2ad1bdfbb532abdb320b66eeb20d3feef6c4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -474,5 +486,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=21dc6e6c66ea23bd ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5b2df445203a9f57 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
