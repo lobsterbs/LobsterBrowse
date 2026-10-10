@@ -179,6 +179,15 @@ export function loadSettings(): Settings {
       diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
       /* SameSite option removed from Settings: pinned on (approx). */
       sameSitePolicy: "approx",
+      /* "Server default" UA option removed from Settings: stored picks
+         migrate to the default preset; the id stays valid for rules
+         pushed to the engine, so no functionality is lost. */
+      uaPreset:
+        !parsed.uaPreset || parsed.uaPreset === "server-default"
+          ? DEFAULT_SETTINGS.uaPreset
+          : parsed.uaPreset === "custom" || UA_PRESETS[parsed.uaPreset as Exclude<UaPresetId, "custom">]
+            ? parsed.uaPreset
+            : DEFAULT_SETTINGS.uaPreset,
       fingerprintSpoof:
         parsed.fingerprintSpoof === undefined
           ? DEFAULT_SETTINGS.fingerprintSpoof
