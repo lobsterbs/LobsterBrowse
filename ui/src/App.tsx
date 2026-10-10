@@ -19,9 +19,6 @@ import {
 import * as store from "./store";
 import { zlSend } from "./zeolite";
 import type { Tab } from "./store";
-/* Rail spacing lives in its own sheet so it cleanly overrides the
-   base theme rules (loaded earlier, same specificity, later wins). */
-import "./rail.css";
 import "./extensions.css";
 
 type View = "home" | "browser" | "settings" | "logs";

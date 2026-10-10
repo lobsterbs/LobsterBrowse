@@ -571,22 +571,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* Error overlay (tab load failure): covers the page area like
    .lb-loading, centered and scrollable. Without this the overlay
    flowed inline and the Try Again button floated loose. */
-.lb-error {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  overflow: auto;
-  padding: var(--md-sys-measurement-space300);
-  background: color-mix(in srgb, var(--md-sys-color-error) 8%, var(--md-sys-color-surface));
-  color: var(--md-sys-color-on-surface);
-  display: flex;
-  flex-direction: column;
-  gap: var(--md-sys-measurement-space100);
-  align-items: center;
-  text-align: center;
-}
-.lb-error .lb-console-text { color: var(--md-sys-color-error); }
-/* Shared error-colored inline text (used by Logs, error overlays). */
+/* Shared error-colored inline text (used by Logs). */
 .lb-error-text { color: var(--md-sys-color-error); }
 .lb-console-input { display: flex; gap: var(--md-sys-measurement-space100); align-items: flex-end; padding-top: var(--md-sys-measurement-space100); }
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
