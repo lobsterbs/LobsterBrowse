@@ -360,8 +360,29 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
           <Row label="Ad & tracker blocking (engine-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="Fingerprint spoofing (engine pages)" icon="visibility_off" on={settings.fingerprintSpoof} toggle={() => onChange({ fingerprintSpoof: !settings.fingerprintSpoof })} />
+          <Row label="HTTPS upgrade (engine pages)" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
         </m3e-list>
+        <p className="lb-muted" style={{ fontSize: 12 }}>
+          HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
+        </p>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Fingerprint profile (engine pages)</div>
+          <M3eSelect
+            label="Fingerprint profile"
+            value={settings.fingerprintProfile}
+            options={[
+              ["native", "Native (no spoofing)"],
+              ["ua", "Match the User-Agent setting"],
+              ...(Object.keys(UA_PRESETS) as UaPresetId[])
+                .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "custom" && id !== "server-default")
+                .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
+            ]}
+            onChange={(v) => onChange({ fingerprintProfile: v as Settings["fingerprintProfile"] })}
+          />
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            One profile drives every spoofed document surface (platform, languages, canvas seed) from a single UA string. A profile the engine rejects is logged, never silently ignored.
+          </p>
+        </div>
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
@@ -527,6 +548,16 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </label>
           </div>
           {sessStatus && <p className="lb-muted" style={{ fontSize: 12 }}>{sessStatus}</p>}
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Page loading</div>
+          <m3e-list>
+            <Row label="Lazy images (engine pages)" icon="image" on={settings.imageLazy} toggle={() => onChange({ imageLazy: !settings.imageLazy })} />
+          </m3e-list>
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            The engine adds loading="lazy" to page images so off-screen images load as you scroll instead of at first paint. Applies from the next navigation.
+          </p>
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
