@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 97ae92d (Zeolite main 3f20ea4, CI run 38045256567)
+# Current pin: dist f6f3235 (Zeolite main 2133cc5, CI run 38047405965)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -311,9 +311,18 @@ RUN npm run build
 # (198177 bytes); bootstrap.js bc001db -> d6f6abba (23388
 # bytes); wasm unchanged f5ad1126. Cargo-side pin stays
 # deccb43.
+# 2026-10-10 (30). #132 closes the frame-protocol duplex: the
+# contentWindow sender half (a parent messaging its child through
+# the element delivers with the genuine sender window; before, the
+# anchor heard the page's setup as ev.source = itself) + the
+# virtual-origin parity drop (a targetOrigin the recipient's marker
+# does not match is dropped, the unproxied behavior). sw.js
+# unchanged 9dcd3c18 (198177 bytes); bootstrap.js d6f6abba ->
+# a9aca861 (24172 bytes); wasm unchanged f5ad1126. Cargo-side pin
+# stays deccb43.
 
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=97ae92da12e748e2f102ffe89b8b2bcdaff7c5d5
+ARG ZEOLITE_COMMIT=f6f32358c2eb251df0b76830cf383946af059369
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -349,5 +358,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=d6f6abbae1785860
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=a9aca861f7f3b606
 ENTRYPOINT ["/app/lobster-server"]
