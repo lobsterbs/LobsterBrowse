@@ -25,7 +25,7 @@ RUN npm run build
 # build time so the server can serve it same-origin at /zlsw/ and the
 # UI can register the worker. Pinned to an exact revision instead of a
 # moving branch so rebuilds are deterministic.
-# Current pin: dist 86e394c (Zeolite main 58be3c2, CI run 38039145218)
+# Current pin: dist adf98d8 (Zeolite main e0a4c45, CI run 38040692856)
 # 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
 # against client payloads, loopback bind + Origin guard + fail-closed
 # auth config + security headers, JSON configs swapped for KDL, SW
@@ -257,8 +257,26 @@ RUN npm run build
 # (c5fe41724b40bae0, verify the served file). Cargo-side pin
 # stays deccb43.
 
+
+# 2026-10-10 (27): #130 finish + #131. The reCAPTCHA widget's last
+# break was sender-side: senderVirtualOrigin decoded only
+# standalone route tails, so a #112 directory-shaped anchor route
+# (<token>/api2/anchor) answered zl:getVirtualOrigin with null; the
+# page's vorigin filter never rewrote the anchor's message events
+# and grecaptcha dropped them all as foreign-origin messages
+# (reCAPTCHA Timeout, anchor retry loop). The origin decode now
+# retries with the request engine's MAC-verified recoverPath and
+# peels nested routes with unwrapDest. #131: Vite's __vite__mapDeps
+# dot-relative asset strings ("../chunks/x.js") now route through the
+# rewriter's module-base encoder instead of resolving to
+# engine-origin 404s (Brave Search: dead UI, no favicons, Ask AI
+# refresh loop). sw.js 568fc624 -> 9dcd3c18 (198177 bytes);
+# bootstrap.js unchanged (c5554b40); wasm c5fe4172 -> f5ad1126
+# (99153 bytes, verify the served file). Cargo-side pin stays
+# deccb43.
+
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=86e394c7bcf938d1fb33db5ec91fb0581ba79c7d
+ARG ZEOLITE_COMMIT=adf98d8f5c8a58e36fe60142602d9bd16d07cd19
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -294,5 +312,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=568fc6243d085a0c ZEOLITE_BOOTSTRAP_SHA=c5554b40311c90d9
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9dcd3c18f44b9426 ZEOLITE_BOOTSTRAP_SHA=c5554b40311c90d9
 ENTRYPOINT ["/app/lobster-server"]
