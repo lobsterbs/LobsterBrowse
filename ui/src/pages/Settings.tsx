@@ -27,6 +27,15 @@ const SEEDS: Array<[string, string]> = [
   ["#4F5B92", "Slate"],
 ];
 
+/* Display name for a per-site rule UA. The "Server default" wording was
+   removed from Settings; the id stays functional in stored rules. */
+const ruleUaName = (id: UaPresetId | undefined): string =>
+  !id || id === "server-default"
+    ? "default UA"
+    : id === "custom"
+      ? "Custom"
+      : UA_PRESETS[id as Exclude<UaPresetId, "custom" | "server-default">].name;
+
 /* Expansion panels: only the header toggles open state, so selecting an
    option inside a panel never collapses it. */
 function Panel(props: { id: string; icon: string; title: string; open: boolean; toggle: () => void; children: ReactNode }) {
@@ -315,9 +324,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             label="User-Agent preset"
             value={settings.uaPreset}
             options={[
-              ...(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map(
-                (id) => [id, UA_PRESETS[id].name] as [string, string]
-              ),
+              ...(Object.keys(UA_PRESETS) as UaPresetId[])
+                .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default")
+                .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
               ["custom", "Custom"],
             ]}
             onChange={(v) => onChange({ uaPreset: v as UaPresetId })}
@@ -540,7 +549,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               {rules.map((r) => (
                 <div key={r.domain} className="lb-rule-row">
                   <code>{r.domain}</code>
-                  <span className="lb-muted">{r.uaPreset ?? "default UA"} · adblock {r.adblock === false ? "off" : "on"}</span>
+                  <span className="lb-muted">{ruleUaName(r.uaPreset)} · adblock {r.adblock === false ? "off" : "on"}</span>
                   <m3e-icon-button aria-label="Remove rule" onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}>
                     <m3e-icon name="delete" aria-hidden={true} />
                   </m3e-icon-button>
@@ -563,9 +572,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               value={ruleUa}
               options={[
                 ["server-default", "Default UA"],
-                ...(Object.keys(UA_PRESETS) as Array<Exclude<UaPresetId, "custom">>).map(
-                  (id) => [id, UA_PRESETS[id].name] as [string, string]
-                ),
+                ...(Object.keys(UA_PRESETS) as UaPresetId[])
+                  .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default")
+                  .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
               ]}
               onChange={(v) => setRuleUa(v as UaPresetId)}
             />
