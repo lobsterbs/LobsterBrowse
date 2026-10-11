@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Push mirror to GitLab
         run: |
-          git clone --mirror https://github.com/lobsterbs/LobsterBrowse.git repo.git
+          # The GitLab mirror project still carries the legacy LobsterBrowse
+          # name; after renaming it to Celadon on GitLab, update the push URL.
+          git clone --mirror https://github.com/lobsterbs/Celadon.git repo.git
           cd repo.git
           git push --mirror "https://oauth2:${{ secrets.GITLAB_PAT }}@gitlab.com/lobsterbs/LobsterBrowse.git"

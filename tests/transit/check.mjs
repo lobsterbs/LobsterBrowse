@@ -1,6 +1,6 @@
 /* Tier-0 check: spawns the deterministic fixture and asserts every
    endpoint over plain HTTP. With LB_ORIGIN set (a locally running
-   lobster-server or a deployed beta origin) it additionally asserts:
+   celadon-server or a deployed beta origin) it additionally asserts:
    - /zl/<b64url> answers with the embedder engine-offline notice
      (503, the no-controller case from Zeolite docs/error-pages.md;
      meta[zl-error] payload, no destination URL in the body);
