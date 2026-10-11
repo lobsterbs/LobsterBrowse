@@ -119,8 +119,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-seed-row { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; flex-wrap: wrap; }
 .lb-color-input { width: 40px; height: 32px; border: none; background: none; cursor: pointer; }
 .lb-text-input { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); margin: var(--md-sys-measurement-space125) 0; }
-.lb-rule-list { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); margin: var(--md-sys-measurement-space100) 0; }
-.lb-rule-row { display: flex; gap: var(--md-sys-measurement-space150); align-items: center; justify-content: space-between; }
+/* LB #73: per-site rules are m3e chips now; the chip set owns layout. */
 
 /* Shared inputs */
 .lb-input {
