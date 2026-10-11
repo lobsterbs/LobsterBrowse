@@ -1,4 +1,4 @@
-# Celadon UI
+# LobsterBrowse UI
 
 Material 3 Expressive shell built with @m3e/web + @m3e/react (matraic/m3e, MIT).
 

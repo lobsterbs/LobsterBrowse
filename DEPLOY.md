@@ -1,4 +1,4 @@
-# Deploying Celadon
+# Deploying LobsterBrowse
 
 ## Server (Render web service, Docker)
 

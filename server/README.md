@@ -1,4 +1,4 @@
-# Celadon Server (Rust)
+# LobsterBrowse Server (Rust)
 
 Clean-room Wisp v2.1 implementation + hardening. MIT OR Apache-2.0.
 
