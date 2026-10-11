@@ -192,6 +192,8 @@ if ("serviceWorker" in navigator) {
    Channel: the SW sends {type:"zl:fetchRelay", rid, dest,
    method, headers, body} over the registered port and this
    handler answers head/chunk/end/error frames on the same port
+   (Zeolite #145 adds the outbound zl:relayCancel frame: the engine
+   aborting a fetch aborts this side's /zlrelay request)
    (the {ok:true} registration ack rides it too - ignored here).
    Re-registering is idempotent; a worker restart drops the port
    (the engine falls back to its own transport with a DIAG), so
@@ -204,11 +206,19 @@ function u8ToB64(u: Uint8Array): string {
   return btoa(s);
 }
 
+const relayControllers = new Map<number, AbortController>();
+
 async function zlRelayFetch(
   m: { rid: number; dest: string; method: string; headers: Array<[string, string]>; body?: unknown },
   port: MessagePort,
 ): Promise<void> {
   const rid = m.rid;
+  /* Zeolite #145: the engine can abort a relayed fetch (page
+     AbortController, navigation away). Aborting this fetch drops the
+     /zlrelay connection, which drops the server-side upstream request
+     mid-flight instead of streaming it to nobody. */
+  const ac = new AbortController();
+  relayControllers.set(rid, ac);
   const fail = (error: string) => port.postMessage({ type: "zl:relayError", rid, error });
   try {
     const body =
@@ -220,6 +230,7 @@ async function zlRelayFetch(
     const resp = await fetch("/zlrelay", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: ac.signal,
       body: JSON.stringify({
         dest: m.dest,
         method: m.method,
@@ -248,6 +259,8 @@ async function zlRelayFetch(
     port.postMessage({ type: "zl:relayEnd", rid });
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
+  } finally {
+    relayControllers.delete(rid);
   }
 }
 
@@ -259,6 +272,8 @@ export function zlRelayInit(): void {
       const m = ev.data as { type?: string; rid?: number };
       if (m && m.type === "zl:fetchRelay" && typeof m.rid === "number") {
         void zlRelayFetch(ev.data, ch.port1);
+      } else if (m && m.type === "zl:relayCancel" && typeof m.rid === "number") {
+        relayControllers.get(m.rid)?.abort();
       }
     };
     sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
