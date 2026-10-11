@@ -498,6 +498,17 @@ RUN npm run build
 # (211757 bytes); bootstrap.js unchanged 03cd3476; wasm
 # unchanged d86f746e; codec.js unchanged c29f5a19. Cargo-side
 # pin stays deccb43 (app-only change).
+# 2026-10-11 (45): cookie jar RFC 6265 audit (Zeolite main 1e573d3,
+# CI run 541 green, dist 2757a66) - an empty Domain attribute no
+# longer demotes a host-only cookie to a bare-host domain cookie
+# (5.2.3), document.cookie reads path-match the document URL the
+# same way request cookies do (5.4), and persisted (jarLoad) plus
+# imported (jarReplace) jar records are shape-checked before
+# admission so corrupted storage or a hostile import cannot throw
+# mid-request. sw.js c4181cb7 -> e2c5ea7a (212157 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
 FROM debian:bookworm-slim AS zl-builder
 ARG ZEOLITE_COMMIT=2757a669080bac0c5cb7acc5bd6dff46f51a25b6
 RUN apt-get update \
