@@ -1,17 +1,14 @@
-# AGENTS.md — Celadon
+# AGENTS.md — LobsterBrowse
 
 Guidance for AI agents and human contributors. Read this before changing the browser, proxy engine, UI, deployment configuration, or docs.
 
 ## Roadmap
 
-`ROADMAP.md` is the authoritative Celadon roadmap. Read it before undertaking major roadmap work. Do not create duplicate roadmap documents. Celadon uses chemical element codenames; Zeolite keeps its separate compound/material naming system.
+`ROADMAP.md` is the authoritative LobsterBrowse roadmap. Read it before undertaking major roadmap work. Do not create duplicate roadmap documents. LobsterBrowse uses chemical element codenames; Zeolite keeps its separate compound/material naming system.
 
 ## Project identity
-Celadon is an open-source proxy browser built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured DevTools diagnostics, and Zeolite integration.
+LobsterBrowse is an open-source proxy browser built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured DevTools diagnostics, and Zeolite integration.
 Make sites work first, then improve browser-like compatibility. Do not add a headless browser or attempt to become a full Chromium/Firefox replacement.
-
-## Naming (2026-10-11 rename)
-The project is Celadon; the GitHub repo was renamed from lobsterbs/LobsterBrowse to lobsterbs/Celadon. Kept as legacy identifiers on purpose (do not rename casually): the `lobsterjet` proxyEngine settings value, the `/lj/` and `/zl/` route prefixes, `lobsterbrowse-*` localStorage keys (the incognito wipe in store.ts matches that prefix), `ui/public/lobsterjet.js`, the `onrender.com` service hostnames, the `lobster` Actions environment, and the GitLab mirror target (legacy name until the GitLab project is renamed). The server binary is `celadon-server` (was `lobster-server`).
 
 ## Repository map
 - `server/` — Rust workspace.
@@ -31,13 +28,13 @@ The project is Celadon; the GitHub repo was renamed from lobsterbs/LobsterBrowse
 Fragments are client-side only (SVG sprite symbol selection, in-page anchors). They must never become part of the encoded request target, a cache key, an upstream request identity or a fallback decision. One sprite file stays one network identity however many `#symbol` references the page makes. Element-level resource failures have no observable HTTP status: diagnostics report `unknown`, never a fabricated `0`.
 
 ## Zeolite
-Zeolite is a separate reusable engine repository. Celadon consumes its published browser bundle and must not make Zeolite depend on the UI.
+Zeolite is a separate reusable engine repository. LobsterBrowse consumes its published browser bundle and must not make Zeolite depend on the UI.
 Always check Zeolite's actual compatibility implementation before claiming browser or extension API support.
 
 ## NativeTransit direction
 NativeTransit is the long-term transport/interception architecture:
 
-    Celadon -> Zeolite -> Transport
+    LobsterBrowse -> Zeolite -> Transport
                               |-> NativeTransit
                               |-> RewriteFallback -> Wisp -> Network
 
@@ -51,10 +48,10 @@ Rules:
 - Do not turn NativeTransit into a second browser engine.
 - Record native/fallback decisions and reasons.
 - Preserve original URLs/content whenever possible.
-- Put reusable engine fixes in Zeolite instead of Celadon-only hacks.
+- Put reusable engine fixes in Zeolite instead of LobsterBrowse-only hacks.
 
 ## Security and privacy
-Celadon is a proxy, so the server necessarily sees traffic it proxies. Never describe it as server-blind.
+LobsterBrowse is a proxy, so the server necessarily sees traffic it proxies. Never describe it as server-blind.
 Preserve SSRF and DNS-rebinding protection, URL/redirect validation, header safety, origin/cookie isolation, extension permissions and diagnostic redaction.
 Never store authorization headers, bearer tokens, passwords, API keys or raw cookies in diagnostics.
 
@@ -64,7 +61,7 @@ Distinguish navigation, upstream HTTP, transport, rewrite, resource, WebSocket, 
 Proxied traffic never touches this server: the `/logs` ring holds server-level diagnostics (suggest/cert/session lines) only, and the browser-side resfail reports carry the resource URL; correlate by URL + timestamp. Never invent a `cache_hit` line server-side.
 When NativeTransit is active, the network view should show NativeTransit vs RewriteFallback and the fallback reason.
 DevTools has three sections: Console, Network, Diagnostics. The separate Terminal page is gone. The Console is the single command surface: page eval plus the engine control-plane commands that used to live only in Terminal (zl:help lists them: zl:ping, zl:status, zl:transit, zl:netlog, zl:ext, zl:downloads; every engine reply passes the diagnostics sanitizers, and async replies append through the functional setDt patch).
-The Diagnostics toolbar carries a Report button that opens the project issue tracker at https://github.com/lobsterbs/Celadon/issues/new.
+The Diagnostics toolbar carries a Report button that opens the project issue tracker at https://github.com/lobsterbs/LobsterBrowse/issues/new.
 
 ## UI rules
 - No hamburger menu. No toolbar Home button (removed by request, 2026-09-27).
@@ -114,7 +111,7 @@ Test real website classes for engine changes: normal HTML, SPAs, fetch/XHR, WebS
 Use **Implemented**, **Partial**, **Experimental**, or **Planned**. Do not describe NativeTransit, full browser compatibility, client-side upstream fetching or extension coverage beyond what the code actually provides.
 
 ## Architecture goal
-Celadon = host application + browser UI.
+LobsterBrowse = host application + browser UI.
 Zeolite = reusable interception/transport engine.
 Wisp = transport foundation.
 RewriteFallback = compatibility escape hatch.

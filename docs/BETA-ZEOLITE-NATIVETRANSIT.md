@@ -37,7 +37,7 @@ Honest gaps created by the removal (do not paper over):
 
 ## Architecture (verified against source, not old docs)
 
-    Celadon (React UI, tabs, DevTools capture)
+    LobsterBrowse (React UI, tabs, DevTools capture)
       -> Zeolite service worker (zlsw/sw.js, root scope, prefix "/zl/")
          -> request classification: only /zl/ engine paths are claimed;
             everything else (app routes, cross-origin) passes through
@@ -211,7 +211,7 @@ NOT part of this beta.
   "Example Domain" rendered through the chain).
   FAIL - Transport redirect at navigation level: /zl/<b64 /redirect>
   (302, Location: "/") lands on the APP origin root (the
-  Celadon UI), not the target virtual root. Root-relative
+  LobsterBrowse UI), not the target virtual root. Root-relative
   Location must be mapped to the /zl/ virtual origin; NativeTransit
   currently surfaces it unrewritten. Same-origin fetch with
   redirect:manual sees opaqueredirect (standard for SW-responded
@@ -616,10 +616,10 @@ Rail. ui/src/rail.css is deleted: the host padding, item margin and sticky
 or overflow overrides are gone, and the m3e-nav-rail component owns every
 geometry decision (mode auto, stock expand button). Live verification on
 the pin 39 build: collapsed width 96px, expanded width 220px via the stock
-expand button, top inset 44px, stock item spacing. No Celadon CSS
+expand button, top inset 44px, stock item spacing. No LobsterBrowse CSS
 touches the rail anymore.
 
-Error pages. Celadon no longer authors error UI. A /zl/ request that
+Error pages. LobsterBrowse no longer authors error UI. A /zl/ request that
 reaches the server answers 503 with the engine offline notice carrying
 meta zl-error and never the destination URL (the issue 32 rule). The
 legacy /r/ prefix answers 502 with the gone notice. A failed engine
@@ -641,12 +641,12 @@ commit re-runs it against the live build.
 
 ## Startpage challenge-pass replay fixed at pin 42 (2026-10-10)
 
-Startpage searching works on the live beta. Two Celadon navigation
+Startpage searching works on the live beta. Two LobsterBrowse navigation
 bugs were the remaining cause of the captcha Something went wrong page;
 the engine challenge flow itself was already correct.
 
 Bug 1 (spent pass replay). The Anubis pass-challenge URL resolves on the
-Celadon origin (the challenge page runs same-origin inside the
+LobsterBrowse origin (the challenge page runs same-origin inside the
 engine frame, so its origin-relative pass URL and the redirect hop both
 land here), and the frame sits on that non-route path for roughly the
 second its upstream redirect takes. The navigation poll classified that
@@ -711,12 +711,12 @@ pays the idle limit and a truly stalled upstream dies at 30s,
 surfaced honestly by the engine deadlines (#140 body-stall,
 navigation TTFB).
 
-DDG close-out (Zeolite #137, Celadon #75): direct rustls
+DDG close-out (Zeolite #137, LobsterBrowse #75): direct rustls
 fetches of duckduckgo.com from a clean IP answer 200 while the same
 fetch class from Render egress gets 502, so DDG blocks the Render
 datacenter egress range, not the wasm TLS ClientHello. The relay
 mechanism is proven; DDG-on-Render is an infrastructure limit
-tracked in Celadon #75.
+tracked in LobsterBrowse #75.
 
 This push re-runs the transit-live CI job against the live pin 44
 build.

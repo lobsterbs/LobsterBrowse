@@ -405,7 +405,7 @@ export default function App() {
   }, [settings.transport]);
 
   /* ---- Cloak favicon (#76): the tab icon must follow the cloak,
-     not keep the Celadon logo. A neutral inline SVG data URL
+     not keep the LobsterBrowse logo. A neutral inline SVG data URL
      avoids both the logo and any network request to the cloak
      site; the original icon hrefs are restored on uncloak. ---- */
   const cloakIconHref =
@@ -502,7 +502,7 @@ export default function App() {
         <m3e-nav-rail
           id="nav-rail"
           mode="auto"
-          aria-label="Celadon"
+          aria-label="LobsterBrowse"
           {...{ ref: railRef }}
         >
           <m3e-icon-button toggle aria-label="Expand or collapse the navigation rail">
@@ -539,7 +539,7 @@ export default function App() {
         {/* Small screens (#76): the M3E nav bar replaces the wide
             rail (CSS hides the rail and shows this bar under 600px).
             Same items and handlers as the rail. */}
-        <m3e-nav-bar {...{ class: "lb-bottom-nav" }} mode="compact" aria-label="Celadon">
+        <m3e-nav-bar {...{ class: "lb-bottom-nav" }} mode="compact" aria-label="LobsterBrowse">
           <m3e-nav-item
             selected={view === "home" ? "" : undefined}
             onClick={() => setView("home")}
@@ -568,7 +568,7 @@ export default function App() {
           {/* The browser view gets every pixel: no header there. */}
           {view !== "browser" && (
             <m3e-app-bar>
-              <span slot="title" className="lb-app-title">Celadon <span className="lb-preview-badge">Preview</span></span>
+              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
             </m3e-app-bar>
           )}
 

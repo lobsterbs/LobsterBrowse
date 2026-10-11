@@ -11,7 +11,7 @@ integration surface and the backlog detail behind it.
 
 ## Current integration surface (verified)
 
-Celadon consumes Zeolite in exactly three places today:
+LobsterBrowse consumes Zeolite in exactly three places today:
 
 1. `zeolite-server` crate: git dependency in
    `server/bin/server/Cargo.toml` (rev pinned). LB uses
