@@ -169,6 +169,9 @@ type Props = {
   onOpenLogs: () => void;
   /* Session token for the /logs part of the copy-logs button. */
   sess?: string;
+  /* #76: false while the close animation plays (mount-stay in
+     Browser.tsx); the exit class mirrors the entry animation. */
+  open?: boolean;
 };
 
 const PAGES: Array<[DtState["page"], string, string]> = [
@@ -487,7 +490,7 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   );
 }
 
-export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess }: Props) {
+export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess, open }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
   const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
@@ -793,7 +796,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       variant="elevated"
       {...{
         ref: (el: any) => {
-          if (el) el.classList.add("lb-devtools");
+          if (el) {
+            el.classList.add("lb-devtools");
+            el.classList.toggle("lb-devtools-out", open === false);
+          }
         },
       }}
       aria-label="Developer tools"

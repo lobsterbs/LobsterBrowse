@@ -13,8 +13,6 @@
    restored sessions) auto-load when they become active. */
 
 import { useEffect, useRef, useState } from "react";
-import lockSvg from "@material-symbols/svg-400/outlined/lock.svg?raw";
-import noEncSvg from "@material-symbols/svg-400/outlined/no_encryption.svg?raw";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
 import {
@@ -109,13 +107,6 @@ type DlItem = {
   error?: string;
 };
 
-/* User-Agent options for the per-site rules chip (#10): the global
-   presets only. A custom UA stays a global setting; resolveUa reads
-   the custom string from the global settings, not per-site. */
-const UA_RULE_OPTIONS: Array<[string, string]> = [
-  ["", "Use global setting"],
-  ...(Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custom">[]).map((id): [string, string] => [id, UA_PRESETS[id].name]),
-];
 
 /* Minimal File System Access surface used by the streaming download
    path. Declared locally (structural, no global augmentation) so it
@@ -146,6 +137,18 @@ export default function BrowserView(props: Props) {
   const navId = useRef<Map<number, string>>(new Map());
   const [status, setStatus] = useState<Record<number, { loading: boolean; nav?: string }>>({});
   const [dt, setDtState] = useState<Record<number, DtState>>({});
+  /* #76 exit animations: DevTools stays mounted one animation
+     longer after its tab closes, so the close animation plays. */
+  const [dtMounted, setDtMounted] = useState(false);
+  const activeDtOpen = !!dt[props.activeId]?.open;
+  useEffect(() => {
+    if (activeDtOpen) {
+      setDtMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setDtMounted(false), 280);
+    return () => clearTimeout(t);
+  }, [activeDtOpen]);
   /* Per-tab URL bar drafts; when empty the bar shows the real URL. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   /* Toolbar autocomplete: engine-queried suggestions, debounced. */
@@ -239,8 +242,6 @@ export default function BrowserView(props: Props) {
   };
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
-  /* Site info card: open state plus the cookies the page can read. */
-  const [siteInfoOpen, setSiteInfoOpen] = useState(false);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
@@ -262,6 +263,16 @@ export default function BrowserView(props: Props) {
   /* ---- Downloads ---- */
   const [downloads, setDownloads] = useState<DlItem[]>([]);
   const [dlOpen, setDlOpen] = useState(false);
+  /* #76: same mount-stay for the downloads card. */
+  const [dlMounted, setDlMounted] = useState(false);
+  useEffect(() => {
+    if (dlOpen) {
+      setDlMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setDlMounted(false), 280);
+    return () => clearTimeout(t);
+  }, [dlOpen]);
   const dlSeq = useRef(1);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
@@ -765,12 +776,22 @@ export default function BrowserView(props: Props) {
     void zlSend({ type: "zl:menuClick", extId: m.extId, msg: { menuItemId: m.id, pageUrl } }, 8000);
   };
 
-  const [siteCookies, setSiteCookies] = useState<string[]>([]);
   /* Extensions panel: asks the service worker for the installed list
      (Zeolite zl:listExt control message). The worker controlling the
      page wins; otherwise the vendored worker at /zlsw/sw.js is
      registered and used as a control plane (no page control). */
   const [extPanelOpen, setExtPanelOpen] = useState(false);
+  /* #76: the extensions panel stays mounted through its exit
+     animation too. */
+  const [extPanelMounted, setExtPanelMounted] = useState(false);
+  useEffect(() => {
+    if (extPanelOpen) {
+      setExtPanelMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setExtPanelMounted(false), 200);
+    return () => clearTimeout(t);
+  }, [extPanelOpen]);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
 
@@ -871,6 +892,22 @@ export default function BrowserView(props: Props) {
     }
     pushLog("info", "ext options open " + p);
     window.open(p, "_blank", "noopener");
+  };
+  /* Uninstall (#76): the manager owns removal (storage, caches,
+     menus, alarms, background). The panel refreshes from the reply. */
+  const uninstallExt = async (id: string) => {
+    const rep = await zlSend({ type: "zl:extUninstall", extId: id }, 8000);
+    if (!rep || !rep.ok) {
+      setExtDetailError(
+        rep && rep.error ? String(rep.error) : "the worker did not answer zl:extUninstall",
+      );
+      return;
+    }
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open("Extension removed", { duration: 3000 });
+    }
+    setExtDetail(null);
+    loadExtensions();
   };
   const loadExtensions = async () => {
     setExtError(null);
@@ -1746,9 +1783,6 @@ export default function BrowserView(props: Props) {
   /* TLS certificate state: declared above the !active early return —
      a useState below a conditional return changes the hook count
      between renders and crashes React. */
-  const [siteCert, setSiteCert] = useState<
-    { issuer: string; notAfter: string; days: number } | null | "checking" | "error"
-  >(null);
 
   if (!active) {
     /* App sends us back to Home when the last tab closes. */
@@ -1832,128 +1866,6 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
-  /* ---- Per-site rules chip (#10) ---- */
-  const activeRule = rules.find((r) => r.domain === uParts.host);
-  /* Effective ad-block: global unless this site's rule disables it
-     (same semantics as the zl:rules push). */
-  const ruleAdBlock = settings.adblock && activeRule?.adblock !== false;
-  const ruleUa: UaPresetId | "" = activeRule?.uaPreset ?? "";
-  const setRuleAdblock = (on: boolean) => {
-    const host = uParts.host;
-    if (!host) return;
-    const i = rules.findIndex((r) => r.domain === host);
-    if (on) {
-      /* Remove the override: the site falls back to the global setting. */
-      if (i < 0) return;
-      const r = { ...rules[i] };
-      delete r.adblock;
-      const next = [...rules];
-      if (Object.keys(r).every((k) => k === "domain" || r[k as keyof SiteRule] === undefined)) next.splice(i, 1);
-      else next[i] = r;
-      props.onRulesChange(next);
-    } else {
-      if (i >= 0) props.onRulesChange(rules.map((r) => (r.domain === host ? { ...r, adblock: false } : r)));
-      else props.onRulesChange([...rules, { domain: host, adblock: false }]);
-    }
-  };
-  const setRuleUa = (preset: UaPresetId | "") => {
-    const host = uParts.host;
-    if (!host) return;
-    const i = rules.findIndex((r) => r.domain === host);
-    if (preset === "") {
-      if (i < 0) return;
-      const r = { ...rules[i] };
-      delete r.uaPreset;
-      const next = [...rules];
-      if (Object.keys(r).every((k) => k === "domain" || r[k as keyof SiteRule] === undefined)) next.splice(i, 1);
-      else next[i] = r;
-      props.onRulesChange(next);
-      return;
-    }
-    if (i >= 0) props.onRulesChange(rules.map((r) => (r.domain === host ? { ...r, uaPreset: preset } : r)));
-    else props.onRulesChange([...rules, { domain: host, uaPreset: preset }]);
-  };
-  /* TLS certificate details for the site card. The server checks the
-     host's public CT-log record (crt.sh), so this works even though
-     the browser never makes a direct TLS connection to the site. */
-  const loadSiteCert = (host: string) => {
-    if (!host) return;
-    /* Navigation-generation guard: if the tab navigates while the CT
-       lookup is in flight, the stale answer is dropped. */
-    const tabId = active.id;
-    const gen = navGen.current.get(tabId);
-    setSiteCert("checking");
-    fetch("/cert?host=" + encodeURIComponent(host) + "&lb_sess=" + encodeURIComponent(active.sess))
-      .then((r) => r.json() as Promise<{ ok: boolean; issuer?: string; notAfter?: string; days?: number }>)
-      .then((d) => {
-        if (navGen.current.get(tabId) !== gen) return;
-        if (d && d.ok && d.issuer) {
-          setSiteCert({ issuer: d.issuer, notAfter: d.notAfter ?? "", days: d.days ?? 0 });
-        } else {
-          setSiteCert("error");
-        }
-      })
-      .catch(() => {
-        if (navGen.current.get(tabId) !== gen) return;
-        setSiteCert("error");
-      });
-  };
-  const loadSiteCookies = () => {
-    const f = frames.current.get(active.id);
-    let jar: string[] = [];
-    try {
-      const doc = f ? f.contentDocument : null;
-      jar = doc && doc.cookie ? doc.cookie.split(";").map((c) => c.trim()).filter(Boolean) : [];
-    } catch {
-      jar = [];
-    }
-    setSiteCookies(jar);
-  };
-  /* Expire every cookie the page can see, on the host and every
-     parent domain, so nothing survives. */
-  const clearSiteCookies = () => {
-    const f = frames.current.get(active.id);
-    try {
-      const doc = f ? f.contentDocument : null;
-      if (!doc) return;
-      const host = new URL(active.url).hostname;
-      const domains = [host, ...host.split(".").map((_, i) => host.split(".").slice(i).join(".")).slice(1)];
-      const names = doc.cookie.split(";").map((c) => c.trim().split("=")[0]).filter(Boolean);
-      for (const n of names) {
-        for (const d of domains) {
-          doc.cookie = n + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/" + (d !== host ? ";domain=" + d : "");
-        }
-      }
-      setSiteCookies(doc.cookie.split(";").map((c) => c.trim()).filter(Boolean));
-      pushLog("info", "cleared " + names.length + " site cookie(s) for " + host);
-    } catch {
-      /* frame not reachable */
-    }
-  };
-  const exportCookies = () => {
-    let domain = "";
-    try {
-      domain = new URL(active.url).hostname;
-    } catch {
-      /* keep empty */
-    }
-    const rows = [["name", "value", "domain"]].concat(
-      siteCookies.map((c) => {
-        const i = c.indexOf("=");
-        return [i === -1 ? c : c.slice(0, i), i === -1 ? "" : c.slice(i + 1), domain];
-      })
-    );
-    const csv = rows.map((r) => r.map((x) => '"' + x.replace(/"/g, '""') + '"').join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "lobsterbrowse-cookies.csv";
-    a.click();
-    /* Revoke late: an immediate revoke can abort the download before
-       the browser takes ownership of the blob (seen on Firefox). */
-    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-  };
-
   return (
     <section
       className={"lb-browser" + (props.incognito ? " incognito" : "")}
@@ -2016,8 +1928,9 @@ export default function BrowserView(props: Props) {
             tab expands and focuses the toolbar pill instead (see the
             empty-tab effect), so there is exactly one search surface. */}
 
-        {activeDt.open && (
+        {dtMounted && (
           <DevTools
+            open={activeDt.open}
             tab={active}
             dt={activeDt}
             setDt={(patch) => setDt(active.id, patch)}
@@ -2069,7 +1982,6 @@ export default function BrowserView(props: Props) {
             aria-label={"Open tab list (" + tabs.length + " tabs)"}
             onClick={() => {
               setTabsOpen((v) => !v);
-              setSiteInfoOpen(false);
               setDlOpen(false);
             }}
             {...{ ref: tabsBtnRef }}
@@ -2134,25 +2046,6 @@ export default function BrowserView(props: Props) {
             )}
             {active.url && (
               <>
-                <span
-                  className="lb-tb-lock-wrap"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={secure ? "https connection, site details" : "Not secure, site details"}
-                  onClick={() => {
-                    loadSiteCookies();
-                    if (secure && uParts.host && !siteInfoOpen) loadSiteCert(uParts.host);
-                    setSiteInfoOpen((v) => !v);
-                    setTabsOpen(false);
-                    setDlOpen(false);
-                  }}
-                >
-                  <span
-                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
-                    aria-hidden={true}
-                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
-                  />
-                </span>
                 {icons[active.id] ? (
                   <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
                 ) : (
@@ -2256,7 +2149,6 @@ export default function BrowserView(props: Props) {
                 onClick={() => {
                   setDlOpen((v) => !v);
                   setTabsOpen(false);
-                  setSiteInfoOpen(false);
                 }}
               >
                 <m3e-icon name="download" aria-hidden={true} />
@@ -2316,102 +2208,6 @@ export default function BrowserView(props: Props) {
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
         </m3e-toolbar>
-          {/* Site info (#26): a real M3E card (elevated) anchored above
-              the toolbar (outside the identity pill, so opening it can
-              never inflate the pill or the toolbar). It is the single
-              entry point for connection facts, cookies and per-site
-              settings: the former toolbar Site settings chip and card
-              were merged in here. Long cookie lists scroll inside the
-              card. */}
-          {siteInfoOpen && (
-              <m3e-card variant="elevated" aria-label="Site information" {...{ class: "lb-site-card" }}>
-                <div slot="header" className="lb-site-head">
-                  <span
-                    className={"lb-tb-lock " + (secure ? "secure" : "insecure")}
-                    aria-hidden={true}
-                    dangerouslySetInnerHTML={{ __html: secure ? lockSvg : noEncSvg }}
-                  />
-                  <span className="lb-site-ctitle">{secure ? "https connection" : "http connection, not secure"}</span>
-                  <m3e-icon-button aria-label="Close site info" onClick={() => setSiteInfoOpen(false)}>
-                    <m3e-icon name="close" aria-hidden={true} />
-                  </m3e-icon-button>
-                </div>
-                <div slot="content" className="lb-site-body">
-                  <div className="lb-site-row">
-                    {uParts.scheme ? uParts.scheme + "://" + uParts.host + (uParts.port.includes("default") ? "" : ":" + uParts.port) : "No URL loaded"}
-                  </div>
-                  {secure && (
-                    <>
-                      <div className="lb-site-ctitle">Public certificate record</div>
-                      {siteCert === null && <div className="lb-site-row">Press the lock again to check the certificate.</div>}
-                      {siteCert === "checking" && <div className="lb-site-row">Checking certificate record...</div>}
-                      {siteCert === "error" && <div className="lb-site-row">Certificate data unavailable (no public CT-log record or lookup failed).</div>}
-                      {siteCert && siteCert !== "checking" && siteCert !== "error" && (
-                        <div className="lb-site-row">
-                          Issuer: {siteCert.issuer}
-                          <br />
-                          Valid until {siteCert.notAfter} ({siteCert.days} days left)
-                          <br />
-                          <span className="lb-muted">Source: Certificate Transparency logs (crt.sh / Cert Spotter). This is the public record for the host, not the certificate this session actually negotiated.</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className="lb-site-ctitle">Page-readable cookies ({siteCookies.length})</div>
-                  {siteCookies.length > 0 && (
-                    <div className="lb-site-cookies">
-                      {siteCookies.slice(0, 12).map((c) => (
-                        <div key={c} className="lb-site-cookie">{c}</div>
-                      ))}
-                    </div>
-                  )}
-                  <p className="lb-site-note">
-                    Only cookies the page itself can read. HttpOnly cookies live on the proxy server side.
-                  </p>
-                  {/* Per-site settings (#26): same store as the Settings
-                      editor; created lazily, removed when it carries no
-                      overrides anymore. Merged into the lock card from
-                      the removed rules chip card. */}
-                  {active.url && (
-                    <>
-                      <div className="lb-site-ctitle">Site settings</div>
-                      <div className="lb-site-row lb-rule-row">
-                        <span>Block ads &amp; trackers on this site</span>
-                        <m3e-switch
-                          aria-label="Block ads and trackers on this site"
-                          checked={ruleAdBlock ? "" : undefined}
-                          disabled={!settings.adblock ? "" : undefined}
-                          onClick={() => setRuleAdblock(!ruleAdBlock)}
-                        />
-                      </div>
-                      {!settings.adblock && (
-                        <p className="lb-site-note">
-                          Global ad &amp; tracker blocking is off in Settings; a site rule cannot turn it on.
-                        </p>
-                      )}
-                      <div className="lb-site-ctitle">User-Agent</div>
-                      <M3eSelect
-                        label="User-Agent for this site"
-                        value={ruleUa}
-                        options={UA_RULE_OPTIONS}
-                        onChange={(v) => setRuleUa(v as UaPresetId | "")}
-                      />
-                      <p className="lb-site-note">
-                        Per-site rules reach the engine through the zl:rules push and apply from the next navigation.
-                      </p>
-                    </>
-                  )}
-                </div>
-                <div slot="actions" className="lb-site-actions">
-                  <m3e-button onClick={clearSiteCookies}>
-                    <m3e-icon name="delete" aria-hidden={true} /> Clear page-readable cookies
-                  </m3e-button>
-                  <m3e-button onClick={exportCookies}>
-                    <m3e-icon name="download" aria-hidden={true} /> Export CSV
-                  </m3e-button>
-                </div>
-              </m3e-card>
-            )}
           {xpiPrompt && (
             <XpiPrompt
               name={xpiPrompt.name}
@@ -2421,8 +2217,9 @@ export default function BrowserView(props: Props) {
               onCancel={() => setXpiPrompt(null)}
             />
           )}
-          {dlOpen && downloads.length > 0 && (
+          {dlMounted && downloads.length > 0 && (
             <DownloadsCard
+              closing={!dlOpen}
               downloads={downloads}
               onClose={() => setDlOpen(false)}
               onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
@@ -2440,8 +2237,9 @@ export default function BrowserView(props: Props) {
         </div>
       </div>
 
-      {extPanelOpen && (
+      {extPanelMounted && (
         <ExtensionsPanel
+          open={extPanelOpen}
           list={extList}
           busy={extBusy}
           error={extError}
@@ -2455,6 +2253,7 @@ export default function BrowserView(props: Props) {
           onToggleEnabled={toggleExtEnabled}
           onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
+          onDelete={uninstallExt}
         />
       )}
 

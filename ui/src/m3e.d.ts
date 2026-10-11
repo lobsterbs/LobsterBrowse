@@ -47,6 +47,7 @@ declare module "react" {
       "m3e-nav-rail": M3eBase & { mode?: string };
       "m3e-nav-item": M3eBase & { selected?: boolean | string; disabled?: boolean; href?: string };
       "m3e-nav-rail-toggle": M3eBase & { for?: string };
+      "m3e-nav-bar": M3eBase & { mode?: string };
       "m3e-expansion-panel": M3eBase & {
         open?: boolean | string;
         "hide-toggle"?: boolean | string;
