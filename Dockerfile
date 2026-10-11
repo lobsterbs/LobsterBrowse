@@ -517,8 +517,17 @@ RUN npm run build
 # sw.js e2c5ea7a -> 38b66986 (212039 bytes); bootstrap.js unchanged
 # 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
 # Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-11 (47): #144 navh suffix navigation recovery, HTTPS-only
+# default with proceed-anyway (loopback never upgraded),
+# zl:extUninstall, optional API module detach/reattach,
+# cookies.onChanged, RFC 6265 cookie-date parser, wisp stall-storm
+# relay-first cooldown (Zeolite main 72351d4, CI green, dist
+# 0767b56). sw.js 38b66986 -> f0c7b17f (215739 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=f8135f2ac9ccdad89aa02993e1c4e1caac087d66
+ARG ZEOLITE_COMMIT=0767b56a758aaaf9b05b381106638490263e56be
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -554,5 +563,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=38b66986372a37f7 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f0c7b17fd2ebb23f ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
