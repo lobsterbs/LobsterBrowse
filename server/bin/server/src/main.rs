@@ -503,8 +503,8 @@ async fn zl_relay_endpoint(
         Ok(r) => r,
         Err(e) => {
             /* The reqwest Display alone says only "error sending request";
-               the source chain says WHY (connect timeout, reset by peer,
-               TLS failure). LB #75 needs that distinction on the wire. */
+            the source chain says WHY (connect timeout, reset by peer,
+            TLS failure). LB #75 needs that distinction on the wire. */
             let mut chain = e.to_string();
             let mut src = std::error::Error::source(&e);
             while let Some(s) = src {
