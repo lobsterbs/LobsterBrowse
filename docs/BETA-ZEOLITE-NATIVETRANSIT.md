@@ -720,3 +720,39 @@ tracked in LobsterBrowse #75.
 
 This push re-runs the transit-live CI job against the live pin 44
 build.
+
+
+## Pin 45/46 (2026-10-11): cookie jar hardening, DDG egress verdict sharpened
+
+Pin 45 (dist 2757a66, Zeolite 1e573d): the cookie jar RFC 6265 audit
+fixes - an empty Domain attribute no longer demotes a host-only cookie
+to a bare-host domain cookie (5.2.3), document.cookie reads path-match
+the document URL the same way request cookies do (5.4), and persisted
+(jarLoad) plus imported (jarReplace) records are shape-checked before
+admission.
+
+Pin 46 (dist f8135f2, Zeolite b1b96b3): cookie jar follow-ups -
+re-admitting a cookie keeps the original creation-time (RFC 6265
+5.3.11, send-order tie-break stability), and jarMerge filters imported
+records with the same stored-cookie shape gate jarLoad uses (records
+missing secure/httpOnly/expires/created previously read as
+never-expiring in document.cookie but were purged as expired on the
+request header path). Live on both services, zlswSha 38b66986372a37f7.
+
+DDG verdict sharpened with the relay error source chain (server commit
+998357d): from Render egress, duckduckgo.com and lite.duckduckgo.com
+fail at TCP connect (deadline elapsed, no SYN-ACK) while example.com
+answers 200 upstream from the same egress; from a clean IP both DDG
+hosts answer 200 with and without a browser UA. The block sits at the
+egress IP layer, upstream of TLS and headers. Worked-before is
+consistent with dynamic datacenter-range blocking and shifting Render
+egress IPs (LB #75).
+
+Server: the relay 502 body carries the full reqwest source chain
+(998357d); the CI format gate on the new comment block is restored by
+af7e2c3 (main) / 6b045af (beta), comment indent only.
+
+M3E sweep closed (LB #73): tooltips on toolbar actions, snackbar
+notify surfaces, linear progress in downloads, and per-site rule
+chips all shipped; the tab overflow menu item has no surface (tabs
+live behind the toolbar pill + TabSwitcherCard preview tiles).
