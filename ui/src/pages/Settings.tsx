@@ -176,58 +176,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     });
   };
 
-  /* Session export / import: the engine owns the envelope and the
-     crypto (PBKDF2 is slow by design, hence the long timeouts). The UI
-     only collects the passphrase and moves the JSON blob in and out. */
-  const [sessPass, setSessPass] = useState("");
-  const [sessMode, setSessMode] = useState<"replace" | "merge">("merge");
-  const [sessStatus, setSessStatus] = useState("");
-  const exportSession = async () => {
-    setSessStatus("Encrypting session, this takes a few seconds...");
-    const rep = await zlSend({ type: "zl:exportSession", passphrase: sessPass }, 20000);
-    if (!rep || !rep.ok) {
-      setSessStatus(
-        rep && rep.error
-          ? "Export failed: " + String(rep.error)
-          : "Export failed: the Zeolite service worker could not be reached on this origin."
-      );
-      return;
-    }
-    const blob = new Blob([JSON.stringify(rep.blob)], { type: "application/json" });
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = "lobsterbrowse-session.json";
-    a.click();
-    /* Revoke late: an immediate revoke can abort the download before
-       the browser takes ownership of the blob (seen on Firefox). */
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-    setSessStatus("Session exported. Without the passphrase the file is unreadable.");
-  };
-  const importSessionFile = async (file: File) => {
-    setSessStatus("Decrypting " + file.name + "...");
-    let blob: unknown;
-    try {
-      blob = JSON.parse(await file.text());
-    } catch {
-      setSessStatus("Import failed: not a valid session file.");
-      return;
-    }
-    const rep = await zlSend(
-      { type: "zl:importSession", passphrase: sessPass, blob, mode: sessMode, rule: "keep-existing" },
-      20000
-    );
-    if (!rep || !rep.ok) {
-      setSessStatus(
-        rep && rep.error
-          ? "Import failed: " + String(rep.error) + " (wrong passphrase or corrupt file?)"
-          : "Import failed: the Zeolite service worker could not be reached on this origin."
-      );
-      return;
-    }
-    setSessStatus("Session imported (" + sessMode + ")." + (rep.extra ? " Extra keys were kept." : ""));
-  };
-
   /* About / Build: one authoritative source. The /build endpoint on
      the deployed server reports the versions compiled into that exact
      build plus its deployment git commit, so the UI never claims a
@@ -289,9 +237,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   return (
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
-      <p className="lb-muted" style={{ marginTop: 4 }}>
-        Saved on this device only.
-      </p>
 
       {/* Real M3E accordion coordinating the panels. multi keeps the
           current behavior (several panels open at once); without it
@@ -359,30 +304,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad & tracker blocking (engine-side)" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="HTTPS upgrade (engine pages)" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
+          <Row label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
         </m3e-list>
         <p className="lb-muted" style={{ fontSize: 12 }}>
           HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
         </p>
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Fingerprint profile (engine pages)</div>
-          <M3eSelect
-            label="Fingerprint profile"
-            value={settings.fingerprintProfile}
-            options={[
-              ["native", "Native (no spoofing)"],
-              ["ua", "Match the User-Agent setting"],
-              ...(Object.keys(UA_PRESETS) as UaPresetId[])
-                .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "custom" && id !== "server-default")
-                .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
-            ]}
-            onChange={(v) => onChange({ fingerprintProfile: v as Settings["fingerprintProfile"] })}
-          />
-          <p className="lb-muted" style={{ fontSize: 12 }}>
-            One profile drives every spoofed document surface (platform, languages, canvas seed) from a single UA string. A profile the engine rejects is logged, never silently ignored.
-          </p>
-        </div>
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
@@ -478,87 +405,57 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Zeolite cache</div>
+          <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
-            Cached proxied pages live on this device in the service worker
-            cache. Clearing drops every entry; pages reload from the server on the next visit.
+            One place for destructive actions: clear the proxied page cache on
+            this device, or delete every stored history, session and setting.
           </p>
-          <m3e-button
-            onClick={() => {
-              (async () => {
-                try {
-                  const keys = await caches.keys();
-                  await Promise.all(keys.map((k) => caches.delete(k)));
-                  if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                    M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
-                  }
-                } catch {
-                  /* caches unavailable */
-                }
-              })();
-            }}
-          >
-            <m3e-icon name="delete" aria-hidden={true} /> Clear Zeolite cache
+          <m3e-button onClick={() => setConfirmDelete(true)}>
+            <m3e-icon name="delete" aria-hidden={true} /> Manage data
           </m3e-button>
+          {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
+              handling and alertdialog semantics (alert attribute). */}
+          <m3e-dialog
+            {...{ ref: deleteDialogRef }}
+            alert=""
+            dismissible=""
+            close-label="Cancel"
+          >
+            <span slot="header">Manage data</span>
+            <p>Clear the Zeolite page cache, or delete all data on this device?</p>
+            <div slot="actions">
+              <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
+              <m3e-button
+                onClick={() => {
+                  deleteDialogRef.current?.hide();
+                  (async () => {
+                    try {
+                      const keys = await caches.keys();
+                      await Promise.all(keys.map((k) => caches.delete(k)));
+                      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                        M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
+                      }
+                    } catch {
+                      /* caches unavailable */
+                    }
+                  })();
+                }}
+              >
+                Clear cache
+              </m3e-button>
+              <m3e-button
+                variant="filled"
+                onClick={() => {
+                  onDeleteAll();
+                  deleteDialogRef.current?.hide();
+                }}
+              >
+                Delete all data
+              </m3e-button>
+            </div>
+          </m3e-dialog>
         </div>
 
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Session export / import</div>
-          <p className="lb-muted">
-            The engine encrypts your whole proxied session (tabs, cookie jar, cache keys) with a
-            passphrase and hands the file to you. Import decrypts it back into this browser.
-            The passphrase is never stored: no passphrase, no data.
-          </p>
-          <TextInput
-            label="Passphrase (min 8 characters)"
-            value={sessPass}
-            placeholder="at least 8 characters"
-            onChange={setSessPass}
-          />
-          <M3eSelect
-            label="Import mode"
-            value={sessMode}
-            options={[
-              ["replace", "Replace: wipe this session, then restore the file"],
-              ["merge", "Merge: existing data wins on conflict"],
-            ]}
-            onChange={(v) => setSessMode(v as "replace" | "merge")}
-          />
-          <div className="lb-seed-row">
-            <m3e-button disabled={sessPass.length >= 8 ? undefined : true} onClick={exportSession}>
-              <m3e-icon name="download" aria-hidden={true} /> Export encrypted session
-            </m3e-button>
-            <label className="lb-import-row">
-              <input
-                type="file"
-                accept="application/json,.json"
-                className="lb-import-file"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) importSessionFile(f);
-                  e.target.value = "";
-                }}
-              />
-              <m3e-button
-                disabled={sessPass.length >= 8 ? undefined : true}
-                onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}
-              >
-                <m3e-icon name="upload" aria-hidden={true} /> Import session file
-              </m3e-button>
-            </label>
-          </div>
-          {sessStatus && <p className="lb-muted" style={{ fontSize: 12 }}>{sessStatus}</p>}
-        </div>
-        <m3e-divider />
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Page loading</div>
-          <m3e-list>
-            <Row label="Lazy images (engine pages)" icon="image" on={settings.imageLazy} toggle={() => onChange({ imageLazy: !settings.imageLazy })} />
-          </m3e-list>
-          <p className="lb-muted" style={{ fontSize: 12 }}>
-            The engine adds loading="lazy" to page images so off-screen images load as you scroll instead of at first paint. Applies from the next navigation.
-          </p>
-        </div>
         <m3e-divider />
         <div className="lb-setting-group">
           <div className="lb-setting-label">Technical logs</div>
@@ -573,98 +470,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
           </m3e-button>
         </div>
-        <m3e-divider />
-        <div className="lb-setting-group">
-          {/* LB #73 M3E sweep: per-site rules render as chips. The
-              chip carries the domain and its effective profile; clicking
-              it removes the rule (the close icon communicates the
-              destructive affordance, the aria-label says it). */}
-          {rules.length > 0 && (
-            <m3e-chip-set>
-              {rules.map((r) => (
-                <m3e-chip
-                  key={r.domain}
-                  aria-label={"Remove rule for " + r.domain + ": " + ruleUaName(r.uaPreset) + ", adblock " + (r.adblock === false ? "off" : "on")}
-                  onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}
-                >
-                  <m3e-icon name="close" aria-hidden={true} />
-                  {r.domain} · {ruleUaName(r.uaPreset)} · adblock {r.adblock === false ? "off" : "on"}
-                </m3e-chip>
-              ))}
-            </m3e-chip-set>
-          )}
-          <div className="lb-seed-row">
-            <input
-              className="lb-input"
-              type="text"
-              placeholder="example.com"
-              aria-label="Site domain"
-              aria-invalid={ruleDomainInvalid ? true : undefined}
-              value={ruleDomain}
-              onChange={(e) => setRuleDomain(e.target.value)}
-            />
-            <M3eSelect
-              label="User-Agent for site"
-              value={ruleUa}
-              options={[
-                ["server-default", "Default UA"],
-                ...(Object.keys(UA_PRESETS) as UaPresetId[])
-                  .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default")
-                  .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
-              ]}
-              onChange={(v) => setRuleUa(v as UaPresetId)}
-            />
-            <m3e-switch checked={ruleAdblock ? "" : undefined} icons="selected" aria-label="Ad blocking for site" onClick={() => setRuleAdblock(!ruleAdblock)} />
-            <m3e-button
-              onClick={() => {
-                if (ruleDomainInvalid) return;
-                const domain = ruleDomainCandidate;
-                if (!domain) return;
-                const next = rules.filter((r) => r.domain !== domain);
-                next.push({ domain, uaPreset: ruleUa, adblock: ruleAdblock });
-                onRulesChange(next);
-                setRuleDomain("");
-              }}
-            >
-              Add
-            </m3e-button>
-          </div>
-          {ruleDomainInvalid && (
-            <p className="lb-error-text">
-              Enter a plain domain like example.com (scheme and path are stripped, spaces are not allowed).
-            </p>
-          )}
-        </div>
-        <m3e-divider />
-        <div className="lb-setting-group">
-          <div className="lb-setting-label">Data</div>
-          <m3e-button onClick={() => setConfirmDelete(true)}>
-            <m3e-icon name="delete_forever" aria-hidden={true} /> Delete all data
-          </m3e-button>
-          {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
-              handling and alertdialog semantics (alert attribute). */}
-          <m3e-dialog
-            {...{ ref: deleteDialogRef }}
-            alert=""
-            dismissible=""
-            close-label="Cancel"
-          >
-            <span slot="header">Delete all data?</span>
-            <p>Delete history, sessions and settings on this device?</p>
-            <div slot="actions">
-              <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
-              <m3e-button
-                variant="filled"
-                onClick={() => {
-                  onDeleteAll();
-                  deleteDialogRef.current?.hide();
-                }}
-              >
-                Yes, delete
-              </m3e-button>
-            </div>
-          </m3e-dialog>
-        </div>
+
       </Panel>
       </m3e-accordion>
 

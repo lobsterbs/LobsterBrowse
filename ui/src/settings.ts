@@ -164,7 +164,7 @@ export const DEFAULT_SETTINGS: Settings = {
   uaCustom: "",
   sameSitePolicy: "approx",
   fingerprintProfile: "ua",
-  httpsUpgrade: false,
+  httpsUpgrade: true,
   imageLazy: true,
   transport: "libcurl",
   cloakEnabled: false,
@@ -217,7 +217,7 @@ export function loadSettings(): Settings {
             : (parsed as { fingerprintSpoof?: boolean }).fingerprintSpoof === false
               ? "native"
               : DEFAULT_SETTINGS.fingerprintProfile,
-      httpsUpgrade: parsed.httpsUpgrade === undefined ? false : Boolean(parsed.httpsUpgrade),
+      httpsUpgrade: parsed.httpsUpgrade === undefined ? true : Boolean(parsed.httpsUpgrade),
       imageLazy: parsed.imageLazy === undefined ? true : Boolean(parsed.imageLazy),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       density: "normal",
