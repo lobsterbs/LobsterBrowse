@@ -31,7 +31,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive } from "../zeolite";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -598,6 +598,16 @@ export default function BrowserView(props: Props) {
     };
     navigator.serviceWorker?.addEventListener("message", onSwMsg);
     return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
+  }, []);
+  /* Zeolite #137: register the embedder fetch-relay channel (hosts
+     whose wasm TLS ClientHello is blocked ride this server's native
+     TLS). A worker restart drops the engine's stored port, so
+     re-register whenever the controller changes. */
+  useEffect(() => {
+    zlRelayInit();
+    const re = () => zlRelayInit();
+    navigator.serviceWorker?.addEventListener("controllerchange", re);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", re);
   }, []);
   /* ---- Engine notification handoff (#50): notifications.create/
      update/clear broadcast zl:notifyOp; LB owns the rendered surface
