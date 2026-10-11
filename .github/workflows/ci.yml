@@ -70,8 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/beta/zeolite-nativetransit'
     env:
-      FIXTURE_ORIGIN: https://lobsterbrowse-fixture.onrender.com
-      LB_ORIGIN: https://lobsterbrowse-beta.onrender.com
+      FIXTURE_ORIGIN: https://lobsterbrowse-fixture-qzhp.onrender.com
+      LB_ORIGIN: https://lobsterbrowse-beta-dr2h.onrender.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -87,7 +87,7 @@ compiles; it does not browse). The beta branch isolates that risk.
   capability succeeded when it did not. Failed capability = immediate,
   loud, visible.
 - One integration item per commit series, deployed and live-tested
-  (lobsterbrowse-server.onrender.com) before the next starts.
+  (lobsterbrowse.onrender.com) before the next starts.
 - When all items above are green in production for a few days, merge
   beta -> main in one reviewed merge (PR #12), not by cherry-picking.
 

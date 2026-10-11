@@ -24,7 +24,7 @@ function ok(name, cond, detail) {
 const b64u = (s) => Buffer.from(s, "utf8").toString("base64url");
 
 /* FIXTURE_ORIGIN: verify an already-deployed fixture (for example
-   https://lobsterbrowse-fixture.onrender.com) instead of spawning a
+   https://lobsterbrowse-fixture-qzhp.onrender.com) instead of spawning a
    local one; pair it with LB_ORIGIN to gate a deployed beta
    end to end. */
 const extFx = (process.env.FIXTURE_ORIGIN || "").replace(/\/+$/, "");
