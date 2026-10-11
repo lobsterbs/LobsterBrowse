@@ -681,3 +681,42 @@ clean.
 Mirror to GitLab failed on the simultaneous double-branch push twice
 (known race between the two mirror jobs); each later push mirrors
 successfully and no content diverges.
+
+## Pin 44: opaque-route relative recovery, relay idle bound (2026-10-11)
+
+Zeolite dist 2f94ffd (sw.js sha256-16 c4181cb7f98c3b87, codec.js
+unchanged c29f5a19): navh tail-destination recovery for page-built
+suffix paths and relative fetches under the opaque nav-handle route
+(Zeolite #143). github.com repo pages boot their React app: the
+widget fetches the app builds against the opaque route (latest
+commit, recently touched branches, tree commit info) resolve through
+the tail semantics and answer 200 instead of 404ing as expired
+navigation handles. The flat runtime module.css class from pin 37/38
+no longer appears at the page origin.
+
+Live verification (beta, pin 44 build 4a462de, headless netlog probe
+against github.com/lobsterbs/Zeolite): recovered widget routes 200
+through the navh tail, React app boots. One honest residual: a
+transient wisp websocket wedge mid-stream left one re-fetched script
+pending until the #140 body-stall deadline killed it (20s idle,
+diag carries the body-stall warning and the REWRITE failure row,
+the transport reset and reconnect 10s later is also recorded). The
+engine surfaced it per design; no infinite hang.
+
+Server relay hardening (main e866323 / beta 7f6c802): the /zlrelay
+upstream client now bounds IDLE reads (reqwest read_timeout, 30s)
+instead of total request duration. A total 20s cap aborted any
+healthy relayed body still streaming past 20s; a flowing body never
+pays the idle limit and a truly stalled upstream dies at 30s,
+surfaced honestly by the engine deadlines (#140 body-stall,
+navigation TTFB).
+
+DDG close-out (Zeolite #137, LobsterBrowse #75): direct rustls
+fetches of duckduckgo.com from a clean IP answer 200 while the same
+fetch class from Render egress gets 502, so DDG blocks the Render
+datacenter egress range, not the wasm TLS ClientHello. The relay
+mechanism is proven; DDG-on-Render is an infrastructure limit
+tracked in LobsterBrowse #75.
+
+This push re-runs the transit-live CI job against the live pin 44
+build.
