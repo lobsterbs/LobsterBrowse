@@ -509,8 +509,16 @@ RUN npm run build
 # bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
 # codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
 # (app-only change).
+# 2026-10-11 (46): cookie jar follow-ups (Zeolite main b1b96b3, CI
+# green, dist f8135f2) - RFC 6265 5.3.11: re-admitting a cookie keeps
+# the original creation-time (send-order tie-break), and jarMerge
+# filters imported records with the stored-cookie shape gate so a
+# record missing secure/httpOnly/expires/created cannot be admitted.
+# sw.js e2c5ea7a -> 38b66986 (212039 bytes); bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
+# Cargo-side pin stays deccb43 (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=2757a669080bac0c5cb7acc5bd6dff46f51a25b6
+ARG ZEOLITE_COMMIT=f8135f2ac9ccdad89aa02993e1c4e1caac087d66
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
