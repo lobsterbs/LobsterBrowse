@@ -38,13 +38,12 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 3d491fa (pin 43: the embedder fetch
-relay for TLS-fingerprint-blocked hosts with the LB /zlrelay
-endpoint, policy routes native and relay, the subresource
-body-stall settle, the github flat module.css recovery, the
-extension polyfill background boot and the rawHeaders cookie-jar
-repair, from Zeolite main 66265f0, CI all-green), zlswSha
-60ce0fde7dba9ea9 (sw.js changed; verify the served file hash).
+Current pin: Zeolite dist 2f94ffd (pin 44: the opaque-route
+relative recovery, resolving page-built /__zl_navh__/<token>/
+<suffix> fetches and relative tails against the page virtual
+context so github repo pages finish booting their widgets, from
+Zeolite main bcb2e2d, CI all-green), zlswSha c4181cb7f98c3b87
+(sw.js changed; verify the served file hash).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays deccb43 because no crate change shipped since it,
 and server/Cargo.lock is consistent with the pin.
