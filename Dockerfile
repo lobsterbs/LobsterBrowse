@@ -553,8 +553,17 @@ RUN npm run build
 # unchanged 03cd3476; wasm unchanged d86f746e; codec.js
 # c29f5a19 -> 950319bc59af25c9 (codec.ts changed; not startup-
 # pinned). Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-11 (51): Zeolite docs wave (main 1022268, CI run
+# 38169358836, dist 1021d30): security doc retitled as an internal
+# self-review with methodology stated, session-blob iter bounds
+# documented at the check, stale Phase 3 AST comment in literals.rs
+# corrected (issue #146). sw.js 230932f95cdef730 (342885 bytes),
+# bootstrap.js 03cd3476, codec.js 950319bc59af25c9 all unchanged
+# (comment-only source changes); wasm d86f746e -> 68264b205eb4e64d
+# (byte-level shift from the literals.rs comment, functionally
+# identical). Cargo-side pin stays deccb43.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=d2315dfdaf59ee33d4389e58ed3ca856f018fafa
+ARG ZEOLITE_COMMIT=1021d3060fb97d7d1c09d5b09a1780d45c28628e
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
