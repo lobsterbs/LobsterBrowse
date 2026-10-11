@@ -878,8 +878,19 @@ export default function BrowserView(props: Props) {
      worker refuses or answers no URL. */
   const openExtOptions = async (d: ExtDetail) => {
     if (!d.optionsPath) return;
+    /* Open the placeholder synchronously INSIDE the user gesture:
+       the token mint is async, and Chrome drops window.open calls
+       that happen after transient activation expires (a cold service
+       worker can take seconds to answer). The placeholder keeps the
+       gesture alive; its location is set once the mint replies. */
+    const placeholder = window.open("", "_blank");
+    if (!placeholder) {
+      setExtDetailError("the browser blocked the new tab");
+      return;
+    }
     const rep = await zlSend({ type: "zl:openExtPage", extId: d.id, which: "options" }, 6000);
     if (!rep || !rep.ok) {
+      placeholder.close();
       setExtDetailError(
         rep && rep.error ? String(rep.error) : "the worker did not answer zl:openExtPage",
       );
@@ -887,11 +898,12 @@ export default function BrowserView(props: Props) {
     }
     const p = typeof rep.url === "string" ? rep.url : "";
     if (!p.startsWith("/zl-ext/")) {
+      placeholder.close();
       setExtDetailError("the worker returned no options page URL");
       return;
     }
     pushLog("info", "ext options open " + p);
-    window.open(p, "_blank", "noopener");
+    placeholder.location.assign(p);
   };
   /* Uninstall (#76): the manager owns removal (storage, caches,
      menus, alarms, background). The panel refreshes from the reply. */
