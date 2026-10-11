@@ -526,8 +526,16 @@ RUN npm run build
 # bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
 # codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
 # (app-only change).
+# 2026-10-11 (48): PSL site boundary for the cookie jar via tldts
+# (registrable domain, private-section suffixes included) plus the
+# RFC 6265 5.3 step 5 public-suffix admission gate; tough-cookie and
+# whatwg-url adopted as test oracles (Zeolite main cbe510a, CI
+# green, dist e6f9c7a). sw.js f0c7b17f -> 19ff69a3f5572ce9 (342614 bytes;
+# +127KB is the public-suffix trie). bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
+# Cargo-side pin stays deccb43 (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=0767b56a758aaaf9b05b381106638490263e56be
+ARG ZEOLITE_COMMIT=e6f9c7aff220300bf3c88870cc150fa36c33ae35
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -563,5 +571,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f0c7b17fd2ebb23f ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=19ff69a3f5572ce9 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
