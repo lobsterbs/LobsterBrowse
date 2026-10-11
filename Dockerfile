@@ -483,8 +483,23 @@ RUN npm run build
 # (211106 bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
 # d86f746e; codec.js unchanged c29f5a19. Cargo-side pin stays
 # deccb43 (app-only change).
+
+# 2026-10-11 (44): the opaque-route relative recovery (#143
+# follow-up). github repo pages boot the React app but their
+# widget fetches arrive as /__zl_navh__/<token>/<suffix> and
+# 404 with a bad-handle strand: the page cannot read its real
+# path (LegacyUnforgeable location), so runtime URL building
+# appends to location.pathname. navhTailDest resolves
+# token-bearing tails with page-path-append semantics (the
+# token destination first, the client virtual context as the
+# fallback for expired tokens on long-lived pages) and
+# parser-resolved relative tails with ordinary URL semantics;
+# navigations keep the honest 404. sw.js 60ce0fde -> c4181cb7
+# (211757 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged d86f746e; codec.js unchanged c29f5a19. Cargo-side
+# pin stays deccb43 (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=3d491faf98733a725eeef4bd3b8c05804c691126
+ARG ZEOLITE_COMMIT=2f94ffd855cf3801a81701d24593d7ce9c461c9b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -520,5 +535,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=60ce0fde7dba9ea9 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c4181cb7f98c3b87 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
