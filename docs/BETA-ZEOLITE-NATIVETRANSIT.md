@@ -126,7 +126,7 @@ NOT part of this beta.
 ## Known limits (do not paper over)
 
 - Real-browser verification exists as of 2026-09-28 (Chromium via
-  Playwright against https://lobsterbrowse-beta.onrender.com at
+  Playwright against https://lobsterbrowse-beta-dr2h.onrender.com at
   4614b57): Tier 0 fully executed and recorded below, plus one Tier 1
   sample (example.com). A Tier 1-3 sample site matrix was run 2026-09-28 and is
   recorded below; real credential flows remain blocked by the
@@ -186,7 +186,7 @@ NOT part of this beta.
 - Browser-level Tier 0 (SW claims /zl/, transport over Wisp): RUN
   2026-09-28, Chromium (Playwright) against the deployed beta at
   4614b57, target = the public Tier-0 fixture
-  (https://lobsterbrowse-fixture.onrender.com). Fresh-context
+  (https://lobsterbrowse-fixture-qzhp.onrender.com). Fresh-context
   sequence UI load -> engine "Zeolite Beta" -> SW install -> zl:config
   -> /zl/ navigation worked first try (the 5e0b7e3 controllerchange
   re-push is deployed). Results:
