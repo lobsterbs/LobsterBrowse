@@ -564,8 +564,18 @@ RUN npm run build
 # (comment-only source changes); wasm d86f746e -> 68264b205eb4e64d
 # (byte-level shift from the literals.rs comment, functionally
 # identical). Cargo-side pin stays deccb43.
+# 2026-10-11 (52): Zeolite relay abort wave (main c4fca0c, CI run
+# 38170947855, dist d255688): relayFetch propagates AbortSignal with
+# a zl:relayCancel frame (issue #145) so an aborted page fetch drops
+# the embedder-side /zlrelay connection instead of streaming to
+# completion; the transport cooldown passes the signal through and
+# request.ts threads e.request.signal into upstreamFetch. LB ui
+# zeolite.ts aborts its /zlrelay fetch on the cancel frame. sw.js
+# 230932f95cdef730 -> acec9296b7e68c10 (343391 bytes); bootstrap.js
+# 03cd3476, codec.js 950319bc59af25c9, wasm 68264b205eb4e64d all
+# unchanged. Cargo-side pin stays deccb43.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=1021d3060fb97d7d1c09d5b09a1780d45c28628e
+ARG ZEOLITE_COMMIT=d2556885c5f63168b22d735e6b70cdbbb0fc22fa
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -601,5 +611,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=230932f95cdef730 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=acec9296b7e68c10 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
