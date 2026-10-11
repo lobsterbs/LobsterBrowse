@@ -541,8 +541,20 @@ RUN npm run build
 # bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
 # codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
 # (app-only change).
+# 2026-10-11 (50): Zeolite bug-scout wave (main 1e9b7d1, CI run
+# 38154209990, dist d2315df): the extension package reader now caps
+# zip inflation DURING decompression (a decompression bomb could
+# previously expand gigabytes in the worker before the declared-size
+# check ever ran), and codec tailBytes is anchored, so a same-origin
+# path merely containing the scheme prefix mid-way no longer decodes
+# as a destination; hostile-tail recovery stays in recoverPath
+# behind its keyed gates. First tests for the package reader. sw.js
+# a5e47b8e3a265fd8 -> 230932f95cdef730 (342885 bytes); bootstrap.js
+# unchanged 03cd3476; wasm unchanged d86f746e; codec.js
+# c29f5a19 -> 950319bc59af25c9 (codec.ts changed; not startup-
+# pinned). Cargo-side pin stays deccb43 (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=e01015a33e0444b48fbadba9d66161847f5c0331
+ARG ZEOLITE_COMMIT=d2315dfdaf59ee33d4389e58ed3ca856f018fafa
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -578,5 +590,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a5e47b8e3a265fd8 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=230932f95cdef730 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
