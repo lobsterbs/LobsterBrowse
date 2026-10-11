@@ -1,12 +1,12 @@
 [package]
-name = "celadon-server"
-description = "Celadon Wisp server: tokio + axum WSS entrypoint"
+name = "lobster-server"
+description = "LobsterBrowse Wisp server: tokio + axum WSS entrypoint"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "celadon-server"
+name = "lobster-server"
 path = "src/main.rs"
 
 [dependencies]

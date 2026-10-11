@@ -1,4 +1,4 @@
-# Celadon
+# LobsterBrowse
 ```text
     __          __         __            __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
@@ -7,13 +7,13 @@
  /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
 ```
 **Open-source browser-style proxy · Rust + React + Material 3 Expressive**
-Celadon is a browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics and Zeolite integration.
+LobsterBrowse is a browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics and Zeolite integration.
 
 ## Status
 
 This branch, `beta/zeolite-nativetransit`, is the experimental **Zeolite NativeTransit-first** line. Zeolite is the only engine on this branch; `/zl/` is the engine route. The legacy `/r/` and `/lj/` prefixes are gone (#67): the server answers them with the honest gone-notice, so stale bookmarks break by design.
 
-This branch is experimental and should not be treated as the stable Celadon release.
+This branch is experimental and should not be treated as the stable LobsterBrowse release.
 ## What it includes
 
 - Browser-style UI with tabs, settings, incognito sessions, DevTools and extension controls
@@ -26,10 +26,10 @@ This branch is experimental and should not be treated as the stable Celadon rele
 
 ## Roadmap
 
-The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemical element codenames for Celadon releases, distinct from Zeolite's compound/material naming system.
+The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemical element codenames for LobsterBrowse releases, distinct from Zeolite's compound/material naming system.
 
 ## Architecture
-    Celadon UI
+    LobsterBrowse UI
           |
         Zeolite
        engine SW
@@ -51,10 +51,10 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
 ## UI
 React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions and link prefetch.
 ## Zeolite integration
-Zeolite is maintained separately so other host applications can reuse it. Celadon consumes its published bundle under /zlsw/ without making Zeolite depend on Celadon UI code. On the beta branch, Zeolite is the only engine: browsing routes over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
+Zeolite is maintained separately so other host applications can reuse it. LobsterBrowse consumes its published bundle under /zlsw/ without making Zeolite depend on LobsterBrowse UI code. On the beta branch, Zeolite is the only engine: browsing routes over /zl/ (worker-owned, NativeTransit-first); see docs/BETA-ZEOLITE-NATIVETRANSIT.md.
 ## NativeTransit direction
 NativeTransit is the next transport/interception architecture:
-    Celadon -> Zeolite -> Transport
+    LobsterBrowse -> Zeolite -> Transport
                               |-> NativeTransit
                               |-> RewriteFallback -> Wisp -> Network
 > Do not rewrite website content unless the engine needs to.
@@ -70,7 +70,7 @@ DevTools is a real diagnostic surface. Events should identify trace/request ID, 
 ## UI rules
 No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
 ## Privacy
-Celadon is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
+LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
 
 ### Server
@@ -99,9 +99,9 @@ npm run dev
 
 The application is deployed on Render. This beta branch should be verified against the actually served Zeolite revision after deployment; do not assume every branch push automatically updates the running instance. After deployment changes verify /healthz, UI, /zl/, /zlsw/, Wisp and extension routes when relevant.
 ## Contributing
-Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a Celadon-only workaround.
+Inspect the implementation, trace the request/state flow, identify the correct repository boundary, make the smallest coherent change, run tests/builds, inspect the diff and update docs. If a fix belongs in Zeolite, fix it there instead of adding a LobsterBrowse-only workaround.
 ## Architecture goal
-Celadon = host application + browser UI
+LobsterBrowse = host application + browser UI
 Zeolite = reusable interception/transport engine
 Wisp = transport foundation
 RewriteFallback = compatibility escape hatch

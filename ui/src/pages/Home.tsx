@@ -168,7 +168,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
   return (
     <section className="lb-view-content lb-home">
       <pre
-        aria-label="Celadon"
+        aria-label="LobsterBrowse"
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
