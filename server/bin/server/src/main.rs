@@ -316,10 +316,18 @@ fn build_engine_client() -> reqwest::Client {
 /// Zeolite #137 relay client: same SSRF resolver and no redirects (the
 /// engine's hop chain re-issues 3xx itself), but NO cookie store - the
 /// engine jar owns cookies and they ride as request headers.
+/// The relay STREAMS bodies (Body::from_stream of bytes_stream), so a
+/// total request timeout aborts any healthy body still streaming past
+/// it (live evidence: a githubassets script died at exactly 20s
+/// mid-body; the total cap guillotined the stream and the page paid a
+/// relay TypeError). Only the IDLE read is bounded: a body that keeps
+/// sending bytes never pays the limit, and a truly stalled upstream
+/// dies at read_timeout, surfaced honestly by the engine deadlines
+/// (#140 body-stall, navigation TTFB).
 fn build_relay_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(8))
-        .timeout(std::time::Duration::from_secs(20))
+        .read_timeout(std::time::Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .dns_resolver(std::sync::Arc::new(PolicyDns))
         .cookie_store(false)
