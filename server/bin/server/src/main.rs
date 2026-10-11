@@ -501,7 +501,19 @@ async fn zl_relay_endpoint(
     }
     let upstream = match out.send().await {
         Ok(r) => r,
-        Err(e) => return bad(StatusCode::BAD_GATEWAY, &format!("relay upstream: {}", e)),
+        Err(e) => {
+            /* The reqwest Display alone says only "error sending request";
+               the source chain says WHY (connect timeout, reset by peer,
+               TLS failure). LB #75 needs that distinction on the wire. */
+            let mut chain = e.to_string();
+            let mut src = std::error::Error::source(&e);
+            while let Some(s) = src {
+                chain.push_str(" :: ");
+                chain.push_str(&s.to_string());
+                src = s.source();
+            }
+            return bad(StatusCode::BAD_GATEWAY, &chain);
+        }
     };
     let mut pairs: Vec<(String, String)> = Vec::new();
     for (name, value) in upstream.headers().iter() {
