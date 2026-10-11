@@ -165,3 +165,83 @@ export async function zlNavHandle(dest: string, timeoutMs = 5000): Promise<strin
   const r = await zlSend({ type: "zl:navHandle", dest }, timeoutMs);
   return r && r.ok === true && typeof r.url === "string" ? r.url : null;
 }
+
+/* Zeolite #137 embedder fetch relay. The engine asks the embedder
+   origin to fetch for hosts whose wasm TLS ClientHello is
+   fingerprint-blocked (policy route "relay"); this server route
+   performs them with native TLS and its own SSRF validation.
+   Channel: the SW sends {type:"zl:fetchRelay", rid, dest,
+   method, headers, body} over the registered port and this
+   handler answers head/chunk/end/error frames on the same port
+   (the {ok:true} registration ack rides it too - ignored here).
+   Re-registering is idempotent; a worker restart drops the port
+   (the engine falls back to its own transport with a DIAG), so
+   call again on controllerchange. */
+function u8ToB64(u: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) {
+    s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+async function zlRelayFetch(
+  m: { rid: number; dest: string; method: string; headers: Array<[string, string]>; body?: unknown },
+  port: MessagePort,
+): Promise<void> {
+  const rid = m.rid;
+  const fail = (error: string) => port.postMessage({ type: "zl:relayError", rid, error });
+  try {
+    const body =
+      typeof m.body === "string"
+        ? m.body
+        : m.body instanceof ArrayBuffer
+          ? u8ToB64(new Uint8Array(m.body))
+          : undefined;
+    const resp = await fetch("/zlrelay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        dest: m.dest,
+        method: m.method,
+        headers: m.headers,
+        ...(typeof m.body === "string" ? { body } : {}),
+        ...(typeof body === "string" && typeof m.body !== "string" ? { body_b64: body } : {}),
+      }),
+    });
+    const status = Number(resp.headers.get("x-zl-relay-status"));
+    if (!Number.isFinite(status) || status <= 0) {
+      throw new Error("relay endpoint unavailable (" + resp.status + ")");
+    }
+    const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
+    const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
+    port.postMessage({ type: "zl:relayHead", rid, status, statusText: "", headers, setCookies });
+    if (!resp.body) {
+      port.postMessage({ type: "zl:relayEnd", rid });
+      return;
+    }
+    const reader = resp.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) port.postMessage({ type: "zl:relayChunk", rid, bytes: value });
+    }
+    port.postMessage({ type: "zl:relayEnd", rid });
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
+export function zlRelayInit(): void {
+  void zlWorker().then((sw) => {
+    if (!sw) return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (ev) => {
+      const m = ev.data as { type?: string; rid?: number };
+      if (m && m.type === "zl:fetchRelay" && typeof m.rid === "number") {
+        void zlRelayFetch(ev.data, ch.port1);
+      }
+    };
+    sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+  });
+}
