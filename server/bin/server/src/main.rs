@@ -14,7 +14,7 @@ use axum::body::Body;
 use axum::extract::{RawQuery, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get};
+use axum::routing::{any, get, post};
 use axum::Router;
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
@@ -28,6 +28,10 @@ struct AppState {
     /// DNS, no cookie jar). Proxied traffic never touches this server:
     /// the Zeolite worker owns it.
     client: reqwest::Client,
+    /// Zeolite #137 embedder relay client: native TLS, the same
+    /// resolve-then-validate SSRF resolver, no cookie store (the
+    /// engine's jar owns cookies; they ride as headers).
+    relay_client: reqwest::Client,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
@@ -307,6 +311,224 @@ fn build_engine_client() -> reqwest::Client {
         .cookie_store(true)
         .build()
         .expect("reqwest client")
+}
+
+/// Zeolite #137 relay client: same SSRF resolver and no redirects (the
+/// engine's hop chain re-issues 3xx itself), but NO cookie store - the
+/// engine jar owns cookies and they ride as request headers.
+fn build_relay_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .dns_resolver(std::sync::Arc::new(PolicyDns))
+        .cookie_store(false)
+        .build()
+        .expect("reqwest relay client")
+}
+
+/* ---- Zeolite #137 embedder relay --------------------------------- */
+
+fn relay_b64_val(c: u8) -> Option<u32> {
+    match c {
+        b'A'..=b'Z' => Some((c - b'A') as u32),
+        b'a'..=b'z' => Some((c - b'a') as u32 + 26),
+        b'0'..=b'9' => Some((c - b'0') as u32 + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Standard-alphabet base64 decode for relayed binary bodies. Hand
+/// rolled (no crate): the payload is small (form posts), and a wrong
+/// decoder would corrupt every binary POST, so the unit test pins it
+/// against round trips.
+/// Base64 alphabet indexed by the decoder 6-bit values, so the
+/// round-trip test can encode without a second encoder crate.
+#[cfg(test)]
+fn b64chars() -> [char; 64] {
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        .chars()
+        .collect::<Vec<char>>()
+        .try_into()
+        .unwrap()
+}
+
+fn relay_base64_decode(input: &str) -> Option<Vec<u8>> {
+    let cleaned: Vec<u8> = input.bytes().filter(|b| !b" \t\r\n".contains(b)).collect();
+    if cleaned.is_empty() {
+        return Some(Vec::new());
+    }
+    if !cleaned.len().is_multiple_of(4) {
+        return None;
+    }
+    let pad = cleaned.iter().rev().take_while(|b| **b == b'=').count();
+    if pad > 2 || cleaned[..cleaned.len() - pad].contains(&b'=') {
+        return None;
+    }
+    let mut out = Vec::with_capacity(cleaned.len() / 4 * 3);
+    for chunk in cleaned.chunks(4) {
+        let v0 = relay_b64_val(chunk[0])?;
+        let v1 = relay_b64_val(chunk[1])?;
+        match (chunk[2], chunk[3]) {
+            (b'=', b'=') => {
+                out.push((v0 << 2 | v1 >> 4) as u8);
+            }
+            (c2, b'=') => {
+                let v2 = relay_b64_val(c2)?;
+                out.push((v0 << 2 | v1 >> 4) as u8);
+                out.push((v1 << 4 | v2 >> 2) as u8);
+            }
+            (c2, c3) => {
+                let v2 = relay_b64_val(c2)?;
+                let v3 = relay_b64_val(c3)?;
+                out.push((v0 << 2 | v1 >> 4) as u8);
+                out.push((v1 << 4 | v2 >> 2) as u8);
+                out.push((v2 << 6 | v3) as u8);
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Request headers the relay never forwards upstream: hop-by-hop, the
+/// ones reqwest owns (host, content-length), and accept-encoding (the
+/// relay demands identity so the body rides decodable).
+fn relay_request_header_allowed(name: &str) -> bool {
+    !matches!(
+        name,
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+            | "content-length"
+            | "accept-encoding"
+    )
+}
+
+/// Response headers the relay never hands back: hop-by-hop plus
+/// framing the streamed body redefines.
+fn relay_response_header_allowed(name: &str) -> bool {
+    !matches!(
+        name,
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+            | "content-encoding"
+            | "content-length"
+    )
+}
+
+/// Zeolite #137 embedder relay endpoint. The service worker relays
+/// fetches for hosts whose wasm TLS ClientHello is fingerprint-
+/// blocked (engine policy route "relay"); the UI performs them here
+/// because this server's TLS stack is the one those hosts accept.
+/// Request: {dest, method, headers, body?, body_b64?}. Answer: the
+/// upstream body streamed, with the upstream status, header pairs and
+/// Set-Cookie lines in x-zl-relay-* headers (fetch hides raw
+/// set-cookie from browser JS, so cookies ride as data). SSRF:
+/// resolve-then-validate at connect time via the same PolicyDns
+/// resolver the engine clients use. Redirects are NOT followed (the
+/// engine hop chain re-issues them). ponytail: the shared 20s client
+/// timeout covers the streamed body too; long-lived event-stream
+/// relays are not a use case.
+async fn zl_relay_endpoint(
+    State(state): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> Response {
+    let bad = |code: StatusCode, msg: &str| -> Response { (code, msg.to_string()).into_response() };
+    let req: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return bad(StatusCode::BAD_REQUEST, &format!("relay body: {}", e)),
+    };
+    let Some(dest) = req.get("dest").and_then(|v| v.as_str()) else {
+        return bad(StatusCode::BAD_REQUEST, "relay: dest missing");
+    };
+    if !(dest.starts_with("http://") || dest.starts_with("https://")) {
+        return bad(StatusCode::BAD_REQUEST, "relay: dest must be http(s)");
+    }
+    let method_s = req
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or("GET")
+        .to_uppercase();
+    let Ok(method) = reqwest::Method::from_bytes(method_s.as_bytes()) else {
+        return bad(StatusCode::BAD_REQUEST, "relay: bad method");
+    };
+    let mut out = state.relay_client.request(method, dest);
+    if let Some(pairs) = req.get("headers").and_then(|v| v.as_array()) {
+        for p in pairs {
+            if let (Some(k), Some(v)) = (
+                p.get(0).and_then(|x| x.as_str()),
+                p.get(1).and_then(|x| x.as_str()),
+            ) {
+                if relay_request_header_allowed(&k.to_ascii_lowercase()) {
+                    out = out.header(k, v);
+                }
+            }
+        }
+    }
+    /* Identity encoding keeps the body decodable: a compressed
+    upstream answer would ride the relay as opaque bytes with a
+    content-encoding the SW fetch path never decodes. */
+    out = out.header("accept-encoding", "identity");
+    if let Some(b) = req.get("body").and_then(|v| v.as_str()) {
+        out = out.body(b.to_string());
+    } else if let Some(b64s) = req.get("body_b64").and_then(|v| v.as_str()) {
+        match relay_base64_decode(b64s) {
+            Some(bytes) => out = out.body(bytes),
+            None => return bad(StatusCode::BAD_REQUEST, "relay: bad body_b64"),
+        }
+    }
+    let upstream = match out.send().await {
+        Ok(r) => r,
+        Err(e) => return bad(StatusCode::BAD_GATEWAY, &format!("relay upstream: {}", e)),
+    };
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for (name, value) in upstream.headers().iter() {
+        if name.as_str() == "set-cookie" || !relay_response_header_allowed(name.as_str()) {
+            continue;
+        }
+        if let Ok(v) = value.to_str() {
+            pairs.push((name.as_str().to_string(), v.to_string()));
+        }
+    }
+    let cookies: Vec<String> = upstream
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .collect();
+    let headers_json = serde_json::to_string(&pairs).unwrap_or_else(|_| "[]".into());
+    let cookies_json = serde_json::to_string(&cookies).unwrap_or_else(|_| "[]".into());
+    let mut hm = axum::http::HeaderMap::new();
+    let status_v = upstream.status().as_u16().to_string();
+    match (
+        axum::http::HeaderValue::from_str(&status_v),
+        axum::http::HeaderValue::from_str(&headers_json),
+        axum::http::HeaderValue::from_str(&cookies_json),
+    ) {
+        (Ok(a), Ok(b), Ok(c)) => {
+            hm.insert("x-zl-relay-status", a);
+            hm.insert("x-zl-relay-headers", b);
+            hm.insert("x-zl-relay-set-cookie", c);
+        }
+        _ => return bad(StatusCode::INTERNAL_SERVER_ERROR, "relay: header encode"),
+    }
+    let streamed = Body::from_stream(upstream.bytes_stream());
+    (StatusCode::OK, hm, streamed).into_response()
 }
 
 /// Firefox User-Agent for the /suggest provider fetches (Brave and
@@ -1078,6 +1300,7 @@ async fn main() {
 
     let state = Arc::new(AppState {
         client,
+        relay_client: build_relay_client(),
         logs: Mutex::new(VecDeque::new()),
         sessions: Mutex::new(HashMap::new()),
     });
@@ -1123,6 +1346,7 @@ async fn main() {
         // gets the honest load-error card.
         .route("/zl/:target", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
+        .route("/zlrelay", post(zl_relay_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
@@ -1387,9 +1611,78 @@ mod session_log_tests {
     fn test_state() -> AppState {
         AppState {
             client: reqwest::Client::new(),
+            relay_client: reqwest::Client::new(),
             logs: Mutex::new(VecDeque::new()),
             sessions: Mutex::new(HashMap::new()),
         }
+    }
+
+    #[test]
+    fn relay_base64_round_trips_and_rejects_junk() {
+        /* Round trips over all byte-value classes and lengths. */
+        for len in [0usize, 1, 2, 3, 7, 32, 251] {
+            let bytes: Vec<u8> = (0..len).map(|i| (i * 37 + 11) as u8).collect();
+            let mut s = String::new();
+            for chunk in bytes.chunks(3) {
+                let b = [
+                    chunk[0],
+                    *chunk.get(1).unwrap_or(&0),
+                    *chunk.get(2).unwrap_or(&0),
+                ];
+                s.push(b64chars()[((b[0] >> 2) & 63) as usize]);
+                s.push(b64chars()[(((b[0] << 4) | (b[1] >> 4)) & 63) as usize]);
+                s.push(if chunk.len() > 1 {
+                    b64chars()[(((b[1] << 2) | (b[2] >> 6)) & 63) as usize]
+                } else {
+                    '='
+                });
+                s.push(if chunk.len() > 2 {
+                    b64chars()[(b[2] & 63) as usize]
+                } else {
+                    '='
+                });
+            }
+            assert_eq!(
+                relay_base64_decode(&s).as_deref(),
+                Some(bytes.as_slice()),
+                "len {}",
+                len
+            );
+        }
+        assert_eq!(relay_base64_decode("Zg=="), Some(b"f".to_vec()));
+        assert_eq!(relay_base64_decode("Zm8="), Some(b"fo".to_vec()));
+        assert_eq!(relay_base64_decode("Zm9v"), Some(b"foo".to_vec()));
+        assert!(relay_base64_decode("!!!!").is_none());
+        assert!(relay_base64_decode("Zm9").is_none()); /* bad length */
+        assert!(relay_base64_decode("Z=g=").is_none()); /* pad inside */
+    }
+
+    #[test]
+    fn relay_header_filters_cover_hop_by_hop_and_framing() {
+        for h in [
+            "connection",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailer",
+            "transfer-encoding",
+            "upgrade",
+        ] {
+            assert!(!relay_request_header_allowed(h));
+            assert!(!relay_response_header_allowed(h));
+        }
+        assert!(!relay_request_header_allowed("host"));
+        assert!(!relay_request_header_allowed("content-length"));
+        assert!(!relay_request_header_allowed("accept-encoding"));
+        assert!(!relay_response_header_allowed("content-encoding"));
+        assert!(!relay_response_header_allowed("content-length"));
+        /* The engine jar's cookie header must pass upstream, and the
+        page-visible headers must pass back. */
+        assert!(relay_request_header_allowed("cookie"));
+        assert!(relay_request_header_allowed("user-agent"));
+        assert!(relay_response_header_allowed("content-type"));
+        assert!(relay_response_header_allowed("location"));
     }
 
     #[test]
