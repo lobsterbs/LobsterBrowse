@@ -554,5 +554,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e2c5ea7a2bda8609 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=38b66986372a37f7 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
