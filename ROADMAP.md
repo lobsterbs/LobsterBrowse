@@ -1,6 +1,6 @@
-# LobsterBrowse Roadmap
+# Celadon Roadmap
 
-This is the **single authoritative roadmap** for LobsterBrowse.
+This is the **single authoritative roadmap** for Celadon.
 
 - Canonical location: `/ROADMAP.md`
 - README and AGENTS.md should point here instead of duplicating the roadmap.
@@ -9,12 +9,12 @@ This is the **single authoritative roadmap** for LobsterBrowse.
 
 ## Project direction
 
-LobsterBrowse is an open-source browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics, and Zeolite integration.
+Celadon is an open-source browser-style proxy application built around Rust/Axum, React + TypeScript, Material 3 Expressive, Wisp transport, structured diagnostics, and Zeolite integration.
 
 The long-term boundary is:
 
 ```
-LobsterBrowse
+Celadon
       |
       v
    Zeolite
@@ -28,18 +28,18 @@ LobsterBrowse
  Network / Wisp / Native transport
 ```
 
-LobsterBrowse owns the browser/application experience. Zeolite owns reusable interception and transport functionality. Wisp remains a transport foundation.
+Celadon owns the browser/application experience. Zeolite owns reusable interception and transport functionality. Wisp remains a transport foundation.
 
 The project should prioritize **working browser behavior over feature count**. It is not intended to become a Chromium or Firefox clone.
 
 ## Naming system
 
-LobsterBrowse uses **chemical element names** as release codenames.
+Celadon uses **chemical element names** as release codenames.
 
 This deliberately parallels Zeolite's scientific naming style while remaining distinct:
 
 - **Zeolite:** compound/material terminology such as Nitride, Oxide, Halide, Carbide, Boride, Silicide, Hydride, Sulfide, Telluride, Fullerene, Graphene.
-- **LobsterBrowse:** individual chemical elements.
+- **Celadon:** individual chemical elements.
 
 Planned sequence:
 
@@ -53,9 +53,9 @@ Planned sequence:
 | 0.8 | **Tungsten** | Extension
 s |
 | 0.9 | **Iridium** | Stabilization and compatibility freeze |
-| 1.0 | **Osmium** | Stable LobsterBrowse |
+| 1.0 | **Osmium** | Stable Celadon |
 
-These are codenames, not replacements for semantic versioning. A release should be written as, for example, **LobsterBrowse 0.4 — Vanadium**.
+These are codenames, not replacements for semantic versioning. A release should be written as, for example, **Celadon 0.4 — Vanadium**.
 
 The exact milestone boundaries may be changed when justified by the actual repository, but the chemical-element naming system should remain.
 
@@ -83,14 +83,14 @@ Search source, tests, configuration and documentation for:
 
 If RewriteFallback is genuinely obsolete, remove remaining implementation and documentation references. If a piece is still required, identify the exact dependency instead of deleting working compatibility infrastructure blindly.
 
-Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README/AGENTS), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed LobsterBrowse component. Nothing to delete; recorded here per the audit instruction.
+Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README/AGENTS), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed Celadon component. Nothing to delete; recorded here per the audit instruction.
 
 ### Engine architecture
 
-- Make the LobsterBrowse ↔ Zeolite boundary explicit.
+- Make the Celadon ↔ Zeolite boundary explicit.
 - Keep one authoritative decision point for the engine route prefix (`/zl/`; the legacy `/r/` and `/lj/` prefixes answer the honest gone-notice since 2026-10-09, #67).
 - Avoid duplicate networking, cookie, rewriting or interception infrastructure.
-- Keep reusable engine fixes in Zeolite rather than adding LobsterBrowse-only hacks.
+- Keep reusable engine fixes in Zeolite rather than adding Celadon-only hacks.
 - Keep NativeTransit and rewriting behavior accurately repre
 sented as implemented, partial, experimental or planned.
 
@@ -226,7 +226,7 @@ cookie-jar pass against real providers).
 
 ## Difficult modern websites
 
-Make LobsterBrowse substantially more capable with real-world applications.
+Make Celadon substantially more capable with real-world applications.
 
 Focus on:
 
@@ -442,13 +442,13 @@ Documentation must describe actual behavior. Do not present planned features as 
 
 # 1.0 — Osmium
 
-## Stable LobsterBrowse
+## Stable Celadon
 
 1.0 means the architecture and browser experience are stable enough to document and maintain as a real release.
 
 ### Architecture
 
-- clear LobsterBrowse/Zeolite boundary
+- clear Celadon/Zeolite boundary
 - no obsolete fallback architecture
 - no duplicated networking architecture
 - reproducible builds
@@ -511,13 +511,13 @@ releases and does not chase Zeolite internals.
 
 Planned work:
 
-- Validate LobsterBrowse against the final Zeolite 2.x contract.
+- Validate Celadon against the final Zeolite 2.x contract.
 - Re-test the complete browser → worker → Zeolite → Wisp path.
 - Implement proper proxied WebSockets when the final Zeolite
   transport/API is ready (today foreign-origin sockets fail loudly
   with WEBSOCKET_UNSUPPORTED; that stays the behavior until then).
 - Decide which Zeolite interception capabilities should be exposed
-  by LobsterBrowse.
+  by Celadon.
 - Session export/import integration.
 - Network inspector integration.
 - Recording/replay integration.
@@ -531,7 +531,7 @@ Planned work:
 - Re-run the compatibility/security audit after integration.
 
 These are future planned features, not current failures. Until this
-phase starts, LobsterBrowse must remain stable against the pinned
+phase starts, Celadon must remain stable against the pinned
 Zeolite revision, and anything that cannot be implemented without the
 evolving Zeolite codebase is deferred here rather than shimmed.
 
@@ -565,7 +565,7 @@ README and AGENTS.md should point here.
 
 Do not merge Zeolite's roadmap into this file.
 
-LobsterBrowse milestones may depend on Zeolite milestones, but each repository maintains its own roadmap.
+Celadon milestones may depend on Zeolite milestones, but each repository maintains its own roadmap.
 
 ## Living plan
 
@@ -600,7 +600,7 @@ is complete; the difficult-modern-websites push begins).
 Before expanding into more browser features:
 
 1. audit the old RewriteFallback architecture;
-2. reconcile LobsterBrowse and Zeolite responsibilities;
+2. reconcile Celadon and Zeolite responsibilities;
 3. verify `/zl/`, Wisp and NativeTransit behavior;
 4. verify reproducible engine builds/deployments;
 5. establish the first real-site compatibility regression suite;

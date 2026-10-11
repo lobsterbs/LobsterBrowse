@@ -380,7 +380,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
-            you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
+            you return, the cloak covers Celadon Preview until you click "Return". Browsers do not let a
             page re-render while hidden — this is the strongest behavior a normal web page can offer.
           </p>
         </div>
@@ -479,7 +479,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">Celadon Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>

@@ -1,7 +1,7 @@
 # Deep Zeolite integration plan (beta branch)
 
 Working branch for deep integration of the Zeolite engine into
-LobsterBrowse: beta/zeolite-nativetransit, per the owner's direction
+Celadon: beta/zeolite-nativetransit, per the owner's direction
 on 2026-09-29 (migrated from the retired "unstable" line; beta is the
 only integration branch). Everything lands here first, gets deployed
 and live-tested from this branch, and only moves to main once stable

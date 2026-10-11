@@ -438,7 +438,7 @@ export default function BrowserView(props: Props) {
           pushLog("info", "download streamed to disk " + name + " (" + fmtBytes(total) + ")");
           try {
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification("LobsterBrowse Preview download complete", { body: name });
+              new Notification("Celadon Preview download complete", { body: name });
             }
           } catch {
             /* notifications unavailable */
@@ -496,7 +496,7 @@ export default function BrowserView(props: Props) {
            the entry goes away a few seconds after completion. */
         try {
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("LobsterBrowse Preview download complete", { body: name });
+            new Notification("Celadon Preview download complete", { body: name });
           }
         } catch {
           /* notifications unavailable */
@@ -1242,7 +1242,7 @@ export default function BrowserView(props: Props) {
                   ...base,
                   console: [
                     ...base.console,
-                    { id: nextEntryId(), kind: "error" as const, text: "[LobsterBrowse] " + msg + " (" + sanitizeUrl(t.url) + ")", ts: Date.now() },
+                    { id: nextEntryId(), kind: "error" as const, text: "[Celadon] " + msg + " (" + sanitizeUrl(t.url) + ")", ts: Date.now() },
                   ].slice(-500),
                 },
               };
@@ -1283,7 +1283,7 @@ export default function BrowserView(props: Props) {
                 {
                   id: nextEntryId(),
                   kind: "error" as const,
-                  text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
+                  text: "[Celadon] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
                   ts: Date.now(),
                 },
               ].slice(-500),
@@ -1333,7 +1333,7 @@ export default function BrowserView(props: Props) {
                 if (csp > 0) bits.push(csp + " CSP meta tag(s)");
                 if (sri > 0) bits.push(sri + " integrity attribute(s)");
                 const ctext =
-                  "[LobsterBrowse Preview engine] This proxy stripped " +
+                  "[Celadon Preview engine] This proxy stripped " +
                   bits.join(" and ") +
                   " from the page. SRI hashes and CSP rules no longer match rewritten content; the rewriter removes them so the page loads at all. If the page misbehaves, this is the proxy's doing, not the website's.";
                 const console_ = [
@@ -1633,7 +1633,7 @@ export default function BrowserView(props: Props) {
                   id: nextEntryId(),
                   kind: "error" as const,
                   text:
-                    "[LobsterBrowse] failed to load " + entry.kind + ": " + entry.url +
+                    "[Celadon] failed to load " + entry.kind + ": " + entry.url +
                     " (" + reasonText(entry.reason) +
                     (entry.status !== undefined ? ", HTTP " + entry.status : "") + ")",
                   ts: Date.now(),
