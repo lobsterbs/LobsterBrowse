@@ -210,3 +210,23 @@
   height: 12px;
   border-radius: var(--m3e-shape-xs, 8px);
 }
+
+/* ---- #76: panel entry/exit animation, per-row delete affordance,
+   detail action buttons. ---- */
+.lb-ext-panel {
+  animation: lb-pop-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
+  transform-origin: bottom right;
+}
+.lb-ext-item-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.lb-ext-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space100, 8px);
+  margin-top: var(--md-sys-measurement-space100, 8px);
+}
+.lb-ext-optbtn,
+.lb-ext-delbtn { width: 100%; }

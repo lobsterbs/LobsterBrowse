@@ -65,7 +65,7 @@ m3e-nav-rail m3e-nav-item,
 m3e-nav-rail m3e-icon,
 m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), color var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), transform var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
-.lb-shell { display: flex; min-height: 100vh; }
+.lb-shell { display: flex; height: 100vh; overflow: hidden; }
 .lb-main { flex: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; }
 
 .app-content {
@@ -77,6 +77,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   display: flex;
   flex-direction: column;
   justify-content: center;
+  overflow-y: auto;
   transition: padding var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
 
@@ -1196,4 +1197,56 @@ m3e-snackbar {
 .lb-ctx-item.nested { padding-left: var(--md-sys-measurement-space300, 24px); }
 @media (prefers-reduced-motion: reduce) {
   .lb-ext-note { animation: none; }
+}
+
+/* ---- #76 exit animations: cards that mount on open stay one
+   animation longer on close, so they animate out with the same
+   motion family as their entry. ---- */
+@keyframes lb-dt-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(16px); }
+}
+.lb-devtools.lb-devtools-out {
+  animation: lb-dt-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+}
+@keyframes lb-pop-out {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(6px) scaleY(0.96); }
+}
+.lb-ext-panel.lb-out {
+  animation: lb-pop-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+}
+@keyframes lb-card-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  to { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
+}
+.lb-dl-card.lb-out {
+  animation: lb-card-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+}
+
+/* ---- #76 small screens: the M3E nav bar (m3e-nav-bar) replaces the
+   wide rail; the floating toolbar dock sits above it. Normal screens
+   are untouched. ---- */
+.lb-bottom-nav { display: none; }
+@media (max-width: 600px) {
+  m3e-nav-rail { display: none; }
+  .lb-bottom-nav {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+  }
+  .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
+  .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
+  .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
+  .app-content {
+    padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-devtools.lb-devtools-out,
+  .lb-ext-panel.lb-out,
+  .lb-dl-card.lb-out { animation: none; }
 }
