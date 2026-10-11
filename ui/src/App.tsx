@@ -67,8 +67,8 @@ export default function App() {
     if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
       M3eSnackbar.open(
         incognito
-          ? "Incognito on — history and session are not recorded"
-          : "Incognito off — history and session resume",
+          ? "Incognito on"
+          : "Incognito off",
         { duration: 4000 }
       );
     }
@@ -351,7 +351,8 @@ export default function App() {
           type: "zl:config",
           prefix: engineRoutePrefix(),
           httpsUpgrade: settings.httpsUpgrade,
-          imageLazy: settings.imageLazy,
+          /* #76: lazy images are always on (the toggle is gone). */
+          imageLazy: true,
         },
         8000,
       );
@@ -359,7 +360,7 @@ export default function App() {
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.httpsUpgrade, settings.imageLazy]);
+  }, [settings.httpsUpgrade]);
 
   /* ---- Zeolite jar knobs (#48): SameSite policy on the engine cookie
      jar, and document-surface fingerprint spoofing on engine-routed
@@ -372,12 +373,9 @@ export default function App() {
   useEffect(() => {
     const post = () => {
       void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
-      const profile =
-        settings.fingerprintProfile === "native"
-          ? null
-          : settings.fingerprintProfile === "ua"
-            ? { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent }
-            : { userAgent: UA_PRESETS[settings.fingerprintProfile].ua };
+      /* #76: the fingerprint profile picker is gone from Settings;
+         the default match-the-User-Agent profile is always on. */
+      const profile = { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent };
       void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
         /* A rejected profile must not silently read as spoofed: the
            engine answers ok:false (e.g. a custom UA it cannot derive a
@@ -390,7 +388,7 @@ export default function App() {
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.fingerprintProfile, settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, rules]);
+  }, [settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, rules]);
 
   /* ---- Zeolite transport engine (#54): push the persisted choice
      (zl:transport). The engine switches on the NEXT transport init,
@@ -406,6 +404,37 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.transport]);
 
+  /* ---- Cloak favicon (#76): the tab icon must follow the cloak,
+     not keep the LobsterBrowse logo. A neutral inline SVG data URL
+     avoids both the logo and any network request to the cloak
+     site; the original icon hrefs are restored on uncloak. ---- */
+  const cloakIconHref =
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='#9aa0a6'/></svg>",
+    );
+  const cloakPrevIcons = useRef<Array<string | null>>([]);
+  const cloakFavicon = () => {
+    const links = Array.from(
+      document.head.querySelectorAll("link[rel=icon]"),
+    ) as HTMLLinkElement[];
+    if (cloakPrevIcons.current.length === 0) {
+      cloakPrevIcons.current = links.map((l) => l.getAttribute("href"));
+    }
+    for (const l of links) l.setAttribute("href", cloakIconHref);
+  };
+  const uncloakFavicon = () => {
+    const links = Array.from(
+      document.head.querySelectorAll("link[rel=icon]"),
+    ) as HTMLLinkElement[];
+    links.forEach((l, i) => {
+      const prev = cloakPrevIcons.current[i];
+      if (prev === null || prev === undefined) return;
+      l.setAttribute("href", prev);
+    });
+    cloakPrevIcons.current = [];
+  };
+
   /* ---- Auto cloak ---- */
   useEffect(() => {
     const onVisibility = () => {
@@ -415,6 +444,7 @@ export default function App() {
       if (settings.cloakEnabled && document.hidden && !cloaked) {
         prevTitle.current = document.title;
         document.title = settings.cloakTitle;
+        cloakFavicon();
         setCloaked(true);
         store.pushLog("info", "auto cloak engaged");
       }
@@ -426,6 +456,7 @@ export default function App() {
   const uncloak = () => {
     setCloaked(false);
     document.title = prevTitle.current;
+    uncloakFavicon();
   };
 
   const deleteAll = () => {
@@ -433,6 +464,15 @@ export default function App() {
     store.pushLog("warn", "all local data deleted");
     window.location.replace("/");
   };
+
+  /* ---- Rail auto-retract (#76): entering Browse collapses an
+     expanded rail; the toggle can expand it again. ---- */
+  const railRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (view !== "browser") return;
+    const rail = railRef.current as unknown as { currentMode?: string } | null;
+    if (rail && rail.currentMode === "expanded") rail.currentMode = "compact";
+  }, [view]);
 
   if (cloaked) {
     return (
@@ -463,6 +503,7 @@ export default function App() {
           id="nav-rail"
           mode="auto"
           aria-label="LobsterBrowse"
+          {...{ ref: railRef }}
         >
           <m3e-icon-button toggle aria-label="Expand or collapse the navigation rail">
             <m3e-icon name="menu" aria-hidden={true} />
@@ -494,6 +535,33 @@ export default function App() {
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
         </m3e-nav-rail>
+
+        {/* Small screens (#76): the M3E nav bar replaces the wide
+            rail (CSS hides the rail and shows this bar under 600px).
+            Same items and handlers as the rail. */}
+        <m3e-nav-bar {...{ class: "lb-bottom-nav" }} mode="compact" aria-label="LobsterBrowse">
+          <m3e-nav-item
+            selected={view === "home" ? "" : undefined}
+            onClick={() => setView("home")}
+          >
+            <m3e-icon slot="icon" name="home" aria-hidden={true} />Home
+          </m3e-nav-item>
+          <m3e-nav-item
+            selected={view === "browser" ? "" : undefined}
+            onClick={() => {
+              if (tabs.length === 0) newTab();
+              else setView("browser");
+            }}
+          >
+            <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
+          </m3e-nav-item>
+          <m3e-nav-item
+            selected={view === "settings" ? "" : undefined}
+            onClick={() => setView("settings")}
+          >
+            <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
+          </m3e-nav-item>
+        </m3e-nav-bar>
 
 
         <div className="lb-main">

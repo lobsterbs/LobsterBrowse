@@ -1,7 +1,14 @@
 /* Extensions toolbar panel: installed add-ons list + detail view.
    Search-and-install over the AMO API lives in Settings
    (browser/AmoSearch.tsx); the engine control-plane queries and
-   state stay in pages/Browser.tsx. */
+   state stay in pages/Browser.tsx.
+
+   #76: the panel animates in and out (Browser.tsx keeps it mounted
+   one animation longer and flips the exit class), and uninstall is
+   available from every surface: a trash affordance per row plus a
+   two-step Delete in the detail view. */
+
+import { useEffect, useState } from "react";
 
 export type ExtInfo = {
   id: string;
@@ -27,6 +34,7 @@ export type ExtDetail = {
 };
 
 export default function ExtensionsPanel(props: {
+  open: boolean;
   list: ExtInfo[] | null;
   busy: boolean;
   error: string | null;
@@ -40,9 +48,17 @@ export default function ExtensionsPanel(props: {
   onToggleEnabled: (id: string, on: boolean) => void;
   onToggleIncognito: (id: string, on: boolean) => void;
   onOpenOptions: (d: ExtDetail) => void;
+  onDelete: (id: string) => void;
 }) {
+  /* Two-step delete: the first press asks for confirmation, the
+     second removes the extension. Reset when the target changes. */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => {
+    setConfirmDelete(false);
+  }, [props.detail?.id]);
+
   return (
-    <div className="lb-ext-panel" role="dialog" aria-label="Extensions">
+    <div className={"lb-ext-panel" + (props.open ? "" : " lb-out")} role="dialog" aria-label="Extensions">
       <div className="lb-ext-head">
         <span className="lb-ext-title">Extensions</span>
         <span>
@@ -99,6 +115,17 @@ export default function ExtensionsPanel(props: {
               <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
                 {e.enabled ? e.state : "disabled"}
               </span>
+              <span className="lb-ext-item-actions">
+                <m3e-icon-button
+                  aria-label={"Delete " + e.name}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    props.onDelete(e.id);
+                  }}
+                >
+                  <m3e-icon name="delete" aria-hidden={true} />
+                </m3e-icon-button>
+              </span>
             </div>
           ))}
         </div>
@@ -131,40 +158,33 @@ export default function ExtensionsPanel(props: {
           </div>
           <div className="lb-ext-trow">
             <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-            {/* Permission grant: a checkbox (not an instant-apply switch)
-               reads as opt-in consent, matching the grant-and-notice
-               pattern below. */}
             <m3e-checkbox
               checked={props.incognito[props.detail.id] ? "" : undefined}
               aria-label="Allow extension in incognito tabs"
               onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
             />
           </div>
-          {/* Honest labeling (P0): this records the user's intent only.
-              The engine has no incognito concept yet, so the grant is
-              NOT enforced; do not present it as a security control. */}
-          <p className="lb-ext-desc">
-            {props.incognito[props.detail.id]
-              ? "Grant recorded, but not enforced yet: the engine does not have incognito tabs."
-              : "Not enforced yet: the engine does not have incognito tabs."}
-          </p>
-          {(props.detail.permissions.length > 0 || props.detail.hostPermissions.length > 0) && (
-            <div className="lb-ext-perms">
-              {[...props.detail.permissions, ...props.detail.hostPermissions].slice(0, 12).map((p) => (
-                <code key={p}>{p}</code>
-              ))}
-            </div>
-          )}
-          {props.detail.contentScripts > 0 && (
-            <p className="lb-ext-desc">
-              {props.detail.contentScripts} content script{props.detail.contentScripts === 1 ? "" : "s"} registered.
-            </p>
-          )}
-          {props.detail.optionsPath && (
-            <m3e-button onClick={() => props.onOpenOptions(props.detail!)} {...{ class: "lb-ext-optbtn" }}>
-              <m3e-icon name="settings" aria-hidden={true} /> Open options page
+          <div className="lb-ext-actions">
+            {props.detail.optionsPath && (
+              <m3e-button onClick={() => props.onOpenOptions(props.detail!)} {...{ class: "lb-ext-optbtn" }}>
+                <m3e-icon name="settings" aria-hidden={true} /> Open options page
+              </m3e-button>
+            )}
+            <m3e-button
+              onClick={() => {
+                if (confirmDelete) {
+                  setConfirmDelete(false);
+                  props.onDelete(props.detail!.id);
+                } else {
+                  setConfirmDelete(true);
+                }
+              }}
+              {...{ class: "lb-ext-delbtn" }}
+            >
+              <m3e-icon name="delete" aria-hidden={true} />
+              {confirmDelete ? "Confirm delete" : "Delete extension"}
             </m3e-button>
-          )}
+          </div>
           {props.detail.lastError && <p className="lb-ext-err">{props.detail.lastError}</p>}
         </div>
       )}

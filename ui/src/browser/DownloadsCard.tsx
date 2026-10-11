@@ -14,13 +14,19 @@ export type DlItem = {
 };
 
 export default function DownloadsCard(props: {
+  /* #76: true while the close animation plays. */
+  closing?: boolean;
   downloads: DlItem[];
   onClose: () => void;
   onRemove: (id: number) => void;
   onCancel: (id: number) => void;
 }) {
   return (
-    <m3e-card variant="elevated" aria-label="Downloads" {...{ class: "lb-dl-card" }}>
+    <m3e-card
+      variant="elevated"
+      aria-label="Downloads"
+      {...{ class: props.closing ? "lb-dl-card lb-out" : "lb-dl-card" }}
+    >
       <div slot="header" className="lb-site-head">
         <span className="lb-site-ctitle">Downloads ({props.downloads.length})</span>
         <m3e-icon-button aria-label="Close downloads" onClick={props.onClose}>
