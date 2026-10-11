@@ -470,8 +470,21 @@ RUN npm run build
 # the fix rides codec.js (88437eb5 -> c29f5a19, verify the served
 # file). Cargo-side pin stays deccb43 (app-only change).
 
+# 2026-10-11 (43): the embedder fetch relay and settle guarantees.
+# Hosts that fingerprint-block the wasm TLS ClientHello (duckduckgo:
+# libcurl error 35) route onto the embedder network stack (the LB
+# /zlrelay endpoint, native TLS, the same SSRF resolver); policy
+# route "relay" drives it, route "native" (#138) demotes the JS
+# literal pass for proven hosts. Subresource bodies settle on idle
+# stalls (#140) and github repo pages boot again (#143: runtime
+# flat module.css names recover against the CDN bases). The stall
+# wrap and relayed responses carry rawHeaders, so upstream
+# set-cookie still lands in the jar. sw.js 8edc1a9b -> 60ce0fde
+# (211106 bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
+# d86f746e; codec.js unchanged c29f5a19. Cargo-side pin stays
+# deccb43 (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=7b0491770808062a24f2364dd4fce1c450a8949d
+ARG ZEOLITE_COMMIT=3d491faf98733a725eeef4bd3b8c05804c691126
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -507,5 +520,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8edc1a9b7e9184a7 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=60ce0fde7dba9ea9 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
