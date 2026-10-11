@@ -385,9 +385,10 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
 
 /* Suggestions for the search bars. The server's /suggest endpoint owns
    the fallback chain (a provider can be unreachable from the server's
-   network — DuckDuckGo rate-limits the Render egress — so the server
-   retries Brave then Bing before answering empty). One round trip per
-   keystroke; the client no longer double-fetches. */
+   network — DuckDuckGo drops TCP connects from the Render egress IP
+   class outright, LB #75; it escalated from rate-limiting — so the
+   server retries Brave then Bing before answering empty). One round
+   trip per keystroke; the client no longer double-fetches. */
 export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {
   return suggestFrom(engine, q, signal, sess);
 }
