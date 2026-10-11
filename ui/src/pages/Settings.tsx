@@ -575,18 +575,23 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
+          {/* LB #73 M3E sweep: per-site rules render as chips. The
+              chip carries the domain and its effective profile; clicking
+              it removes the rule (the close icon communicates the
+              destructive affordance, the aria-label says it). */}
           {rules.length > 0 && (
-            <div className="lb-rule-list">
+            <m3e-chip-set>
               {rules.map((r) => (
-                <div key={r.domain} className="lb-rule-row">
-                  <code>{r.domain}</code>
-                  <span className="lb-muted">{ruleUaName(r.uaPreset)} · adblock {r.adblock === false ? "off" : "on"}</span>
-                  <m3e-icon-button aria-label="Remove rule" onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}>
-                    <m3e-icon name="delete" aria-hidden={true} />
-                  </m3e-icon-button>
-                </div>
+                <m3e-chip
+                  key={r.domain}
+                  aria-label={"Remove rule for " + r.domain + ": " + ruleUaName(r.uaPreset) + ", adblock " + (r.adblock === false ? "off" : "on")}
+                  onClick={() => onRulesChange(rules.filter((x) => x.domain !== r.domain))}
+                >
+                  <m3e-icon name="close" aria-hidden={true} />
+                  {r.domain} · {ruleUaName(r.uaPreset)} · adblock {r.adblock === false ? "off" : "on"}
+                </m3e-chip>
               ))}
-            </div>
+            </m3e-chip-set>
           )}
           <div className="lb-seed-row">
             <input
