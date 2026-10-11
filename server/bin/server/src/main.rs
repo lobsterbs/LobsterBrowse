@@ -1,4 +1,4 @@
-//! LobsterBrowse Zeolite engine + wisp server entrypoint.
+//! Celadon Zeolite engine + wisp server entrypoint.
 //!
 //! Routes HTTP traffic normally and upgrades /wisp/ (configurable path)
 //! to the Wisp protocol. Zeolite is the only proxy engine: its service
@@ -1441,7 +1441,7 @@ async fn main() {
     );
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!(
-        "LobsterBrowse native engine server listening on {} at {}",
+        "Celadon native engine server listening on {} at {}",
         addr, wisp_path
     );
     let listener = tokio::net::TcpListener::bind(addr)

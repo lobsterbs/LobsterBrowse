@@ -1,7 +1,7 @@
 /* DevTools panel — console / network / diagnostics for the currently
    selected proxy tab. Each tab keeps its own state.
 
-   Proxied pages are served from the LobsterBrowse origin (/zl/),
+   Proxied pages are served from the Celadon origin (/zl/),
    rendered in a same-origin iframe. That gives the panel real access to the page:
    JavaScript is executed with iframe.contentWindow.eval, and console /
    network events arrive over the engine's control plane for every
@@ -967,7 +967,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
             </m3e-button>
             <m3e-button
-              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
+              onClick={() => window.open("https://github.com/lobsterbs/Celadon/issues/new", "_blank", "noopener")}
             >
               <m3e-icon name="bug_report" aria-hidden={true} />
               Report

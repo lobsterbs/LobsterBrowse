@@ -7,7 +7,7 @@ honest gone-notice (#67). Kept as the pre-removal reference.
 
 Full-repository audit of mocked/stubbed/spoofed/hardcoded browser
 behavior, the guest-origin threat model, and the honest-compatibility
-policy. This is the reference for what LobsterBrowse fakes, why, and
+policy. This is the reference for what Celadon fakes, why, and
 what is genuinely unsupported.
 
 ## 1. Inventory — every fake / stub / spoof / shim
@@ -16,7 +16,7 @@ what is genuinely unsupported.
 |---|---|---|---|
 | `navigator.serviceWorker` stub (register rejects, `ready` never resolved) | `server/bin/server/src/engine-compat.js` | compatibility shim | KEPT, fixed: `ready` now resolves (was a hanging promise), all paths fail immediately, one-time diagnostic explains why |
 | `Notification.permission = "denied"`, `requestPermission` → `"denied"` | `engine-compat.js` | deliberate policy | KEPT, documented: permission belongs to the proxy origin, not the site; never granted artificially; one-time diagnostic added |
-| `beforeinstallprompt` preventDefault | `engine-compat.js` | deliberate policy | KEPT: the prompt would offer installing LobsterBrowse (the host PWA), never the proxied site; documented in the file |
+| `beforeinstallprompt` preventDefault | `engine-compat.js` | deliberate policy | KEPT: the prompt would offer installing Celadon (the host PWA), never the proxied site; documented in the file |
 | AMO Firefox spoof (UA header + `navigator.userAgent`/`vendor`/`oscpu`/`userAgentData`/`InstallTrigger` patch) | `main.rs` (`is_amo_host`, `amo_spoof_script`, `FIREFOX_UA` in `engine_proxy`) | site-scoped spoof | KEPT: scoped strictly to `addons.mozilla.org` (AMO gates .xpi downloads on a Firefox client). NOT generalized anywhere else. `userAgentData` is patched to `undefined` and `vendor` to `""` because that is what Firefox actually reports — the spoof describes a real browser, not a fake capability |
 | UA presets (Chrome/Firefox/Safari/Edge/...) | `ui/src/settings.ts` | configuration | Not a spoof: explicit user setting, applied server-side per-request as the `lb_ua` engine option |
 | Firefox UA header on `/suggest` proxy requests | `main.rs` `suggest_endpoint` | compatibility shim | KEPT: suggestion providers reject non-browser UAs; scoped to the suggest path only |
@@ -85,7 +85,7 @@ holds):
 
 ## 4. Guest-origin threat model (P0)
 
-Proxied pages are served from the LobsterBrowse origin in a
+Proxied pages are served from the Celadon origin in a
 same-origin iframe. That is load-bearing architecture: DevTools
 `contentWindow.eval`, the title/favicon/error-meta poll and the
 DevTools DOM inspector all depend on it. A `sandbox` attribute without
@@ -147,8 +147,8 @@ break DevTools as written).
 When a site breaks: reproduce on `/r/` (server ScramJet rewrite) and
 `/lj/` (Zeolite service worker). `/lj/` failures where `/r/` works are
 engine-side; document them separately with reproduction and evidence,
-never patch Zeolite from LobsterBrowse. Everything in this document
-and the 2026-09-27 pass is LobsterBrowse-owned (shim, compat, UI,
+never patch Zeolite from Celadon. Everything in this document
+and the 2026-09-27 pass is Celadon-owned (shim, compat, UI,
 server rewrite).
 
 ## 7. Remaining backlog (ranked, not done in this pass)

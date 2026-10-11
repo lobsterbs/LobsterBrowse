@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
-# Multi-stage build for the LobsterBrowse single-site service:
+# Multi-stage build for the Celadon single-site service:
 # the Rust Wisp server and the static M3E UI it serves from one origin.
 # Builder tracks latest stable Rust: zeroize 1.9+ manifests need cargo >= 1.85.
-# Reproducibility: same LobsterBrowse commit + same Dockerfile + pinned
+# Reproducibility: same Celadon commit + same Dockerfile + pinned
 # ZEOLITE_COMMIT below must give identical build inputs. Bump the pin
 # by updating both the ARG and the zeolite-server rev in
 # server/bin/server/Cargo.toml (and the committed server/Cargo.lock via
@@ -10,7 +10,7 @@
 FROM rust:1-slim AS builder
 WORKDIR /build
 COPY server/ ./
-RUN cargo build --release --locked -p lobster-server
+RUN cargo build --release --locked -p celadon-server
 
 FROM node:22-slim AS ui-builder
 WORKDIR /ui
@@ -570,7 +570,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=builder /build/target/release/lobster-server /app/lobster-server
+COPY --from=builder /build/target/release/celadon-server /app/celadon-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
 EXPOSE 6001
@@ -579,4 +579,4 @@ EXPOSE 6001
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
 ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a5e47b8e3a265fd8 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
-ENTRYPOINT ["/app/lobster-server"]
+ENTRYPOINT ["/app/celadon-server"]
