@@ -756,3 +756,9 @@ M3E sweep closed (LB #73): tooltips on toolbar actions, snackbar
 notify surfaces, linear progress in downloads, and per-site rule
 chips all shipped; the tab overflow menu item has no surface (tabs
 live behind the toolbar pill + TabSwitcherCard preview tiles).
+
+Promotion complete (LB #74): beta/zeolite-nativetransit merged into
+main with a -s ours merge (c3d016d) - main already carried every beta
+content change, so the merge records beta's history without touching
+main's tree (empty diff verified). Main and beta move in lockstep
+again; CI green on c3d016d (run 38211505940). LB #74 closed.
