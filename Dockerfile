@@ -574,8 +574,19 @@ RUN npm run build
 # 230932f95cdef730 -> acec9296b7e68c10 (343391 bytes); bootstrap.js
 # 03cd3476, codec.js 950319bc59af25c9, wasm 68264b205eb4e64d all
 # unchanged. Cargo-side pin stays deccb43.
+# 2026-10-12 (53): Zeolite navh split-identity wave (#144)
+# (main 9772360, CI run 38212107143, dist 296078c): zl:navHandle
+# now carries only the origin in the keyed token with the real
+# path and query plaintext on the route, so SPA URL bars show a
+# real pathname while the destination stays hidden from the page.
+# decodeNavHandlePath in codec/request.ts resolves token+tail;
+# legacy full-dest tokens decode unchanged and age out at 120s.
+# sw.js acec9296b7e68c10 -> 66d337316585ca15 (343611 bytes),
+# codec.js 950319bc59af25c9 -> 8dbcd20fd3c8e9ff; bootstrap.js
+# 03cd3476 unchanged; wasm 68264b205eb4e64d -> 19575746805d5da0.
+# Cargo-side pin stays deccb43.
 FROM debian:bookworm-slim AS zl-builder
-ARG ZEOLITE_COMMIT=d2556885c5f63168b22d735e6b70cdbbb0fc22fa
+ARG ZEOLITE_COMMIT=296078c1792120681aaa4b9277246aaa45c77bb1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -611,5 +622,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=acec9296b7e68c10 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=66d337316585ca15 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
 ENTRYPOINT ["/app/lobster-server"]
