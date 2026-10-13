@@ -609,11 +609,11 @@ RUN npm run build
 # bootstrap.js 03cd3476 unchanged. Cargo-side pin stays deccb43
 # (app-only change).
 FROM debian:bookworm-slim AS zl-builder
-# Pin 56: Zeolite dist 08ef5d7 ships policy.kdl relay rules for the
-# #149 blocked hosts (cbc, united, opentable, acer, slither, delta).
-# sw.js unchanged (96d70fb9d7b90b14); Cargo-side pin stays deccb43
-# (app-only change).
-ARG ZEOLITE_COMMIT=08ef5d749bfd51176f1d69678be4d630c1e5b948
+# Pin 57: Zeolite dist f5b7327 ships the policy.kdl catch-all relay
+# (wisp-auth deployments: the wasm client cannot authenticate, so
+# every fetch rides the embedder relay). sw.js unchanged
+# (96d70fb9d7b90b14); Cargo-side pin stays deccb43 (data-only change).
+ARG ZEOLITE_COMMIT=f5b7327e89474182ced4a93e78328bdcda74b413
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
