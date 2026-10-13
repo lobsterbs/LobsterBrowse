@@ -109,24 +109,6 @@ function randomShaderType(): ShaderType {
   }
 }
 
-/* Live M3E palette for the shader: primary / tertiary / the dark
-   surface tone, so the gradient follows the theme seed. Read off the
-   <m3e-theme> host (the portal layer lives on <body>, outside the
-   theme subtree, so the tokens do not cascade into it); the stock
-   dark-baseline values cover an unreadable token. */
-function themeColors(): { color1: string; color2: string; color3: string } {
-  const cs = getComputedStyle((document.querySelector("m3e-theme") ?? document.documentElement) as Element);
-  const tok = (name: string, fallback: string): string => {
-    const v = cs.getPropertyValue(name).trim();
-    return v || fallback;
-  };
-  return {
-    color1: tok("--md-sys-color-primary", "#D0BCFF"),
-    color2: tok("--md-sys-color-tertiary", "#EFB8C8"),
-    color3: tok("--md-sys-color-surface", "#1C1B1F"),
-  };
-}
-
 export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [gradType] = useState<ShaderType>(randomShaderType);
@@ -137,14 +119,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
       /* storage unavailable - randomness still works per session */
     }
   }, [gradType]);
-  /* Colors follow the theme seed: read the tokens one frame after
-     mount (the theme applies its palette during render) and again on
-     every seed change, so retinting the theme retints the shader. */
-  const [colors, setColors] = useState(themeColors);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setColors(themeColors()));
-    return () => cancelAnimationFrame(id);
-  }, [settings.seed]);
+
   /* Click pulse: gradflow tracks the pointer itself (the interactive
      prop swells the pattern under the mouse) but ships no click hook,
      so a pointerdown anywhere briefly surges speed + noise through
@@ -164,12 +139,16 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
       window.removeEventListener("pointerdown", down);
     };
   }, [settings.fancyBackground]);
+  /* Colors are the library's own defaults (DEFAULT_CONFIG): no M3E
+     token integration, the shader keeps its stock palette. */
   const gradConfig = {
-    ...colors,
+    color1: { r: 210, g: 21, b: 112 },
+    color2: { r: 140, g: 63, b: 248 },
+    color3: { r: 86, g: 255, b: 195 },
     type: gradType,
     speed: pulse ? 1.6 : 0.5,
     scale: 1.2,
-    noise: pulse ? 0.3 : 0.12,
+    noise: pulse ? 0.5 : 0.32,
   };
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
