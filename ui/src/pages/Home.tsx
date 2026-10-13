@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { GradFlow, PRESETS, type PresetName } from "gradflow";
+import { GradFlow } from "gradflow";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 
@@ -93,31 +93,84 @@ function useSpringCard(open: boolean): { visible: boolean; progress: number } {
   return state;
 }
 
-/* Enhanced UI background: a random preset from the gradflow
-   library per app open/refresh (never the same one twice in a row
-   when the last pick was stored). */
-function randomPreset(): PresetName {
-  const names = Object.keys(PRESETS) as PresetName[];
-  const pick = names[Math.floor(Math.random() * names.length)];
+/* Enhanced UI background: one of the three quiet shader types
+   (rays, nebula, horizon) per app open/refresh, never the same one
+   twice in a row when the last pick was stored. */
+const SHADER_TYPES = ["rays", "nebula", "horizon"] as const;
+type ShaderType = (typeof SHADER_TYPES)[number];
+function randomShaderType(): ShaderType {
+  const pick = SHADER_TYPES[Math.floor(Math.random() * SHADER_TYPES.length)];
   try {
     const last = localStorage.getItem("lb-gradflow-last");
-    if (last && last === pick) return names[(names.indexOf(pick) + 1) % names.length];
+    if (last && last === pick) return SHADER_TYPES[(SHADER_TYPES.indexOf(pick) + 1) % SHADER_TYPES.length];
     return pick;
   } catch {
     return pick;
   }
 }
 
+/* Live M3E palette for the shader: primary / tertiary / the dark
+   surface tone, so the gradient follows the theme seed. Read off the
+   <m3e-theme> host (the portal layer lives on <body>, outside the
+   theme subtree, so the tokens do not cascade into it); the stock
+   dark-baseline values cover an unreadable token. */
+function themeColors(): { color1: string; color2: string; color3: string } {
+  const cs = getComputedStyle((document.querySelector("m3e-theme") ?? document.documentElement) as Element);
+  const tok = (name: string, fallback: string): string => {
+    const v = cs.getPropertyValue(name).trim();
+    return v || fallback;
+  };
+  return {
+    color1: tok("--md-sys-color-primary", "#D0BCFF"),
+    color2: tok("--md-sys-color-tertiary", "#EFB8C8"),
+    color3: tok("--md-sys-color-surface", "#1C1B1F"),
+  };
+}
+
 export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
-  const [gradPreset] = useState<PresetName>(randomPreset);
+  const [gradType] = useState<ShaderType>(randomShaderType);
   useEffect(() => {
     try {
-      localStorage.setItem("lb-gradflow-last", gradPreset);
+      localStorage.setItem("lb-gradflow-last", gradType);
     } catch {
       /* storage unavailable - randomness still works per session */
     }
-  }, [gradPreset]);
+  }, [gradType]);
+  /* Colors follow the theme seed: read the tokens one frame after
+     mount (the theme applies its palette during render) and again on
+     every seed change, so retinting the theme retints the shader. */
+  const [colors, setColors] = useState(themeColors);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setColors(themeColors()));
+    return () => cancelAnimationFrame(id);
+  }, [settings.seed]);
+  /* Click pulse: gradflow tracks the pointer itself (the interactive
+     prop swells the pattern under the mouse) but ships no click hook,
+     so a pointerdown anywhere briefly surges speed + noise through
+     the package's own config blend. */
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    if (!settings.fancyBackground) return;
+    let t = 0;
+    const down = () => {
+      setPulse(true);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setPulse(false), 320);
+    };
+    window.addEventListener("pointerdown", down, { passive: true });
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", down);
+    };
+  }, [settings.fancyBackground]);
+  const gradConfig = {
+    ...colors,
+    type: gradType,
+    speed: pulse ? 1.6 : 0.5,
+    scale: 1.2,
+    noise: pulse ? 0.3 : 0.12,
+  };
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -199,7 +252,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
       {settings.fancyBackground &&
         createPortal(
           <div className="lb-gradflow-bg" aria-hidden="true">
-            <GradFlow preset={gradPreset} />
+            <GradFlow config={gradConfig} transition={300} interactive />
           </div>,
           document.body
         )}

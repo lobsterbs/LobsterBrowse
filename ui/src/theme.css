@@ -44,7 +44,12 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   padding: var(--md-sys-measurement-space300) var(--md-sys-measurement-space300) var(--md-sys-measurement-space600);
   display: flex;
   flex-direction: column;
+  /* safe center: plain center clips overflow upward, which left the
+     Settings page opening at its middle cards with everything above
+     unreachable; safe center keeps the centering and falls back to
+     start-aligned scrolling when the content overflows. */
   justify-content: center;
+  justify-content: safe center;
   overflow-y: auto;
   transition: padding var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
@@ -90,9 +95,18 @@ body.lb-fancy .lb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
 }
-body.lb-fancy m3e-nav-rail {
+/* Frost the rail controls, not the full-height host: the rail
+   column is viewport-tall but its UI (menu button + nav items) ends
+   a few hundred pixels down, so a frosted host left a blurred empty
+   field below the items. The children live in the light DOM, so they
+   are reachable from here; the pill radius clips each blurred
+   backdrop to the control shape (the same corner treatment the
+   search bar got above). */
+body.lb-fancy m3e-nav-rail > m3e-icon-button,
+body.lb-fancy m3e-nav-rail > m3e-nav-item {
   background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
+  border-radius: 9999px;
 }
 
 /* Settings */
