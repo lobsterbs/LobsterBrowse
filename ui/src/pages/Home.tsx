@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { GradFlow } from "gradflow";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 
@@ -167,6 +168,10 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
+      {/* Enhanced UI setting: fixed WebGL gradient behind everything
+          (negative z-index keeps it above the body background but
+          under the rail and page content). Off = not rendered at all. */}
+      {settings.fancyBackground && <GradFlow className="lb-gradflow" preset="cosmic" />}
       <pre
         aria-label="LobsterBrowse"
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
