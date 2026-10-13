@@ -236,6 +236,7 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
           document.body
         )}
       <pre
+        className="lb-ascii"
         aria-label="LobsterBrowse"
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
