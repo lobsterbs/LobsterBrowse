@@ -95,18 +95,9 @@ body.lb-fancy .lb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
 }
-/* Frost the rail controls, not the full-height host: the rail
-   column is viewport-tall but its UI (menu button + nav items) ends
-   a few hundred pixels down, so a frosted host left a blurred empty
-   field below the items. The children live in the light DOM, so they
-   are reachable from here; the pill radius clips each blurred
-   backdrop to the control shape (the same corner treatment the
-   search bar got above). */
-body.lb-fancy m3e-nav-rail > m3e-icon-button,
-body.lb-fancy m3e-nav-rail > m3e-nav-item {
+body.lb-fancy m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
-  border-radius: 9999px;
 }
 
 /* Settings */
