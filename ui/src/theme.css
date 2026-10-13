@@ -110,6 +110,16 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    body class App toggles with the setting; off = untouched chrome. */
 body.lb-fancy .lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
+  /* Pill-clip the host: backdrop-filter blurs the whole host
+     rectangle, and the fully rounded bar leaves blurred corner
+     squares outside the pill. Matching corner radius clips the
+     blurred backdrop to the pill shape. */
+  border-radius: 9999px;
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+/* Suggestion dropdown: same frosted treatment as the search bar. */
+body.lb-fancy .lb-ac {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
 }
 body.lb-fancy m3e-nav-rail {
