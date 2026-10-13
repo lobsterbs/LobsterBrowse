@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { GradFlow } from "gradflow";
+import { createPortal } from "react-dom";
+import { GradFlow, PRESETS, type PresetName } from "gradflow";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 
@@ -92,8 +93,31 @@ function useSpringCard(open: boolean): { visible: boolean; progress: number } {
   return state;
 }
 
+/* Enhanced UI background: a random preset from the gradflow
+   library per app open/refresh (never the same one twice in a row
+   when the last pick was stored). */
+function randomPreset(): PresetName {
+  const names = Object.keys(PRESETS) as PresetName[];
+  const pick = names[Math.floor(Math.random() * names.length)];
+  try {
+    const last = localStorage.getItem("lb-gradflow-last");
+    if (last && last === pick) return names[(names.indexOf(pick) + 1) % names.length];
+    return pick;
+  } catch {
+    return pick;
+  }
+}
+
 export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
+  const [gradPreset] = useState<PresetName>(randomPreset);
+  useEffect(() => {
+    try {
+      localStorage.setItem("lb-gradflow-last", gradPreset);
+    } catch {
+      /* storage unavailable - randomness still works per session */
+    }
+  }, [gradPreset]);
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -168,10 +192,17 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
-      {/* Enhanced UI setting: fixed WebGL gradient behind everything
-          (negative z-index keeps it above the body background but
-          under the rail and page content). Off = not rendered at all. */}
-      {settings.fancyBackground && <GradFlow className="lb-gradflow" preset="cosmic" />}
+      {/* Enhanced UI setting: the gradient is portaled to <body> so
+          no view ancestor (transforms, stacking contexts) can trap
+          the fixed layer or shrink it. z-index -1 keeps it above the
+          body background but under the app. Off = not rendered. */}
+      {settings.fancyBackground &&
+        createPortal(
+          <div className="lb-gradflow-bg" aria-hidden="true">
+            <GradFlow preset={gradPreset} />
+          </div>,
+          document.body
+        )}
       <pre
         aria-label="LobsterBrowse"
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
