@@ -479,6 +479,29 @@ export default function App() {
     const rail = railRef.current as unknown as { currentMode?: string } | null;
     if (rail && rail.currentMode === "expanded") rail.currentMode = "compact";
   }, [view]);
+  /* Auto-collapse: an expanded rail retracts after 6s without
+     interaction. Any pointer or key activity on the rail restarts
+     the window; expanding via the toggle is itself an interaction,
+     so the timer is armed for the fresh expansion too. */
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const r = railRef.current as unknown as { currentMode?: string } | null;
+        if (r && r.currentMode === "expanded") r.currentMode = "compact";
+      }, 6000);
+    };
+    const events = ["pointerdown", "pointermove", "keydown", "wheel", "focusin"] as const;
+    for (const ev of events) rail.addEventListener(ev, arm, { passive: true });
+    arm();
+    return () => {
+      window.clearTimeout(timer);
+      for (const ev of events) rail.removeEventListener(ev, arm);
+    };
+  }, []);
 
   if (cloaked) {
     return (
