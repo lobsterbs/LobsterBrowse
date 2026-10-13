@@ -22,10 +22,10 @@ export type PollAction = "wait" | "recover" | "sync";
 
 const APP_PREFIXES = [
   "/zlsw", "/libcurl", "/zl-ext", "/zl-cs", "/suggest", "/cert",
-  "/logs", "/build", "/wisp", "/favicon",
+  "/logs", "/build", "/wisp", "/favicon", "/sj",
 ];
 
-const ENGINE_PREFIXES = ["/zl/", "/__zl_nav__/", "/__zl_navh__"];
+const ENGINE_PREFIXES = ["/zl/", "/__zl_nav__/", "/__zl_navh__", "/sj/r/"];
 
 export function pollAction(protocol: string, path: string, tabUrl: string): PollAction {
   if (protocol.startsWith("about:")) return "wait";

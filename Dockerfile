@@ -634,6 +634,29 @@ RUN mkdir -p /bundle/epoxy \
  && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.js /bundle/epoxy/epoxy.js \
  && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.wasm /bundle/epoxy/epoxy.wasm
 
+# ScramJet engine bundle (upstream MercuryWorkshop, the newest
+# published build), vendored with the same never-committed rule as
+# the Zeolite bundle and served same-origin at /sj/. Pin:
+# scramjet 2.0.67-alpha.2 + controller 0.0.14 + utils 0.0.3 +
+# libcurl-transport 2.0.5 (the same libcurl pin the zl-builder
+# vendors). The controller worker scope is /sj/ (default from the
+# script path), so it never competes with the Zeolite root worker.
+# Bump these pins together with SCRAMJET_VERSION in the final stage.
+FROM node:22-slim AS sj-builder
+RUN npm install --prefix /sjvendor --no-audit --no-fund \
+      @mercuryworkshop/scramjet@2.0.67-alpha.2 \
+      @mercuryworkshop/scramjet-controller@0.0.14 \
+      @mercuryworkshop/scramjet-utils@0.0.3 \
+      @mercuryworkshop/libcurl-transport@2.0.5 \
+ && mkdir -p /sj \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.js /sj/scramjet.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.wasm /sj/scramjet.wasm \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js /sj/controller.api.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js /sj/controller.inject.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.sw.js /sj/controller.sw.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-utils/dist/scramjet-utils.js /sj/scramjet-utils.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/index.js /sj/libcurl-client.js 
+
 FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
@@ -642,10 +665,11 @@ WORKDIR /app
 COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
+COPY --from=sj-builder /sj /app/sj
 EXPOSE 6001
 # Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=96d70fb9d7b90b14 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=96d70fb9d7b90b14 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]

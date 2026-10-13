@@ -18,6 +18,7 @@ import {
 } from "./settings";
 import * as store from "./store";
 import { zlSend } from "./zeolite";
+import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -181,6 +182,15 @@ export default function App() {
     },
     [tabs, activeId, newTab]
   );
+
+  /* ---- ScramJet engine option: init the upstream controller
+     worker (idempotent, ui/src/scramjet.ts) when the Proxy engine
+     setting picks it. Zeolite is the default and initializes through
+     its own registration path. ---- */
+  useEffect(() => {
+    if (settings.proxyEngine !== "scramjet") return;
+    sjInit().catch((e: unknown) => console.error("scramjet init failed", e));
+  }, [settings.proxyEngine]);
 
   /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
      Ctrl+W) are never delivered to the page, so the tab shortcuts
