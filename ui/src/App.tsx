@@ -18,6 +18,7 @@ import {
 } from "./settings";
 import * as store from "./store";
 import { zlSend } from "./zeolite";
+import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
 import "./extensions.css";
@@ -47,6 +48,8 @@ export default function App() {
     return restored;
   });
   const [activeId, setActiveId] = useState<number>(0);
+  /* #81: Ctrl+K command palette. */
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
@@ -215,23 +218,36 @@ export default function App() {
     sjInit().catch((e: unknown) => console.error("scramjet init failed", e));
   }, [settings.proxyEngine]);
 
+  /* #81: reopen the last closed tab - shared by Alt+Shift+T and
+     the command palette. */
+  const reopenTab = useCallback(() => {
+    const last = closedTabs.current[closedTabs.current.length - 1];
+    if (!last) return;
+    closedTabs.current = closedTabs.current.slice(0, -1);
+    setTabs((prev) => [...prev, last]);
+    setActiveId(last.id);
+    setView("browser");
+  }, []);
+
   /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
      Ctrl+W) are never delivered to the page, so the tab shortcuts
      live on Alt combos. AltGr is reported as ctrlKey+altKey and is
      therefore left alone. Documented in Settings. ---- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      /* #81: Ctrl+K (Cmd+K) toggles the palette. Checked before the
+         Alt gate because Ctrl+K carries no altKey. */
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       const k = e.key.toUpperCase();
       if (e.shiftKey) {
         if (k !== "T") return;
         e.preventDefault();
-        const last = closedTabs.current[closedTabs.current.length - 1];
-        if (!last) return;
-        closedTabs.current = closedTabs.current.slice(0, -1);
-        setTabs((prev) => [...prev, last]);
-        setActiveId(last.id);
-        setView("browser");
+        reopenTab();
         return;
       }
       if (k === "T") {
@@ -247,7 +263,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tabs, activeId, newTab, closeTab]);
+  }, [tabs, activeId, newTab, closeTab, reopenTab]);
 
   /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
@@ -555,6 +571,83 @@ export default function App() {
     );
   }
 
+  /* ---- #81 command palette actions. Browser.tsx-owned surfaces
+     (extensions panel, toolbar omnibox) are reached through window
+     events so App stays decoupled from Browser internals; the
+     timeout lets the browser view mount before the event fires. ---- */
+  const activeTab = tabs.find((t) => t.id === activeId);
+  const commands: Command[] = [
+    { id: "new-tab", group: "Tabs", label: "New tab", run: () => newTab() },
+    {
+      id: "close-tab",
+      group: "Tabs",
+      label: "Close tab",
+      run: () => {
+        if (activeTab) closeTab(activeTab.id);
+      },
+    },
+    { id: "reopen-tab", group: "Tabs", label: "Reopen last closed tab", run: reopenTab },
+    { id: "go-home", group: "Go", label: "Home", run: () => setView("home") },
+    { id: "go-settings", group: "Go", label: "Settings", run: () => setView("settings") },
+    { id: "go-logs", group: "Go", label: "Logs", run: () => setView("logs") },
+    {
+      id: "toggle-engine",
+      group: "Engine",
+      label:
+        settings.proxyEngine === "scramjet"
+          ? "Switch engine to Zeolite"
+          : "Switch engine to ScramJet",
+      run: () =>
+        update({ proxyEngine: settings.proxyEngine === "scramjet" ? "zeolite" : "scramjet" }),
+    },
+    {
+      id: "open-extensions",
+      group: "Tools",
+      label: "Open extensions",
+      run: () => {
+        setView("browser");
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
+      },
+    },
+    {
+      id: "focus-omnibox",
+      group: "Tools",
+      label: "Focus omnibox",
+      run: () => {
+        if (view === "browser") {
+          window.dispatchEvent(new CustomEvent("lb-focus-omnibox"));
+          return;
+        }
+        const el = document.getElementById("lb-search-input") as HTMLInputElement | null;
+        el?.focus();
+      },
+    },
+    {
+      id: "clear-site",
+      group: "Privacy",
+      label: "Clear cookies for this site",
+      confirm: "Press Enter again to clear this site's cookies",
+      run: () => {
+        if (!activeTab?.url) return;
+        /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
+           jar profile, one origin - cookies only, honest counts. */
+        void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
+          if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+          if (reply && reply.ok) {
+            M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
+              duration: 4000,
+            });
+          } else {
+            M3eSnackbar.open(
+              "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
+              { duration: 5000 },
+            );
+          }
+        });
+      },
+    },
+  ];
+
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
       <div className="lb-shell">
@@ -671,6 +764,8 @@ export default function App() {
           </div>
         </div>
       </div>
+      {/* #81: rendered at the root so Ctrl+K works in every view. */}
+      <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
     </m3e-theme>
   );
 }

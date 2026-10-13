@@ -1265,3 +1265,79 @@ m3e-snackbar {
   .lb-ext-panel.lb-out,
   .lb-dl-card.lb-out { animation: none; }
 }
+
+
+/* ---- #81 command palette (Ctrl+K): plain-div overlay styled
+   against M3E tokens; motion respects the reduced-motion block
+   at the end of the file. ---- */
+.lb-cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: color-mix(in srgb, var(--md-sys-color-scrim, #000) 40%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--md-sys-measurement-space900, 72px);
+}
+.lb-cmdk {
+  width: min(520px, calc(100% - var(--md-sys-measurement-space400, 32px)));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--md-sys-color-surface-container-high, #2b2b2f);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  box-shadow: 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: lb-cmdk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
+}
+@keyframes lb-cmdk-in {
+  from { opacity: 0; transform: translateY(var(--md-sys-measurement-space100, 8px)); }
+}
+.lb-cmdk-input {
+  margin: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  font-family: inherit;
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  background: var(--md-sys-color-surface-container-highest, #37393e);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border: none;
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  outline: none;
+}
+.lb-cmdk-input:focus { box-shadow: 0 0 0 1px var(--md-sys-color-primary, #a8c7fa); }
+.lb-cmdk-list {
+  overflow-y: auto;
+  padding: 0 var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px);
+}
+.lb-cmdk-group {
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  font-weight: var(--md-sys-typescale-label-large-font-weight, 500);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  margin-top: var(--md-sys-measurement-space100, 8px);
+}
+.lb-cmdk-item {
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  padding: var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space200, 16px);
+  border-radius: var(--md-sys-shape-corner-large, 16px);
+  cursor: pointer;
+}
+.lb-cmdk-item.selected {
+  background: var(--md-sys-color-primary, #a8c7fa);
+  color: var(--md-sys-color-on-primary, #381e72);
+}
+.lb-cmdk-empty {
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space200, 16px);
+}
+.lb-cmdk-hint {
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space150, 12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-cmdk { animation: none; }
+}
