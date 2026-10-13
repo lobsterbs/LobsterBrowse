@@ -1,0 +1,225 @@
+# Playwright test plan for LobsterBrowse + Zeolite
+
+Fixed site list. Run every Group A/B/C site through LobsterBrowse (beta, Zeolite
+engine) at https://lobsterbrowse-beta-dr2h.onrender.com. Run Groups B and C a
+second time direct for comparison. One navigation per site unless the steps say
+otherwise; a broken site must show exactly 1 navigation (no reload loops).
+
+## Common run procedure (all sites, no exceptions)
+
+Engine run:
+1. chromium.launch({headless:true}), context viewport 1280x900, newCDPSession.
+2. Emulation.setUserAgentOverride with non-headless userAgentMetadata (brands
+   Chromium + Google Chrome; a HeadlessChrome brand is bot-flagged by Akamai).
+3. Page.enable; count every Page.frameNavigated whose frame URL starts with the
+   app origin (this is the navigation+reload count).
+4. page.on("console") and page.on("pageerror") collected per site.
+5. page.goto("https://lobsterbrowse-beta-dr2h.onrender.com",
+   waitUntil domcontentloaded); settle 1.5s.
+6. page.fill("#lb-search-input", "<URL>"); page.press("#lb-search-input","Enter").
+7. Wait the site-specific settle time; then evaluate PASS criteria inside the
+   engine iframe (the frame whose URL starts with the app origin and contains
+   /zl/ or /__zl_navh__ or anubis).
+8. Record: navigation count, console errors, failed requests, document.cookie
+   visibility, screenshot to shots/<n>-lb.png.
+9. Status label: PASS, FAIL, BLOCKED-BY-SANDBOX, CHALLENGE, LOGIN-WALL,
+   REGION-UNAVAILABLE. Nothing else.
+
+Direct run (Groups B and C only): same browser, page.goto(site URL) directly,
+same measurements, screenshot to shots/<n>-direct.png.
+
+Captchas and bot checks: verify the challenge widget loads, renders and reacts
+to a click. Never solve it, never complete it, never bypass it. A challenge that
+loads and reacts = CHALLENGE status (pass for the render check). Spinning
+forever, blank frame, or console errors = FAIL.
+
+AI chat message rule (Groups B and C): send exactly one message "hi" to
+claude.ai, chatgpt.com and Google AI Mode. If the service requires login first,
+record LOGIN-WALL and stop. Never sign in. Never type anything personal.
+
+## Group A: engine compatibility (through LobsterBrowse/Zeolite)
+
+### A1 https://en.wikipedia.org/wiki/Main_Page (LB #19)
+Steps: common procedure, settle 8s.
+PASS: engine frame shows #mw-content-text with visible article text and the
+Wikipedia wordmark; navigation count <= 3.
+FAIL: shell only, no article text, stylesheet loss (unstyled content), or a
+reload count above 3 without user action.
+
+### A2 https://www.tagesschau.de (LB #19)
+Steps: common procedure, settle 10s. A bootstrap 404 is known-harmless.
+PASS: headline list visible (.teaser or h2/h3 headlines), site styling applied.
+FAIL: blank shell, headline list absent, repeated reloads.
+
+### A3 https://excalidraw.com (LB #19)
+Steps: common procedure, settle 12s, then click the canvas center and drag
+200px to verify interaction.
+PASS: .excalidraw canvas present, toolbar visible, drag draws a shape (canvas
+pixels change between two screenshots).
+FAIL: no canvas, toolbar missing, drag has no effect, JS crash in console.
+
+### A4 https://github.com (Zeolite #143)
+Steps: common procedure, settle 10s.
+PASS: header with GitHub logo, repo/file cards or the logged-out homepage
+content renders.
+FAIL: raw-path assets 404 (broken CSS/JS), unstyled page, console module errors.
+
+### A5 https://github.com/lobsterbs/Zeolite (Zeolite #143)
+Steps: common procedure, settle 10s.
+PASS: repo page renders file list and README (#readme visible).
+FAIL: file list empty, README not rendered, module CSS missing.
+
+### A6 https://www.openstreetmap.org (Zeolite #134)
+Steps: common procedure, settle 12s, then click the zoom-in button once.
+PASS: #map leaflet container with rendered tiles; zoom button responds (map
+changes).
+FAIL: map canvas blank, fragment hrefs break navigation, buttons dead.
+
+### A7 https://craigslist.org
+Steps: common procedure, settle 10s. Current-state check (502 mid-response).
+PASS: city list visible and clickable links rewritten to engine routes.
+FAIL: 502 mid-response without an error page, empty list, reload loop.
+
+### A8 https://www.google.com/search?q=test (Zeolite #120, #148)
+Steps: common procedure, settle 12s.
+PASS: search results list (#search or #rso) OR a rendered consent/captcha page
+(CHALLENGE status).
+FAIL: blank, unstyled, or a challenge widget that does not render.
+
+### A9 https://consent.google.com (Zeolite #79, #148)
+Steps: common procedure, settle 10s.
+PASS: consent form renders with clickable buttons.
+FAIL: redirect chain that ends blank, buttons dead, console errors.
+
+### A10 https://www.youtube.com (Zeolite #99)
+Steps: common procedure, settle 15s (large document).
+PASS: masthead renders, video grid thumbnails visible.
+FAIL: shell without grid, streaming stalls mid-document, console errors.
+
+### A11 https://www.twitch.tv (Zeolite #124)
+Steps: common procedure, settle 15s.
+PASS: front page renders with content cards; no player-core SyntaxError.
+FAIL: player-core SyntaxError in console, blank shell.
+
+### A12 https://search.brave.com/search?q=test (Zeolite #131)
+Steps: common procedure, settle 12s.
+PASS: results list renders.
+FAIL: JS 404 loop, Ask AI panel auto-reloads, results absent.
+
+### A13 https://duckduckgo.com/?q=test (LB #75)
+Steps: common procedure, settle 25s (DDG hangs on Render egress, expect the
+engine timeout path).
+PASS for the CHECK (not the site): exactly 1 error/timeout state, one honest
+error page, no auto-reload, no loop; manual retry only.
+FAIL: any reload or auto-retry without a user click.
+
+### A14 https://www.cbc.ca (Zeolite #149)
+Steps: common procedure, settle 12s.
+PASS: real article headlines render (relay route).
+FAIL: 502 stream error, blank.
+
+### A15 https://www.acer.com (Zeolite #149)
+Steps: common procedure, settle 12s.
+PASS: product/hero content renders.
+FAIL: 502, blank.
+
+### A16 https://www.opentable.com (Zeolite #149)
+Steps: common procedure, settle 12s.
+PASS: search UI and content render.
+FAIL: 502, blank.
+
+### A17 https://www.united.com (Zeolite #149)
+Steps: common procedure, settle 20s.
+PASS: content renders via relay; else record honest timeout state with count 1.
+FAIL: reload loop.
+
+### A18 https://www.delta.com (Zeolite #149)
+Steps: common procedure, settle 20s.
+PASS: content renders; else record honest error state (egress class) with
+count 1.
+FAIL: reload loop.
+
+### A19 https://play2048.co (Zeolite #134)
+Steps: common procedure, settle 10s, then keyboard ArrowUp x3, ArrowRight x2.
+PASS: .grid-container with tiles; tile positions or score change after keys.
+FAIL: game never mounts (known upstream ad-shell regression: record current
+state with evidence).
+
+### A20 LB #72 free AI sites (6 sites; re-test after tile-gating fix)
+A20a https://huggingface.co/chat - PASS: chat UI with model selector renders.
+A20b https://chat.deepseek.com - PASS: chat input renders.
+A20c https://poe.com - PASS: bot list renders.
+A20d https://copilot.microsoft.com - PASS: copilot UI renders.
+A20e https://perplexity.ai - PASS: ask input renders.
+A20f https://grok.com - PASS: page renders; login gate = LOGIN-WALL (honest).
+Each: settle 15s, then try one "hi" message if the chat input is usable
+logged-out; record whether a reply or streaming text arrives.
+
+## Group B: AI services (engine run + direct comparison)
+
+Rules: logged out only; single "hi" message; LOGIN-WALL is a result, not a
+fail; challenge render check per the captcha rule.
+
+### B21 https://claude.ai
+Steps: engine run then direct run, settle 15s. If a chat input exists without
+login, send "hi" once.
+PASS: UI renders and (if usable logged out) the message sends and a reply or
+an honest error arrives. LOGIN-WALL recorded when gated.
+FAIL: blank, JS crash, message silently swallowed.
+
+### B22 https://chatgpt.com
+Steps: same as B21.
+PASS/FAIL: same rules as B21.
+
+### B23 Google AI Mode - BOTH URLs
+B23a https://www.google.com/ai
+B23b https://www.google.com/search?q=test&udm=50
+Steps: engine run then direct run, settle 12s. Record the runner region
+(Render frankfurt egress / sprite region) and whether the AI button or page
+appears. REGION-UNAVAILABLE is a result, not a fail.
+
+## Group C: graphics-heavy sites (engine run + direct comparison)
+
+### C24 https://www.shadertoy.com
+Steps: settle 15s; FPS via requestAnimationFrame count over 10s
+(page.evaluate); check "webglcontextlost"; click one shader card from the grid.
+PASS: canvas/preview renders non-blank, FPS recorded both runs, card click
+opens the shader page.
+FAIL: context lost through the engine, near-zero FPS only in the engine run,
+blank canvas.
+
+### C25 https://sketchfab.com/feed
+Steps: settle 15s; FPS 10s; webglcontextlost check; click one model card.
+PASS: model cards render, card click opens the model view, FPS recorded.
+FAIL: blank feed, context loss in engine run only.
+
+### C26 https://threejs.org/examples/ (3 examples, one at a time)
+Examples: webgl_animation_keyframes, webgl_instancing_dynamic,
+webgl_postprocessing_unreal_bloom.
+Steps: per example: settle 12s, FPS 10s, webglcontextlost check, screenshot,
+then compare two screenshots 3s apart for animation (moving scene).
+PASS: each example canvas animates in both runs; FPS recorded.
+FAIL: frozen canvas only in the engine run, context loss, blank.
+
+## Group B/C extras
+
+Button press test (B21-B23, C24-C26, engine run): enumerate visible buttons
+in top nav and main UI (a, button, [role=button]); skip anything that opens a
+login form, sends data beyond the single "hi" test, changes account settings,
+or completes a captcha. Click one at a time; record label, location, whether
+something visibly changed (URL change, new element, panel, state), console
+errors, and RESPONDED / NO-RESPONSE / ERROR / SKIPPED(reason). A button that
+does nothing and throws nothing = FAIL. A click that causes a reload = FAIL
+unless user-initiated (manual retry button).
+
+Graphics performance (C24-C26): FPS over 10s via rAF counting in
+page.evaluate, webglcontextlost events, non-blank canvas check (sample pixels
+or compare screenshots), responsiveness (a button click responds within 2s).
+Engine run vs direct run; large FPS drop or context loss through the engine =
+FAIL for the engine, numbers in the issue.
+
+## Broken-page rule (all groups)
+
+A broken site shows ONE error page with a manual retry. It must not reload,
+loop or auto-retry without a user click. Navigation count for a broken site:
+exactly 1. Re-verify LB #55, LB #61, Zeolite #131 (closed) with this rule.
