@@ -86,8 +86,11 @@ PASS: search results list (#search or #rso) OR a rendered consent/captcha page
 (CHALLENGE status).
 FAIL: blank, unstyled, or a challenge widget that does not render.
 
-### A9 https://consent.google.com (Zeolite #79, #148)
+### A9 https://consent.google.com/m?continue=https://www.google.com (Zeolite #79, #148)
 Steps: common procedure, settle 10s.
+NOTE: the bare consent.google.com root answers 404 upstream (verified
+direct: HTTP 404), so the run must use a consent-bearing URL; a 404 on
+the root URL is upstream-normal, not an engine failure.
 PASS: consent form renders with clickable buttons.
 FAIL: redirect chain that ends blank, buttons dead, console errors.
 
