@@ -227,7 +227,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
    keep their size on hover: the M3E icon's expressive hover bounce
    is pinned at the host so a hover cannot expand a row past the
    card, and the hover tint eases instead of snapping. */
-.lb-ac-item { overflow: hidden; transition: background-color 120ms ease; }
+.lb-ac-item { overflow: hidden; transition: background-color var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease); }
 .lb-ac-item m3e-icon { flex: 0 0 auto; }
 .lb-ac-item:hover m3e-icon,
 .lb-ac-item m3e-icon {
@@ -438,7 +438,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width 260ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tb-pill.expanded { width: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));

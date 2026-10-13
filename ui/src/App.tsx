@@ -74,6 +74,29 @@ export default function App() {
       );
     }
   }, [incognito]);
+  /* #80: the engine worker broadcasts zl:engineUpdate (updates.ts)
+     to every window client once it activates; the UI itself is a
+     client of the same worker, so the update surfaces as a snackbar
+     with a manual reload action. Nothing reloads on its own. */
+  const lastEngineKey = useRef("");
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string; sha?: string | null; version?: unknown } | null;
+      if (!d || d.type !== "zl:engineUpdate") return;
+      const key = typeof d.sha === "string" && d.sha ? d.sha : "v:" + String(d.version ?? "");
+      if (!key || key === lastEngineKey.current) return;
+      lastEngineKey.current = key;
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Engine updated - reload to pick it up", "Reload now", {
+          actionCallback: () => window.location.reload(),
+          duration: 8000,
+        });
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
   const closedTabs = useRef<Tab[]>([]);
   const prevTitle = useRef(document.title);
 
@@ -533,7 +556,7 @@ export default function App() {
   }
 
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
       <div className="lb-shell">
         {/* Expressive wide rail: the M3E defaults are the spec
            (96dp collapsed with persistent labels, 44dp top inset);
