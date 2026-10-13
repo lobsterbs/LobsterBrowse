@@ -276,6 +276,9 @@ export default function BrowserView(props: Props) {
   const dlSeq = useRef(1);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
+  /* Per-document/per-window wiring for the new-tab interception. */
+  const tabWired = useRef<WeakSet<Document>>(new WeakSet());
+  const openWired = useRef<WeakSet<Window>>(new WeakSet());
   /* A finished .xpi download waiting for the install prompt. The
      bytes are held here so Install needs no second fetch. */
   const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
@@ -1502,6 +1505,61 @@ export default function BrowserView(props: Props) {
           },
           true,
         );
+      }
+      /* New-tab interception: target=_blank links, middle-clicks and
+         window.open inside the proxied page must open LB tabs, not
+         escape to a real browser tab (the frame is same-origin, so
+         the default would open a new top-level context on our
+         origin with no relay channel). Nested subframes of the page
+         are not covered - honest gap. */
+      if (!tabWired.current.has(doc)) {
+        tabWired.current.add(doc);
+        const openInTab = (raw: string): boolean => {
+          if (!raw || raw.startsWith("javascript:") || raw.startsWith("blob:") || raw.startsWith("data:")) return false;
+          let real = decodeRoute(raw);
+          if (!real && /^https?:/i.test(raw)) real = raw;
+          if (!real) return false;
+          props.newTab(real);
+          return true;
+        };
+        doc.addEventListener(
+          "click",
+          (e) => {
+            const el = e.target as Element | null;
+            const a = el && el.closest ? (el.closest("a[href]") as HTMLAnchorElement | null) : null;
+            if (!a || a.hasAttribute("download") || e.defaultPrevented) return;
+            if (a.getAttribute("target") !== "_blank") return;
+            if (openInTab(a.getAttribute("href") || "")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          },
+          true,
+        );
+        doc.addEventListener(
+          "auxclick",
+          (e) => {
+            if (e.button !== 1) return;
+            const el = e.target as Element | null;
+            const a = el && el.closest ? (el.closest("a[href]") as HTMLAnchorElement | null) : null;
+            if (!a || a.hasAttribute("download") || e.defaultPrevented) return;
+            if (openInTab(a.getAttribute("href") || "")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          },
+          true,
+        );
+        const win = f.contentWindow;
+        if (win && !openWired.current.has(win)) {
+          openWired.current.add(win);
+          const orig = win.open.bind(win);
+          win.open = ((url?: string | URL, target?: string, features?: string) => {
+            const raw = url == null ? "" : String(url);
+            if (openInTab(raw)) return null;
+            return orig(url, target, features);
+          }) as typeof window.open;
+        }
       }
     }, 1200);
     return () => clearInterval(iv);
