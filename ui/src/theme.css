@@ -104,6 +104,18 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    buffer from these client dimensions. */
 .lb-gradflow-bg { position: fixed; inset: 0; z-index: -1; background: var(--md-sys-color-surface); }
 .lb-gradflow-bg canvas { display: block; width: 100%; height: 100%; }
+/* Frosted glass under Enhanced UI: the Home search bar and the nav
+   rail get a translucent surface tint plus backdrop blur, so their
+   contents stay readable over the animated gradient. Scoped to the
+   body class App toggles with the setting; off = untouched chrome. */
+body.lb-fancy .lb-home m3e-search-bar {
+  --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+body.lb-fancy m3e-nav-rail {
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
 
 /* Settings */
 .lb-panel-header { cursor: pointer; }

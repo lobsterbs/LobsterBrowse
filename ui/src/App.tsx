@@ -89,6 +89,12 @@ export default function App() {
     saveSiteRules(next);
   }, []);
 
+  /* Enhanced UI flag on <body>: theme.css scopes the frosted-glass
+     search bar and nav rail treatments to this class. */
+  useEffect(() => {
+    document.body.classList.toggle("lb-fancy", settings.fancyBackground);
+  }, [settings.fancyBackground]);
+
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
     if (!incognito) store.saveSessionTabs(tabs);
