@@ -594,12 +594,6 @@ export default function App() {
 
 
         <div className="lb-main">
-          {/* The browser view gets every pixel: no header there. */}
-          {view !== "browser" && (
-            <m3e-app-bar>
-              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
-            </m3e-app-bar>
-          )}
 
           <div className="app-content">
             <div key={view} className="lb-view">
