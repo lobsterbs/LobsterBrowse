@@ -30,6 +30,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive } from "../zeolite";
+import { sjInit } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -315,10 +316,10 @@ export default function BrowserView(props: Props) {
       if (engId === undefined) return;
       void zlSend({ type: "zl:downloadState", id: engId, status, ...extra }, 8000);
     };
-    /* Engine-routed hrefs (/zl/) are fetched as-is; anything else
-       goes through routeUrl so it rides the engine like a
-       navigation. */
-    const target = href.startsWith("/zl/") ? href : routeUrl(href);
+    /* Engine-routed hrefs (/zl/, /sj/r/) are fetched as-is;
+       anything else goes through routeUrl so it rides the engine
+       like a navigation. */
+    const target = href.startsWith("/zl/") || href.startsWith("/sj/r/") ? href : routeUrl(href);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
@@ -1037,7 +1038,7 @@ export default function BrowserView(props: Props) {
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
     if (attr) {
-      if (attr.startsWith("/zl/")) {
+      if (attr.startsWith("/zl/") || attr.startsWith("/sj/r/")) {
         href = attr;
       } else {
         try {
@@ -1125,7 +1126,13 @@ export default function BrowserView(props: Props) {
      "Load failed" page; wait for an active worker once per boot
      first. */
   const initialRoute = (url: string) =>
-    zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
+    settings.proxyEngine === "scramjet"
+      ? /* ScramJet: the controller route exists after the engine init
+           (sjInit is idempotent). A failed init falls through and
+           routeUrl answers the Zeolite route, so the tab stays
+           functional instead of hanging. */
+        sjInit().catch(() => {}).then(() => routeUrl(url))
+      : zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
@@ -1454,7 +1461,7 @@ export default function BrowserView(props: Props) {
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
         wiredDocs.current.add(doc);
-        const prefix = engineRoutePrefix();
+        const prefix = settings.proxyEngine === "scramjet" ? "/sj/r/" : engineRoutePrefix();
         const prefetch = (el: EventTarget | null) => {
           const target = el as Element | null;
           const a = target && target.closest ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;

@@ -1123,12 +1123,33 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => ("unknown".to_string(), "unknown".to_string()),
     };
+    // ScramJet engine option: the vendored upstream bundle version
+    // (pinned in the Dockerfile, surfaced via SCRAMJET_VERSION) and
+    // its scramjet.js sha256 prefix — same stale-bundle detection as
+    // zlswSha. The wisp URL (SCRAMJET_WISP_URL, the standalone
+    // wisp-js backend service) is reported empty honestly when unset.
+    let scramjet = {
+        let v = std::env::var("SCRAMJET_VERSION").unwrap_or_default();
+        if v.is_empty() { "unknown".to_string() } else { v }
+    };
+    let sj_sha = match tokio::fs::read("sj/scramjet.js").await {
+        Ok(bytes) => {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(&bytes);
+            hash.iter().take(8).map(|b| format!("{b:02x}")).collect::<String>()
+        }
+        Err(_) => "unknown".to_string(),
+    };
+    let sj_wisp = std::env::var("SCRAMJET_WISP_URL").unwrap_or_default();
     let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
+        json_escape(&scramjet),
+        json_escape(&sj_sha),
+        json_escape(&sj_wisp),
         json_escape(&build),
         json_escape(&build_short),
     );
@@ -1441,6 +1462,15 @@ async fn main() {
         // under the same prefix.
         .route("/zlsw/sw.js", get(zl_sw_js))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
+        // ScramJet engine bundle (upstream MercuryWorkshop, vendored
+        // into sj/ at build time): the controller worker loads from
+        // /sj/sw.js with the default /sj/ scope, so it coexists with
+        // the Zeolite root worker (each fetch goes to the longest
+        // matching scope). Its assets are plain static files under
+        // the same prefix; the UI drives the engine from
+        // ui/src/scramjet.ts.
+        .route("/sj/sw.js", get(sj_sw_js))
+        .nest_service("/sj", ServeDir::new("sj"))
         // The engine rewriter injects <script src="/bootstrap.js">
         // (root-absolute): pages served from engine routes resolve
         // that URL at the origin root, and the missing route 404ed
@@ -1554,6 +1584,28 @@ async fn zl_sw_js() -> Response {
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
     }
+}
+
+/// ScramJet controller worker loader (the upstream
+/// @mercuryworkshop/proxy-bootstrap sw.js template): hands fetch
+/// events to $scramjetController from the vendored controller.sw.js.
+/// Default /sj/ scope from the script path - no Service-Worker-Allowed
+/// needed; no-cache so bundle updates are picked up promptly.
+async fn sj_sw_js() -> Response {
+    const SJ_SW: &str = concat!(
+        "importScripts(\\"/sj/controller.sw.js\\");\\n",
+        "addEventListener(\\"fetch\\", (e) => {\\n",
+        "  if ($scramjetController.shouldRoute(e)) {\\n",
+        "    e.respondWith($scramjetController.route(e));\\n",
+        "  }\\n",
+        "});\\n",
+    );
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/javascript")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .body(Body::from(SJ_SW))
+        .expect("static response build")
 }
 
 /// Zeolite bootstrap at the origin root (vendored build,

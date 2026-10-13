@@ -6,6 +6,8 @@
    lb_sid, so deployment users no longer share a single jar. Stable per
    browser profile for normal browsing (cookies survive reloads), fresh
    and in-memory for each incognito window (its jar dies with the sid). */
+import { sjRouteUrl, sjDecodeRoute } from "./scramjet";
+
 const SID_KEY = "lobsterbrowse-sid";
 let incSid = "";
 let memSid = "";
@@ -114,6 +116,10 @@ export type SiteRule = {
 export type Settings = {
   seed: string;
   engine: EngineId;
+  /* Proxy engine: zeolite (default, owns /zl/) or scramjet (upstream
+     MercuryWorkshop client driven from ui/src/scramjet.ts, routes
+     under /sj/). The engine options below are Zeolite-only. */
+  proxyEngine: "zeolite" | "scramjet";
   /* Strip known ad and tracker hosts from proxied documents
      (engine-side). */
   adblock: boolean;
@@ -163,6 +169,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#6750A4",
   engine: "startpage",
+  proxyEngine: "zeolite",
   adblock: true,
   uaPreset: "chrome-win",
   uaCustom: "",
@@ -309,6 +316,13 @@ export function engineRoutePrefix(): string {
    route's query string to the target, so no option params ride on
    them (settings reach the engine through the zl:rules push). */
 export function routeUrl(target: string): string {
+  /* ScramJet engine: the controller route ("" until the engine
+     initializes; the Zeolite route below then keeps the tab
+     functional — its worker owns /zl/ either way). */
+  if (loadSettings().proxyEngine === "scramjet") {
+    const sj = sjRouteUrl(target);
+    if (sj) return sj;
+  }
   return engineRoutePrefix() + b64urlEncode(target);
 }
 
@@ -318,6 +332,10 @@ export function decodeRoute(pathname: string): string {
   /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
      prefixes are gone, so they decode to "" and the poll sync falls
      back to the caller tab URL. */
+  /* ScramJet routes (codec: encodeURIComponent) decode through the
+     scramjet module; "" for any other shape. */
+  const sjUrl = sjDecodeRoute(pathname);
+  if (sjUrl) return sjUrl;
   let seg = "";
   if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
