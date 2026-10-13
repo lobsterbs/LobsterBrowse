@@ -30,7 +30,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive } from "../zeolite";
-import { sjInit } from "../scramjet";
+import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -1125,13 +1125,17 @@ export default function BrowserView(props: Props) {
      would time out to the legacy route and land the SW-less
      "Load failed" page; wait for an active worker once per boot
      first. */
-  const initialRoute = (url: string) =>
+  /* ScramJet: the upstream controller answers 500 "No frame found for
+     request" unless the route carries a frame id, so each tab's
+     iframe is wrapped in an upstream controller frame on first
+     navigation (sjFrame is idempotent per element) and the route is
+     minted from that frame. Any failure falls through to routeUrl's
+     Zeolite route, so the tab stays functional instead of hanging. */
+  const initialRoute = (tabId: number, url: string) =>
     settings.proxyEngine === "scramjet"
-      ? /* ScramJet: the controller route exists after the engine init
-           (sjInit is idempotent). A failed init falls through and
-           routeUrl answers the Zeolite route, so the tab stays
-           functional instead of hanging. */
-        sjInit().catch(() => {}).then(() => routeUrl(url))
+      ? sjFrame(frames.current.get(tabId) ?? null)
+          .then((fr) => fr.prefix + encodeURIComponent(url))
+          .catch(() => routeUrl(url))
       : zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
@@ -1177,7 +1181,7 @@ export default function BrowserView(props: Props) {
        the hop, the engine's own netlog keeps reporting the real
        upstream TTFB. */
     const mintT0 = Date.now();
-    void initialRoute(url).then((href) => {
+    void initialRoute(tab.id, url).then((href) => {
       if (navGen.current.get(tab.id) !== gen) return;
       const hopMs = Date.now() - mintT0;
       if (frame) frame.src = href;
@@ -1397,7 +1401,7 @@ export default function BrowserView(props: Props) {
           );
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
-          void initialRoute(intended).then((href) => {
+          void initialRoute(t.id, intended).then((href) => {
             f.src = href;
           });
           /* Record the recovered URL as this tab's last navigation so

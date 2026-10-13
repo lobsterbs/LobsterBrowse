@@ -310,9 +310,9 @@ export function engineRoutePrefix(): string {
   return "/zl/";
 }
 
-/* ScramJet engine route prefix: the upstream controller route for
-   this session, pushed by sjInit (ui/src/scramjet.ts) once the
-   controller is up. "" until then, so routeUrl falls back to
+/* ScramJet engine route prefix: the upstream frame route for
+   the most recently created tab frame, pushed by sjFrame
+   (ui/src/scramjet.ts) once a frame exists. "" until then, so routeUrl falls back to
    the Zeolite route. Same pattern as the Zeolite runtime prefix. */
 let sjPrefix = "";
 export function setSjPrefix(prefix: string): void {
@@ -339,12 +339,16 @@ export function decodeRoute(pathname: string): string {
   /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
      prefixes are gone, so they decode to "" and the poll sync falls
      back to the caller tab URL. */
-  /* ScramJet routes (codec: encodeURIComponent; the session id
-     segment between /sj/r/ and the encoded target is dropped). A
-     wrong shape falls through to the Zeolite decode below. */
+  /* ScramJet routes (codec: encodeURIComponent; the controller and
+     frame id segments between /sj/r/ and the encoded target are
+     dropped). A wrong shape falls through to the Zeolite decode below. */
   if (pathname.startsWith("/sj/r/")) {
     const tail = pathname.slice(6).split("?")[0].split("#")[0];
-    const rest = tail.slice(tail.indexOf("/") + 1);
+    /* Two id segments (controller, frame) precede the encoded
+       target; a route without both fails closed below. */
+    const i1 = tail.indexOf("/");
+    const i2 = i1 < 0 ? -1 : tail.indexOf("/", i1 + 1);
+    const rest = i2 < 0 ? "" : tail.slice(i2 + 1);
     try {
       const url = decodeURIComponent(rest);
       const ok = url.startsWith("https://") || url.startsWith("http://");
