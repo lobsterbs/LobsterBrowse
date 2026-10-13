@@ -97,6 +97,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
+/* Enhanced UI (gradflow): the fixed full-viewport WebGL canvas sits
+   at negative z-index, so it covers the plain body background but
+   stays under the rail, toolbar and home content. */
+.lb-gradflow { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; }
 
 /* Settings */
 .lb-panel-header { cursor: pointer; }

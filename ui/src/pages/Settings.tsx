@@ -369,6 +369,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-chip-set>
           </div>
         </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Background</div>
+          <m3e-list>
+            <Row label="Enhanced UI (animated background)" icon="gradient" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+          </m3e-list>
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            Replaces the Home page's plain background with an animated WebGL gradient (gradflow).
+            More resource intensive: the GPU renders it every frame. Off keeps the plain flat background.
+          </p>
+        </div>
       </Panel>
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>

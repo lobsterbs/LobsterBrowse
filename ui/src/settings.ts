@@ -152,6 +152,10 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
+  /* Enhanced UI: animated WebGL gradient background (gradflow) on
+     the Home page instead of the flat surface. GPU-heavy every
+     frame, hence opt-in. */
+  fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
 };
@@ -175,6 +179,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoHideChrome: true,
   diagnostics: true,
   density: "normal",
+  fancyBackground: false,
 };
 
 const KEY = "lobsterbrowse-settings";
