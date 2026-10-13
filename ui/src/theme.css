@@ -25,38 +25,6 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* Top bar is the real m3e-app-bar. Its internal .base paints the
-   container token over the host, which left a solid detached bar.
-   Make the container transparent (no elevation, no background) so
-   the bar blends into the page like the rest of the chrome. */
-m3e-app-bar {
-  --m3e-app-bar-container-color: transparent;
-  --m3e-app-bar-container-elevation: none;
-  --m3e-app-bar-title-text-color: var(--md-sys-color-primary);
-  background: transparent !important;
-  color: var(--md-sys-color-on-surface);
-}
-/* The title is light DOM, so coloring the span directly always wins
-   over whatever the component's internal styles do with the token. */
-.lb-app-title {
-  color: var(--md-sys-color-primary);
-  font-variation-settings: "wght" 600;
-}
-
-/* Preview build badge on the app title. */
-.lb-preview-badge {
-  display: inline-block;
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
-  margin-left: var(--md-sys-measurement-space125, 10px);
-  vertical-align: middle;
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  color: var(--md-sys-color-on-primary-container, #4f378b);
-  background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
-}
 
 /* Smooth nav rail: items glide on state changes. The host width is
    owned by the component itself - overriding it (or clipping with

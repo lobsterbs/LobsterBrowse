@@ -203,15 +203,6 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
           </div>,
           document.body
         )}
-      <pre
-        aria-label="LobsterBrowse"
-        style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
-      >{String.raw`    __          __         __            ____                             
-   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
-  / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
- / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
-/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
-                                                                           `}</pre>
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
