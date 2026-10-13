@@ -6,15 +6,17 @@
    fetch to the longest matching scope), loads the controller API,
    creates the libcurl transport against the ScramJet wisp backend
    (the LB /wisp/ endpoint requires password auth the upstream client
-   cannot send) and exposes the per-session engine route prefix.
+   cannot send) and publishes the per-session engine route prefix to
+   settings.ts (setSjPrefix).
    Everything here mirrors the upstream @mercuryworkshop/proxy-bootstrap
    client (packages/bootstrap/src/client.ts in the scramjet repo): no
    rewriter code lives in this repo. */
 
+import { setSjPrefix } from "./settings";
+
 type SjBuildInfo = { sjWisp?: string };
 
 let initPromise: Promise<void> | null = null;
-let sjPrefix = "";
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -77,7 +79,7 @@ async function doInit(): Promise<void> {
   const transport = new LibcurlClient({ wisp });
   const controller = new api.Controller({ serviceworker: sw, transport });
   if (typeof controller.wait === "function") await controller.wait();
-  sjPrefix = controller.prefix;
+  setSjPrefix(controller.prefix);
 }
 
 /* Idempotent init; a failed init clears the memo so a later
@@ -90,26 +92,4 @@ export function sjInit(): Promise<void> {
     });
   }
   return initPromise;
-}
-
-/* Route for a target on the scramjet engine ("" until initialized).
-   Codec is the upstream default: encodeURIComponent. */
-export function sjRouteUrl(target: string): string {
-  return sjPrefix ? sjPrefix + encodeURIComponent(target) : "";
-}
-
-/* Recover the real URL from a scramjet route pathname ("" when the
-   shape is wrong or the tail does not decode; the session id segment
-   between /sj/r/ and the encoded target is dropped). */
-export function sjDecodeRoute(pathname: string): string {
-  if (!pathname.startsWith("/sj/r/")) return "";
-  const tail = pathname.slice(6).split("?")[0].split("#")[0];
-  const rest = tail.slice(tail.indexOf("/") + 1);
-  try {
-    const url = decodeURIComponent(rest);
-    if (!/^https?:\/\//i.test(url) || /[\x00-\x1f\x7f]/.test(url)) return "";
-    return url;
-  } catch {
-    return "";
-  }
 }
