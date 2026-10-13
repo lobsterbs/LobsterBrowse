@@ -617,7 +617,13 @@ FROM debian:bookworm-slim AS zl-builder
 # zl:engineUpdate window CustomEvent for a manual reload affordance).
 # sw.js 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js
 # 03cd3476 -> b0624c71; Cargo-side pin stays deccb43 (app-only change).
-ARG ZEOLITE_COMMIT=8f51d867eaaba5c1928d01e23c2e3e79180f412c
+# Pin 59: Zeolite dist c406407 ships the refresh-spam follow-up hardening
+# (demo-page boot-reload guard, one reload per tab session then a visible
+# status; engine init() reports SW control honestly; the update notice
+# dedupes per sha even when storage is unavailable). sw.js unchanged
+# 473408e5d1abe91a; bootstrap.js b0624c71 -> 3c148a51; Cargo-side pin
+# stays deccb43 (app-only change).
+ARG ZEOLITE_COMMIT=c406407f00960d8909003d3fb0fa2a135bce6b0f
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -677,5 +683,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=473408e5d1abe91a ZEOLITE_BOOTSTRAP_SHA=b0624c71826306b8 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=473408e5d1abe91a ZEOLITE_BOOTSTRAP_SHA=3c148a515e56eca0 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
