@@ -796,6 +796,22 @@ export default function BrowserView(props: Props) {
     const t = setTimeout(() => setExtPanelMounted(false), 200);
     return () => clearTimeout(t);
   }, [extPanelOpen]);
+  /* #81 command palette decoupling: the palette lives in App, the
+     extensions panel and the toolbar pill live here. Window events
+     bridge the two without threading more props through Browser. */
+  useEffect(() => {
+    const onOpenExt = () => setExtPanelOpen(true);
+    const onFocusOmnibox = () => {
+      setTbExpanded(true);
+      window.setTimeout(() => urlInputRef.current?.focus(), 80);
+    };
+    window.addEventListener("lb-open-extensions", onOpenExt);
+    window.addEventListener("lb-focus-omnibox", onFocusOmnibox);
+    return () => {
+      window.removeEventListener("lb-open-extensions", onOpenExt);
+      window.removeEventListener("lb-focus-omnibox", onFocusOmnibox);
+    };
+  }, []);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
 
