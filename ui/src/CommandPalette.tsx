@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 export type Command = {
   id: string;
@@ -25,16 +25,24 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
+  /* Reset on every open. Escape is handled on window, not only on the
+     input: a focus steal (engine-update snackbar etc.) must not leave
+     a keyboard-trapped overlay. Focus itself is autoFocus on the
+     input, so first keystrokes cannot race a timeout. */
   useEffect(() => {
     if (!open) return;
     setQ("");
     setIdx(0);
     setPending(null);
-    const t = window.setTimeout(() => inputRef.current?.focus(), 30);
-    return () => window.clearTimeout(t);
-  }, [open]);
+    const onWin = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onWin);
+    return () => window.removeEventListener("keydown", onWin);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -89,7 +97,7 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
     >
       <div className="lb-cmdk" role="dialog" aria-label="Command palette">
         <input
-          ref={inputRef}
+          autoFocus={true}
           className="lb-cmdk-input"
           placeholder="Type a command..."
           value={q}
