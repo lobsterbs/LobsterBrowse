@@ -611,7 +611,13 @@ FROM debian:bookworm-slim AS zl-builder
 # (wisp-auth deployments: the wasm client cannot authenticate, so
 # every fetch rides the embedder relay). sw.js unchanged
 # (96d70fb9d7b90b14); Cargo-side pin stays deccb43 (data-only change).
-ARG ZEOLITE_COMMIT=f5b7327e89474182ced4a93e78328bdcda74b413
+# Pin 58: Zeolite dist 8f51d86 ships the #121 refresh-spam fix (the
+# bootstrap never auto-reloads proxied pages when a new engine
+# activates; it now logs a console note and re-dispatches a
+# zl:engineUpdate window CustomEvent for a manual reload affordance).
+# sw.js 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js
+# 03cd3476 -> b0624c71; Cargo-side pin stays deccb43 (app-only change).
+ARG ZEOLITE_COMMIT=8f51d867eaaba5c1928d01e23c2e3e79180f412c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -671,5 +677,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=96d70fb9d7b90b14 ZEOLITE_BOOTSTRAP_SHA=03cd3476b4117997 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=473408e5d1abe91a ZEOLITE_BOOTSTRAP_SHA=b0624c71826306b8 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
