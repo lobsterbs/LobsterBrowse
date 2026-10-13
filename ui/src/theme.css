@@ -99,6 +99,20 @@ body.lb-fancy m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
 }
+/* ASCII wordmark: the same frosted glass as the rail and search bar,
+   so the art stays readable over the animated gradient. Scoped to
+   the fancy setting; the plain background keeps the bare pre. */
+body.lb-fancy .lb-home pre.lb-ascii {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
+  border-radius: var(--m3e-shape-lg);
+}
 
 /* Settings */
 .lb-panel-header { cursor: pointer; }
