@@ -1130,13 +1130,20 @@ async fn build_endpoint() -> Response {
     // wisp-js backend service) is reported empty honestly when unset.
     let scramjet = {
         let v = std::env::var("SCRAMJET_VERSION").unwrap_or_default();
-        if v.is_empty() { "unknown".to_string() } else { v }
+        if v.is_empty() {
+            "unknown".to_string()
+        } else {
+            v
+        }
     };
     let sj_sha = match tokio::fs::read("sj/scramjet.js").await {
         Ok(bytes) => {
             use sha2::{Digest, Sha256};
             let hash = Sha256::digest(&bytes);
-            hash.iter().take(8).map(|b| format!("{b:02x}")).collect::<String>()
+            hash.iter()
+                .take(8)
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
         }
         Err(_) => "unknown".to_string(),
     };
@@ -1593,12 +1600,12 @@ async fn zl_sw_js() -> Response {
 /// needed; no-cache so bundle updates are picked up promptly.
 async fn sj_sw_js() -> Response {
     const SJ_SW: &str = concat!(
-        "importScripts(\\"/sj/controller.sw.js\\");\\n",
-        "addEventListener(\\"fetch\\", (e) => {\\n",
-        "  if ($scramjetController.shouldRoute(e)) {\\n",
-        "    e.respondWith($scramjetController.route(e));\\n",
-        "  }\\n",
-        "});\\n",
+        "importScripts(\"/sj/controller.sw.js\");\n",
+        "addEventListener(\"fetch\", (e) => {\n",
+        "  if ($scramjetController.shouldRoute(e)) {\n",
+        "    e.respondWith($scramjetController.route(e));\n",
+        "  }\n",
+        "});\n",
     );
     Response::builder()
         .status(StatusCode::OK)

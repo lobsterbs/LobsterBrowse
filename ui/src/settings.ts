@@ -6,7 +6,6 @@
    lb_sid, so deployment users no longer share a single jar. Stable per
    browser profile for normal browsing (cookies survive reloads), fresh
    and in-memory for each incognito window (its jar dies with the sid). */
-import { sjRouteUrl, sjDecodeRoute } from "./scramjet";
 
 const SID_KEY = "lobsterbrowse-sid";
 let incSid = "";
@@ -311,6 +310,15 @@ export function engineRoutePrefix(): string {
   return "/zl/";
 }
 
+/* ScramJet engine route prefix: the upstream controller route for
+   this session, pushed by sjInit (ui/src/scramjet.ts) once the
+   controller is up. "" until then, so routeUrl falls back to
+   the Zeolite route. Same pattern as the Zeolite runtime prefix. */
+let sjPrefix = "";
+export function setSjPrefix(prefix: string): void {
+  sjPrefix = prefix;
+}
+
 /* Build the navigation route for a target URL. Zeolite is the only
    engine: its service worker owns /zl/ routes and forwards the
    route's query string to the target, so no option params ride on
@@ -319,9 +327,8 @@ export function routeUrl(target: string): string {
   /* ScramJet engine: the controller route ("" until the engine
      initializes; the Zeolite route below then keeps the tab
      functional — its worker owns /zl/ either way). */
-  if (loadSettings().proxyEngine === "scramjet") {
-    const sj = sjRouteUrl(target);
-    if (sj) return sj;
+  if (loadSettings().proxyEngine === "scramjet" && sjPrefix) {
+    return sjPrefix + encodeURIComponent(target);
   }
   return engineRoutePrefix() + b64urlEncode(target);
 }
@@ -332,10 +339,25 @@ export function decodeRoute(pathname: string): string {
   /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
      prefixes are gone, so they decode to "" and the poll sync falls
      back to the caller tab URL. */
-  /* ScramJet routes (codec: encodeURIComponent) decode through the
-     scramjet module; "" for any other shape. */
-  const sjUrl = sjDecodeRoute(pathname);
-  if (sjUrl) return sjUrl;
+  /* ScramJet routes (codec: encodeURIComponent; the session id
+     segment between /sj/r/ and the encoded target is dropped). A
+     wrong shape falls through to the Zeolite decode below. */
+  if (pathname.startsWith("/sj/r/")) {
+    const tail = pathname.slice(6).split("?")[0].split("#")[0];
+    const rest = tail.slice(tail.indexOf("/") + 1);
+    try {
+      const url = decodeURIComponent(rest);
+      const ok = url.startsWith("https://") || url.startsWith("http://");
+      let clean = ok;
+      for (let i = 0; clean && i < url.length; i++) {
+        const c = url.charCodeAt(i);
+        if (c < 0x20 || c === 0x7f) clean = false;
+      }
+      if (clean) return url;
+    } catch {
+      /* fall through to the Zeolite shape below */
+    }
+  }
   let seg = "";
   if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";
