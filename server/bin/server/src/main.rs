@@ -335,7 +335,10 @@ mod persona {
     the persona constant exists to remove. */
     #[test]
     fn chrome_persona_emulation_ua_and_major_agree() {
-        assert_eq!(format!("{:?}", CHROME_EMULATION), format!("Chrome{}", CHROME_PERSONA_MAJOR));
+        assert_eq!(
+            format!("{:?}", CHROME_EMULATION),
+            format!("Chrome{}", CHROME_PERSONA_MAJOR)
+        );
         assert!(CHROME_PERSONA_UA.contains(&format!("Chrome/{}.0.0.0", CHROME_PERSONA_MAJOR)));
     }
 }
@@ -452,7 +455,11 @@ mod relay_wait {
         )
         .await;
         match res {
-            Err(msg) => assert!(msg.contains("no response headers within"), "diagnostic: {}", msg),
+            Err(msg) => assert!(
+                msg.contains("no response headers within"),
+                "diagnostic: {}",
+                msg
+            ),
             Ok(_) => panic!("a stalled upstream must not produce headers"),
         }
     }
