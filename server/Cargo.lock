@@ -2558,7 +2558,7 @@ dependencies = [
 [[package]]
 name = "wisp-core"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f239d1b7394fca08f2df46758dd88a1a9be8"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f2391f4584444346c006e6e45ee4de804641"
 dependencies = [
  "bytes",
  "thiserror 2.0.21",
@@ -2567,7 +2567,7 @@ dependencies = [
 [[package]]
 name = "wisp-extensions"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f239d1b7394fca08f2df46758dd88a1a9be8"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f2391f4584444346c006e6e45ee4de804641"
 dependencies = [
  "ed25519-dalek",
  "rand 0.8.8",
@@ -2692,7 +2692,7 @@ dependencies = [
 [[package]]
 name = "zeolite-server"
 version = "3.0.0"
-source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f239d1b7394fca08f2df46758dd88a1a9be8"
+source = "git+https://github.com/lobsterbs/Zeolite?rev=63b4f2391f4584444346c006e6e45ee4de804641#63b4f2391f4584444346c006e6e45ee4de804641"
 dependencies = [
  "axum",
  "bytes",
