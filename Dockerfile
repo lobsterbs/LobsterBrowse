@@ -657,7 +657,22 @@ FROM debian:bookworm-slim AS zl-builder
 # f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
 # 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
 # (app + wasm-side rewriter changes, no server crate change).
-ARG ZEOLITE_COMMIT=ad2e571c34ca790976effffa5749f77c3e028391
+# Pin 65: Zeolite dist 4cd98ad. Server crate moves to Zeolite
+# d8d6bed: wisp CONNECT now races allowed addresses (250ms stagger,
+# first success wins) instead of starving later IPs behind a
+# blackholed first address; DoH fallback (Quad9 NXDOMAIN/SERVFAIL
+# retried once through Cloudflare) so filtered domains no longer
+# look dead; wisp caps raised (streams/conn 24 -> 256, connections
+# 64 -> 256, per-IP fairness behind a trusted proxy) and the 1h
+# connection deadline drains live streams (60s grace) instead of
+# hard-killing them. App-side sw.js ships built Sec-Fetch /
+# Sec-CH-UA headers for first navigations (the #160 class),
+# conditional body replay (buffer only when a retry or relay can
+# actually happen), and mask accounting for #158/#159-class
+# rewritten script responses. sw.js 6fc87be1664e3954 ->
+# 4405ed7132900953; bootstrap.js 423b16b806b7f4cc unchanged;
+# Cargo-side pin deccb43 -> d8d6bed (zeolite-server changed).
+ARG ZEOLITE_COMMIT=4cd98ada9e38e0de33294544283ad1b2c78ef0d6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -717,5 +732,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6fc87be1664e3954 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4405ed7132900953 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
