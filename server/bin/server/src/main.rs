@@ -22,6 +22,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
+/* wreq replaces reqwest wholesale: same client API (hard fork),
+ * BoringSSL + Chrome TLS/HTTP2 emulation underneath. The alias keeps
+ * every reqwest:: path in this file meaningful. */
+use wreq as reqwest;
 
 struct AppState {
     /// Shared client for /suggest and /cert upstream lookups (SSRF-safe
@@ -303,6 +307,12 @@ impl reqwest::dns::Resolve for PolicyDns {
 /// own cookie jar.
 fn build_engine_client() -> reqwest::Client {
     reqwest::Client::builder()
+        // Chrome124 TLS/HTTP2 emulation: must be set before any later
+        // builder call that reads TLS/HTTP options (wreq applies the
+        // emulation over them). The upstream sees a browser-shaped
+        // ClientHello, h2 SETTINGS frame and header order instead of
+        // the rust/hyper fingerprint (Zeolite #149/#160 class).
+        .emulation(wreq_util::Emulation::Chrome124)
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .connect_timeout(std::time::Duration::from_secs(8))
         .timeout(std::time::Duration::from_secs(20))
@@ -326,6 +336,12 @@ fn build_engine_client() -> reqwest::Client {
 /// (#140 body-stall, navigation TTFB).
 fn build_relay_client() -> reqwest::Client {
     reqwest::Client::builder()
+        // Chrome124 TLS/HTTP2 emulation, the same profile the engine
+        // client uses: the relay exists precisely because some hosts
+        // fingerprint-block the wasm transports, so the embedder hop
+        // must look like a real browser at the TLS and h2 layers too,
+        // not only in headers.
+        .emulation(wreq_util::Emulation::Chrome124)
         .connect_timeout(std::time::Duration::from_secs(8))
         .read_timeout(std::time::Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
@@ -500,7 +516,7 @@ async fn zl_relay_endpoint(
             }
         }
     }
-    /* The relay client negotiates real content encoding: reqwest
+    /* The relay client negotiates real content encoding: wreq
     advertises gzip/br/zstd/deflate and transparently decodes the
     answer, so the SW still receives identity bytes while the
     upstream request carries a browser-shaped Accept-Encoding
@@ -518,7 +534,7 @@ async fn zl_relay_endpoint(
     let upstream = match out.send().await {
         Ok(r) => r,
         Err(e) => {
-            /* The reqwest Display alone says only "error sending request";
+            /* The wreq Display alone says only "error sending request";
             the source chain says WHY (connect timeout, reset by peer,
             TLS failure). LB #75 needs that distinction on the wire. */
             let mut chain = e.to_string();
