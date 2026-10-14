@@ -12,7 +12,7 @@ FROM rust:1-slim AS builder
 # bindgen needs libclang at build time (the runtime feature loads the
 # system libclang, it is not linked into the binary).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config libclang-dev \
+ && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config libclang-dev git \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY server/ ./
