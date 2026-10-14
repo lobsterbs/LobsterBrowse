@@ -376,11 +376,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Background</div>
           <m3e-list>
-            <Row label="Enhanced UI (animated background)" icon="gradient" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+            <Row label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
-            Replaces the Home page's plain background with an animated WebGL gradient (gradflow).
-            More resource intensive: the GPU renders it every frame. Off keeps the plain flat background.
+            Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
+            Off keeps the plain flat background.
           </p>
         </div>
       </Panel>
