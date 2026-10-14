@@ -7,7 +7,11 @@
 # by updating both the ARG and the zeolite-server rev in
 # server/bin/server/Cargo.toml (and the committed server/Cargo.lock via
 # the generate-rust-lockfile workflow), then clear the Render build cache.
-FROM rust:1-slim AS builder
+# Builder base is pinned to bookworm: the runtime stage is
+# debian:bookworm-slim (glibc 2.36) and the rolling rust:1-slim tag
+# moved to a newer Debian, producing a binary that needs GLIBC_2.38
+# and dies at instance start ("version GLIBC_2.38 not found").
+FROM rust:1-slim-bookworm AS builder
 # wreq links BoringSSL (btls-sys): cmake + g++ + perl build it and
 # bindgen needs libclang at build time (the runtime feature loads the
 # system libclang, it is not linked into the binary).
