@@ -8,6 +8,12 @@
 # server/bin/server/Cargo.toml (and the committed server/Cargo.lock via
 # the generate-rust-lockfile workflow), then clear the Render build cache.
 FROM rust:1-slim AS builder
+# wreq links BoringSSL (btls-sys): cmake + g++ + perl build it and
+# bindgen needs libclang at build time (the runtime feature loads the
+# system libclang, it is not linked into the binary).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config libclang-dev \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY server/ ./
 RUN cargo build --release --locked -p lobster-server
@@ -688,7 +694,21 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
 # 47b8f5b (app-only change; 037e0d1 additionally makes the
 # connect-race test DNS override parallel-safe).
-ARG ZEOLITE_COMMIT=a78c6c831541d3035ce82f7edaa73e16d79d0709
+# Pin 67: Zeolite dist 350cb06. Three engine fixes: the GREASE brand
+# and the brand-list order of Sec-CH-UA now derive from the Chromium
+# major (a fixed "Not_A Brand";v="8" in a fixed order is a list no real
+# Chrome of that major ever sends; verified against chromium
+# user_agent_utils.cc), chPlatform maps iPhone/iPad UAs to iOS instead
+# of macOS, and routed <script src> values keep their destination's
+# filename as a fragment so CMPs that locate their stub tag by substring
+# on the original src (OneTrust script[src*=...] class, #161) find it
+# again; the fetch target is unchanged (fragments strip before the
+# request). sw.js c364479519b6e1ab -> 9c99fc3a2fef7157; bootstrap.js
+# 423b16b806b7f4cc unchanged; Cargo-side pin stays 47b8f5b (the dns.rs
+# change is test-only). Deployed together with the relay's wreq swap:
+# reqwest/rustls -> wreq/boringssl with Chrome124 TLS/h2 emulation, the
+# Zeolite #149/#160 fingerprint class.
+ARG ZEOLITE_COMMIT=350cb06f9883741dfbd07575c7c914a553af4dea
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -748,5 +768,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c364479519b6e1ab ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9c99fc3a2fef7157 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
