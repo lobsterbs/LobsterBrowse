@@ -341,8 +341,8 @@ mod persona {
             .nth(1)
             .and_then(|rest| rest.split('.').next())
             .unwrap_or("");
-        let emulation_major = format!("{:?}", CHROME_EMULATION).trim_start_matches("Chrome");
-        assert_eq!(ua_major, emulation_major);
+        let emulation = format!("{:?}", CHROME_EMULATION);
+        assert_eq!(ua_major, emulation.trim_start_matches("Chrome"));
     }
 }
 
