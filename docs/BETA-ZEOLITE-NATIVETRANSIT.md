@@ -762,3 +762,47 @@ main with a -s ours merge (c3d016d) - main already carried every beta
 content change, so the merge records beta's history without touching
 main's tree (empty diff verified). Main and beta move in lockstep
 again; CI green on c3d016d (run 38211505940). LB #74 closed.
+
+
+## Pin 69 (2026-10-14): Chrome 149 persona, relay first-byte wait, 307/308 body replay
+
+Zeolite dist e26dc50 (sw e575b078e13e2193, bootstrap 423b16b806b7f4cc
+unchanged), Zeolite main 63b4f23.
+
+Engine fixes (Zeolite app): 307/308 redirects replay the buffered
+body on every hop - the redirect hop loop buffers a stream body once
+with replayableInit before it starts, and the break conditions now
+fire only when the body is still a ReadableStream (announced
+Content-Length over the 32 MiB cap), so a capped body still surfaces
+the redirect instead of hanging the submission. Cross-origin 307/308
+hops drop Authorization, per the fetch spec. The navigation deadline
+now aborts the upstream fetch (an AbortController threaded through
+withDeadline and upstreamFetch) instead of only rejecting the promise
+while the fetch keeps running.
+
+Chrome 149 persona: the Zeolite DEFAULT_PROFILE UA and client hints
+and the LB server clients (engine, relay, ct_fetch) all name Chrome
+149, from one constant set (CHROME_PERSONA_MAJOR,
+CHROME_EMULATION = wreq-util Emulation::Chrome149, CHROME_PERSONA_UA)
+with a drift test pinning the emulation variant, the UA major and the
+constant together. ui UA presets bumped 124 to 149.
+Sec-Fetch-Storage-Access (Chrome 133+) is synthesized when the
+persona major, credentials mode and sec-fetch-site call for it. This
+removes a known mismatch (an April 2024 browser identity on a 2026
+wire); it is not expected to change the egress-IP-class rejections
+(LB #75, #76).
+
+Relay deadline race: the relay waits at most RELAY_HEADER_WAIT = 20s
+for response headers, shorter than the engine's 30s navigation
+deadline, so the relay's diagnostic 502 with the reqwest source chain
+reaches the page before the service worker's generic deadline error;
+a healthy streamed body never pays the wait (send() resolves at the
+first header and the 30s idle read timeout still bounds a stalled
+one). A stall test pins it.
+
+Process notes: the hand-edited Cargo.lock zeolite source lines
+carried a stale git fragment (new rev, old fragment tail) and the
+Generate server lockfile workflow normalized it (acadf48 main /
+7a10629 beta). A rustfmt follow-up (644e504 main / a94c50d beta)
+split the two test asserts the report commits had pre-collapsed;
+fmt --check had failed the first CI attempt on both branches.
