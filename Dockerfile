@@ -642,7 +642,22 @@ FROM debian:bookworm-slim AS zl-builder
 # graphs fail cleanly). sw.js 2a70658ddf60e57a -> f006bbd75da0a643;
 # bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
 # deccb43 (app-only change).
-ARG ZEOLITE_COMMIT=d981283b2bcfd2235c44a518bb03cb7be508d513
+# Pin 64: Zeolite dist ad2e571 ships two engine fixes. First,
+# the POST stream-body fix (#155/#159/#164/#166 class): every
+# request body is buffered once at the upstreamFetch choke point
+# (32MiB cap, honest overflow), so POSTs ride the embedder relay
+# and survive the wisp connect-class retry instead of dying as a
+# disturbed ReadableStream - the "shell renders, API 502" pattern
+# on youtube innertube, chatgpt, deepseek, twitch Apollo,
+# sketchfab and three.js. Second, the wasm rewriter never mints
+# routes for www.w3.org namespace-identity URI literals (#153):
+# createElementNS keeps the identity namespace, so the excalidraw
+# provider cascade and delta setAttributeNS NamespaceError go
+# away; the wasm is rebuilt with the guard. sw.js
+# f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
+# 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
+# (app + wasm-side rewriter changes, no server crate change).
+ARG ZEOLITE_COMMIT=ad2e571c34ca790976effffa5749f77c3e028391
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -702,5 +717,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f006bbd75da0a643 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6fc87be1664e3954 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
