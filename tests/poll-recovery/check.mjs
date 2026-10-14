@@ -29,6 +29,9 @@ const cases = [
   /* #55: the opaque initial-navigation handle route must sync (no-op
      decode), never "recover" into a reload loop. */
   ["http:", "/__zl_navh__/Ae4YgFO-token", "https://example.com/", "sync"],
+  /* ScramJet engine routes sync and decode through the controller
+     codec (the controller and frame id segments are dropped). */
+  ["http:", "/sj/r/ctrl1/fr1/https%3A%2F%2Fexample.com%2F", "https://example.com/", "sync"],
   /* App-shell routes and the root wait for the engine to move on. */
   ["http:", "/", "https://example.com/", "wait"],
   ["http:", "/zlsw/sw.js", "https://example.com/", "wait"],
@@ -57,6 +60,12 @@ for (const [protocol, path, tabUrl, want] of cases) {
 /* #58: decodeRoute must fail closed on keyed route tails
    instead of returning binary garbage the poll sync re-navigates to. */
 assert.equal(decodeRoute("/zl/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "https://example.com/");
+/* ScramJet route decode drops the controller and frame id
+   segments; a bare prefix tail or a one-segment legacy shape fails
+   closed like the keyed Zeolite tails. */
+assert.equal(decodeRoute("/sj/r/ctrl1/fr1/https%3A%2F%2Fexample.com%2F"), "https://example.com/");
+assert.equal(decodeRoute("/sj/r/ctrl1/https%3A%2F%2Fexample.com%2F"), "");
+assert.equal(decodeRoute("/sj/r/"), "");
 /* #67: the legacy prefixes are gone and must decode to "". */
 assert.equal(decodeRoute("/r/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "");
 assert.equal(decodeRoute("/lj/aHR0cHM6Ly9leGFtcGxlLmNvbS8"), "");

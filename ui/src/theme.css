@@ -25,38 +25,6 @@ body {
 
 h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
 
-/* Top bar is the real m3e-app-bar. Its internal .base paints the
-   container token over the host, which left a solid detached bar.
-   Make the container transparent (no elevation, no background) so
-   the bar blends into the page like the rest of the chrome. */
-m3e-app-bar {
-  --m3e-app-bar-container-color: transparent;
-  --m3e-app-bar-container-elevation: none;
-  --m3e-app-bar-title-text-color: var(--md-sys-color-primary);
-  background: transparent !important;
-  color: var(--md-sys-color-on-surface);
-}
-/* The title is light DOM, so coloring the span directly always wins
-   over whatever the component's internal styles do with the token. */
-.lb-app-title {
-  color: var(--md-sys-color-primary);
-  font-variation-settings: "wght" 600;
-}
-
-/* Preview build badge on the app title. */
-.lb-preview-badge {
-  display: inline-block;
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
-  margin-left: var(--md-sys-measurement-space125, 10px);
-  vertical-align: middle;
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  color: var(--md-sys-color-on-primary-container, #4f378b);
-  background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
-}
 
 /* Smooth nav rail: items glide on state changes. The host width is
    owned by the component itself - overriding it (or clipping with
@@ -76,7 +44,12 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   padding: var(--md-sys-measurement-space300) var(--md-sys-measurement-space300) var(--md-sys-measurement-space600);
   display: flex;
   flex-direction: column;
+  /* safe center: plain center clips overflow upward, which left the
+     Settings page opening at its middle cards with everything above
+     unreachable; safe center keeps the centering and falls back to
+     start-aligned scrolling when the content overflows. */
   justify-content: center;
+  justify-content: safe center;
   overflow-y: auto;
   transition: padding var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
 }
@@ -97,6 +70,49 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
+/* Enhanced UI (gradflow): portaled to <body> by Home, so the fixed
+   layer can never be trapped or resized by a view ancestor. Negative
+   z-index covers the plain body background yet stays under the app.
+   The canvas is forced to fill the layer; gradflow sizes its drawing
+   buffer from these client dimensions. */
+.lb-gradflow-bg { position: fixed; inset: 0; z-index: -1; background: var(--md-sys-color-surface); }
+.lb-gradflow-bg canvas { display: block; width: 100%; height: 100%; }
+/* Frosted glass under Enhanced UI: the Home search bar and the nav
+   rail get a translucent surface tint plus backdrop blur, so their
+   contents stay readable over the animated gradient. Scoped to the
+   body class App toggles with the setting; off = untouched chrome. */
+body.lb-fancy .lb-home m3e-search-bar {
+  --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
+  /* Pill-clip the host: backdrop-filter blurs the whole host
+     rectangle, and the fully rounded bar leaves blurred corner
+     squares outside the pill. Matching corner radius clips the
+     blurred backdrop to the pill shape. */
+  border-radius: 9999px;
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+/* Suggestion dropdown: same frosted treatment as the search bar. */
+body.lb-fancy .lb-ac {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+body.lb-fancy m3e-nav-rail {
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+/* ASCII wordmark: the same frosted glass as the rail and search bar,
+   so the art stays readable over the animated gradient. Scoped to
+   the fancy setting; the plain background keeps the bare pre. */
+body.lb-fancy .lb-home pre.lb-ascii {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
+  border-radius: var(--m3e-shape-lg);
+}
 
 /* Settings */
 .lb-panel-header { cursor: pointer; }
@@ -211,7 +227,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    keep their size on hover: the M3E icon's expressive hover bounce
    is pinned at the host so a hover cannot expand a row past the
    card, and the hover tint eases instead of snapping. */
-.lb-ac-item { overflow: hidden; transition: background-color 120ms ease; }
+.lb-ac-item { overflow: hidden; transition: background-color var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease); }
 .lb-ac-item m3e-icon { flex: 0 0 auto; }
 .lb-ac-item:hover m3e-icon,
 .lb-ac-item m3e-icon {
@@ -422,7 +438,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width 260ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tb-pill.expanded { width: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
@@ -582,7 +598,6 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
 .lb-net-status.lb-ok { color: #1e8e3e; }
 .lb-net-status.lb-bad { color: var(--md-sys-color-error); }
-.lb-net-status.lb-paused { color: var(--md-sys-color-tertiary); }
 .lb-net-method { flex-shrink: 0; opacity: 0.6; }
 .lb-net-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-net-dur { margin-left: auto; opacity: 0.5; flex-shrink: 0; }
@@ -1249,4 +1264,80 @@ m3e-snackbar {
   .lb-devtools.lb-devtools-out,
   .lb-ext-panel.lb-out,
   .lb-dl-card.lb-out { animation: none; }
+}
+
+
+/* ---- #81 command palette (Ctrl+K): plain-div overlay styled
+   against M3E tokens; motion respects the reduced-motion block
+   at the end of the file. ---- */
+.lb-cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: color-mix(in srgb, var(--md-sys-color-scrim, #000) 40%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--md-sys-measurement-space900, 72px);
+}
+.lb-cmdk {
+  width: min(520px, calc(100% - var(--md-sys-measurement-space400, 32px)));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--md-sys-color-surface-container-high, #2b2b2f);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  box-shadow: 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: lb-cmdk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
+}
+@keyframes lb-cmdk-in {
+  from { opacity: 0; transform: translateY(var(--md-sys-measurement-space100, 8px)); }
+}
+.lb-cmdk-input {
+  margin: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  font-family: inherit;
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  background: var(--md-sys-color-surface-container-highest, #37393e);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border: none;
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  outline: none;
+}
+.lb-cmdk-input:focus { box-shadow: 0 0 0 1px var(--md-sys-color-primary, #a8c7fa); }
+.lb-cmdk-list {
+  overflow-y: auto;
+  padding: 0 var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px);
+}
+.lb-cmdk-group {
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  font-weight: var(--md-sys-typescale-label-large-font-weight, 500);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  margin-top: var(--md-sys-measurement-space100, 8px);
+}
+.lb-cmdk-item {
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  padding: var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space200, 16px);
+  border-radius: var(--md-sys-shape-corner-large, 16px);
+  cursor: pointer;
+}
+.lb-cmdk-item.selected {
+  background: var(--md-sys-color-primary, #a8c7fa);
+  color: var(--md-sys-color-on-primary, #381e72);
+}
+.lb-cmdk-empty {
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space200, 16px);
+}
+.lb-cmdk-hint {
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  color: var(--md-sys-color-on-surface-variant, #c4c6d0);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space150, 12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-cmdk { animation: none; }
 }

@@ -183,6 +183,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   const [build, setBuild] = useState<{
     lb: string;
     zeolite: string;
+    scramjet: string;
     build: string;
     buildShort: string;
   } | null>(null);
@@ -201,6 +202,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           ok: boolean;
           lb?: string;
           zeolite?: string;
+          scramjet?: string;
           zlswSha?: string;
           build?: string;
           buildShort?: string;
@@ -212,6 +214,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           setBuild({
             lb: String(d.lb),
             zeolite: String(d.zeolite ?? "unknown"),
+            scramjet: String(d.scramjet ?? "unknown"),
             build: String(d.build ?? "unknown"),
             buildShort: String(d.buildShort ?? "unknown"),
           });
@@ -369,6 +372,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             </m3e-chip-set>
           </div>
         </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Background</div>
+          <m3e-list>
+            <Row label="Enhanced UI (animated background)" icon="gradient" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+          </m3e-list>
+          <p className="lb-muted" style={{ fontSize: 12 }}>
+            Replaces the Home page's plain background with an animated WebGL gradient (gradflow).
+            More resource intensive: the GPU renders it every frame. Off keeps the plain flat background.
+          </p>
+        </div>
       </Panel>
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
@@ -387,6 +401,23 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Proxy engine</div>
+          <div className="lb-seg-wrap">
+          <m3e-segmented-button aria-label="Proxy engine">
+            <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
+              Zeolite (default)
+            </m3e-button-segment>
+            <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+              ScramJet
+            </m3e-button-segment>
+          </m3e-segmented-button>
+          </div>
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only. Applied on the next navigation.
+          </p>
+        </div>
+        <m3e-divider />
         <div className="lb-setting-group">
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
@@ -481,6 +512,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
           <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
+          <span className="lb-build-chip"><span className="lb-build-name">ScramJet</span><span className="lb-build-val">{build ? build.scramjet : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>
         {buildError && (

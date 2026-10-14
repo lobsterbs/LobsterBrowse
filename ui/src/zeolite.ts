@@ -166,25 +166,6 @@ export async function zlNavHandle(dest: string, timeoutMs = 5000): Promise<strin
   return r && r.ok === true && typeof r.url === "string" ? r.url : null;
 }
 
-/* Zeolite #121: the engine's worker broadcasts zl:engineUpdate once
-   a newer version activates (its own update poll found it). Proxied
-   pages reload themselves once per engine sha (the engine's bootstrap
-   listener); LB's own window is in the same scope, so surface the
-   alert here: the operator sees why every tab just reloaded. */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (ev: MessageEvent) => {
-    const d = ev.data as { type?: string; sha?: string | null; version?: string } | null;
-    if (d && d.type === "zl:engineUpdate") {
-      console.info(
-        "[lb] Zeolite engine updated" +
-          (typeof d.sha === "string" ? " (zlswSha " + d.sha + ")" : "") +
-          (typeof d.version === "string" ? " " + d.version : "") +
-          "; proxied pages reload once",
-      );
-    }
-  });
-}
-
 /* Zeolite #137 embedder fetch relay. The engine asks the embedder
    origin to fetch for hosts whose wasm TLS ClientHello is
    fingerprint-blocked (policy route "relay"); this server route
