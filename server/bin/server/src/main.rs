@@ -322,8 +322,9 @@ fn chrome_default_headers() -> reqwest::header::HeaderMap {
 /// issue 4): the wreq emulation profile, the User-Agent, and the
 /// engine-side fingerprint data must all name the same Chrome major,
 /// because the mismatch itself is a bot-scoring tell. Chrome149 is
-/// the newest profile in the locked wreq-util 0.2.0.
-const CHROME_PERSONA_MAJOR: u64 = 149;
+/// the newest profile in the locked wreq-util 0.2.0. The drift test
+/// in mod persona pins the emulation variant and the UA major
+/// together (a persona bump is the two constant lines).
 const CHROME_EMULATION: wreq_util::Profile = wreq_util::Emulation::Chrome149;
 const CHROME_PERSONA_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
 
@@ -335,11 +336,13 @@ mod persona {
     the persona constant exists to remove. */
     #[test]
     fn chrome_persona_emulation_ua_and_major_agree() {
-        assert_eq!(
-            format!("{:?}", CHROME_EMULATION),
-            format!("Chrome{}", CHROME_PERSONA_MAJOR)
-        );
-        assert!(CHROME_PERSONA_UA.contains(&format!("Chrome/{}.0.0.0", CHROME_PERSONA_MAJOR)));
+        let ua_major = CHROME_PERSONA_UA
+            .split("Chrome/")
+            .nth(1)
+            .and_then(|rest| rest.split('.').next())
+            .unwrap_or("");
+        let emulation_major = format!("{:?}", CHROME_EMULATION).trim_start_matches("Chrome");
+        assert_eq!(ua_major, emulation_major);
     }
 }
 
