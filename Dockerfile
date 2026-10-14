@@ -712,7 +712,20 @@ FROM debian:bookworm-slim AS zl-builder
 # change is test-only). Deployed together with the relay's wreq swap:
 # reqwest/rustls -> wreq/boringssl with Chrome124 TLS/h2 emulation, the
 # Zeolite #149/#160 fingerprint class.
-ARG ZEOLITE_COMMIT=350cb06f9883741dfbd07575c7c914a553af4dea
+# Pin 68: Zeolite dist 2947881. Typed navigations now carry the exact
+# header set a real Chrome sends instead of the physical iframe's
+# facts: sec-fetch-dest document with site none and sec-fetch-user ?1
+# (dest iframe + site none + user ?1 is a combo no real Chrome emits,
+# a #160-class WAF tell), initiated frame navs keep their dest but
+# drop sec-fetch-user, the navigation Accept matches the claimed UA
+# major (Chrome 124 does not advertise image/jxl, which arrived with
+# Chrome 155's JPEG XL ship; the forwarded accept did), Accept-Language
+# gains Chrome's q-value shape (en-US,en;q=0.9, not a bare join), and
+# Sec-Fetch-Storage-Access (a Chrome 133+ header, after the persona's
+# major) is neither synthesized nor forwarded. sw.js
+# 9c99fc3a2fef7157 -> f3dfdb76467266c2; bootstrap.js 423b16b806b7f4cc
+# unchanged; Cargo-side pin stays 47b8f5b.
+ARG ZEOLITE_COMMIT=294788137c251afca6ce090c70e539f17f03b0c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -772,5 +785,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9c99fc3a2fef7157 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f3dfdb76467266c2 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
