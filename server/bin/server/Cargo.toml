@@ -16,6 +16,12 @@ axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream", "gzip", "brotli", "zstd", "deflate"] }
+# wreq: reqwest hard fork with BoringSSL and per-browser TLS/HTTP2
+# emulation (Zeolite #149/#160 class: bot-management zones read the
+# rustls ClientHello as non-browser and edge-403 relayed requests).
+# Chrome124 matches the UA profile the relay forwards. No openssl-sys
+# anywhere in this tree, so the boring symbols need no prefixing.
+wreq = { version = "0.16", features = ["cookies", "stream", "gzip", "brotli", "zstd", "deflate"] }
+wreq-util = "0.2"
 serde_json = "1"
 sha2 = { workspace = true }
