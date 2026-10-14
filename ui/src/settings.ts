@@ -72,7 +72,7 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
   "server-default": { name: "Server default", ua: "" },
   "chrome-win": {
     name: "Chrome (Windows)",
-    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
   },
   "firefox-linux": {
     name: "Firefox (Linux)",
@@ -84,11 +84,11 @@ export const UA_PRESETS: Record<Exclude<UaPresetId, "custom">, { name: string; u
   },
   "edge-win": {
     name: "Edge (Windows)",
-    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0",
   },
   "chrome-android": {
     name: "Chrome (Android)",
-    ua: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    ua: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
   },
   "safari-ios": {
     name: "Safari (iPhone)",
