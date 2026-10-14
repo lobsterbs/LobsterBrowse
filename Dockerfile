@@ -633,7 +633,16 @@ FROM debian:bookworm-slim AS zl-builder
 # into navguard). sw.js 2b92b02d0deddd5e -> 2a70658ddf60e57a;
 # bootstrap.js 89314e254ca65dcd -> 423b16b806b7f4cc; Cargo-side
 # pin stays deccb43 (app-only change).
-ARG ZEOLITE_COMMIT=8c54bd1ff26beab310a72cd33cddea1df2be20d5
+# Pin 62: Zeolite dist d981283 extends pin 61 with the content-type
+# honesty guard: a script or worker destination never receives an
+# HTML or CSS body, whatever the upstream status (SPA catch-alls
+# answer missing module paths with a 200 HTML document, claude
+# answers a mangled specifier with CSS; both the fresh path and
+# the cache hit serve a JS-typed comment instead, so module
+# graphs fail cleanly). sw.js 2a70658ddf60e57a -> f006bbd75da0a643;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# deccb43 (app-only change).
+ARG ZEOLITE_COMMIT=d981283b2bcfd2235c44a518bb03cb7be508d513
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -693,5 +702,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2a70658ddf60e57a ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f006bbd75da0a643 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
