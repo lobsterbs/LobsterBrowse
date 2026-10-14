@@ -657,7 +657,7 @@ FROM debian:bookworm-slim AS zl-builder
 # f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
 # 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
 # (app + wasm-side rewriter changes, no server crate change).
-# Pin 65: Zeolite dist 4cd98ad. Server crate moves to Zeolite
+# Pin 65: Zeolite dist a9fb63e. Server crate moves to Zeolite
 # d8d6bed: wisp CONNECT now races allowed addresses (250ms stagger,
 # first success wins) instead of starving later IPs behind a
 # blackholed first address; DoH fallback (Quad9 NXDOMAIN/SERVFAIL
@@ -671,8 +671,11 @@ FROM debian:bookworm-slim AS zl-builder
 # actually happen), and mask accounting for #158/#159-class
 # rewritten script responses. sw.js 6fc87be1664e3954 ->
 # 4405ed7132900953; bootstrap.js 423b16b806b7f4cc unchanged;
-# Cargo-side pin deccb43 -> d8d6bed (zeolite-server changed).
-ARG ZEOLITE_COMMIT=4cd98ada9e38e0de33294544283ad1b2c78ef0d6
+# Cargo-side pin deccb43 -> 47b8f5b (zeolite-server changed; 47b8f5b
+# additionally gives dns::LookupError the std::error::Error impl the
+# server-side reqwest DNS resolver needs, caught by the first pin-65
+# deploy build).
+ARG ZEOLITE_COMMIT=a9fb63e1cfdb3dd9b2458bce02f78335e3980f8a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
