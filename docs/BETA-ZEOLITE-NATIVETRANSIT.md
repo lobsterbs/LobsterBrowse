@@ -782,10 +782,10 @@ while the fetch keeps running.
 
 Chrome 149 persona: the Zeolite DEFAULT_PROFILE UA and client hints
 and the LB server clients (engine, relay, ct_fetch) all name Chrome
-149, from one constant set (CHROME_PERSONA_MAJOR,
-CHROME_EMULATION = wreq-util Emulation::Chrome149, CHROME_PERSONA_UA)
-with a drift test pinning the emulation variant, the UA major and the
-constant together. ui UA presets bumped 124 to 149.
+149, from one constant set (CHROME_EMULATION = wreq-util
+Emulation::Chrome149, CHROME_PERSONA_UA) with a drift test pinning
+the emulation variant and the UA major together. ui UA presets
+bumped 124 to 149.
 Sec-Fetch-Storage-Access (Chrome 133+) is synthesized when the
 persona major, credentials mode and sec-fetch-site call for it. This
 removes a known mismatch (an April 2024 browser identity on a 2026
@@ -806,3 +806,8 @@ Generate server lockfile workflow normalized it (acadf48 main /
 7a10629 beta). A rustfmt follow-up (644e504 main / a94c50d beta)
 split the two test asserts the report commits had pre-collapsed;
 fmt --check had failed the first CI attempt on both branches.
+
+A clippy follow-up dropped the CHROME_PERSONA_MAJOR const (only the
+drift test read it, dead under -D warnings in non-test builds) and
+reworked the test to parse the UA major and compare it with the
+emulation variant's Debug name.
