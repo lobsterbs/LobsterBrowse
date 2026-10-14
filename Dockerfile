@@ -657,7 +657,38 @@ FROM debian:bookworm-slim AS zl-builder
 # f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
 # 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
 # (app + wasm-side rewriter changes, no server crate change).
-ARG ZEOLITE_COMMIT=ad2e571c34ca790976effffa5749f77c3e028391
+# Pin 65: Zeolite dist a9fb63e. Server crate moves to Zeolite
+# d8d6bed: wisp CONNECT now races allowed addresses (250ms stagger,
+# first success wins) instead of starving later IPs behind a
+# blackholed first address; DoH fallback (Quad9 NXDOMAIN/SERVFAIL
+# retried once through Cloudflare) so filtered domains no longer
+# look dead; wisp caps raised (streams/conn 24 -> 256, connections
+# 64 -> 256, per-IP fairness behind a trusted proxy) and the 1h
+# connection deadline drains live streams (60s grace) instead of
+# hard-killing them. App-side sw.js ships built Sec-Fetch /
+# Sec-CH-UA headers for first navigations (the #160 class),
+# conditional body replay (buffer only when a retry or relay can
+# actually happen), and mask accounting for #158/#159-class
+# rewritten script responses. sw.js 6fc87be1664e3954 ->
+# 4405ed7132900953; bootstrap.js 423b16b806b7f4cc unchanged;
+# Cargo-side pin deccb43 -> 47b8f5b (zeolite-server changed; 47b8f5b
+# additionally gives dns::LookupError the std::error::Error impl the
+# server-side reqwest DNS resolver needs, caught by the first pin-65
+# deploy build).
+# Pin 66: Zeolite dist a78c6c8. The SW never forwards proxy-injected
+# hop headers upstream anymore: the reverse proxy in front of the SW
+# origin adds x-forwarded-for/-proto/-host/-port to every inbound
+# engine request and the generic header copy sent them along - a
+# proxy tell no real browser sends, and the plausible trigger behind
+# Cloudflare edge 403 "Bad request" rejections of the relayed
+# document on strict WAF zones (Zeolite #160, live echo evidence:
+# postman-echo through the engine showed x-forwarded-proto riding
+# the upstream request). The LB relay allowlist also denies them
+# server-side now. sw.js 4405ed7132900953 -> c364479519b6e1ab;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# 47b8f5b (app-only change; 037e0d1 additionally makes the
+# connect-race test DNS override parallel-safe).
+ARG ZEOLITE_COMMIT=a78c6c831541d3035ce82f7edaa73e16d79d0709
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -717,5 +748,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6fc87be1664e3954 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c364479519b6e1ab ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
