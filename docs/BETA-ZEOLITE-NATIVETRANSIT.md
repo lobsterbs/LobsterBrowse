@@ -571,7 +571,7 @@ the DevTools engine tools row (tracing toggle, session recording,
 Eruda inject, engine devtools link).
 
 - CI green on all three heads: Zeolite main f760fd0 (lazy images
-  7dc5d8a plus CI-gate and docs commits), LB main a0e848e, LB
+  7dc5a8a plus CI-gate and docs commits), LB main a0e848e, LB
   beta/zeolite-nativetransit d1e32b3. Deployed: main 81cec40,
   beta d1e32b3, both answering zlswSha 21dc6e6c66ea23bd on /build.
 - Real-browser verification (Chromium via Playwright) repeated
@@ -811,3 +811,5 @@ A clippy follow-up dropped the CHROME_PERSONA_MAJOR const (only the
 drift test read it, dead under -D warnings in non-test builds) and
 reworked the test to parse the UA major and compare it with the
 emulation variant's Debug name.
+
+Pin 69 deploy verified live 2026-10-14T22:36:08Z
