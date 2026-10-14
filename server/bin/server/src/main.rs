@@ -302,6 +302,22 @@ impl reqwest::dns::Resolve for PolicyDns {
     }
 }
 
+/// Chrome's codec list, verbatim: the Accept-Encoding a real browser
+/// advertises on every request. wreq's feature-derived default
+/// ("gzip, br") is a client-library tell no Chrome emits (the engine
+/// path's postman-echo probe showed it riding every relayed request),
+/// so both upstream clients pin the real list; the enabled
+/// gzip/deflate/brotli/zstd features still decode whatever upstream
+/// sends back.
+fn chrome_default_headers() -> reqwest::header::HeaderMap {
+    let mut h = reqwest::header::HeaderMap::new();
+    h.insert(
+        reqwest::header::ACCEPT_ENCODING,
+        reqwest::header::HeaderValue::from_static("gzip, deflate, br, zstd"),
+    );
+    h
+}
+
 /// Shared lookup client: manual redirects (reqwest never follows a
 /// 3xx on its own), the PolicyDns SSRF guard at connect time, and its
 /// own cookie jar.
@@ -314,6 +330,7 @@ fn build_engine_client() -> reqwest::Client {
         // the rust/hyper fingerprint (Zeolite #149/#160 class).
         .emulation(wreq_util::Emulation::Chrome124)
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .default_headers(chrome_default_headers())
         .connect_timeout(std::time::Duration::from_secs(8))
         .timeout(std::time::Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
@@ -342,6 +359,7 @@ fn build_relay_client() -> reqwest::Client {
         // must look like a real browser at the TLS and h2 layers too,
         // not only in headers.
         .emulation(wreq_util::Emulation::Chrome124)
+        .default_headers(chrome_default_headers())
         .connect_timeout(std::time::Duration::from_secs(8))
         .read_timeout(std::time::Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
