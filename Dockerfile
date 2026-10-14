@@ -624,7 +624,16 @@ FROM debian:bookworm-slim AS zl-builder
 # navRel/relRoute exclusion list dedupes into navExcluded). sw.js
 # 473408e5d1abe91a -> 2b92b02d0deddd5e; bootstrap.js 3c148a51 ->
 # 89314e254ca65dcd; Cargo-side pin stays deccb43 (app-only change).
-ARG ZEOLITE_COMMIT=8e74ce790e401d27ed3fe1b342e421d10b7a8990
+# Pin 61: Zeolite dist 8c54bd1 ships the #157/#159 own-origin
+# re-anchor (absolute engine-origin inputs re-anchor to their
+# path and re-emit through the parent route, both at the emit
+# seam and at the shared decode; script and worker destinations
+# get a JS-typed body on upstream error statuses instead of an
+# HTML error page; tokenShaped and the rel-route factory dedupe
+# into navguard). sw.js 2b92b02d0deddd5e -> 2a70658ddf60e57a;
+# bootstrap.js 89314e254ca65dcd -> 423b16b806b7f4cc; Cargo-side
+# pin stays deccb43 (app-only change).
+ARG ZEOLITE_COMMIT=8c54bd1ff26beab310a72cd33cddea1df2be20d5
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -684,5 +693,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2b92b02d0deddd5e ZEOLITE_BOOTSTRAP_SHA=89314e254ca65dcd SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2a70658ddf60e57a ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
