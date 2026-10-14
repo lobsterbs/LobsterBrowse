@@ -725,7 +725,18 @@ FROM debian:bookworm-slim AS zl-builder
 # major) is neither synthesized nor forwarded. sw.js
 # 9c99fc3a2fef7157 -> f3dfdb76467266c2; bootstrap.js 423b16b806b7f4cc
 # unchanged; Cargo-side pin stays 47b8f5b.
-ARG ZEOLITE_COMMIT=2947881337c251afca6ce090c70e539f17f03b0c
+# Pin 69: Zeolite dist e26dc50. 307/308 redirect hops buffer the
+# request body once (cap 32 MiB) and replay it instead of surfacing
+# the redirect to the page (only an announced Content-Length over the
+# cap still surfaces), cross-origin hops drop Authorization per the
+# fetch spec, the navigation TTFB deadline aborts the upstream fetch
+# instead of only rejecting its promise, and the default persona is
+# Chrome 149 with Sec-Fetch-Storage-Access synthesized on cross-site
+# credentialed requests (a Chrome 133+ header, so the 124 persona
+# could never carry it honestly). sw.js
+# f3dfdb76467266c2 -> e575b078e13e2193; bootstrap.js 423b16b806b7f4cc;
+# Cargo-side pin moves 47b8f5b -> 63b4f23.
+ARG ZEOLITE_COMMIT=e26dc50f3a75a44faa0afa322ff7dd4bea1c7d85
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -785,5 +796,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f3dfdb76467266c2 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e575b078e13e2193 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
