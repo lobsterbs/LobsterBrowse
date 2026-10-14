@@ -417,6 +417,19 @@ fn relay_request_header_allowed(name: &str) -> bool {
             | "host"
             | "content-length"
             | "accept-encoding"
+            /* Proxy-injected hop headers describe the proxy in front
+               of the server, never the virtual page; real browsers do
+               not send them upstream and strict WAF zones read them as
+               a proxy tell (#160). Defense in depth behind the engine's
+               own strip: the relay never re-sends them even if a
+               client includes them in the relay header pairs. */
+            | "x-forwarded-for"
+            | "x-forwarded-proto"
+            | "x-forwarded-host"
+            | "x-forwarded-port"
+            | "x-forwarded-server"
+            | "x-forwarded-cluster"
+            | "x-real-ip"
     )
 }
 
@@ -1817,6 +1830,14 @@ mod session_log_tests {
         assert!(!relay_request_header_allowed("host"));
         assert!(!relay_request_header_allowed("content-length"));
         assert!(!relay_request_header_allowed("accept-encoding"));
+        /* Proxy-injected hop headers must never ride the relay
+           upstream (the engine strips them too; this is the
+           server-side backstop). */
+        assert!(!relay_request_header_allowed("x-forwarded-for"));
+        assert!(!relay_request_header_allowed("x-forwarded-proto"));
+        assert!(!relay_request_header_allowed("x-forwarded-host"));
+        assert!(!relay_request_header_allowed("x-forwarded-port"));
+        assert!(!relay_request_header_allowed("x-real-ip"));
         assert!(!relay_response_header_allowed("content-encoding"));
         assert!(!relay_response_header_allowed("content-length"));
         /* The engine jar's cookie header must pass upstream, and the
