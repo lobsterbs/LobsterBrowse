@@ -157,9 +157,9 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
-  /* Enhanced UI: animated WebGL gradient background (gradflow) on
-     the Home page instead of the flat surface. GPU-heavy every
-     frame, hence opt-in. */
+  /* Enhanced UI: animated starfield background on the Home page
+     instead of the flat surface. Transform-composited animation,
+     opt-in. */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";

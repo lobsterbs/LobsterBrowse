@@ -1,0 +1,28 @@
+/* StarsBackground (shadcn source) with the Tailwind utilities from
+   the original file expressed as scoped classes: this project styles
+   with its own theme.css + M3E, so Tailwind is not installed. */
+.lb-stars {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(ellipse at bottom, #262626 0%, #000 100%);
+}
+
+.lb-stars-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2000px;
+}
+
+.lb-stars-dot {
+  position: absolute;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.lb-stars-dot-b {
+  top: 2000px;
+}
