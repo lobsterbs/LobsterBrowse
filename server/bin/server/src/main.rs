@@ -500,10 +500,13 @@ async fn zl_relay_endpoint(
             }
         }
     }
-    /* Identity encoding keeps the body decodable: a compressed
-    upstream answer would ride the relay as opaque bytes with a
-    content-encoding the SW fetch path never decodes. */
-    out = out.header("accept-encoding", "identity");
+    /* The relay client negotiates real content encoding: reqwest
+    advertises gzip/br/zstd/deflate and transparently decodes the
+    answer, so the SW still receives identity bytes while the
+    upstream request carries a browser-shaped Accept-Encoding
+    instead of the identity tell (Zeolite #160 header diff). The
+    response filter strips content-encoding/content-length the
+    decoded stream redefines. */
     if let Some(b) = req.get("body").and_then(|v| v.as_str()) {
         out = out.body(b.to_string());
     } else if let Some(b64s) = req.get("body_b64").and_then(|v| v.as_str()) {
