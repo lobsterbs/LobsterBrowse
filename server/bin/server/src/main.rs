@@ -318,18 +318,41 @@ fn chrome_default_headers() -> reqwest::header::HeaderMap {
     h
 }
 
+/// One persona major for the whole wire surface (2026-10-14 report,
+/// issue 4): the wreq emulation profile, the User-Agent, and the
+/// engine-side fingerprint data must all name the same Chrome major,
+/// because the mismatch itself is a bot-scoring tell. Chrome149 is
+/// the newest profile in the locked wreq-util 0.2.0.
+const CHROME_PERSONA_MAJOR: u64 = 149;
+const CHROME_EMULATION: wreq_util::Profile = wreq_util::Emulation::Chrome149;
+const CHROME_PERSONA_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+
+#[cfg(test)]
+mod persona {
+    use super::*;
+    /* Drift check (2026-10-14 report): a UA naming a different major
+    than the emulated TLS/h2 profile is exactly the class of mismatch
+    the persona constant exists to remove. */
+    #[test]
+    fn chrome_persona_emulation_ua_and_major_agree() {
+        assert_eq!(format!("{:?}", CHROME_EMULATION), format!("Chrome{}", CHROME_PERSONA_MAJOR));
+        assert!(CHROME_PERSONA_UA.contains(&format!("Chrome/{}.0.0.0", CHROME_PERSONA_MAJOR)));
+    }
+}
+
 /// Shared lookup client: manual redirects (reqwest never follows a
 /// 3xx on its own), the PolicyDns SSRF guard at connect time, and its
 /// own cookie jar.
 fn build_engine_client() -> reqwest::Client {
     reqwest::Client::builder()
-        // Chrome124 TLS/HTTP2 emulation: must be set before any later
-        // builder call that reads TLS/HTTP options (wreq applies the
-        // emulation over them). The upstream sees a browser-shaped
-        // ClientHello, h2 SETTINGS frame and header order instead of
-        // the rust/hyper fingerprint (Zeolite #149/#160 class).
-        .emulation(wreq_util::Emulation::Chrome124)
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        // Chrome persona TLS/HTTP2 emulation (CHROME_EMULATION): must
+        // be set before any later builder call that reads TLS/HTTP
+        // options (wreq applies the emulation over them). The
+        // upstream sees a browser-shaped ClientHello, h2 SETTINGS
+        // frame and header order instead of the rust/hyper
+        // fingerprint (Zeolite #149/#160 class).
+        .emulation(CHROME_EMULATION)
+        .user_agent(CHROME_PERSONA_UA)
         .default_headers(chrome_default_headers())
         .connect_timeout(std::time::Duration::from_secs(8))
         .timeout(std::time::Duration::from_secs(20))
@@ -353,12 +376,12 @@ fn build_engine_client() -> reqwest::Client {
 /// (#140 body-stall, navigation TTFB).
 fn build_relay_client() -> reqwest::Client {
     reqwest::Client::builder()
-        // Chrome124 TLS/HTTP2 emulation, the same profile the engine
-        // client uses: the relay exists precisely because some hosts
-        // fingerprint-block the wasm transports, so the embedder hop
-        // must look like a real browser at the TLS and h2 layers too,
-        // not only in headers.
-        .emulation(wreq_util::Emulation::Chrome124)
+        // Chrome persona TLS/HTTP2 emulation (CHROME_EMULATION), the
+        // same profile the engine client uses: the relay exists
+        // precisely because some hosts fingerprint-block the wasm
+        // transports, so the embedder hop must look like a real
+        // browser at the TLS and h2 layers too, not only in headers.
+        .emulation(CHROME_EMULATION)
         .default_headers(chrome_default_headers())
         .connect_timeout(std::time::Duration::from_secs(8))
         .read_timeout(std::time::Duration::from_secs(30))
@@ -367,6 +390,72 @@ fn build_relay_client() -> reqwest::Client {
         .cookie_store(false)
         .build()
         .expect("reqwest relay client")
+}
+
+/// First-byte wait for relayed requests (2026-10-14 report, issue 3):
+/// strictly shorter than the engine's navigation deadline (30s
+/// NAV_TTFB_DEADLINE_MS) so the relay's own diagnostic 502 with the
+/// failure source chain wins the race; the user sees the cause
+/// instead of the service worker's generic deadline error. send()
+/// resolves at the first response header, so a healthy streamed body
+/// never pays it; the 30s read timeout still bounds a stalled one.
+const RELAY_HEADER_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
+
+async fn relay_send_wait(
+    req: reqwest::RequestBuilder,
+    wait: std::time::Duration,
+) -> Result<reqwest::Response, String> {
+    match tokio::time::timeout(wait, req.send()).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => {
+            /* The wreq Display alone says only "error sending request";
+            the source chain says WHY (connect timeout, reset by peer,
+            TLS failure). LB #75 needs that distinction on the wire. */
+            let mut chain = e.to_string();
+            let mut src = std::error::Error::source(&e);
+            while let Some(s) = src {
+                chain.push_str(" :: ");
+                chain.push_str(&s.to_string());
+                src = s.source();
+            }
+            Err(chain)
+        }
+        Err(_) => Err(format!(
+            "relay: no response headers within {}s :: operation timed out",
+            wait.as_secs()
+        )),
+    }
+}
+
+#[cfg(test)]
+mod relay_wait {
+    use super::*;
+    /* 2026-10-14 report, issue 3: a tarpit upstream that accepts the
+    connection but never sends a header must get the relay's own
+    diagnostic before the engine's navigation deadline fires. */
+    #[tokio::test]
+    async fn stalled_upstream_gets_the_relay_diagnostic() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (_sock, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            /* never write a byte: the upstream tarpits */
+        });
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(1))
+            .build()
+            .unwrap();
+        let res = relay_send_wait(
+            client.get(format!("http://{}/", addr)),
+            std::time::Duration::from_millis(300),
+        )
+        .await;
+        match res {
+            Err(msg) => assert!(msg.contains("no response headers within"), "diagnostic: {}", msg),
+            Ok(_) => panic!("a stalled upstream must not produce headers"),
+        }
+    }
 }
 
 /* ---- Zeolite #137 embedder relay --------------------------------- */
@@ -495,9 +584,10 @@ fn relay_response_header_allowed(name: &str) -> bool {
 /// set-cookie from browser JS, so cookies ride as data). SSRF:
 /// resolve-then-validate at connect time via the same PolicyDns
 /// resolver the engine clients use. Redirects are NOT followed (the
-/// engine hop chain re-issues them). ponytail: the shared 20s client
-/// timeout covers the streamed body too; long-lived event-stream
-/// relays are not a use case.
+/// engine hop chain re-issues them). ponytail: RELAY_HEADER_WAIT
+/// bounds only the wait for the first response header, so a healthy
+/// streamed body never pays it; long-lived event-stream relays are
+/// not a use case.
 async fn zl_relay_endpoint(
     State(state): State<Arc<AppState>>,
     body: axum::body::Bytes,
@@ -549,21 +639,9 @@ async fn zl_relay_endpoint(
             None => return bad(StatusCode::BAD_REQUEST, "relay: bad body_b64"),
         }
     }
-    let upstream = match out.send().await {
+    let upstream = match relay_send_wait(out, RELAY_HEADER_WAIT).await {
         Ok(r) => r,
-        Err(e) => {
-            /* The wreq Display alone says only "error sending request";
-            the source chain says WHY (connect timeout, reset by peer,
-            TLS failure). LB #75 needs that distinction on the wire. */
-            let mut chain = e.to_string();
-            let mut src = std::error::Error::source(&e);
-            while let Some(s) = src {
-                chain.push_str(" :: ");
-                chain.push_str(&s.to_string());
-                src = s.source();
-            }
-            return bad(StatusCode::BAD_GATEWAY, &chain);
-        }
+        Err(msg) => return bad(StatusCode::BAD_GATEWAY, &msg),
     };
     let mut pairs: Vec<(String, String)> = Vec::new();
     for (name, value) in upstream.headers().iter() {
@@ -1058,7 +1136,7 @@ async fn ct_fetch(state: &AppState, url: &str) -> Result<String, String> {
     let resp = state
         .client
         .get(url)
-        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .header("user-agent", CHROME_PERSONA_UA)
         .timeout(std::time::Duration::from_secs(12))
         .send()
         .await
