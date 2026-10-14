@@ -1834,8 +1834,8 @@ mod session_log_tests {
         assert!(!relay_request_header_allowed("content-length"));
         assert!(!relay_request_header_allowed("accept-encoding"));
         /* Proxy-injected hop headers must never ride the relay
-           upstream (the engine strips them too; this is the
-           server-side backstop). */
+        upstream (the engine strips them too; this is the
+        server-side backstop). */
         assert!(!relay_request_header_allowed("x-forwarded-for"));
         assert!(!relay_request_header_allowed("x-forwarded-proto"));
         assert!(!relay_request_header_allowed("x-forwarded-host"));
