@@ -6,6 +6,7 @@
    lb_sid, so deployment users no longer share a single jar. Stable per
    browser profile for normal browsing (cookies survive reloads), fresh
    and in-memory for each incognito window (its jar dies with the sid). */
+
 const SID_KEY = "lobsterbrowse-sid";
 let incSid = "";
 let memSid = "";
@@ -114,6 +115,10 @@ export type SiteRule = {
 export type Settings = {
   seed: string;
   engine: EngineId;
+  /* Proxy engine: zeolite (default, owns /zl/) or scramjet (upstream
+     MercuryWorkshop client driven from ui/src/scramjet.ts, routes
+     under /sj/). The engine options below are Zeolite-only. */
+  proxyEngine: "zeolite" | "scramjet";
   /* Strip known ad and tracker hosts from proxied documents
      (engine-side). */
   adblock: boolean;
@@ -152,6 +157,10 @@ export type Settings = {
      verbosely in the app log, and surface expected proxy
      interventions (CSP/SRI stripping) as failure entries. */
   diagnostics: boolean;
+  /* Enhanced UI: animated WebGL gradient background (gradflow) on
+     the Home page instead of the flat surface. GPU-heavy every
+     frame, hence opt-in. */
+  fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
 };
@@ -159,6 +168,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#6750A4",
   engine: "startpage",
+  proxyEngine: "zeolite",
   adblock: true,
   uaPreset: "chrome-win",
   uaCustom: "",
@@ -175,6 +185,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoHideChrome: true,
   diagnostics: true,
   density: "normal",
+  fancyBackground: false,
 };
 
 const KEY = "lobsterbrowse-settings";
@@ -299,11 +310,26 @@ export function engineRoutePrefix(): string {
   return "/zl/";
 }
 
+/* ScramJet engine route prefix: the upstream frame route for
+   the most recently created tab frame, pushed by sjFrame
+   (ui/src/scramjet.ts) once a frame exists. "" until then, so routeUrl falls back to
+   the Zeolite route. Same pattern as the Zeolite runtime prefix. */
+let sjPrefix = "";
+export function setSjPrefix(prefix: string): void {
+  sjPrefix = prefix;
+}
+
 /* Build the navigation route for a target URL. Zeolite is the only
    engine: its service worker owns /zl/ routes and forwards the
    route's query string to the target, so no option params ride on
    them (settings reach the engine through the zl:rules push). */
 export function routeUrl(target: string): string {
+  /* ScramJet engine: the controller route ("" until the engine
+     initializes; the Zeolite route below then keeps the tab
+     functional — its worker owns /zl/ either way). */
+  if (loadSettings().proxyEngine === "scramjet" && sjPrefix) {
+    return sjPrefix + encodeURIComponent(target);
+  }
   return engineRoutePrefix() + b64urlEncode(target);
 }
 
@@ -313,6 +339,29 @@ export function decodeRoute(pathname: string): string {
   /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
      prefixes are gone, so they decode to "" and the poll sync falls
      back to the caller tab URL. */
+  /* ScramJet routes (codec: encodeURIComponent; the controller and
+     frame id segments between /sj/r/ and the encoded target are
+     dropped). A wrong shape falls through to the Zeolite decode below. */
+  if (pathname.startsWith("/sj/r/")) {
+    const tail = pathname.slice(6).split("?")[0].split("#")[0];
+    /* Two id segments (controller, frame) precede the encoded
+       target; a route without both fails closed below. */
+    const i1 = tail.indexOf("/");
+    const i2 = i1 < 0 ? -1 : tail.indexOf("/", i1 + 1);
+    const rest = i2 < 0 ? "" : tail.slice(i2 + 1);
+    try {
+      const url = decodeURIComponent(rest);
+      const ok = url.startsWith("https://") || url.startsWith("http://");
+      let clean = ok;
+      for (let i = 0; clean && i < url.length; i++) {
+        const c = url.charCodeAt(i);
+        if (c < 0x20 || c === 0x7f) clean = false;
+      }
+      if (clean) return url;
+    } catch {
+      /* fall through to the Zeolite shape below */
+    }
+  }
   let seg = "";
   if (pathname.startsWith("/zl/")) seg = pathname.slice(4);
   else return "";

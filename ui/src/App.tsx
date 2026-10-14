@@ -18,6 +18,8 @@ import {
 } from "./settings";
 import * as store from "./store";
 import { zlSend } from "./zeolite";
+import CommandPalette, { type Command } from "./CommandPalette";
+import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -46,6 +48,8 @@ export default function App() {
     return restored;
   });
   const [activeId, setActiveId] = useState<number>(0);
+  /* #81: Ctrl+K command palette. */
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
@@ -73,6 +77,29 @@ export default function App() {
       );
     }
   }, [incognito]);
+  /* #80: the engine worker broadcasts zl:engineUpdate (updates.ts)
+     to every window client once it activates; the UI itself is a
+     client of the same worker, so the update surfaces as a snackbar
+     with a manual reload action. Nothing reloads on its own. */
+  const lastEngineKey = useRef("");
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string; sha?: string | null; version?: unknown } | null;
+      if (!d || d.type !== "zl:engineUpdate") return;
+      const key = typeof d.sha === "string" && d.sha ? d.sha : "v:" + String(d.version ?? "");
+      if (!key || key === lastEngineKey.current) return;
+      lastEngineKey.current = key;
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Engine updated - reload to pick it up", "Reload now", {
+          actionCallback: () => window.location.reload(),
+          duration: 8000,
+        });
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
   const closedTabs = useRef<Tab[]>([]);
   const prevTitle = useRef(document.title);
 
@@ -88,6 +115,12 @@ export default function App() {
     setRules(next);
     saveSiteRules(next);
   }, []);
+
+  /* Enhanced UI flag on <body>: theme.css scopes the frosted-glass
+     search bar and nav rail treatments to this class. */
+  useEffect(() => {
+    document.body.classList.toggle("lb-fancy", settings.fancyBackground);
+  }, [settings.fancyBackground]);
 
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
@@ -176,23 +209,45 @@ export default function App() {
     [tabs, activeId, newTab]
   );
 
+  /* ---- ScramJet engine option: init the upstream controller
+     worker (idempotent, ui/src/scramjet.ts) when the Proxy engine
+     setting picks it. Zeolite is the default and initializes through
+     its own registration path. ---- */
+  useEffect(() => {
+    if (settings.proxyEngine !== "scramjet") return;
+    sjInit().catch((e: unknown) => console.error("scramjet init failed", e));
+  }, [settings.proxyEngine]);
+
+  /* #81: reopen the last closed tab - shared by Alt+Shift+T and
+     the command palette. */
+  const reopenTab = useCallback(() => {
+    const last = closedTabs.current[closedTabs.current.length - 1];
+    if (!last) return;
+    closedTabs.current = closedTabs.current.slice(0, -1);
+    setTabs((prev) => [...prev, last]);
+    setActiveId(last.id);
+    setView("browser");
+  }, []);
+
   /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
      Ctrl+W) are never delivered to the page, so the tab shortcuts
      live on Alt combos. AltGr is reported as ctrlKey+altKey and is
      therefore left alone. Documented in Settings. ---- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      /* #81: Ctrl+K (Cmd+K) toggles the palette. Checked before the
+         Alt gate because Ctrl+K carries no altKey. */
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       const k = e.key.toUpperCase();
       if (e.shiftKey) {
         if (k !== "T") return;
         e.preventDefault();
-        const last = closedTabs.current[closedTabs.current.length - 1];
-        if (!last) return;
-        closedTabs.current = closedTabs.current.slice(0, -1);
-        setTabs((prev) => [...prev, last]);
-        setActiveId(last.id);
-        setView("browser");
+        reopenTab();
         return;
       }
       if (k === "T") {
@@ -208,7 +263,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tabs, activeId, newTab, closeTab]);
+  }, [tabs, activeId, newTab, closeTab, reopenTab]);
 
   /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
@@ -473,6 +528,29 @@ export default function App() {
     const rail = railRef.current as unknown as { currentMode?: string } | null;
     if (rail && rail.currentMode === "expanded") rail.currentMode = "compact";
   }, [view]);
+  /* Auto-collapse: an expanded rail retracts after 6s without
+     interaction. Any pointer or key activity on the rail restarts
+     the window; expanding via the toggle is itself an interaction,
+     so the timer is armed for the fresh expansion too. */
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const r = railRef.current as unknown as { currentMode?: string } | null;
+        if (r && r.currentMode === "expanded") r.currentMode = "compact";
+      }, 6000);
+    };
+    const events = ["pointerdown", "pointermove", "keydown", "wheel", "focusin"] as const;
+    for (const ev of events) rail.addEventListener(ev, arm, { passive: true });
+    arm();
+    return () => {
+      window.clearTimeout(timer);
+      for (const ev of events) rail.removeEventListener(ev, arm);
+    };
+  }, []);
 
   if (cloaked) {
     return (
@@ -493,8 +571,85 @@ export default function App() {
     );
   }
 
+  /* ---- #81 command palette actions. Browser.tsx-owned surfaces
+     (extensions panel, toolbar omnibox) are reached through window
+     events so App stays decoupled from Browser internals; the
+     timeout lets the browser view mount before the event fires. ---- */
+  const activeTab = tabs.find((t) => t.id === activeId);
+  const commands: Command[] = [
+    { id: "new-tab", group: "Tabs", label: "New tab", run: () => newTab() },
+    {
+      id: "close-tab",
+      group: "Tabs",
+      label: "Close tab",
+      run: () => {
+        if (activeTab) closeTab(activeTab.id);
+      },
+    },
+    { id: "reopen-tab", group: "Tabs", label: "Reopen last closed tab", run: reopenTab },
+    { id: "go-home", group: "Go", label: "Home", run: () => setView("home") },
+    { id: "go-settings", group: "Go", label: "Settings", run: () => setView("settings") },
+    { id: "go-logs", group: "Go", label: "Logs", run: () => setView("logs") },
+    {
+      id: "toggle-engine",
+      group: "Engine",
+      label:
+        settings.proxyEngine === "scramjet"
+          ? "Switch engine to Zeolite"
+          : "Switch engine to ScramJet",
+      run: () =>
+        update({ proxyEngine: settings.proxyEngine === "scramjet" ? "zeolite" : "scramjet" }),
+    },
+    {
+      id: "open-extensions",
+      group: "Tools",
+      label: "Open extensions",
+      run: () => {
+        setView("browser");
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
+      },
+    },
+    {
+      id: "focus-omnibox",
+      group: "Tools",
+      label: "Focus omnibox",
+      run: () => {
+        if (view === "browser") {
+          window.dispatchEvent(new CustomEvent("lb-focus-omnibox"));
+          return;
+        }
+        const el = document.getElementById("lb-search-input") as HTMLInputElement | null;
+        el?.focus();
+      },
+    },
+    {
+      id: "clear-site",
+      group: "Privacy",
+      label: "Clear cookies for this site",
+      confirm: "Press Enter again to clear this site's cookies",
+      run: () => {
+        if (!activeTab?.url) return;
+        /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
+           jar profile, one origin - cookies only, honest counts. */
+        void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
+          if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+          if (reply && reply.ok) {
+            M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
+              duration: 4000,
+            });
+          } else {
+            M3eSnackbar.open(
+              "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
+              { duration: 5000 },
+            );
+          }
+        });
+      },
+    },
+  ];
+
   return (
-    <m3e-theme color={settings.seed} scheme="dark" strong-focus={true}>
+    <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
       <div className="lb-shell">
         {/* Expressive wide rail: the M3E defaults are the spec
            (96dp collapsed with persistent labels, 44dp top inset);
@@ -565,12 +720,6 @@ export default function App() {
 
 
         <div className="lb-main">
-          {/* The browser view gets every pixel: no header there. */}
-          {view !== "browser" && (
-            <m3e-app-bar>
-              <span slot="title" className="lb-app-title">LobsterBrowse <span className="lb-preview-badge">Preview</span></span>
-            </m3e-app-bar>
-          )}
 
           <div className="app-content">
             <div key={view} className="lb-view">
@@ -615,6 +764,8 @@ export default function App() {
           </div>
         </div>
       </div>
+      {/* #81: rendered at the root so Ctrl+K works in every view. */}
+      <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
     </m3e-theme>
   );
 }

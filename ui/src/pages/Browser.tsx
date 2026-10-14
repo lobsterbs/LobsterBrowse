@@ -30,6 +30,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive } from "../zeolite";
+import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
@@ -276,6 +277,9 @@ export default function BrowserView(props: Props) {
   const dlSeq = useRef(1);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
+  /* Per-document/per-window wiring for the new-tab interception. */
+  const tabWired = useRef<WeakSet<Document>>(new WeakSet());
+  const openWired = useRef<WeakSet<Window>>(new WeakSet());
   /* A finished .xpi download waiting for the install prompt. The
      bytes are held here so Install needs no second fetch. */
   const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
@@ -312,10 +316,10 @@ export default function BrowserView(props: Props) {
       if (engId === undefined) return;
       void zlSend({ type: "zl:downloadState", id: engId, status, ...extra }, 8000);
     };
-    /* Engine-routed hrefs (/zl/) are fetched as-is; anything else
-       goes through routeUrl so it rides the engine like a
-       navigation. */
-    const target = href.startsWith("/zl/") ? href : routeUrl(href);
+    /* Engine-routed hrefs (/zl/, /sj/r/) are fetched as-is;
+       anything else goes through routeUrl so it rides the engine
+       like a navigation. */
+    const target = href.startsWith("/zl/") || href.startsWith("/sj/r/") ? href : routeUrl(href);
     setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
@@ -792,6 +796,22 @@ export default function BrowserView(props: Props) {
     const t = setTimeout(() => setExtPanelMounted(false), 200);
     return () => clearTimeout(t);
   }, [extPanelOpen]);
+  /* #81 command palette decoupling: the palette lives in App, the
+     extensions panel and the toolbar pill live here. Window events
+     bridge the two without threading more props through Browser. */
+  useEffect(() => {
+    const onOpenExt = () => setExtPanelOpen(true);
+    const onFocusOmnibox = () => {
+      setTbExpanded(true);
+      window.setTimeout(() => urlInputRef.current?.focus(), 80);
+    };
+    window.addEventListener("lb-open-extensions", onOpenExt);
+    window.addEventListener("lb-focus-omnibox", onFocusOmnibox);
+    return () => {
+      window.removeEventListener("lb-open-extensions", onOpenExt);
+      window.removeEventListener("lb-focus-omnibox", onFocusOmnibox);
+    };
+  }, []);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
 
@@ -1034,7 +1054,7 @@ export default function BrowserView(props: Props) {
     const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
     const attr = link ? link.getAttribute("href") || "" : "";
     if (attr) {
-      if (attr.startsWith("/zl/")) {
+      if (attr.startsWith("/zl/") || attr.startsWith("/sj/r/")) {
         href = attr;
       } else {
         try {
@@ -1121,8 +1141,18 @@ export default function BrowserView(props: Props) {
      would time out to the legacy route and land the SW-less
      "Load failed" page; wait for an active worker once per boot
      first. */
-  const initialRoute = (url: string) =>
-    zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
+  /* ScramJet: the upstream controller answers 500 "No frame found for
+     request" unless the route carries a frame id, so each tab's
+     iframe is wrapped in an upstream controller frame on first
+     navigation (sjFrame is idempotent per element) and the route is
+     minted from that frame. Any failure falls through to routeUrl's
+     Zeolite route, so the tab stays functional instead of hanging. */
+  const initialRoute = (tabId: number, url: string) =>
+    settings.proxyEngine === "scramjet"
+      ? sjFrame(frames.current.get(tabId) ?? null)
+          .then((fr) => fr.prefix + encodeURIComponent(url))
+          .catch(() => routeUrl(url))
+      : zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
@@ -1167,7 +1197,7 @@ export default function BrowserView(props: Props) {
        the hop, the engine's own netlog keeps reporting the real
        upstream TTFB. */
     const mintT0 = Date.now();
-    void initialRoute(url).then((href) => {
+    void initialRoute(tab.id, url).then((href) => {
       if (navGen.current.get(tab.id) !== gen) return;
       const hopMs = Date.now() - mintT0;
       if (frame) frame.src = href;
@@ -1387,7 +1417,7 @@ export default function BrowserView(props: Props) {
           );
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
-          void initialRoute(intended).then((href) => {
+          void initialRoute(t.id, intended).then((href) => {
             f.src = href;
           });
           /* Record the recovered URL as this tab's last navigation so
@@ -1451,7 +1481,7 @@ export default function BrowserView(props: Props) {
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
         wiredDocs.current.add(doc);
-        const prefix = engineRoutePrefix();
+        const prefix = settings.proxyEngine === "scramjet" ? "/sj/r/" : engineRoutePrefix();
         const prefetch = (el: EventTarget | null) => {
           const target = el as Element | null;
           const a = target && target.closest ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
@@ -1502,6 +1532,61 @@ export default function BrowserView(props: Props) {
           },
           true,
         );
+      }
+      /* New-tab interception: target=_blank links, middle-clicks and
+         window.open inside the proxied page must open LB tabs, not
+         escape to a real browser tab (the frame is same-origin, so
+         the default would open a new top-level context on our
+         origin with no relay channel). Nested subframes of the page
+         are not covered - honest gap. */
+      if (!tabWired.current.has(doc)) {
+        tabWired.current.add(doc);
+        const openInTab = (raw: string): boolean => {
+          if (!raw || raw.startsWith("javascript:") || raw.startsWith("blob:") || raw.startsWith("data:")) return false;
+          let real = decodeRoute(raw);
+          if (!real && /^https?:/i.test(raw)) real = raw;
+          if (!real) return false;
+          props.newTab(real);
+          return true;
+        };
+        doc.addEventListener(
+          "click",
+          (e) => {
+            const el = e.target as Element | null;
+            const a = el && el.closest ? (el.closest("a[href]") as HTMLAnchorElement | null) : null;
+            if (!a || a.hasAttribute("download") || e.defaultPrevented) return;
+            if (a.getAttribute("target") !== "_blank") return;
+            if (openInTab(a.getAttribute("href") || "")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          },
+          true,
+        );
+        doc.addEventListener(
+          "auxclick",
+          (e) => {
+            if (e.button !== 1) return;
+            const el = e.target as Element | null;
+            const a = el && el.closest ? (el.closest("a[href]") as HTMLAnchorElement | null) : null;
+            if (!a || a.hasAttribute("download") || e.defaultPrevented) return;
+            if (openInTab(a.getAttribute("href") || "")) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          },
+          true,
+        );
+        const win = f.contentWindow;
+        if (win && !openWired.current.has(win)) {
+          openWired.current.add(win);
+          const orig = win.open.bind(win);
+          win.open = ((url?: string | URL, target?: string, features?: string) => {
+            const raw = url == null ? "" : String(url);
+            if (openInTab(raw)) return null;
+            return orig(url, target, features);
+          }) as typeof window.open;
+        }
       }
     }, 1200);
     return () => clearInterval(iv);

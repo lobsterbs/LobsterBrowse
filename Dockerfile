@@ -517,17 +517,15 @@ RUN npm run build
 # sw.js e2c5ea7a -> 38b66986 (212039 bytes); bootstrap.js unchanged
 # 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
 # Cargo-side pin stays deccb43 (app-only change).
-# 2026-10-11 (47): #144 navh suffix navigation recovery (pathname-
-# routed SPAs boot while parked on the opaque handle route),
-# HTTPS-only by default with a proceed-anyway session exemption
-# (loopback/localhost never upgraded), zl:extUninstall, optional
-# API module detach/reattach (9 namespaces, detached = absent),
-# cookies.onChanged, RFC 6265 5.1.1 cookie-date parser, and the
-# wisp stall-storm relay-first cooldown (Zeolite main 72351d4, CI
-# green, dist 0767b56). sw.js 38b66986 -> f0c7b17f (215739
-# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
-# d86f746e; codec.js unchanged c29f5a19. Cargo-side pin stays
-# deccb43 (app-only change).
+# 2026-10-11 (47): #144 navh suffix navigation recovery, HTTPS-only
+# default with proceed-anyway (loopback never upgraded),
+# zl:extUninstall, optional API module detach/reattach,
+# cookies.onChanged, RFC 6265 cookie-date parser, wisp stall-storm
+# relay-first cooldown (Zeolite main 72351d4, CI green, dist
+# 0767b56). sw.js 38b66986 -> f0c7b17f (215739 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
 # 2026-10-11 (48): PSL site boundary for the cookie jar via tldts
 # (registrable domain, private-section suffixes included) plus the
 # RFC 6265 5.3 step 5 public-suffix admission gate; tough-cookie and
@@ -613,12 +611,53 @@ FROM debian:bookworm-slim AS zl-builder
 # (wisp-auth deployments: the wasm client cannot authenticate, so
 # every fetch rides the embedder relay). sw.js unchanged
 # (96d70fb9d7b90b14); Cargo-side pin stays deccb43 (data-only change).
-# Pin 59: Zeolite dist c406407 ships the #121 refresh-spam fix and its
-# follow-up hardening (boot-reload guard, engine init() honesty, per-sha
-# update-notice dedupe) on top of the pin 57 relay catch-all. sw.js
-# 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js 03cd3476 ->
-# 3c148a51; Cargo-side pin stays deccb43 (app-only change).
-ARG ZEOLITE_COMMIT=c406407f00960d8909003d3fb0fa2a135bce6b0f
+# Pin 58: Zeolite dist 8f51d86 ships the #121 refresh-spam fix (the
+# bootstrap never auto-reloads proxied pages when a new engine
+# activates; it now logs a console note and re-dispatches a
+# zl:engineUpdate window CustomEvent for a manual reload affordance).
+# sw.js 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js
+# 03cd3476 -> b0624c71; Cargo-side pin stays deccb43 (app-only change).
+# Pin 60: Zeolite dist 8e74ce7 ships the #157 top-level re-emit anchoring
+# (root-relative fetch/XHR/beacon inputs on NAVH-served pages re-emit
+# through <route>/__zl_prel__ instead of escaping to the proxy origin
+# root; NAVP parents resolve under all three route shapes; the
+# navRel/relRoute exclusion list dedupes into navExcluded). sw.js
+# 473408e5d1abe91a -> 2b92b02d0deddd5e; bootstrap.js 3c148a51 ->
+# 89314e254ca65dcd; Cargo-side pin stays deccb43 (app-only change).
+# Pin 61: Zeolite dist 8c54bd1 ships the #157/#159 own-origin
+# re-anchor (absolute engine-origin inputs re-anchor to their
+# path and re-emit through the parent route, both at the emit
+# seam and at the shared decode; script and worker destinations
+# get a JS-typed body on upstream error statuses instead of an
+# HTML error page; tokenShaped and the rel-route factory dedupe
+# into navguard). sw.js 2b92b02d0deddd5e -> 2a70658ddf60e57a;
+# bootstrap.js 89314e254ca65dcd -> 423b16b806b7f4cc; Cargo-side
+# pin stays deccb43 (app-only change).
+# Pin 62: Zeolite dist d981283 extends pin 61 with the content-type
+# honesty guard: a script or worker destination never receives an
+# HTML or CSS body, whatever the upstream status (SPA catch-alls
+# answer missing module paths with a 200 HTML document, claude
+# answers a mangled specifier with CSS; both the fresh path and
+# the cache hit serve a JS-typed comment instead, so module
+# graphs fail cleanly). sw.js 2a70658ddf60e57a -> f006bbd75da0a643;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# deccb43 (app-only change).
+# Pin 64: Zeolite dist ad2e571 ships two engine fixes. First,
+# the POST stream-body fix (#155/#159/#164/#166 class): every
+# request body is buffered once at the upstreamFetch choke point
+# (32MiB cap, honest overflow), so POSTs ride the embedder relay
+# and survive the wisp connect-class retry instead of dying as a
+# disturbed ReadableStream - the "shell renders, API 502" pattern
+# on youtube innertube, chatgpt, deepseek, twitch Apollo,
+# sketchfab and three.js. Second, the wasm rewriter never mints
+# routes for www.w3.org namespace-identity URI literals (#153):
+# createElementNS keeps the identity namespace, so the excalidraw
+# provider cascade and delta setAttributeNS NamespaceError go
+# away; the wasm is rebuilt with the guard. sw.js
+# f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
+# 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
+# (app + wasm-side rewriter changes, no server crate change).
+ARG ZEOLITE_COMMIT=ad2e571c34ca790976effffa5749f77c3e028391
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -641,6 +680,29 @@ RUN mkdir -p /bundle/epoxy \
  && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.js /bundle/epoxy/epoxy.js \
  && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.wasm /bundle/epoxy/epoxy.wasm
 
+# ScramJet engine bundle (upstream MercuryWorkshop, the newest
+# published build), vendored with the same never-committed rule as
+# the Zeolite bundle and served same-origin at /sj/. Pin:
+# scramjet 2.0.67-alpha.2 + controller 0.0.14 + utils 0.0.3 +
+# libcurl-transport 2.0.5 (the same libcurl pin the zl-builder
+# vendors). The controller worker scope is /sj/ (default from the
+# script path), so it never competes with the Zeolite root worker.
+# Bump these pins together with SCRAMJET_VERSION in the final stage.
+FROM node:22-slim AS sj-builder
+RUN npm install --prefix /sjvendor --no-audit --no-fund \
+      @mercuryworkshop/scramjet@2.0.67-alpha.2 \
+      @mercuryworkshop/scramjet-controller@0.0.14 \
+      @mercuryworkshop/scramjet-utils@0.0.3 \
+      @mercuryworkshop/libcurl-transport@2.0.5 \
+ && mkdir -p /sj \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.js /sj/scramjet.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.wasm /sj/scramjet.wasm \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js /sj/controller.api.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js /sj/controller.inject.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.sw.js /sj/controller.sw.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-utils/dist/scramjet-utils.js /sj/scramjet-utils.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/index.js /sj/libcurl-client.js 
+
 FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
@@ -649,10 +711,11 @@ WORKDIR /app
 COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
+COPY --from=sj-builder /sj /app/sj
 EXPOSE 6001
 # Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=473408e5d1abe91a ZEOLITE_BOOTSTRAP_SHA=3c148a515e56eca0
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6fc87be1664e3954 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]

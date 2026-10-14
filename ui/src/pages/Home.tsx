@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+import { GradFlow } from "gradflow";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 
@@ -91,8 +93,63 @@ function useSpringCard(open: boolean): { visible: boolean; progress: number } {
   return state;
 }
 
+/* Enhanced UI background: one of the three quiet shader types
+   (rays, nebula, horizon) per app open/refresh, never the same one
+   twice in a row when the last pick was stored. */
+const SHADER_TYPES = ["rays", "nebula", "horizon"] as const;
+type ShaderType = (typeof SHADER_TYPES)[number];
+function randomShaderType(): ShaderType {
+  const pick = SHADER_TYPES[Math.floor(Math.random() * SHADER_TYPES.length)];
+  try {
+    const last = localStorage.getItem("lb-gradflow-last");
+    if (last && last === pick) return SHADER_TYPES[(SHADER_TYPES.indexOf(pick) + 1) % SHADER_TYPES.length];
+    return pick;
+  } catch {
+    return pick;
+  }
+}
+
 export default function HomePage({ settings, history, onNavigate }: Props) {
   const [url, setUrl] = useState("");
+  const [gradType] = useState<ShaderType>(randomShaderType);
+  useEffect(() => {
+    try {
+      localStorage.setItem("lb-gradflow-last", gradType);
+    } catch {
+      /* storage unavailable - randomness still works per session */
+    }
+  }, [gradType]);
+
+  /* Click pulse: gradflow tracks the pointer itself (the interactive
+     prop swells the pattern under the mouse) but ships no click hook,
+     so a pointerdown anywhere briefly surges speed + noise through
+     the package's own config blend. */
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    if (!settings.fancyBackground) return;
+    let t = 0;
+    const down = () => {
+      setPulse(true);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setPulse(false), 320);
+    };
+    window.addEventListener("pointerdown", down, { passive: true });
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", down);
+    };
+  }, [settings.fancyBackground]);
+  /* Colors are the library's own defaults (DEFAULT_CONFIG): no M3E
+     token integration, the shader keeps its stock palette. */
+  const gradConfig = {
+    color1: { r: 210, g: 21, b: 112 },
+    color2: { r: 140, g: 63, b: 248 },
+    color3: { r: 86, g: 255, b: 195 },
+    type: gradType,
+    speed: pulse ? 1.6 : 0.5,
+    scale: 1.2,
+    noise: pulse ? 0.5 : 0.32,
+  };
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -167,7 +224,19 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
+      {/* Enhanced UI setting: the gradient is portaled to <body> so
+          no view ancestor (transforms, stacking contexts) can trap
+          the fixed layer or shrink it. z-index -1 keeps it above the
+          body background but under the app. Off = not rendered. */}
+      {settings.fancyBackground &&
+        createPortal(
+          <div className="lb-gradflow-bg" aria-hidden="true">
+            <GradFlow config={gradConfig} transition={300} interactive />
+          </div>,
+          document.body
+        )}
       <pre
+        className="lb-ascii"
         aria-label="LobsterBrowse"
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
