@@ -725,7 +725,7 @@ FROM debian:bookworm-slim AS zl-builder
 # major) is neither synthesized nor forwarded. sw.js
 # 9c99fc3a2fef7157 -> f3dfdb76467266c2; bootstrap.js 423b16b806b7f4cc
 # unchanged; Cargo-side pin stays 47b8f5b.
-ARG ZEOLITE_COMMIT=294788137c251afca6ce090c70e539f17f03b0c
+ARG ZEOLITE_COMMIT=2947881337c251afca6ce090c70e539f17f03b0c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
