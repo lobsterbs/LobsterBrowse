@@ -852,4 +852,5 @@ CSS/JS) bypasses to the live path so the origin owns range
 semantics (Zeolite #204). Cargo-side pin stays 63b4f23: both
 fixes are SW-side, not in the server crate.
 
-"Pin
+
+Pin 72 deploy verified live 2026-10-15T20:18:29Z (build b8905d9, zlswSha 6085e72118592e42; this push re-runs transit-live CI against the live pin-72 pair)
