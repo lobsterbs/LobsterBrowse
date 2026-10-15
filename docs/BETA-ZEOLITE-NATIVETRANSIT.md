@@ -852,3 +852,4 @@ CSS/JS) bypasses to the live path so the origin owns range
 semantics (Zeolite #204). Cargo-side pin stays 63b4f23: both
 fixes are SW-side, not in the server crate.
 
+"Pin
