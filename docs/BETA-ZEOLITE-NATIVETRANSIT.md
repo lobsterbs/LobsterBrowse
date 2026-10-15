@@ -865,3 +865,5 @@ reader, redirect hop bodies are cancelled before the next hop,
 pre-pump rejections settle the heartbeat, Zeolite #201).
 Cargo-side pin stays 63b4f23: both fixes are SW-side, not in the
 server crate.
+
+Pin 73 deploy verified live 2026-10-15T20:56:51Z (build 67a8a7d, zlswSha b238040b761eadf0; this push re-runs transit-live CI against the live pin-73 pair)
