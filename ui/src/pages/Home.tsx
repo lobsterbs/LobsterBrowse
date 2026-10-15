@@ -10,7 +10,11 @@ const suggestWarned = new Set<string>();
 type Props = {
   settings: Settings;
   history: string[];
+  /* #93: incognito hides the recent-sites row entirely. */
+  incognito: boolean;
   onNavigate: (target: string) => void;
+  onRemoveHistory: (url: string) => void;
+  onClearHistory: () => void;
 };
 
 type Suggestion = { icon: string; text: string; url: string; src?: string };
@@ -93,7 +97,7 @@ function useSpringCard(open: boolean): { visible: boolean; progress: number } {
   return state;
 }
 
-export default function HomePage({ settings, history, onNavigate }: Props) {
+export default function HomePage({ settings, history, incognito, onNavigate, onRemoveHistory, onClearHistory }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
@@ -143,6 +147,24 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
     setOpen(false);
     setIdx(-1);
   };
+  /* #93: recent sites from the local history: unique hosts, newest
+     first, capped at six so the row stays one compact line. Labels
+     are bare hostnames: query strings and paths stay private. */
+  const recent: { url: string; host: string }[] = [];
+  {
+    const seenHosts = new Set<string>();
+    for (const u of history) {
+      let host = "";
+      try {
+        host = new URL(u).hostname.replace(/^www\./, "");
+      } catch {
+        continue;
+      }
+      if (!host || seenHosts.has(host) || recent.length >= 6) continue;
+      seenHosts.add(host);
+      recent.push({ url: u, host });
+    }
+  }
   const go = (q0: string) => {
     const q = q0.trim();
     if (!q) return;
@@ -183,7 +205,8 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"
-        style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
+        /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
@@ -247,6 +270,33 @@ export default function HomePage({ settings, history, onNavigate }: Props) {
           </div>
         )}
       </div>
+      {/* #93 recent sites: local history only (never recorded while
+          incognito: the whole section hides there), hostname labels,
+          one-tap reopen, per-entry remove and clear-all. */}
+      {!incognito && recent.length > 0 && (
+        <div className="lb-recent" aria-label="Recent sites">
+          {recent.map((r) => (
+            <span key={r.url} className="lb-recent-chip">
+              <button type="button" className="lb-recent-open" onClick={() => commit(r.url)} title={r.host}>
+                <m3e-icon name="history" aria-hidden={true} />
+                {r.host}
+              </button>
+              <button
+                type="button"
+                className="lb-recent-x"
+                aria-label={"Remove " + r.host + " from recent sites"}
+                onClick={() => onRemoveHistory(r.url)}
+              >
+                <m3e-icon name="close" aria-hidden={true} />
+              </button>
+            </span>
+          ))}
+          <button type="button" className="lb-recent-clear" onClick={() => onClearHistory()}>
+            <m3e-icon name="mop" aria-hidden={true} />
+            Clear
+          </button>
+        </div>
+      )}
 
     </section>
   );

@@ -874,6 +874,7 @@ body {{ margin:0; min-height:100vh; display:grid; place-items:center; text-align
 main {{ max-width:32em; padding:1.5em; }}
 h1 {{ font-size:1.0625rem; font-weight:600; margin:0 0 .4em; }}
 p {{ margin:0 0 1.2em; color:#6b6b70; }}
+.dt {{ margin:-0.9em 0 1.2em; font-size:.8125rem; opacity:.7; }}
 button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
   border:1px solid currentColor; border-radius:6px; cursor:pointer; }}
 @media (prefers-color-scheme: dark) {{ body {{ background:#0f0f10; color:#e8e8ea; }} p {{ color:#9b9ba0; }} }}
@@ -881,12 +882,15 @@ button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
 <h1>{title}</h1>
 <p>{line}</p>
 <p>{action}</p>
+<p class="dt">{category} · HTTP {status}</p>
 {retry_form}
 </main></body></html>"#,
         meta = meta,
         title = json_escape(title),
         line = json_escape(line),
         action = json_escape(action),
+        category = json_escape(category),
+        status = code.as_u16(),
         retry_form = if retry {
             r#"<form method="get" action=""><button type="submit">Try again</button></form>"#
         } else {

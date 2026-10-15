@@ -103,9 +103,11 @@ function TextInput(props: {
 
 export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
+    /* #90: only Search & browse starts expanded; the accordion
+       keeps its multi-open behavior. */
     search: true,
-    ua: true,
-    privacy: true,
+    ua: false,
+    privacy: false,
     appearance: false,
     extensions: false,
     cloak: false,

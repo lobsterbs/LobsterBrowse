@@ -55,7 +55,12 @@ export default function TabSwitcherCard(props: {
             aria-label={"Switch to " + tabLabel(t)}
             onClick={() => props.onSelect(t.id)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") props.onSelect(t.id);
+              /* #91: full button semantics: Space activates too,
+                 without scrolling the row. */
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                props.onSelect(t.id);
+              }
             }}
           >
             <div className="lb-tab-preview">
@@ -79,15 +84,20 @@ export default function TabSwitcherCard(props: {
                 <m3e-icon name="public" aria-hidden={true} />
               )}
               <span className="lb-tabs-title">{tabLabel(t)}</span>
-              <m3e-icon
-                name="close"
-                aria-hidden={true}
+              {/* #91: a real button so closing is independently
+                  keyboard-reachable; selection and closing stay
+                  separate actions. */}
+              <button
+                type="button"
                 className="lb-tab-close"
+                aria-label={"Close " + tabLabel(t)}
                 onClick={(e) => {
                   e.stopPropagation();
                   props.onCloseTab(t.id);
                 }}
-              />
+              >
+                <m3e-icon name="close" aria-hidden={true} />
+              </button>
             </div>
           </div>
         ))}

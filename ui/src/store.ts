@@ -55,6 +55,18 @@ export function addHistory(url: string): string[] {
   return trimmed;
 }
 
+/* #93 Home recent sites: single-entry removal and full clear. */
+export function removeHistory(url: string): string[] {
+  const list = loadHistory().filter((u) => u !== url);
+  writeJson(HISTORY_KEY, list);
+  return list;
+}
+
+export function clearHistory(): string[] {
+  writeJson(HISTORY_KEY, []);
+  return [];
+}
+
 /* ---- Session tabs (persisted so the browser view can restore on reload) ----
    The full per-tab history stack and index are preserved (P0 session
    restoration): flattening to the current URL used to destroy back/
