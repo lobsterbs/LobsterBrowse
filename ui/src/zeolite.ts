@@ -260,3 +260,15 @@ export function zlRelayInit(): void {
     sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
   });
 }
+
+/* Zeolite #168: announce the wisp transit endpoint for the per-host
+   policy route "wisp". The engine opens a secondary wisp client on
+   the announced ws(s):// URL (the public ScramJet wisp-js backend on
+   beta; empty honestly on main). An empty string withdraws the
+   endpoint and the route falls back to the default (relay). */
+export function zlWispInit(url: string): void {
+  void zlWorker().then((sw) => {
+    if (!sw) return;
+    sw.postMessage({ type: "zl:wispRegister", url });
+  });
+}
