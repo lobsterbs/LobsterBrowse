@@ -757,7 +757,17 @@ FROM debian:bookworm-slim AS zl-builder
 # 2026-10-15 small-issue wave, Zeolite #197/#209-#213, is
 # zeolite-server only and ships with the next server-dep bump,
 # so the rev gap here is expected, not a miss).
-ARG ZEOLITE_COMMIT=6ef511cb6ac900ec1d2109779440ca4294c67f9b
+# Pin 72: Zeolite dist 32c942e. Engine-side fixes since pin 71:
+# the NAVH handle tail now binds to the minted origin (separator-
+# led and cross-origin tails decode to the honest null, surplus
+# leading slashes round-trip percent-escaped; Zeolite #202) and a
+# Range request on a cached rewritable entry (HTML/CSS/JS)
+# bypasses to the live path so the origin owns range semantics
+# (Zeolite #204). sw.js 3c4ab45cce61c488 -> 6085e72118592e42;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# 63b4f23 (both fixes are SW-side, so the server-rev gap noted at
+# pin 71 persists until the next server-dep bump).
+ARG ZEOLITE_COMMIT=32c942e34a8aa14f6dbb60a34cc2bfa1b0dc0f87
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -817,5 +827,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3c4ab45cce61c488 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6085e72118592e42 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
