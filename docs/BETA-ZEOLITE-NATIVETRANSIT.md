@@ -571,7 +571,7 @@ the DevTools engine tools row (tracing toggle, session recording,
 Eruda inject, engine devtools link).
 
 - CI green on all three heads: Zeolite main f760fd0 (lazy images
-  7dc5a8a plus CI-gate and docs commits), LB main a0e848e, LB
+  7dc5d8a plus CI-gate and docs commits), LB main a0e848e, LB
   beta/zeolite-nativetransit d1e32b3. Deployed: main 81cec40,
   beta d1e32b3, both answering zlswSha 21dc6e6c66ea23bd on /build.
 - Real-browser verification (Chromium via Playwright) repeated
@@ -812,7 +812,6 @@ drift test read it, dead under -D warnings in non-test builds) and
 reworked the test to parse the UA major and compare it with the
 emulation variant's Debug name.
 
-Pin 69 deploy verified live 2026-10-14T22:36:08Z
 
 Wisp transit route (Zeolite #168): the engine gained a per-host
 "route wisp" policy option. The shipped rule matches
@@ -828,3 +827,5 @@ Pin 70: Zeolite dist ced0c3f, sw.js e575b078e13e2193 ->
 2c036ac7ea643f7b, bootstrap.js unchanged. LB wiring: zlWispInit
 in ui/src/zeolite.ts plus the /build fetch in Browser.tsx
 (e944c7a main / 0fc91d1 beta).
+
+Pin 70 deploy verified live 2026-10-15T16:02:43Z (wisp route Zeolite #168: Brave search results render through the beta engine, PoW passes; this push re-runs transit-live CI against the live pin-70 pair)
