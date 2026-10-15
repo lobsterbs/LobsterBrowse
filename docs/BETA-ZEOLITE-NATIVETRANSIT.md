@@ -811,3 +811,19 @@ A clippy follow-up dropped the CHROME_PERSONA_MAJOR const (only the
 drift test read it, dead under -D warnings in non-test builds) and
 reworked the test to parse the UA major and compare it with the
 emulation variant's Debug name.
+
+
+Wisp transit route (Zeolite #168): the engine gained a per-host
+"route wisp" policy option. The shipped rule matches
+search.brave.com, whose PoW interstitial accepts the
+libcurl-wasm TLS ClientHello through the public unauthenticated
+wisp-js backend but rejects the relay's transport class. The UI
+announces the backend (/build sjWisp, the standalone ScramJet
+wisp service on beta; empty on main) to the worker with
+zl:wispRegister and re-announces on controller change. No
+endpoint or a failed wisp fetch falls back to the default route
+(relay). Main stays relay-only honestly: sjWisp is unset there.
+Pin 70: Zeolite dist ced0c3f, sw.js e575b078e13e2193 ->
+2c036ac7ea643f7b, bootstrap.js unchanged. LB wiring: zlWispInit
+in ui/src/zeolite.ts plus the /build fetch in Browser.tsx
+(e944c7a main / 0fc91d1 beta).
