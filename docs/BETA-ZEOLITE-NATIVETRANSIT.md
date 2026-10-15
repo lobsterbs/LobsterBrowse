@@ -839,3 +839,4 @@ compares url( and @import prefixes on bytes, not str slices.
 Cargo-side pin stays 63b4f23: the 2026-10-15 small-issue wave
 (Zeolite #197, #209-#213) is zeolite-server only, not in the
 dist bundle, so it lands with the next server-dep bump.
+Pin 71 deploy verified live 2026-10-15T19:45:49Z (build aa5e725, zlswSha 3c4ab45cce61c488; this push re-runs transit-live CI against the live pin-71 pair)
