@@ -29,7 +29,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive } from "../zeolite";
+import { zlNavHandle, zlRelayInit, zlSend, zlWaitActive, zlWispInit } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -618,9 +618,27 @@ export default function BrowserView(props: Props) {
      whose wasm TLS ClientHello is blocked ride this server's native
      TLS). A worker restart drops the engine's stored port, so
      re-register whenever the controller changes. */
+  /* Zeolite #168: announce the wisp transit endpoint (/build sjWisp,
+     the standalone ScramJet wisp-js backend; empty honestly when
+     unset) so policy-routed "wisp" hosts ride it. Re-announced with
+     the relay channel on controller change. */
   useEffect(() => {
     zlRelayInit();
-    const re = () => zlRelayInit();
+    let wispUrl = "";
+    void fetch("/build", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        const u = b && typeof b.sjWisp === "string" ? b.sjWisp : "";
+        if (u) {
+          wispUrl = u;
+          zlWispInit(u);
+        }
+      })
+      .catch(() => {});
+    const re = () => {
+      zlRelayInit();
+      if (wispUrl) zlWispInit(wispUrl);
+    };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", re);
   }, []);
