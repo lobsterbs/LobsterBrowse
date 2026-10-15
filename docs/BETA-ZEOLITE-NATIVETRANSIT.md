@@ -854,3 +854,14 @@ fixes are SW-side, not in the server crate.
 
 
 Pin 72 deploy verified live 2026-10-15T20:18:29Z (build b8905d9, zlswSha 6085e72118592e42; this push re-runs transit-live CI against the live pin-72 pair)
+
+Pin 73: Zeolite dist eaff2a7, sw.js 6085e72118592e42 ->
+b238040b761eadf0, bootstrap.js unchanged. Engine changes since
+pin 72: navigation bodies carry the idle stall bound (a document
+that stalls after its first body byte errors into the honest
+failure path instead of loading forever, Zeolite #200) and the
+stream lifecycle tears down (consumer cancel reaches the upstream
+reader, redirect hop bodies are cancelled before the next hop,
+pre-pump rejections settle the heartbeat, Zeolite #201).
+Cargo-side pin stays 63b4f23: both fixes are SW-side, not in the
+server crate.
