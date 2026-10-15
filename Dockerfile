@@ -767,7 +767,18 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
 # 63b4f23 (both fixes are SW-side, so the server-rev gap noted at
 # pin 71 persists until the next server-dep bump).
-ARG ZEOLITE_COMMIT=32c942e34a8aa14f6dbb60a34cc2bfa1b0dc0f87
+# Pin 73: Zeolite dist eaff2a7. Engine-side fixes since pin 72:
+# navigation bodies get the same idle stall bound as subresources
+# (a document that stalls after its first body byte errors into the
+# honest failure path instead of loading forever, Zeolite #200) and
+# the stream lifecycle tears down (consumer cancel reaches the
+# upstream reader, redirect hop bodies are cancelled, pre-pump
+# rejections settle the worker heartbeat, Zeolite #201). sw.js
+# 6085e72118592e42 -> b238040b761eadf0; bootstrap.js
+# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23 (both
+# fixes are SW-side, so the server-rev gap noted at pin 71 persists
+# until the next server-dep bump).
+ARG ZEOLITE_COMMIT=eaff2a76d526fa90d52272eee03f14216be3fecf
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -827,5 +838,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6085e72118592e42 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b238040b761eadf0 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
