@@ -736,7 +736,18 @@ FROM debian:bookworm-slim AS zl-builder
 # could never carry it honestly). sw.js
 # f3dfdb76467266c2 -> e575b078e13e2193; bootstrap.js 423b16b806b7f4cc;
 # Cargo-side pin moves 47b8f5b -> 63b4f23.
-ARG ZEOLITE_COMMIT=e26dc50f3a75a44faa0afa322ff7dd4bea1c7d85
+# Pin 70: Zeolite dist ced0c3f. Per-host policy route "wisp"
+# (#168): hosts the policy file routes to "wisp" (shipped rule:
+# search.brave.com, whose PoW interstitial accepts the
+# libcurl-wasm ClientHello through the public unauthenticated
+# wisp-js backend but 429s the relay transport class) ride a
+# secondary wisp client the UI announces via zl:wispRegister
+# from /build sjWisp (beta: the standalone ScramJet wisp-js
+# service; main: unset, so the route falls back to relay there).
+# The relay stays the default for everything else. sw.js
+# e575b078e13e2193 -> 2c036ac7ea643f7b; bootstrap.js
+# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23.
+ARG ZEOLITE_COMMIT=ced0c3f3c9d88190d496ba7b6e602b8ab87b2478
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -796,5 +807,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e575b078e13e2193 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2c036ac7ea643f7b ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
