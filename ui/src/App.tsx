@@ -122,6 +122,12 @@ export default function App() {
     document.body.classList.toggle("lb-fancy", settings.fancyBackground);
   }, [settings.fancyBackground]);
 
+  /* #96: incognito gets a persistent body class so the chrome can
+     carry a subtle, unmistakable identity the whole time it is on. */
+  useEffect(() => {
+    document.body.classList.toggle("lb-incognito", incognito);
+  }, [incognito]);
+
   /* Zeolite #137/#168: register the embedder fetch-relay channel and
      announce the wisp transit endpoint at APP level. Any view can
      start a /zl/ navigation (Home search, view switches); when only
@@ -219,6 +225,15 @@ export default function App() {
     if (incognito) return;
     setHistory(store.addHistory(url));
   }, [incognito]);
+
+  /* #93 recent sites: removal and clearing keep Home row and the
+     persisted history store in lockstep. */
+  const removeHistory = useCallback((url: string) => {
+    setHistory(store.removeHistory(url));
+  }, []);
+  const clearHistoryAll = useCallback(() => {
+    setHistory(store.clearHistory());
+  }, []);
 
   /* Navigate the active proxy tab (used by Home search). */
   const navigateTo = useCallback(
@@ -549,37 +564,12 @@ export default function App() {
     window.location.replace("/");
   };
 
-  /* ---- Rail auto-retract (#76): entering Browse collapses an
-     expanded rail; the toggle can expand it again. ---- */
+  /* ---- Rail (#87): expansion is deliberate and user-controlled:
+     the menu toggle collapses and expands it, nothing else. The
+     old auto-retract (collapse on entering Browse, 6s idle
+     collapse) made the rail width unpredictable; both effects
+     are gone. ---- */
   const railRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (view !== "browser") return;
-    const rail = railRef.current as unknown as { currentMode?: string } | null;
-    if (rail && rail.currentMode === "expanded") rail.currentMode = "compact";
-  }, [view]);
-  /* Auto-collapse: an expanded rail retracts after 6s without
-     interaction. Any pointer or key activity on the rail restarts
-     the window; expanding via the toggle is itself an interaction,
-     so the timer is armed for the fresh expansion too. */
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail) return;
-    let timer = 0;
-    const arm = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        const r = railRef.current as unknown as { currentMode?: string } | null;
-        if (r && r.currentMode === "expanded") r.currentMode = "compact";
-      }, 6000);
-    };
-    const events = ["pointerdown", "pointermove", "keydown", "wheel", "focusin"] as const;
-    for (const ev of events) rail.addEventListener(ev, arm, { passive: true });
-    arm();
-    return () => {
-      window.clearTimeout(timer);
-      for (const ev of events) rail.removeEventListener(ev, arm);
-    };
-  }, []);
 
   if (cloaked) {
     return (
@@ -756,7 +746,10 @@ export default function App() {
                 <HomePage
                   settings={settings}
                   history={history}
+                  incognito={incognito}
                   onNavigate={navigateTo}
+                  onRemoveHistory={removeHistory}
+                  onClearHistory={clearHistoryAll}
                 />
               )}
               {view === "browser" && (

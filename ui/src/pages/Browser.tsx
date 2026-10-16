@@ -2060,6 +2060,17 @@ export default function BrowserView(props: Props) {
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
           onCloseTab={closeTabSmooth}
         />
+        {/* #86: the tucked dock leaves a 12px sliver; the grip makes
+            that sliver an intentional, visible handle (touch has no
+            hover). Tapping it reveals the toolbar like any activity. */}
+        <div
+          className="lb-dock-grip"
+          aria-hidden={true}
+          onClick={() => {
+            setDockTucked(false);
+            hideSoon();
+          }}
+        />
         <div className="lb-dock-pill">
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
@@ -2298,6 +2309,9 @@ export default function BrowserView(props: Props) {
               ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
               : "Turn on incognito: stops history and session recording."}
           </m3e-tooltip>
+          {/* #96: persistent incognito identity: the badge stays
+              visible in the chrome the whole time the mode is on. */}
+          {props.incognito && <span className="lb-incognito-badge">Incognito</span>}
         </m3e-toolbar>
           {xpiPrompt && (
             <XpiPrompt
