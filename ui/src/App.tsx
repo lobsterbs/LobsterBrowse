@@ -17,7 +17,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { zlSend } from "./zeolite";
+import { zlRelayInit, zlSend, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -121,6 +121,35 @@ export default function App() {
   useEffect(() => {
     document.body.classList.toggle("lb-fancy", settings.fancyBackground);
   }, [settings.fancyBackground]);
+
+  /* Zeolite #137/#168: register the embedder fetch-relay channel and
+     announce the wisp transit endpoint at APP level. Any view can
+     start a /zl/ navigation (Home search, view switches); when only
+     the Browser view registered the channel, fetches that raced the
+     mount fell back to the wisp transport and died on this
+     deployment password-authed wisp ("tls handshake eof" 502s).
+     A worker restart drops the engine stored port, so re-register
+     on controller change. Registration is idempotent. */
+  useEffect(() => {
+    zlRelayInit();
+    let wispUrl = "";
+    void fetch("/build", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        const u = b && typeof b.sjWisp === "string" ? b.sjWisp : "";
+        if (u) {
+          wispUrl = u;
+          zlWispInit(u);
+        }
+      })
+      .catch(() => {});
+    const re = () => {
+      zlRelayInit();
+      if (wispUrl) zlWispInit(wispUrl);
+    };
+    navigator.serviceWorker?.addEventListener("controllerchange", re);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", re);
+  }, []);
 
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {

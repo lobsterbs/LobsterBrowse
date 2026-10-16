@@ -14,7 +14,7 @@ Make sites work first, then improve browser-like compatibility. Do not add a hea
 - `server/` — Rust workspace.
 - `server/bin/server/src/main.rs` — current Axum proxy implementation.
 - `ui/` — React + TypeScript + Vite.
-- `ui/src/App.tsx` — application shell/global state.
+- `ui/src/App.tsx` — application shell/global state; owns the app-level Zeolite relay/wisp registration (zlRelayInit/zlWispInit on boot and on service worker controllerchange) so any view can start /zl/ navigations, not only Browser.tsx.
 - `ui/src/pages/Browser.tsx` — tabs, toolbar and frame integrations.
 - `ui/src/settings.ts` — settings/defaults/migrations.
 - `ui/src/store.ts` — local browser state.
