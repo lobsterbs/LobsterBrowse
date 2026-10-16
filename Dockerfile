@@ -823,7 +823,19 @@ FROM debian:bookworm-slim AS zl-builder
 # session, connection budgets + handshake timeout + per-IP cap,
 # client-to-server byte budget, password auth rate limit + PBKDF2
 # KDF; Zeolite #181, #182, #183, #189, #196, #198).
-ARG ZEOLITE_COMMIT=7cdf6fcaad4ba331efb50e9854fad3864bec43f6
+# Pin 77: Zeolite dist db17179. Engine-side fix since pin 76: the
+# route search replaces a token-encoded destination query instead of
+# concatenating onto it (a query-only relative navigation "?x" has
+# browser replace semantics; JS-literal mints and legacy full-dest
+# tokens encode their query inside the token, and the glued-on outer
+# search produced "?a=1?b=2" upstream - Brave Ask on search.brave.com
+# sent the new question as a mangled double-q URL and the AI answer
+# never streamed). The same replace semantics apply at the cache-key,
+# refresh, cache-bypass and forwarded Referer seams, and a NAVH
+# full-dest token no longer drops the route search. sw.js
+# 88e39dd016c4ad30 -> 4102766dcac60856; bootstrap.js cf8b76ad53488959
+# unchanged; Cargo-side pin stays b0296f8 (app-only change).
+ARG ZEOLITE_COMMIT=db17179deb266e53e92c29b2fbe194cc8c1ff646
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -883,5 +895,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=88e39dd016c4ad30 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4102766dcac60856 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
