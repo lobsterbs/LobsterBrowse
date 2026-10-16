@@ -801,7 +801,22 @@ FROM debian:bookworm-slim AS zl-builder
 # skip the pass - measured ~0.15 ms per 2 MB fast path, ~24 ms per 1
 # MB parsed and renamed). Cargo-side pin stays b0296f8 (rewriter crate
 # only; it is not a server dependency).
-ARG ZEOLITE_COMMIT=54f2c0985392934f431bdeee9fb343ed852074c1
+# Pin 79: Zeolite dist d934d4a. #236 regression fix: the virtual
+# location anchored every re-anchored pushState/assign on the full
+# native pathname captured at bootstrap, so a document loaded at a
+# re-anchored <entry>/__zl_prel__/<encoded> URL nested the previous
+# tail inside every new encoded tail and each SPA fallback reload
+# doubled it (Brave Ask: 429 retry loops, then 414 Request-URI-Too-
+# Long). entry strips its prel tail, the NAVH native-parse decodes a
+# prel tail as the newer virtual state instead of reading it as site
+# path, and decoded tails cut at an embedded marker so legacy
+# history entries cannot re-seed the loop (Zeolite 385e55ef, CI run
+# 620 green, 4 regression tests). sw.js 4e6e7a32ae284b67 unchanged;
+# bootstrap.js 29bfb41d3b8e83ce -> 90af15190531c5df (27441 bytes,
+# under the 27648 gate); Cargo-side pin stays b0296f8 (bootstrap-
+# only change, so the /build zlswSha cannot distinguish this bump -
+# verify the served /zlsw/bootstrap.js hash instead).
+ARG ZEOLITE_COMMIT=d934d4a05335579aa8ff5759a69aef771df8ab58
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -861,6 +876,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4e6e7a32ae284b67 ZEOLITE_BOOTSTRAP_SHA=29bfb41d3b8e83ce SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4e6e7a32ae284b67 ZEOLITE_BOOTSTRAP_SHA=90af15190531c5df SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
