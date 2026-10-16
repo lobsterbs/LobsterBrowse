@@ -867,3 +867,22 @@ Cargo-side pin stays 63b4f23: both fixes are SW-side, not in the
 server crate.
 
 Pin 73 deploy verified live 2026-10-15T20:56:51Z (build 67a8a7d, zlswSha b238040b761eadf0; this push re-runs transit-live CI against the live pin-73 pair)
+
+
+Pin 74: Zeolite dist 20c5f67, sw.js b238040b761eadf0 ->
+3a33c20f49502192, bootstrap.js 423b16b806b7f4cc ->
+cf8b76ad53488959. Engine changes since pin 73: the control-plane
+sender gates fail closed (the window relay arm requires a
+same-origin self-posted sender, host-only control messages require
+a host-page sender, workers get per-site storage scoping, tab
+message replies bind to the sending extension via per-send nonces,
+Zeolite #169/#170/#171/#185), the #132 identity-race follow-up
+converges the mint relabel and the contentWindow getter on one
+proxy identity (bootstrap 25115 bytes; the Zeolite CI budget is
+raised 25088 -> 25600, rationale recorded in the gate), and the
+fingerprint consistency wave (timezoneName without utcOffsetMin no
+longer forces a UTC Date patch, canvas copy paths read pristine
+pixels, worker transferToImageBitmap clears the source, cooldown
+relay failures carry their traceId and retry stalls are recorded,
+Zeolite #223/#224/#225/#226). Cargo-side pin stays 63b4f23: all
+changes are SW-side, not in the server crate.
