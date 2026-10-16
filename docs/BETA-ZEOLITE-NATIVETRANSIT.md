@@ -900,3 +900,17 @@ mint memo is capped at 256 with LRU-by-recency eviction so
 long-lived workers cannot grow it without bound (Zeolite #229).
 Cargo-side pin stays 63b4f23: all changes are SW-side or in the
 dist wasm bundle, not in the server crate.
+
+Pin 76: Zeolite dist 7cdf6fc, sw.js cd12f976230ddba9 ->
+88e39dd016c4ad30, bootstrap.js unchanged. Engine changes since
+pin 75: mid-body transport errors surface as stream errors, not
+a clean EOF (#180); redirect hop gates + cross-origin header
+scoping (#186, #194); cookie prefix and Secure admission rules
+(#191); download buffer budget with honest resume errors (#192);
+NAVH virtual origin recovery (#193); page cache session/auth
+scope, credentials and redirect-final URL keys (#179, #184,
+#195); DevTools keyboard access (#220); css url() fragment
+survival (#199). Cargo-side pin moves 63b4f23 -> b0296f8: the
+deferred zeolite-server wave ships (session liveness, stream
+freeze fix, connection budgets, handshake timeout, client byte
+budget, auth rate limit + PBKDF2; #181/#182/#183/#189/#196/#198).

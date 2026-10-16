@@ -804,7 +804,26 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot grow it without bound (#229). sw.js 3a33c20f49502192 ->
 # cd12f976230ddba9; bootstrap.js cf8b76ad53488959 unchanged;
 # Cargo-side pin stays 63b4f23 (no server crate change).
-ARG ZEOLITE_COMMIT=b866d45abf94cfa3013c4db9ffd7f877a84d084b
+# Pin 76: Zeolite dist 7cdf6fc. Engine-side fixes since pin 75:
+# mid-body transport errors surface as stream errors instead of a
+# clean EOF (#180); redirect hop requests re-enter the full gate
+# chain and engine-injected headers stay scoped to same-origin
+# hops (#186, #194); cookie __Host-/__Secure- prefixes and Secure
+# cookies set from http are rejected per RFC 6265bis (#191);
+# download eviction releases buffered bytes and the global partial
+# buffer is capped with honest resume errors (#192); NAVH handle
+# pages recover their virtual origin (#193); page cache gains
+# session/auth scope, credentials handling and redirect-final URL
+# keys (#179, #184, #195); DevTools rows are keyboard-accessible
+# with column sort (#220); css url() fragments survive engine-
+# route unwrap (#199). sw.js cd12f976230ddba9 -> 88e39dd016c4ad30;
+# bootstrap.js cf8b76ad53488959 unchanged. Cargo-side pin moves
+# 63b4f23 -> b0296f8: the deferred zeolite-server wave ships
+# (session liveness, one stalled upstream no longer freezing the
+# session, connection budgets + handshake timeout + per-IP cap,
+# client-to-server byte budget, password auth rate limit + PBKDF2
+# KDF; Zeolite #181, #182, #183, #189, #196, #198).
+ARG ZEOLITE_COMMIT=7cdf6fcaad4ba331efb50e9854fad3864bec43f6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -864,5 +883,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cd12f976230ddba9 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=88e39dd016c4ad30 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
