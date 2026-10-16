@@ -6,9 +6,11 @@
    #76: the panel animates in and out (Browser.tsx keeps it mounted
    one animation longer and flips the exit class), and uninstall is
    available from every surface: a trash affordance per row plus a
-   two-step Delete in the detail view. */
+   Delete in the detail view. Both ask first in a m3e-dialog (#99). */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
 
 export type ExtInfo = {
   id: string;
@@ -50,12 +52,35 @@ export default function ExtensionsPanel(props: {
   onOpenOptions: (d: ExtDetail) => void;
   onDelete: (id: string) => void;
 }) {
-  /* Two-step delete: the first press asks for confirmation, the
-     second removes the extension. Reset when the target changes. */
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  /* Removal is irreversible (the engine deletes the extension's stored
+     data and caches), so both the row trash icon and the detail button
+     open a Cancel/Remove m3e-dialog (the Settings pattern). Escape,
+     the scrim and Cancel all close with no removal. */
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const pendingRef = useRef(pendingDelete);
+  pendingRef.current = pendingDelete;
+  const onDeleteRef = useRef(props.onDelete);
+  onDeleteRef.current = props.onDelete;
+  const deleteDialogRef = useRef<DialogEl | null>(null);
   useEffect(() => {
-    setConfirmDelete(false);
-  }, [props.detail?.id]);
+    const el = deleteDialogRef.current;
+    if (!el) return;
+    const onClosed = () => {
+      const target = pendingRef.current;
+      const confirmed = el.returnValue === "remove";
+      el.returnValue = "";
+      setPendingDelete(null);
+      if (confirmed && target) onDeleteRef.current(target.id);
+    };
+    el.addEventListener("closed", onClosed);
+    return () => el.removeEventListener("closed", onClosed);
+  }, []);
+  useEffect(() => {
+    const el = deleteDialogRef.current;
+    if (!pendingDelete || !el) return;
+    el.returnValue = "";
+    void el.show();
+  }, [pendingDelete]);
 
   return (
     <div className={"lb-ext-panel" + (props.open ? "" : " lb-out")} role="dialog" aria-label="Extensions">
@@ -70,6 +95,18 @@ export default function ExtensionsPanel(props: {
           </m3e-icon-button>
         </span>
       </div>
+      <m3e-dialog {...{ ref: deleteDialogRef }} alert="">
+        <span slot="header">Remove {pendingDelete?.name ?? "extension"}?</span>
+        <p>Its stored data and caches are removed from the engine. This cannot be undone.</p>
+        <div slot="actions">
+          <m3e-button autofocus>
+            <m3e-dialog-action return-value="cancel">Cancel</m3e-dialog-action>
+          </m3e-button>
+          <m3e-button variant="filled">
+            <m3e-dialog-action return-value="remove">Remove</m3e-dialog-action>
+          </m3e-button>
+        </div>
+      </m3e-dialog>
       {props.list === null && props.busy ? (
         /* #64: skeleton rows in the exact real-row metrics (28px
            avatar, flex-1 name bar, fixed version bar) so the pending
@@ -120,7 +157,7 @@ export default function ExtensionsPanel(props: {
                   aria-label={"Delete " + e.name}
                   onClick={(ev) => {
                     ev.stopPropagation();
-                    props.onDelete(e.id);
+                    setPendingDelete({ id: e.id, name: e.name });
                   }}
                 >
                   <m3e-icon name="delete" aria-hidden={true} />
@@ -171,18 +208,11 @@ export default function ExtensionsPanel(props: {
               </m3e-button>
             )}
             <m3e-button
-              onClick={() => {
-                if (confirmDelete) {
-                  setConfirmDelete(false);
-                  props.onDelete(props.detail!.id);
-                } else {
-                  setConfirmDelete(true);
-                }
-              }}
+              onClick={() => setPendingDelete({ id: props.detail!.id, name: props.detail!.name })}
               {...{ class: "lb-ext-delbtn" }}
             >
               <m3e-icon name="delete" aria-hidden={true} />
-              {confirmDelete ? "Confirm delete" : "Delete extension"}
+              Delete extension
             </m3e-button>
           </div>
           {props.detail.lastError && <p className="lb-ext-err">{props.detail.lastError}</p>}
