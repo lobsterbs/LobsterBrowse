@@ -31,7 +31,7 @@ declare module "react" {
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean; autofocus?: boolean };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
-      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string; size?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean | string };
@@ -40,6 +40,7 @@ declare module "react" {
       "m3e-form-field": M3eBase & { variant?: string; "float-label"?: string };
       "m3e-chip-set": M3eBase & { vertical?: boolean };
       "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
+      "m3e-assist-chip": M3eBase & { variant?: string; disabled?: boolean };
       "m3e-list": M3eBase;
       "m3e-list-item": M3eBase;
       "m3e-nav-menu": M3eBase;

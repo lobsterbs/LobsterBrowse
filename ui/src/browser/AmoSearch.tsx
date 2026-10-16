@@ -143,17 +143,19 @@ export default function AmoSearch() {
   return (
     <div>
       <div className="lb-ext-search">
-        <input
-          className="lb-ext-search-input"
-          type="text"
-          placeholder="Search Firefox add-ons..."
-          aria-label="Search Firefox add-ons"
-          value={sq}
-          onChange={(e) => setSq(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void runSearch();
-          }}
-        />
+        <m3e-search-bar style={{ flex: "1 1 auto", minWidth: 0 }}>
+          <input
+            slot="input"
+            type="text"
+            placeholder="Search Firefox add-ons..."
+            aria-label="Search Firefox add-ons"
+            value={sq}
+            onChange={(e) => setSq(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void runSearch();
+            }}
+          />
+        </m3e-search-bar>
         <m3e-icon-button aria-label="Search add-ons" disabled={sbusy ? true : undefined} onClick={() => void runSearch()}>
           <m3e-icon name="search" aria-hidden={true} />
         </m3e-icon-button>

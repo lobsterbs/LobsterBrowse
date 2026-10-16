@@ -143,14 +143,16 @@ export default function PdfViewer(props: { blob: Blob }) {
           <m3e-icon name="rotate_right" aria-hidden={true} />
         </m3e-icon-button>
         <span className="lb-fv-searchbox">
-          <input
-            className="lb-input"
-            aria-label="Search in PDF"
-            placeholder="Search in PDF"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
-          />
+          <m3e-search-bar style={{ flex: "1 1 auto", minWidth: 0 }}>
+            <input
+              slot="input"
+              aria-label="Search in PDF"
+              placeholder="Search in PDF"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
+            />
+          </m3e-search-bar>
           <m3e-icon-button aria-label="Search in PDF" onClick={() => void runSearch()}>
             <m3e-icon name="search" aria-hidden={true} />
           </m3e-icon-button>

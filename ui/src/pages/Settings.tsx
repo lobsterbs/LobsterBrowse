@@ -356,11 +356,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
         <div className="lb-setting-group">
-          <div className="lb-setting-label">Theme color</div>
+          {/* #102: a visible, associated label for the colour input. */}
+          <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
+            Theme color
+          </label>
           <div className="lb-seed-row">
             <input
+              id="lb-theme-color"
               type="color"
-              aria-label="Theme color"
               value={settings.seed}
               onChange={(e) => onChange({ seed: e.target.value })}
               className="lb-color-input"
