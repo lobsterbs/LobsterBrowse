@@ -781,7 +781,27 @@ FROM debian:bookworm-slim AS zl-builder
 # full-dest token no longer drops the route search. sw.js
 # 88e39dd016c4ad30 -> 4102766dcac60856; bootstrap.js cf8b76ad53488959
 # unchanged; Cargo-side pin stays b0296f8 (app-only change).
-ARG ZEOLITE_COMMIT=db17179deb266e53e92c29b2fbe194cc8c1ff646
+# Pin 78: Zeolite dist 54f2c098. SPA pathname routing: an oxc AST
+# pass in the wasm rewriter renames location reads (bare location and
+# <window|self|globalThis|document|top|parent>.location member reads)
+# to the __zl virtual location (#235), scope-aware so shadowed locals,
+# writes, delete targets and shorthand keys stay untouched, with a
+# parse-failure fallback that keeps the input unchanged and counts the
+# failure in diagnostics; the bootstrap gains applyVloc (#236): a
+# location-like view over the virtual path/query/hash (initScript
+# vpath; the host stays opaque), pushState/replaceState re-anchoring
+# through /__zl_prel__/ engine routes, popstate/hashchange sync, and
+# assign/replace/reload/toString parity. Pathname-routed SPAs (Brave
+# Ask's SvelteKit router) match their routes in-app instead of throwing
+# Not found on the opaque engine pathname. sw.js 4102766dcac60856 ->
+# 4e6e7a32ae284b67; bootstrap.js cf8b76ad53488959 -> 29bfb41d3b8e83ce
+# (bootstrap budget raised 25600 -> 27648 in the Zeolite CI gate,
+# measured 27117); rewriter_wasm_bg.wasm grows 114438 -> 663252 bytes
+# (the oxc parser rides the wasm; scripts without a location token
+# skip the pass - measured ~0.15 ms per 2 MB fast path, ~24 ms per 1
+# MB parsed and renamed). Cargo-side pin stays b0296f8 (rewriter crate
+# only; it is not a server dependency).
+ARG ZEOLITE_COMMIT=54f2c0985392934f431bdeee9fb343ed852074c1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -841,5 +861,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4102766dcac60856 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4e6e7a32ae284b67 ZEOLITE_BOOTSTRAP_SHA=29bfb41d3b8e83ce SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
+
