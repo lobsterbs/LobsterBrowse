@@ -67,6 +67,22 @@ export function clearHistory(): string[] {
   return [];
 }
 
+/* #99 undo: put one removed entry back at its old position. */
+export function insertHistory(url: string, index: number): string[] {
+  const list = loadHistory().filter((u) => u !== url);
+  list.splice(Math.min(Math.max(index, 0), list.length), 0, url);
+  const trimmed = list.slice(0, 200);
+  writeJson(HISTORY_KEY, trimmed);
+  return trimmed;
+}
+
+/* #99 undo: restore a cleared list, keeping anything visited since. */
+export function restoreHistory(urls: string[]): string[] {
+  const merged = Array.from(new Set([...loadHistory(), ...urls])).slice(0, 200);
+  writeJson(HISTORY_KEY, merged);
+  return merged;
+}
+
 /* ---- Session tabs (persisted so the browser view can restore on reload) ----
    The full per-tab history stack and index are preserved (P0 session
    restoration): flattening to the current URL used to destroy back/

@@ -228,11 +228,31 @@ export default function App() {
 
   /* #93 recent sites: removal and clearing keep Home row and the
      persisted history store in lockstep. */
+  /* #99: both removals are reversible, so they happen at once and the
+     snackbar offers Undo (entries go back to their old positions). */
   const removeHistory = useCallback((url: string) => {
+    const index = store.loadHistory().indexOf(url);
     setHistory(store.removeHistory(url));
+    if (index < 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      /* keep the raw entry as the label */
+    }
+    M3eSnackbar.open("Removed " + host + " from recent sites", "Undo", {
+      duration: 6000,
+      actionCallback: () => setHistory(store.insertHistory(url, index)),
+    });
   }, []);
   const clearHistoryAll = useCallback(() => {
+    const before = store.loadHistory();
     setHistory(store.clearHistory());
+    if (before.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+    M3eSnackbar.open("Cleared recent sites", "Undo", {
+      duration: 6000,
+      actionCallback: () => setHistory(store.restoreHistory(before)),
+    });
   }, []);
 
   /* Navigate the active proxy tab (used by Home search). */
@@ -571,6 +591,56 @@ export default function App() {
      are gone. ---- */
   const railRef = useRef<HTMLElement | null>(null);
 
+  /* #99: clearing a site's cookies is irreversible, so it asks first.
+     The palette command only sets the target; this m3e-dialog (the
+     Settings pattern) confirms. Hooks stay above the cloak return. */
+  const [clearSiteUrl, setClearSiteUrl] = useState<string | null>(null);
+  const clearSiteRef = useRef<(HTMLElement & { show: () => Promise<void>; returnValue: string }) | null>(null);
+  const clearSiteTarget = useRef<string | null>(null);
+  clearSiteTarget.current = clearSiteUrl;
+  useEffect(() => {
+    const el = clearSiteRef.current;
+    if (!el) return;
+    const onClosed = () => {
+      const target = clearSiteTarget.current;
+      const confirmed = el.returnValue === "clear";
+      el.returnValue = "";
+      setClearSiteUrl(null);
+      if (!confirmed || !target) return;
+      /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
+         jar profile, one origin - cookies only, honest counts. */
+      void zlSend({ type: "zl:clearJar", origin: target }).then((reply) => {
+        if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+        if (reply && reply.ok) {
+          M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
+            duration: 4000,
+          });
+        } else {
+          M3eSnackbar.open(
+            "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
+            { duration: 5000 },
+          );
+        }
+      });
+    };
+    el.addEventListener("closed", onClosed);
+    return () => el.removeEventListener("closed", onClosed);
+  }, [cloaked]);
+  useEffect(() => {
+    const el = clearSiteRef.current;
+    if (!clearSiteUrl || !el) return;
+    el.returnValue = "";
+    void el.show();
+  }, [clearSiteUrl]);
+  let clearSiteHost = "this site";
+  if (clearSiteUrl) {
+    try {
+      clearSiteHost = new URL(clearSiteUrl).hostname;
+    } catch {
+      /* keep the generic label */
+    }
+  }
+
   if (cloaked) {
     return (
       <div className="lb-cloak">
@@ -645,24 +715,9 @@ export default function App() {
       id: "clear-site",
       group: "Privacy",
       label: "Clear cookies for this site",
-      confirm: "Press Enter again to clear this site's cookies",
       run: () => {
         if (!activeTab?.url) return;
-        /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
-           jar profile, one origin - cookies only, honest counts. */
-        void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
-          if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-          if (reply && reply.ok) {
-            M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
-              duration: 4000,
-            });
-          } else {
-            M3eSnackbar.open(
-              "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
-              { duration: 5000 },
-            );
-          }
-        });
+        setClearSiteUrl(activeTab.url);
       },
     },
   ];
@@ -788,6 +843,22 @@ export default function App() {
       </div>
       {/* #81: rendered at the root so Ctrl+K works in every view. */}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
+      {/* #99: confirm before deleting cookies (irreversible). Cancel,
+          Escape and the scrim all close with no action. */}
+      <m3e-dialog {...{ ref: clearSiteRef }} alert="">
+        <span slot="header">Clear cookies?</span>
+        <p>
+          Cookies stored for {clearSiteHost} in the active profile will be deleted. This cannot be undone.
+        </p>
+        <div slot="actions">
+          <m3e-button autofocus>
+            <m3e-dialog-action return-value="cancel">Cancel</m3e-dialog-action>
+          </m3e-button>
+          <m3e-button variant="filled">
+            <m3e-dialog-action return-value="clear">Clear cookies</m3e-dialog-action>
+          </m3e-button>
+        </div>
+      </m3e-dialog>
     </m3e-theme>
   );
 }
