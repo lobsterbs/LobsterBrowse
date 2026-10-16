@@ -793,7 +793,18 @@ FROM debian:bookworm-slim AS zl-builder
 # transferToImageBitmap source clear (#225), and cooldown relay
 # failures carrying their traceId with retry stalls recorded (#226).
 # Cargo-side pin stays 63b4f23 (all SW-side, no server crate change).
-ARG ZEOLITE_COMMIT=20c5f6745b97c7f867f6a3d640b8c69108282ff4
+# Pin 75: Zeolite dist b866d45. Engine-side fixes since pin 74: the
+# SVG paint rewriter parses the leading url() token (honoring quotes)
+# so external references with a fallback tail (filter:
+# url(f.svg#g) blur(2px), fill/mask fallback chains) are routed and
+# the tail kept verbatim (#227, rewriter_wasm_bg.wasm rebuilt);
+# b64decode rejects a stripped length of 4k+1 instead of silently
+# dropping the trailing 6-bit group (#228); the worker mint memo is
+# capped at 256 with LRU-by-recency eviction so long-lived workers
+# cannot grow it without bound (#229). sw.js 3a33c20f49502192 ->
+# cd12f976230ddba9; bootstrap.js cf8b76ad53488959 unchanged;
+# Cargo-side pin stays 63b4f23 (no server crate change).
+ARG ZEOLITE_COMMIT=b866d45abf94cfa3013c4db9ffd7f877a84d084b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -853,5 +864,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3a33c20f49502192 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cd12f976230ddba9 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]

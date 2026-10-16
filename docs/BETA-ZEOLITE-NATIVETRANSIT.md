@@ -886,3 +886,17 @@ pixels, worker transferToImageBitmap clears the source, cooldown
 relay failures carry their traceId and retry stalls are recorded,
 Zeolite #223/#224/#225/#226). Cargo-side pin stays 63b4f23: all
 changes are SW-side, not in the server crate.
+
+
+Pin 75: Zeolite dist b866d45, sw.js 3a33c20f49502192 ->
+cd12f976230ddba9, bootstrap.js unchanged. Engine changes since
+pin 74: the SVG paint rewriter parses the leading url() token so
+external references with a fallback tail (filter: url(f.svg#g)
+blur(2px), fill/mask fallback chains) are routed and the tail is
+kept verbatim (Zeolite #227, rewriter_wasm_bg.wasm rebuilt),
+b64decode rejects a stripped length of 4k+1 instead of silently
+dropping the trailing 6-bit group (Zeolite #228), and the worker
+mint memo is capped at 256 with LRU-by-recency eviction so
+long-lived workers cannot grow it without bound (Zeolite #229).
+Cargo-side pin stays 63b4f23: all changes are SW-side or in the
+dist wasm bundle, not in the server crate.
