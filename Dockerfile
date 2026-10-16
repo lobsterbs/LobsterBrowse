@@ -747,7 +747,29 @@ FROM debian:bookworm-slim AS zl-builder
 # The relay stays the default for everything else. sw.js
 # e575b078e13e2193 -> 2c036ac7ea643f7b; bootstrap.js
 # 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23.
-ARG ZEOLITE_COMMIT=ced0c3f3c9d88190d496ba7b6e602b8ab87b2478
+# Pin 76 (main release bump; pins 71-75 were beta-only and
+# their fixes ride this bundle): Zeolite dist 7cdf6fc.
+# Engine-side fixes since pin 70: control-plane sender gates
+# fail closed, worker/blob storage scoping, tab reply binding
+# (#169, #170, #171, #185); page cache session/auth scope,
+# credentials handling, redirect-final URL keys and a body
+# size cap (#179, #184, #195); mid-body transport errors
+# surface as stream errors, not a clean EOF (#180); redirect
+# hops re-enter the full gate chain and injected headers stay
+# same-origin (#186, #194); NAVH pages recover their virtual
+# origin (#193); cookie __Host-/__Secure- prefixes (#191);
+# download partial-buffer cap with honest resume errors
+# (#192); css url() fragments survive engine-route unwrap
+# (#199); DevTools keyboard access (#220); fingerprint tz/
+# canvas consistency (#223-#226); svg paint tail, b64decode
+# len%4 rejection, bounded mint memo (#227-#229); plus the
+# wave 18-20 fixes beta rode at pins 71-73 (#200-#204,
+# #205-#208). sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30;
+# bootstrap.js 423b16b806b7f4cc -> cf8b76ad53488959.
+# Cargo-side pin moves 63b4f23 -> b0296f8: ships the
+# zeolite-server hardening wave (#181, #182, #183, #189,
+# #196, #198) and the deferred server wave (#197, #209-#213).
+ARG ZEOLITE_COMMIT=7cdf6fcaad4ba331efb50e9854fad3864bec43f6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -807,5 +829,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2c036ac7ea643f7b ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=88e39dd016c4ad30 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
