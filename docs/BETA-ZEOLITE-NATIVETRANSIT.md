@@ -914,3 +914,5 @@ survival (#199). Cargo-side pin moves 63b4f23 -> b0296f8: the
 deferred zeolite-server wave ships (session liveness, stream
 freeze fix, connection budgets, handshake timeout, client byte
 budget, auth rate limit + PBKDF2; #181/#182/#183/#189/#196/#198).
+
+Pin 76 deploy verified live 2026-10-16T14:35:09Z (build 96ee943, zlswSha 88e39dd016c4ad30, healthz ok; this push re-runs transit-live CI against the live pin-76 pair)
