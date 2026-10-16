@@ -571,7 +571,9 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
 .lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.lb-dt-seg { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
+.lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
+/* #103: the tab panels are siblings of the switcher (bounded card layout, see DevTools.tsx) and flex to fill the card, so the page body inside keeps its bounded scroll area. */
+.lb-dt-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .lb-dt-pager { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--md-sys-measurement-space100); overflow: auto; }
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
