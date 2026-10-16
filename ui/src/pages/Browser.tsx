@@ -2122,10 +2122,11 @@ export default function BrowserView(props: Props) {
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
             {tbSuggOpen && (
-              <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+              <div id="lb-tb-suggest" className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
                   <button
                     key={it.url}
+                    id={"lb-tb-opt-" + i}
                     type="button"
                     role="option"
                     aria-selected={i === tbSuggIdx}
@@ -2156,10 +2157,21 @@ export default function BrowserView(props: Props) {
               </>
             )}
             {tbExpanded || !active.url ? (
+              /* #102: this URL field stays a raw input on purpose. It is
+                 the compact editor that expands in place inside the
+                 center pill (AGENTS.md: toolbar URL editing remains
+                 inside the pill); an m3e-search-bar or m3e-form-field
+                 frame would break that layout. It is labelled by
+                 aria-label. */
               <input
                 ref={urlInputRef}
                 className="lb-url-input"
                 aria-label="URL or search"
+                role="combobox"
+                aria-expanded={tbSuggOpen}
+                aria-controls={tbSuggOpen ? "lb-tb-suggest" : undefined}
+                aria-autocomplete="list"
+                aria-activedescendant={tbSuggOpen && tbSugg[tbSuggIdx] ? "lb-tb-opt-" + tbSuggIdx : undefined}
                 placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                 value={draft}
                 spellCheck={false}

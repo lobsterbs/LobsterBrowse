@@ -856,13 +856,15 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
               ]}
               onChange={(v) => setDt({ levelFilter: v })}
             />
-            <input
-              className="lb-input"
-              placeholder="Filter"
-              aria-label="Filter console output"
-              value={dt.consoleFilter}
-              onChange={(e) => setDt({ consoleFilter: e.target.value })}
-            />
+            <m3e-search-bar style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <input
+                slot="input"
+                placeholder="Filter"
+                aria-label="Filter console output"
+                value={dt.consoleFilter}
+                onChange={(e) => setDt({ consoleFilter: e.target.value })}
+              />
+            </m3e-search-bar>
             <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
@@ -894,16 +896,18 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
                 multi-line expressions (Shift+Enter), replacing the old
                 manual rows=4 toggle. */}
             <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
-            <textarea
-              ref={inputRef}
-              id="lb-dt-console-in"
-              className="lb-input lb-console-area"
-              aria-label="Console input"
-              value={cmd}
-              rows={1}
-              onChange={(e) => setCmd(e.target.value)}
-              onKeyDown={keyDown}
-            />
+            <m3e-form-field style={{ flex: 1, minWidth: 0 }}>
+              <label slot="label" htmlFor="lb-dt-console-in">Console input</label>
+              <textarea
+                ref={inputRef}
+                id="lb-dt-console-in"
+                className="lb-console-area"
+                value={cmd}
+                rows={1}
+                onChange={(e) => setCmd(e.target.value)}
+                onKeyDown={keyDown}
+              />
+            </m3e-form-field>
             <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
           </div>
         </div>
@@ -912,13 +916,15 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       {dt.page === "network" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
-            <input
-              className="lb-input"
-              placeholder="Filter by URL"
-              aria-label="Filter network requests"
-              value={dt.netFilter}
-              onChange={(e) => setDt({ netFilter: e.target.value })}
-            />
+            <m3e-search-bar style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <input
+                slot="input"
+                placeholder="Filter by URL"
+                aria-label="Filter network requests"
+                value={dt.netFilter}
+                onChange={(e) => setDt({ netFilter: e.target.value })}
+              />
+            </m3e-search-bar>
             <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>

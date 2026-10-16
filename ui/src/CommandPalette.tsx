@@ -4,9 +4,8 @@ export type Command = {
   id: string;
   label: string;
   group: string;
-  /* Optional second-Enter confirmation prompt for destructive
-     commands (#81: no destructive action runs on a single Enter). */
-  confirm?: string;
+  /* Destructive commands must not run from here directly: they open
+     a confirmation dialog in the owner instead (App.tsx). */
   run: () => void;
 };
 
@@ -24,7 +23,6 @@ type Props = {
 export default function CommandPalette({ open, commands, onClose }: Props) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
-  const [pending, setPending] = useState<string | null>(null);
 
   /* Reset on every open. Escape is handled on window, not only on the
      input: a focus steal (engine-update snackbar etc.) must not leave
@@ -34,7 +32,6 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
     if (!open) return;
     setQ("");
     setIdx(0);
-    setPending(null);
     const onWin = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -55,15 +52,10 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
       )
     : commands;
   const sel = Math.min(idx, Math.max(hits.length - 1, 0));
-  const pendingCmd = hits.find((c) => c.id === pending);
 
   const run = (i: number) => {
     const c = hits[i];
     if (!c) return;
-    if (c.confirm && pending !== c.id) {
-      setPending(c.id);
-      return;
-    }
     onClose();
     c.run();
   };
@@ -79,7 +71,6 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
       if (hits.length === 0) return;
       const d = e.key === "ArrowDown" ? 1 : -1;
       setIdx((sel + d + hits.length) % hits.length);
-      setPending(null);
       return;
     }
     if (e.key === "Enter") {
@@ -96,19 +87,22 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
       }}
     >
       <div className="lb-cmdk" role="dialog" aria-label="Command palette">
-        <input
-          autoFocus={true}
-          className="lb-cmdk-input"
-          placeholder="Type a command..."
-          value={q}
-          spellCheck={false}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setIdx(0);
-            setPending(null);
-          }}
-          onKeyDown={onKey}
-        />
+        {/* #102: M3E search bar; the input is its slotted control. */}
+        <m3e-search-bar>
+          <input
+            slot="input"
+            autoFocus={true}
+            aria-label="Type a command"
+            placeholder="Type a command..."
+            value={q}
+            spellCheck={false}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setIdx(0);
+            }}
+            onKeyDown={onKey}
+          />
+        </m3e-search-bar>
         <div className="lb-cmdk-list" role="listbox">
           {hits.length === 0 && (
             <div className="lb-cmdk-empty">No matching command</div>
@@ -134,9 +128,7 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
             );
           })}
         </div>
-        <div className="lb-cmdk-hint">
-          {pendingCmd ? pendingCmd.confirm : "Up/Down move, Enter runs, Esc closes"}
-        </div>
+        <div className="lb-cmdk-hint">Up/Down move, Enter runs, Esc closes</div>
       </div>
     </div>
   );
