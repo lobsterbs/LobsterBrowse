@@ -827,3 +827,14 @@ Pin 70: Zeolite dist ced0c3f, sw.js e575b078e13e2193 ->
 2c036ac7ea643f7b, bootstrap.js unchanged. LB wiring: zlWispInit
 in ui/src/zeolite.ts plus the /build fetch in Browser.tsx
 (e944c7a main / 0fc91d1 beta).
+Pin 76 (main release bump, 2026-10-16): Zeolite dist 7cdf6fc,
+sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30, bootstrap.js
+423b16b806b7f4cc -> cf8b76ad53488959. Main jumps 70 -> 76;
+pins 71-75 were beta-only, so this bundle carries every
+engine-side fix since pin 70 (#169-#171, #179-#185, #189-#204,
+#205-#208, #215-#222 triage, #223-#229). Cargo-side pin
+63b4f23 -> b0296f8 ships the zeolite-server hardening
+(#181-#183, #189, #196, #198) plus the deferred server wave
+(#197, #209-#213). Main UI is unchanged: the beta-only
+app-level relay/wisp registration (c29ac93) is not on main,
+so main keeps the Browser.tsx-only relay registration.
