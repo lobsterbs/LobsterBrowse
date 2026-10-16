@@ -778,7 +778,22 @@ FROM debian:bookworm-slim AS zl-builder
 # 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23 (both
 # fixes are SW-side, so the server-rev gap noted at pin 71 persists
 # until the next server-dep bump).
-ARG ZEOLITE_COMMIT=eaff2a76d526fa90d52272eee03f14216be3fecf
+# Pin 74: Zeolite dist 20c5f67. Engine-side fixes since pin 73:
+# the control-plane sender gates fail closed (Zeolite #169/#170/#171/
+# #185 wave: the window relay arm requires a same-origin self-posted
+# sender, host-only control messages require a host-page sender,
+# workers get per-site storage scoping, tab message replies bind to
+# the sending extension via per-send nonces), the #132 identity-race
+# follow-up converges the mint relabel and the contentWindow getter
+# on one proxy identity (bootstrap.js grows to 25115 bytes; the
+# Zeolite CI budget is raised 25088 -> 25600 with the rationale
+# recorded in the gate), and the fingerprint consistency wave fixes
+# timezoneName-without-utcOffsetMin forcing a UTC Date patch (#223),
+# double-perturbed canvas toDataURL/toBlob reads (#224), the worker
+# transferToImageBitmap source clear (#225), and cooldown relay
+# failures carrying their traceId with retry stalls recorded (#226).
+# Cargo-side pin stays 63b4f23 (all SW-side, no server crate change).
+ARG ZEOLITE_COMMIT=20c5f6745b97c7f867f6a3d640b8c69108282ff4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -838,5 +853,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b238040b761eadf0 ZEOLITE_BOOTSTRAP_SHA=423b16b806b7f4cc SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3a33c20f49502192 ZEOLITE_BOOTSTRAP_SHA=cf8b76ad53488959 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
