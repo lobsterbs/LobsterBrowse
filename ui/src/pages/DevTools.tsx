@@ -874,6 +874,13 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             </m3e-icon-button>
           </div>
           <div className="lb-console" ref={consoleRef}>
+            {/* #94: quiet empty state; a filtered-to-nothing list says
+                so instead of implying nothing was ever logged. */}
+            {consoleEntries.length === 0 && (
+              <p className="lb-muted lb-console-empty">
+                {dt.console.length > 0 ? "No matching entries." : "Console output will appear here."}
+              </p>
+            )}
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
