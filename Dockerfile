@@ -831,7 +831,28 @@ FROM debian:bookworm-slim AS zl-builder
 # (globals.rs + handler seam). Cargo-side pin stays b0296f8
 # (rewriter crate is not a server dependency); sw.js is unchanged,
 # so verify the served /zlsw/bootstrap.js hash instead.
-ARG ZEOLITE_COMMIT=47f0ab3c3077498bf96f4d45f8dcca42cf4d986
+# Pin 81: Zeolite dist a84c43f. #238: the Brave SERP reload
+# storm. SvelteKit client start() compares document.URL with
+# location.href and self-assigns location.href to resync (kit
+# PR 11179, a basic-auth drop); the #235 pass renamed
+# location.href reads to the virtual __zl.href but left
+# document.URL native, so against the opaque navh route the
+# compare never passed and start() re-navigated on every
+# load (43 identical document loads in ~30s live, then Brave
+# 429 + PoW interstitial). The globals pass now rewrites
+# scope-resolved document.URL and document.documentURI reads
+# (receiver 'document' only; window.URL is the URL
+# constructor) to __zl.href, so both sides of the compare see
+# the virtual URL and the check never fires (Zeolite 7c3f6c21,
+# CI run 626 green, 144 rewriter tests incl. 2 new). sw.js
+# 4e6e7a32ae284b67 unchanged; bootstrap.js 20dee634ae9c98c9
+# unchanged; rewriter_wasm_bg.wasm moves 1a5c2582 ->
+# 7acc3b508f693a5a (664473 bytes) - the ride is in the wasm,
+# so the /build alarm pins cannot distinguish this bump;
+# verify the served /zlsw/rewriter_wasm_bg.wasm hash instead.
+# Cargo-side pin stays b0296f8 (rewriter crate is not a server
+# dependency).
+ARG ZEOLITE_COMMIT=a84c43f87bbe0eef0a20f96c6747762a6c64eb8b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
