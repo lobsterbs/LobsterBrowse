@@ -941,8 +941,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             </m3e-icon-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-            Requests made by the page's JavaScript (fetch/XHR/WebSocket). Headers and byte sizes are not
-            exposed to the page context by the browser — this is a page-level view, not a network tap.
+            Requests the page's JavaScript makes (fetch/XHR) plus element load failures, captured live
+            from the frame. Headers, byte sizes and bodies are not exposed to the page context by the
+            browser — this is a page-level view, not a network tap.
           </p>
           <ZeoliteDownloads />
           <div className="lb-net">
