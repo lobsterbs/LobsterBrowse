@@ -906,7 +906,26 @@ FROM debian:bookworm-slim AS zl-builder
 # verify the served /zlsw/rewriter_wasm_bg.wasm hash instead.
 # Cargo-side pin stays b0296f8 (rewriter crate is not a server
 # dependency).
-ARG ZEOLITE_COMMIT=a84c43f87bbe0eef0a20f96c6747762a6c64eb8b
+# Pin 82: Zeolite dist 9b6f7f8. Two engine waves since pin 81.
+# #248 (google.com/ai reCAPTCHA solve loop): the post-solve
+# re-navigation minted a prel-of-prel URL and decodeNavHandlePath
+# leaked engine markers into the upstream path (Google's own 404),
+# so Google re-challenged forever; the prel tail now peels to the
+# deepest level (bounded 4) and vloc toVirtual decodes route-shaped
+# inputs instead of re-wrapping them (Zeolite 1dd647a, bootstrap
+# budget 27648 -> 28672 for the 27678-byte result).
+# #243-#247: new app/src/lifecycle.ts draws the host/proxied client
+# boundary structurally (host-only zl:tabsOp/zl:downloadOp/zl:notifyOp;
+# tabs.sendMessage and zl:scripting only reach the client whose
+# decoded destination matches, unmatched scripting is dropped),
+# install holds the rewriter prewarm in waitUntil, the extension
+# boot phases fail independently with EXTENSION diagnostics, and
+# startUpdateChecks runs once per worker evaluation (Zeolite 530d9ab,
+# CI run 630 all 5 jobs green, suite 1232). sw.js 4e6e7a32ae284b67
+# -> d693a74c593bb725 (359381 bytes); bootstrap.js 20dee634ae9c98c9
+# -> eced033e919dfb38; rewriter_wasm_bg.wasm unchanged
+# 7acc3b508f693a5a. Cargo-side pin stays b0296f8 (SW-only fixes).
+ARG ZEOLITE_COMMIT=9b6f7f8d794b64d7080981fb37bb420a87ec4cc3
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -966,5 +985,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4e6e7a32ae284b67 ZEOLITE_BOOTSTRAP_SHA=20dee634ae9c98c9 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d693a74c593bb725 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
