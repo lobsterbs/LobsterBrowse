@@ -1786,7 +1786,6 @@ export default function BrowserView(props: Props) {
       }
       if (tabId === null || !tab) return;
       const d = ev.data ?? {};
-      const dtBase = () => L.dt[tabId as number] ?? emptyDt();
       /* Maximum string lengths: a hostile or broken page must not be
          able to stuff megabytes into DevTools state. */
       const cap = (v: unknown, n: number) => String(v ?? "").slice(0, n);
@@ -1802,13 +1801,19 @@ export default function BrowserView(props: Props) {
           pushLog(kind === "error" || kind === "warn" ? "error" : "info",
             "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
         }
-        setDt(tabId, {
-          console: [...dtBase().console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
-        });
+        /* Functional patch: two events dispatched back to back (log
+           then error) both build their patch against live.current, which
+           only refreshes on the next render, so the second dtBase()-built
+           console array silently dropped the first entry. #106 */
+        setDt(tabId, (base) => ({
+          console: [...base.console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
+        }));
       } else if (ev.lb === "net") {
-        setDt(tabId, {
+        /* Same functional form as console: net events must append to
+           the freshest state, not the live.current snapshot. */
+        setDt(tabId, (base) => ({
           net: [
-            ...dtBase().net,
+            ...base.net,
             {
               id: nextEntryId(),
               url: sanitizeUrl(cap(d.url, 2000)),
@@ -1820,7 +1825,7 @@ export default function BrowserView(props: Props) {
               ts: Number(d.ts ?? Date.now()),
             },
           ].slice(-500),
-        });
+        }));
       } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
