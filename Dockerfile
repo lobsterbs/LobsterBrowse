@@ -900,7 +900,7 @@ FROM debian:bookworm-slim AS zl-builder
 # virtual-origin asset recovers from the cdn.search.brave.com
 # immutable base (Zeolite 1fbac2dc, CI run 634 all 5 jobs
 # green, suite 1242 incl. 2 new assetbase tests). sw.js
-# c19ce11c78efd751 -> 42dda133cb8d9a705 (359976 bytes);
+# c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
 ARG ZEOLITE_COMMIT=d5a2a6683a2726c7f481b57c206044dcddf4e020
@@ -963,6 +963,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42dda133cb8d9a705 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42dda133cb8d9a70 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
