@@ -8,7 +8,7 @@
    proxied document.
 
    Built from real M3E components: m3e-card as the container,
-   m3e-tabs for the section switch, m3e-textinput for the
+   m3e-segmented-button for the section switch, m3e-textinput for the
    edit fields. */
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -818,38 +818,28 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
         </span>
       </div>
 
-      {/* #103: the section switch is m3e-tabs (real tablist/tab roles,
-          the component own roving focus, typeahead and ink bar). The
-          tab panels are siblings of the switcher, not children:
-          m3e-tabs sizes its internal slide to its content, which would
-          overflow this bounded card; sibling panels flex inside it.
-          Panels stay mounted so each tab aria-controls keeps pointing
-          at a live element, but their content stays React-conditional
-          so the pollers (diagnostics, download registry) only run
-          while their page is open. */}
-      <m3e-tabs
-        {...{
-          ref: (el: any) => {
-            if (el) el.classList.add("lb-dt-tabs");
-          },
-        }}
-        aria-label="Developer tools sections"
-      >
+      {/* Real M3E segmented button for the section switch. */}
+      <m3e-segmented-button
+          {...{
+            ref: (el: any) => {
+              if (el) el.classList.add("lb-dt-seg");
+            },
+          }}
+          aria-label="Developer tools sections"
+        >
         {PAGES.map(([page, label, icon]) => (
-          <m3e-tab
+          <m3e-button-segment
             key={page}
-            for={"lb-dt-panel-" + page}
-            selected={dt.page === page ? "" : undefined}
+            checked={dt.page === page ? "" : undefined}
             onClick={() => setDt({ page: page })}
           >
             <m3e-icon slot="icon" name={icon} aria-hidden={true} />
             {label}
             {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
-          </m3e-tab>
+          </m3e-button-segment>
         ))}
-      </m3e-tabs>
+      </m3e-segmented-button>
 
-      <m3e-tab-panel id="lb-dt-panel-console" {...{ hidden: dt.page === "console" ? undefined : true, class: "lb-dt-panel" }}>
       {dt.page === "console" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
@@ -918,9 +908,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           </div>
         </div>
       )}
-      </m3e-tab-panel>
 
-      <m3e-tab-panel id="lb-dt-panel-network" {...{ hidden: dt.page === "network" ? undefined : true, class: "lb-dt-panel" }}>
       {dt.page === "network" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
@@ -936,8 +924,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
             </m3e-icon-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-            Requests made by the page's JavaScript (fetch/XHR/WebSocket). Headers and byte sizes are not
-            exposed to the page context by the browser — this is a page-level view, not a network tap.
+            Requests the page's JavaScript makes (fetch/XHR) plus element load failures, captured live
+            from the frame. Headers, byte sizes and bodies are not exposed to the page context by the
+            browser — this is a page-level view, not a network tap.
           </p>
           <ZeoliteDownloads />
           <div className="lb-net">
@@ -974,9 +963,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           )}
         </div>
       )}
-      </m3e-tab-panel>
 
-      <m3e-tab-panel id="lb-dt-panel-diagnostics" {...{ hidden: dt.page === "diagnostics" ? undefined : true, class: "lb-dt-panel" }}>
       {dt.page === "diagnostics" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
@@ -1043,7 +1030,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           )}
         </div>
       )}
-      </m3e-tab-panel>
 
     </m3e-card>
   );

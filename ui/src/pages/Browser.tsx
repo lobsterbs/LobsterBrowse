@@ -51,6 +51,135 @@ import M3eSelect from "../M3eSelect";
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
 
+/* ---- DevTools capture (#106): the engine exposes no page console
+   or request surface to the embedder, so the Console and Network
+   panels had no producers and stayed empty on every page. Frames are
+   same-origin by architecture, so the parent captures the page
+   surface directly: no page-context script injection (CSP-immune).
+   Every navigation mints a fresh contentWindow, so the per-window
+   flag is the idempotence guard. Everything posts through the
+   existing {lb:...} message schema the DevTools reducer already
+   processes. ---- */
+const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
+  try {
+    const cw0 = frame.contentWindow;
+    if (!cw0) return;
+    const cw = cw0 as Window & typeof globalThis & { __lbDtShim?: boolean };
+    if (cw.__lbDtShim) return;
+    cw.__lbDtShim = true;
+    const post = (ev: { lb: string; data: Record<string, unknown> }): void => {
+      try {
+        cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
+      } catch {
+        /* a torn-down frame cannot report; nothing to do */
+      }
+    };
+    const fmt = (v: unknown): string => {
+      if (typeof v === "string") return v;
+      if (v instanceof Error) return v.stack || String(v);
+      try {
+        const s = JSON.stringify(v);
+        return s === undefined ? String(v) : s;
+      } catch {
+        return String(v);
+      }
+    };
+    /* Console passthrough: report to DevTools, then call through so
+       the page still sees its own output. */
+    const cons = cw.console as unknown as Record<string, (...args: unknown[]) => void>;
+    for (const level of ["log", "info", "warn", "error", "debug"] as const) {
+      const orig = cons[level]?.bind(cw.console);
+      if (!orig) continue;
+      cons[level] = (...args: unknown[]) => {
+        post({ lb: "console", data: { level, text: args.map(fmt).join(" "), ts: Date.now() } });
+        orig(...args);
+      };
+    }
+    /* Uncaught errors and element load failures. Capture phase:
+       resource error events do not bubble. */
+    cw.addEventListener(
+      "error",
+      (ev) => {
+        const tgt = ev.target;
+        if (tgt && tgt !== (cw as unknown as EventTarget) && (tgt as Element).tagName) {
+          const el2 = tgt as Element;
+          const url = String((el2 as HTMLImageElement).src || (el2 as HTMLLinkElement).href || "");
+          post({ lb: "resfail", data: { url, kind: el2.tagName.toLowerCase(), reason: "RESOURCE_LOAD_FAILURE", ts: Date.now() } });
+          return;
+        }
+        const e = ev as ErrorEvent;
+        if (e.message)
+          post({ lb: "console", data: { level: "error", text: e.message + " (" + (e.filename || "?") + ":" + String(e.lineno ?? 0) + ")", ts: Date.now() } });
+      },
+      true,
+    );
+    cw.addEventListener("unhandledrejection", (ev) => {
+      post({ lb: "console", data: { level: "error", text: "Unhandled rejection: " + fmt((ev as PromiseRejectionEvent).reason), ts: Date.now() } });
+    });
+    /* Network view: wrap the frame fetch/XHR after the engine's own
+       hooks (the bootstrap has wrapped them by load time), so what
+       DevTools sees is what the page actually calls. The URL is
+       recorded exactly as the page passed it: relative paths stay
+       readable, and resolving against the opaque engine location
+       would only add noise. */
+    const origFetch = cw.fetch.bind(cw);
+    const urlOf = (input: RequestInfo | URL): string => {
+      if (typeof input === "string") return input;
+      const u = (input as { url?: unknown }).url;
+      if (typeof u === "string") return u;
+      try {
+        return input.toString();
+      } catch {
+        return String(input);
+      }
+    };
+    cw.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const t0 = Date.now();
+      const url = urlOf(input);
+      const im = (input as { method?: unknown }).method;
+      const method = String(init?.method ?? (typeof im === "string" ? im : "GET")).toUpperCase();
+      return origFetch(input, init).then(
+        (r) => {
+          post({ lb: "net", data: { url, method, status: r.status, ok: r.ok, dur: Date.now() - t0, ts: Date.now() } });
+          return r;
+        },
+        (err) => {
+          post({ lb: "net", data: { url, method, error: fmt(err), dur: Date.now() - t0, ts: Date.now() } });
+          throw err;
+        },
+      );
+    }) as typeof fetch;
+    const xo = cw.XMLHttpRequest.prototype;
+    type XH = XMLHttpRequest & { __lbDt?: { method: string; url: string; t0: number } };
+    const origOpen = xo.open as unknown as (this: XH, method: string, url: string | URL, ...rest: unknown[]) => void;
+    xo.open = function (this: XH, method: string, url: string | URL, ...rest: unknown[]) {
+      try {
+        this.__lbDt = { method: String(method).toUpperCase(), url: String(url), t0: 0 };
+      } catch {
+        /* a sealed xhr just goes untracked */
+      }
+      return origOpen.call(this, method, url, ...rest);
+    } as typeof XMLHttpRequest.prototype.open;
+    const origSend = xo.send;
+    xo.send = function (this: XH, body?: Document | XMLHttpRequestBodyInit | null) {
+      const meta = this.__lbDt;
+      if (meta) {
+        meta.t0 = Date.now();
+        this.addEventListener("loadend", () => {
+          if (this.status === 0)
+            post({ lb: "net", data: { url: meta.url, method: meta.method, error: this.statusText || "network error", dur: Date.now() - meta.t0, ts: Date.now() } });
+          else
+            post({ lb: "net", data: { url: meta.url, method: meta.method, status: this.status, ok: this.status >= 200 && this.status < 300, dur: Date.now() - meta.t0, ts: Date.now() } });
+        });
+      }
+      return origSend.call(this, body);
+    };
+  } catch {
+    /* The capture surface must never break the page: any failure
+       here just leaves that frame without DevTools data. */
+  }
+};
+
 /* Engine handoff payloads (Zeolite #43 notifications, #45 menu
    listing): the shapes the service worker broadcasts / replies with.
    Local copies, not imports: the UI has no dependency on engine source
@@ -1985,8 +2114,10 @@ export default function BrowserView(props: Props) {
                     ctxHooked.current.add(el);
                     el.addEventListener("load", () => {
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
+                      hookFrameDevTools(el);
                     });
                     el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
+                    hookFrameDevTools(el);
                   }
                 } else frames.current.delete(t.id);
               }}
