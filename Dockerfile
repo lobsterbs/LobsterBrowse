@@ -871,7 +871,22 @@ FROM debian:bookworm-slim AS zl-builder
 # -> d693a74c593bb725 (359381 bytes); bootstrap.js 20dee634ae9c98c9
 # -> eced033e919dfb38; rewriter_wasm_bg.wasm unchanged
 # 7acc3b508f693a5a. Cargo-side pin stays b0296f8 (SW-only fixes).
-ARG ZEOLITE_COMMIT=9b6f7f8d794b64d7080981fb37bb420a87ec4cc3
+# Pin 83: Zeolite dist d63dd86. One engine wave since pin 82.
+# #249 (UI loads but every engine request wedges to embedder
+# timeout): the boot gates awaited unbounded promises, so a hung
+# Cache Storage or IndexedDB open stalled routeReady/engineReady
+# forever and no proxied request ever settled. lifecycle.ts now
+# races every boot step with a 10s deadline (routeReady, the
+# fetch-handler engine gate, the extension-route gate, the
+# control-plane gate, the install prewarm, the extension boot
+# phases), emits a SERVICE_WORKER "boot step wedged; continuing
+# degraded" diag on expiry, and still propagates rejections
+# (Zeolite a99f021, CI run 632 all 5 jobs green, suite 1236
+# incl. 4 new bounded-boot tests). sw.js d693a74c593bb725 ->
+# c19ce11c78efd751 (359826 bytes); bootstrap.js eced033e919dfb38
+# unchanged; rewriter_wasm_bg.wasm unchanged 7acc3b508f693a5a.
+# Cargo-side pin stays b0296f8 (SW-only fix).
+ARG ZEOLITE_COMMIT=d63dd86aeb1cfb230e2637dfa64a2f21273f23cf
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -931,6 +946,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d693a74c593bb725 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c19ce11c78efd751 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
