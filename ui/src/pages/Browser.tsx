@@ -67,13 +67,29 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     const cw = cw0 as Window & typeof globalThis & { __lbDtShim?: boolean };
     if (cw.__lbDtShim) return;
     cw.__lbDtShim = true;
-    const post = (ev: { lb: string; data: Record<string, unknown> }): void => {
-      try {
-        cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
-      } catch {
-        /* a torn-down frame cannot report; nothing to do */
-      }
-    };
+    /* #106 realm fix: this closure runs in the app realm, so every
+       postMessage it makes is stamped with the APP window as
+       ev.source, and the handler's strict frame match drops every
+       event. Mint the post function in the FRAME realm instead, so
+       the browser stamps the genuine frame window. A page CSP that
+       forbids eval keeps the parent-realm fallback (capture stays
+       unattributed, the pre-fix behavior). */
+    let post: (ev: { lb: string; data: Record<string, unknown> }) => void;
+    try {
+      const frameFn = (cw as unknown as { Function: typeof Function }).Function;
+      post = frameFn(
+        "ev",
+        "try{parent.postMessage({lb:'batch',data:{events:[ev]}},'*')}catch(e){}",
+      ) as typeof post;
+    } catch {
+      post = (ev) => {
+        try {
+          cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
+        } catch {
+          /* a torn-down frame cannot report; nothing to do */
+        }
+      };
+    }
     const fmt = (v: unknown): string => {
       if (typeof v === "string") return v;
       if (v instanceof Error) return v.stack || String(v);
