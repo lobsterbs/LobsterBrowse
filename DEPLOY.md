@@ -38,21 +38,22 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 13d9b85 (pin 87: #297 - extensions
-appeared installed but never ran in the embedded browsing
-pane: every proxied document arrives with sec-fetch-dest
-iframe and the engine treated any iframe destination as a
-genuine subframe, so every non-all_frames content script was
-dropped and MV3 backgrounds never booted. A frame whose
-parent referrer is a host page is now the pane main surface
-for content-script matching, genuine subframes of proxied
-documents keep subframe semantics, unparseable parents fail
-closed; Zeolite 9d33b44 on 1ae6cdc, CI run 39129225053 all
-5 jobs green, suite 1278 incl. 5 new cs-inject tests),
-zlswSha 8ef1ef7239120397 and bootstrapSha 1e55ec0f04f848b9
-(sw.js changed; verify the served file hash). This matches
-the Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev
-stays b0296f8 because the fix is SW-only, and
+Current pin: Zeolite dist 7e29d525 (pin 88: two engine waves - the
+control-plane lifecycle wave #250/#252/#253: the zl: messageListener
+holds the event with waitUntil across the whole handler and answers
+failed dispatches with a structured error reply, engine init()
+resolves only on an explicit worker ack, route persistence waits for
+the ack, post() settles exactly once, and docCookiePorts cap at 16
+per client with eviction; and the #266/#261 wave: object-style
+storage listeners are isolated and removable like function
+listeners, and the cooldown relay branch carries its own first-byte
+deadline so a silent embedder aborts with zl:relayCancel
+(WispStallError) instead of hanging; Zeolite ce9eb6b + 1a70811, CI
+runs 39132519199 and 39133625103 all 5 jobs green, suites 1288 and
+1291 incl. 13 new tests), zlswSha 49896d2b07867e9f and bootstrapSha
+d00b5e4270b011f1 (both changed; verify the served file hashes). This
+matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev
+stays b0296f8 because both waves are SW-only, and
 server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)

@@ -953,7 +953,28 @@ FROM debian:bookworm-slim AS zl-builder
 # 8ef1ef7239120397 (362825 bytes); bootstrap.js
 # 1e55ec0f04f848b9 unchanged. Cargo-side pin stays b0296f8
 # (SW-only fix).
-ARG ZEOLITE_COMMIT=13d9b85d5776a84defe259afc25c9b97f98d5b3a
+# Pin 88: Zeolite dist 7e29d525. Two engine waves since pin 87.
+# #250 the control-plane messageListener (control.ts/sw.ts) keeps
+# the message event alive for the whole handler (waitUntil) and a
+# failed dispatch answers a structured {ok:false,error:"control
+# handler failed"} reply with a RUNTIME diag instead of an unhandled
+# rejection; #252 engine init() resolves only on ack.ok===true,
+# setSiteRoute persists only after the worker acks, post() settles
+# exactly once (settled flag, timeout cleared, port closed);
+# #253 docCookiePorts are capped at 16 per client with shift+close
+# eviction (Zeolite ce9eb6b, CI runs 39132519199 + 39133625103 all
+# 5 jobs green, suite 1288 incl. +10 tests).
+# #266 the storage-event isolation filter recognizes object-style
+# listeners ({handleEvent}) too, keyed by the raw listener so
+# removeEventListener finds both shapes; #261 the cooldown relay
+# branch carries its own first-byte deadline: an embedder that never
+# answers aborts with zl:relayCancel (WispStallError) instead of
+# hanging, and caller aborts stay honest AbortErrors (Zeolite
+# 1a70811, suite 1291 incl. +3 tests). sw.js 8ef1ef7239120397 ->
+# 49896d2b07867e9f (363469 bytes); bootstrap.js 1e55ec0f04f848b9 ->
+# d00b5e4270b011f1 (28080 bytes). Cargo-side pin stays b0296f8
+# (SW-only fixes).
+ARG ZEOLITE_COMMIT=7e29d525530125e77d10ea342f429a4e29e1f404
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1013,6 +1034,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8ef1ef7239120397 ZEOLITE_BOOTSTRAP_SHA=1e55ec0f04f848b9 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49896d2b07867e9f ZEOLITE_BOOTSTRAP_SHA=d00b5e4270b011f1 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
