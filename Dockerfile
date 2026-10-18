@@ -957,7 +957,23 @@ FROM debian:bookworm-slim AS zl-builder
 # c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
-ARG ZEOLITE_COMMIT=d5a2a6683a2726c7f481b57c206044dcddf4e020
+# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Beta
+# jumps from pin 84 (d5a2a66), so this bump rides every engine
+# wave from pins 85 through 91 (see main-branch pin comments for
+# the per-wave breakdown; latest: the rewriter wave Zeolite
+# e4f997f #345/#342/#339 with rewriter_wasm_bg.wasm
+# 7908d03c7920f8a7 -> fc58b70eee7ab936b - the alarm pins cannot
+# distinguish it, verify the served wasm hash instead) plus the
+# app fix #296 flag-surgery script URL recovery (Zeolite a385fa9
+# on main, CI run 39162909529 all 5 jobs green, suite 1313 incl.
+# 4 new tests; fixes the Google /sorry/httpd=1/... script 404
+# class that broke search results and the AI overview). sw.js
+# 42dda133cb8d9a70 -> 248fc6aea789e2f2 (366108 bytes);
+# bootstrap.js eced033e919dfb38 -> 8c7520cbfad8035d. Cargo-side
+# pin b0296f8 -> a385fa9 (first beta server-dep bump since pin
+# 76; ships the deferred server waves a515b17
+# #343/#350/#351/#352/#340 with the regenerated server/Cargo.lock).
+ARG ZEOLITE_COMMIT=7b9593f198019fa010ef3afcf164cf10cfd2e352
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1017,5 +1033,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42dda133cb8d9a70 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=248fc6aea789e2f2 ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
