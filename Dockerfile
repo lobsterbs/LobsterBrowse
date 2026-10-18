@@ -916,7 +916,26 @@ FROM debian:bookworm-slim AS zl-builder
 # 42dda133cb8d9a70 -> d29b017afeef63eb (360334 bytes);
 # bootstrap.js eced033e919dfb38 -> e890e6083be75719. Cargo-side
 # pin stays b0296f8 (SW-only fixes).
-ARG ZEOLITE_COMMIT=65bdf612f7ddcc9265873b3d83dd14e66f4e326d
+# Pin 86: Zeolite dist bee555f. One engine wave since pin 85, the
+# 2026-10-18 fix-wave completion (Zeolite a43aeb10 on top of the
+# agent commits 514471f8, 79b3377a, 4aeb5e3e and the d8126d64
+# tabs.ts splice repair, CI run 39124338300 all 5 jobs green,
+# suite 1273): #270 32-bit fnv1a site hash with jar origin
+# migration, #289 durable-jar-only origins records, #262/#263/
+# #264 honest IndexedDB/cmp/caches.match shims, #265 siteconfig
+# key normalization, #272 webRequest listener detail copies,
+# #282 live webRequest permission views, #271 tabs.onUpdated
+# changeInfo gating (an empty gated changeInfo is not delivered),
+# #278 host-visible filtered tab queries, #283 tab op deadlines
+# with closed-tab rejection, #286 query title globs, #281
+# cookies.onChanged scoping with revoke-on-delivery, #285
+# content-script asset validation, #276 credentials-gated
+# cookie jar, #288 permission-correct webRequest URLs. sw.js
+# d29b017afeef63eb -> 3a6e775447488fe4 (362658 bytes);
+# bootstrap.js e890e6083be75719 -> 1e55ec0f04f848b9 (27962
+# bytes). Cargo-side pin stays b0296f8 (SW-only fixes; the
+# rewriter crate is not a server dep).
+ARG ZEOLITE_COMMIT=bee555feb932e595fd579a1db8c6e93605637661
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -976,6 +995,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d29b017afeef63eb ZEOLITE_BOOTSTRAP_SHA=e890e6083be75719 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3a6e775447488fe4 ZEOLITE_BOOTSTRAP_SHA=1e55ec0f04f848b9 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
