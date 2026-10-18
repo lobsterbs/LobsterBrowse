@@ -1114,15 +1114,19 @@ export default function BrowserView(props: Props) {
      tucks sooner. Rollback for the whole pass: Settings > Density >
      Normal. */
   const compact = settings.density === "compact";
-  /* Dock: tucks out of view when the app is idle; reappears on any
-     pointer/keyboard activity in the app, on hovering the visible
-     sliver, or on focusing the URL field. The transform lives on a
-     plain wrapper div (.lb-dock-pill): applying it to the m3e-toolbar
-     host did nothing (custom element host display), which left the
-     bar frozen in place covering page content. */
+  /* Dock: tucks fully out of view when the app is idle. The grip
+     line (.lb-dock-grip) is the only hint: holding the pointer on
+     it for 3s reveals the dock; grip click/Enter (touch, keyboard)
+     and URL-field focus (CSS :focus-within) reveal it too. There is
+     no global activity reveal - the dock stays hidden until the
+     grip summons it. The transform lives on a plain wrapper div
+     (.lb-dock-pill): applying it to the m3e-toolbar host did
+     nothing (custom element host display), which left the bar
+     frozen in place covering page content. */
   const [dockTucked, setDockTucked] = useState(false);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
+  const gripHoldRef = useRef<number | null>(null);
   const hideSoon = () => {
     if (!settings.autoHideChrome) return;
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
@@ -1131,18 +1135,31 @@ export default function BrowserView(props: Props) {
       else hideSoon();
     }, compact ? 2200 : 3500);
   };
-  useEffect(() => {
-    const onActivity = () => {
+  /* Grip hold: 3s of continuous pointer presence on the grip line
+     reveals the dock. Any leave/cancel resets the countdown. */
+  const gripHoldStart = () => {
+    if (gripHoldRef.current) window.clearTimeout(gripHoldRef.current);
+    gripHoldRef.current = window.setTimeout(() => {
+      gripHoldRef.current = null;
       setDockTucked(false);
       hideSoon();
-    };
-    window.addEventListener("pointermove", onActivity);
-    window.addEventListener("keydown", onActivity);
+    }, 3000);
+  };
+  const gripHoldEnd = () => {
+    if (gripHoldRef.current) {
+      window.clearTimeout(gripHoldRef.current);
+      gripHoldRef.current = null;
+    }
+  };
+  const revealDock = () => {
+    setDockTucked(false);
+    hideSoon();
+  };
+  useEffect(() => {
     hideSoon();
     return () => {
-      window.removeEventListener("pointermove", onActivity);
-      window.removeEventListener("keydown", onActivity);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      if (gripHoldRef.current) window.clearTimeout(gripHoldRef.current);
     };
   }, []);
   useEffect(() => {
@@ -2188,9 +2205,9 @@ export default function BrowserView(props: Props) {
 
       </div>
 
-      {/* Bottom dock: tucks out of view when idle; hover the visible
-          sliver, focus the URL field, or move the pointer / type to
-          bring it back. */}
+      {/* Bottom dock: tucks fully out of view when idle; hold the
+          pointer on the grip line for 3s (or tap/Enter it, or focus
+          the URL field) to bring it back. */}
       <div
         className={"lb-dock" + (dockTucked ? " tucked" : "") + (tabsOpen ? " tabs-open" : "")}
         onMouseEnter={() => (dockHoverRef.current = true)}
@@ -2214,9 +2231,9 @@ export default function BrowserView(props: Props) {
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
           onCloseTab={closeTabSmooth}
         />
-        {/* #86: the tucked dock leaves a 12px sliver; the grip makes
-            that sliver an intentional, visible handle (touch has no
-            hover). Tapping it reveals the toolbar like any activity. */}
+        {/* #86: the tucked dock hides fully; the grip line is the
+            only hint. Hold the pointer on it 3s to reveal, or
+            tap/Enter it (touch has no hover). */}
         {/* #121: the grip is a real button while it is visible
             (tucked); hidden and unfocusable otherwise. */}
         <div
@@ -2225,15 +2242,14 @@ export default function BrowserView(props: Props) {
           tabIndex={dockTucked ? 0 : -1}
           aria-hidden={dockTucked ? undefined : true}
           aria-label="Show browser toolbar"
-          onClick={() => {
-            setDockTucked(false);
-            hideSoon();
-          }}
+          onPointerEnter={gripHoldStart}
+          onPointerLeave={gripHoldEnd}
+          onPointerCancel={gripHoldEnd}
+          onClick={revealDock}
           onKeyDown={(ev) => {
             if (ev.key !== "Enter" && ev.key !== " ") return;
             ev.preventDefault();
-            setDockTucked(false);
-            hideSoon();
+            revealDock();
           }}
         />
         <div className="lb-dock-pill">

@@ -390,8 +390,11 @@ body.lb-fancy .lb-home pre.lb-ascii {
    The tuck transform is applied to a plain div (.lb-dock-pill):
    transforms on the m3e-toolbar host silently did nothing (Lit host
    display), which left the bar frozen in place and covering content.
-   Tucked state leaves a 12px sliver; hovering it, focusing the URL
-   field, or any pointer/keyboard activity in the app reveals it. */
+   Tucked state hides the pill fully below the fold; the grip line
+   is the only hint. Holding the pointer on it for 3s reveals the
+   dock (grip click/Enter and URL-field focus reveal it too). While
+   tucked the dock box ignores pointer events so the hidden bar
+   never blocks page interaction. */
 .lb-dock {
   position: absolute;
   bottom: 10px;
@@ -403,8 +406,8 @@ body.lb-fancy .lb-home pre.lb-ascii {
   transform: translateY(0);
   transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
 }
-.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% - 12px)); }
-.lb-dock:hover .lb-dock-pill,
+.lb-dock.tucked { pointer-events: none; }
+.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); }
 .lb-dock:focus-within .lb-dock-pill { transform: translateY(0); }
 .lb-toolbar {
   display: block;
@@ -1335,13 +1338,13 @@ m3e-snackbar {
    overflows a narrow screen. */
 .lb-home pre.lb-ascii { font-size: clamp(6px, 2.4vw, 11px); }
 
-/* #86: visible handle for the tucked dock. Touch has no hover to
-   reveal the toolbar, so the 12px sliver needs a real target. The
-   grip is inert and invisible unless the dock is tucked. */
+/* #86: visible handle for the tucked dock. The pill hides fully,
+   so the grip line is the only reveal hint: hold the pointer on
+   it for 3s, or tap/Enter it. Inert and invisible unless tucked. */
 .lb-dock-grip {
   position: absolute;
   left: 50%;
-  bottom: calc(100% - 12px);
+  bottom: 0;
   width: 56px;
   height: 24px;
   transform: translateX(-50%);
