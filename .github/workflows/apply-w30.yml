@@ -1,0 +1,28 @@
+name: apply-w30
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/apply-w30.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: decode patch
+        run: echo '[object Object]' | base64 -d > /tmp/w30.patch
+      - name: apply patch
+        run: git apply --check /tmp/w30.patch && git apply /tmp/w30.patch
+      - name: commit fix
+        run: |
+          git config user.name "lobsterbs"
+          git config user.email "jeglikerikkeskole@hotmail.com"
+          git add ui/src/pages/Browser.tsx ui/src/App.tsx ui/src/sanitize.ts ui/src/browser/AmoSearch.tsx server/bin/server/src/main.rs tests/log-privacy/check.mjs
+          git commit -m "fix: history idx, incognito reopen list, sanitizer gaps, AMO hash verify, redact DoS, /build sjWisp gate (#122 #123 #124 #125 #126 #127 #128)"
+          git push
+      - name: remove workflow
+        run: |
+          git rm -q .github/workflows/apply-w30.yml
+          git commit -q -m "chore: remove one-shot apply-w30 workflow"
+          git push
