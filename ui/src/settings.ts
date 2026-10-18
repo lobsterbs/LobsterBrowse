@@ -391,8 +391,17 @@ export function searchUrl(s: Settings, query: string): string {
 /* Normalize a bare domain into a full URL. */
 export function normalizeUrl(input: string): string {
   const s = input.trim();
-  if (input.includes("://")) return s;
-  return "https://" + s;
+  const candidate = s.includes("://") ? s : "https://" + s;
+  /* Parse the candidate: the platform parser inserts the implicit "/"
+     between the host and the query ("host?q=x" carries no path, and
+     the engine sends the decoded path verbatim upstream, so nginx 400s
+     on the empty request line). The parsed href is what a real browser
+     would navigate to; the raw candidate stays the fallback. */
+  try {
+    return new URL(candidate).href;
+  } catch {
+    return candidate;
+  }
 }
 
 /* Heuristic: a URL has a scheme, or looks like a bare domain/host
