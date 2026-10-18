@@ -966,9 +966,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
       {dt.page === "diagnostics" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
-            <m3e-icon-button aria-label="Clear diagnostics" onClick={() => setDt({ fails: [] })}>
-              <m3e-icon name="mop" aria-hidden={true} />
-            </m3e-icon-button>
             <m3e-button onClick={() => void copyLogs()}>
               <m3e-icon name="content_copy" aria-hidden={true} />
               {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
