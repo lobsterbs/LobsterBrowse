@@ -1017,6 +1017,23 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Two
+# waves plus a fix since pin 91: the 2026-10-18 rewriter wave
+# (Zeolite e4f997f on main: #345/#342/#339; the ride is in
+# rewriter_wasm_bg.wasm 7908d03c7920f8a7 -> fc58b70eee7ab936b,
+# so the alarm pins cannot distinguish it - verify the served
+# wasm hash instead), the 2026-10-18 server wave (Zeolite
+# a515b17 on main: #343/#350/#351/#352/#340; server-side only,
+# not in the dist bundle - it ships via the Cargo-side rev bump
+# below), and the app fix #296 flag-surgery script URL recovery
+# (Zeolite a385fa9 on main, CI run 39162909529 all 5 jobs green,
+# suite 1313 incl. 4 new tests; fixes the Google
+# /sorry/httpd=1/... script 404 class that broke search results
+# and the AI overview). sw.js 54e173c073e5de4b ->
+# 248fc6aea789e2f2 (366108 bytes); bootstrap.js unchanged
+# 8c7520cbfad8035d. Cargo-side pin b0296f8 -> a385fa9 (first
+# server-dep bump since pin 76; ships the 2026-10-18 server wave
+# a515b17 with the regenerated server/Cargo.lock).
 # Pin 91: Zeolite dist 9927bd7. One engine wave since pin 90, the
 # 2026-10-18 app security wave (Zeolite 60b9404a on main, CI run
 # 39142882453 all 5 jobs green, suite 1309 incl. 9 new tests):
@@ -1033,7 +1050,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=9927bd7d3ee2cd6c0508e122811c0738a238b003
+ARG ZEOLITE_COMMIT=7b9593f198019fa010ef3afcf164cf10cfd2e352
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1093,6 +1110,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=54e173c073e5de4b ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=248fc6aea789e2f2 ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
