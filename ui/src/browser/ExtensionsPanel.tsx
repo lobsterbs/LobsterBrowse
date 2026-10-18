@@ -141,7 +141,13 @@ export default function ExtensionsPanel(props: {
               tabIndex={0}
               onClick={() => props.onOpenDetail(e.id)}
               onKeyDown={(ev) => {
-                if (ev.key === "Enter" || ev.key === " ") props.onOpenDetail(e.id);
+                /* #118: keys pressed on a nested control (Delete) belong
+                   to that control alone; Space must not scroll either. */
+                if (ev.target !== ev.currentTarget) return;
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault();
+                  props.onOpenDetail(e.id);
+                }
               }}
             >
               <div className="lb-ext-ava" aria-hidden={true}>

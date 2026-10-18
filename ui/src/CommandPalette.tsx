@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 export type Command = {
   id: string;
@@ -23,6 +23,15 @@ type Props = {
 export default function CommandPalette({ open, commands, onClose }: Props) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  /* #117: closing the palette returns focus to the element that
+     had it before the overlay opened. */
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => prev?.focus?.();
+  }, [open]);
 
   /* Reset on every open. Escape is handled on window, not only on the
      input: a focus steal (engine-update snackbar etc.) must not leave
@@ -86,16 +95,35 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="lb-cmdk" role="dialog" aria-label="Command palette">
+      <div
+        className="lb-cmdk"
+        role="dialog"
+        aria-modal={true}
+        aria-label="Command palette"
+        onKeyDown={(e) => {
+          /* #117: the input is the only focusable control, so Tab
+             stays inside the overlay instead of reaching the page. */
+          if (e.key === "Tab") {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }
+        }}
+      >
         {/* #102: M3E search bar; the input is its slotted control. */}
         <m3e-search-bar>
           <input
             slot="input"
+            ref={inputRef}
             autoFocus={true}
             aria-label="Type a command"
             placeholder="Type a command..."
             value={q}
             spellCheck={false}
+            role="combobox"
+            aria-expanded={true}
+            aria-controls="lb-cmdk-list"
+            aria-autocomplete="list"
+            aria-activedescendant={hits.length ? "lb-cmdk-opt-" + hits[sel].id : undefined}
             onChange={(e) => {
               setQ(e.target.value);
               setIdx(0);
@@ -103,16 +131,19 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
             onKeyDown={onKey}
           />
         </m3e-search-bar>
-        <div className="lb-cmdk-list" role="listbox">
+        <div id="lb-cmdk-list" className="lb-cmdk-list" role="listbox">
           {hits.length === 0 && (
             <div className="lb-cmdk-empty">No matching command</div>
           )}
           {hits.map((c, i) => {
             const head = i === 0 || hits[i - 1].group !== c.group;
+            /* #117: presentation wrappers keep the listbox children
+               valid options/groups for assistive technology. */
             return (
-              <div key={c.id}>
-                {head && <div className="lb-cmdk-group">{c.group}</div>}
+              <div key={c.id} role="presentation">
+                {head && <div className="lb-cmdk-group" role="presentation">{c.group}</div>}
                 <div
+                  id={"lb-cmdk-opt-" + c.id}
                   className={"lb-cmdk-item" + (i === sel ? " selected" : "")}
                   role="option"
                   aria-selected={i === sel}
