@@ -994,7 +994,30 @@ FROM debian:bookworm-slim AS zl-builder
 # /build zlswSha cannot distinguish this bump - verify the served
 # /zlsw/bootstrap.js hash instead). Cargo-side pin stays b0296f8
 # (bootstrap-only change).
-ARG ZEOLITE_COMMIT=9eee560e5a180e6cbee91653291d9493882229fd
+# Pin 90: Zeolite dist 3826f41. Two engine waves since pin 89, the
+# 2026-10-18 bug-hunt fix wave.
+# #314 (range serving OOM): a single Range request against a cached
+# entry buffered the whole body with arrayBuffer() before deciding
+# the range lay outside it, so a byte-range probe on a huge cached
+# document could balloon the worker. The range path now prechecks
+# the cached content-length against ZL_RANGE_MAX and refuses the
+# range before buffering (Zeolite 54053ce, CI run 39139691546 all
+# 5 jobs green, suite 1300 incl. 3 new range tests). sw.js
+# 49896d2b07867e9f -> e20a18398c4d25a8 (363561 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d.
+# #322 (blocked-element swallow unbounded): drop_raw swallowed raw
+# text until the close tag, so a blocked script with no close tag
+# buffered the rest of the document without bound. The swallow
+# buffer is capped at 256 KiB and keeps only the longest suffix
+# that is a prefix of the close marker, so no close tag can be
+# missed (Zeolite 0213393, CI run 39141278968, cargo suite incl. 2
+# new bounded-drop_raw tests). Rust-only: sw.js and bootstrap.js
+# unchanged (e20a18398c4d25a8 / 8c7520cbfad8035d); the ride is in
+# rewriter_wasm_bg.wasm (7908d03c7920f8a7), so the alarm pins
+# cannot distinguish this bump - verify the served
+# /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
+# b0296f8 (the rewriter crate is not a server dep).
+ARG ZEOLITE_COMMIT=3826f4171d977b75ecad41caed57245abb6f60a4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1054,6 +1077,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49896d2b07867e9f ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e20a18398c4d25a8 ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
