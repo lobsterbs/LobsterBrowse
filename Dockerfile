@@ -1017,7 +1017,23 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
-ARG ZEOLITE_COMMIT=3826f4171d977b75ecad41caed57245abb6f60a4
+# Pin 91: Zeolite dist 9927bd7. One engine wave since pin 90, the
+# 2026-10-18 app security wave (Zeolite 60b9404a on main, CI run
+# 39142882453 all 5 jobs green, suite 1309 incl. 9 new tests):
+# #337 document.cookie cannot overwrite or delete an HttpOnly
+# cookie, #338 the x-zl-cached-at / x-zl-final-url internal view
+# headers are stripped from served cache copies, #341 an If-Range
+# validator mismatch serves the full body instead of a range
+# slice, #344 WEBNAV.domContentLoaded fires from the
+# sender-derived dest, #349 cookie names and values reject
+# control characters at jar admission, #336 the compat doc
+# discloses the zl:ext one-world limit (the page-visible bridge
+# cfg URL makes per-token scoping impossible). sw.js
+# e20a18398c4d25a8 -> 54e173c073e5de4b (364388 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
+# 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
+# fixes).
+ARG ZEOLITE_COMMIT=9927bd7d3ee2cd6c0508e122811c0738a238b003
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1077,6 +1093,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e20a18398c4d25a8 ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=54e173c073e5de4b ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 

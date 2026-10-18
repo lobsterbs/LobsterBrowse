@@ -38,23 +38,21 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 3826f41 (pin 90: the bug-hunt fix wave -
-#314 range serving refuses an oversized cached entry before
-buffering it: the content-length precheck against ZL_RANGE_MAX
-turns an out-of-range byte request into the honest full-body path
-instead of a giant arrayBuffer (Zeolite 54053ce, CI run
-39139691546 all 5 jobs green, suite 1300 incl. 3 new range
-tests); #322 the blocked-element drop_raw swallow buffer is
-capped at 256 KiB keeping only the partial-close-tag tail, so a
-close-tagless blocked script cannot buffer the whole document
-(Zeolite 0213393, CI run 39141278968, cargo suite incl. 2 new
-tests)), zlswSha 49896d2b07867e9f -> e20a18398c4d25a8 via #314
-and bootstrapSha unchanged 8c7520cbfad8035d; #322 rides in
-rewriter_wasm_bg.wasm only, so the alarm pins cannot distinguish
-that bump - verify the served /zlsw/rewriter_wasm_bg.wasm hash.
-This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
-git rev stays b0296f8 because neither wave touches zeolite-server,
-and server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist 9927bd7 (pin 91: the app security wave -
+#337 document.cookie cannot overwrite or delete an HttpOnly
+cookie, #338 x-zl-cached-at / x-zl-final-url are stripped from
+served cache views, #341 an If-Range validator mismatch serves
+the full body instead of a range slice, #344 WEBNAV
+.domContentLoaded fires from the sender-derived dest, #349
+cookie names and values reject control characters, #336 the
+compat doc discloses the zl:ext one-world limit (Zeolite
+60b9404a, CI run 39142882453 all 5 jobs green, suite 1309
+incl. 9 new tests)), zlswSha e20a18398c4d25a8 ->
+54e173c073e5de4b and bootstrapSha unchanged 8c7520cbfad8035d;
+the wasm is untouched too (7908d03c7920f8a7). This matches the
+Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
+b0296f8 because the wave does not touch zeolite-server, and
+server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
