@@ -154,7 +154,15 @@ export default function App() {
       if (wispUrl) zlWispInit(wispUrl);
     };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
-    return () => navigator.serviceWorker?.removeEventListener("controllerchange", re);
+    /* The relay channel lives in service-worker memory. An idle worker
+       restart drops it without a controllerchange, and relay-routed hosts
+       then fall back to wisp and fail with error 35. Re-register on a
+       timer; the registration itself is cached, so this is cheap. */
+    const keep = window.setInterval(zlRelayInit, 15000);
+    return () => {
+      window.clearInterval(keep);
+      navigator.serviceWorker?.removeEventListener("controllerchange", re);
+    };
   }, []);
 
   /* Persist the session whenever tabs change (never in incognito). */
@@ -825,23 +833,6 @@ export default function App() {
                   onClearHistory={clearHistoryAll}
                 />
               )}
-              {view === "browser" && (
-                <BrowserView
-                  settings={settings}
-                  rules={rules}
-                  tabs={tabs}
-                  activeId={activeId}
-                  setActiveId={setActiveId}
-                  updateTab={updateTab}
-                  newTab={newTab}
-                  closeTab={closeTab}
-                  onHistory={addHistory}
-                  incognito={incognito}
-                  onIncognitoChange={toggleIncognito}
-                  onOpenLogs={() => setView("logs")}
-                  onRulesChange={updateRules}
-                />
-              )}
               {view === "settings" && (
                 <SettingsPanel
                   settings={settings}
@@ -856,6 +847,23 @@ export default function App() {
                 <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
               )}
             </div>
+          <div className="lb-browser-host" hidden={view !== "browser"}>
+            <BrowserView
+              settings={settings}
+              rules={rules}
+              tabs={tabs}
+              activeId={activeId}
+              setActiveId={setActiveId}
+              updateTab={updateTab}
+              newTab={newTab}
+              closeTab={closeTab}
+              onHistory={addHistory}
+              incognito={incognito}
+              onIncognitoChange={toggleIncognito}
+              onOpenLogs={() => setView("logs")}
+              onRulesChange={updateRules}
+            />
+          </div>
           </div>
         </div>
       </div>
