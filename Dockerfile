@@ -974,7 +974,27 @@ FROM debian:bookworm-slim AS zl-builder
 # 49896d2b07867e9f (363469 bytes); bootstrap.js 1e55ec0f04f848b9 ->
 # d00b5e4270b011f1 (28080 bytes). Cargo-side pin stays b0296f8
 # (SW-only fixes).
-ARG ZEOLITE_COMMIT=7e29d525530125e77d10ea342f429a4e29e1f404
+# Pin 89: Zeolite dist 9eee560. One engine wave since pin 88, the
+# bootstrap compat wave (Zeolite a3406c0 on main 6cd18b6, CI run
+# 39137417144 all 5 jobs green, suite 1297 incl. 6 new tests):
+# #268 the vorigin relabel/remove pass recognizes object-style
+# (EventListener {handleEvent}) listeners, not just functions;
+# #269 ScopedChannel subclasses the real BroadcastChannel
+# constructor with its own name getter; #273 the scoped storage
+# store is a Proxy over the backing store (named-property
+# forwarding, key(i) strips the site prefix); #274 EventSource
+# registrations dedupe with native-bound removeEventListener,
+# once-drop and AbortSignal support; #275 ZlWorker/ZlSharedWorker
+# constructors enforce new-only semantics; #284 relay listeners
+# filter object-style listeners through a wrapper registry so
+# removeEventListener finds the real listener shape.
+# bootstrap.js d00b5e4270b011f1 -> 8c7520cbfad8035d (29383 of
+# the 29696 budget, raised 28672 -> 29696 in the Zeolite CI gate);
+# sw.js unchanged 49896d2b07867e9f (bootstrap-only wave, so the
+# /build zlswSha cannot distinguish this bump - verify the served
+# /zlsw/bootstrap.js hash instead). Cargo-side pin stays b0296f8
+# (bootstrap-only change).
+ARG ZEOLITE_COMMIT=9eee560e5a180e6cbee91653291d9493882229fd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1034,6 +1054,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49896d2b07867e9f ZEOLITE_BOOTSTRAP_SHA=d00b5e4270b011f1 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49896d2b07867e9f ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 

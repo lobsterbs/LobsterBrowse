@@ -38,22 +38,22 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 7e29d525 (pin 88: two engine waves - the
-control-plane lifecycle wave #250/#252/#253: the zl: messageListener
-holds the event with waitUntil across the whole handler and answers
-failed dispatches with a structured error reply, engine init()
-resolves only on an explicit worker ack, route persistence waits for
-the ack, post() settles exactly once, and docCookiePorts cap at 16
-per client with eviction; and the #266/#261 wave: object-style
-storage listeners are isolated and removable like function
-listeners, and the cooldown relay branch carries its own first-byte
-deadline so a silent embedder aborts with zl:relayCancel
-(WispStallError) instead of hanging; Zeolite ce9eb6b + 1a70811, CI
-runs 39132519199 and 39133625103 all 5 jobs green, suites 1288 and
-1291 incl. 13 new tests), zlswSha 49896d2b07867e9f and bootstrapSha
-d00b5e4270b011f1 (both changed; verify the served file hashes). This
-matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev
-stays b0296f8 because both waves are SW-only, and
+Current pin: Zeolite dist 9eee560 (pin 89: the bootstrap compat
+wave - #268 object-style EventListener listeners relabel and
+remove correctly in the virtual-origin pass, #269 ScopedChannel
+subclasses the real BroadcastChannel constructor with its own
+name getter, #273 the scoped storage store is a Proxy over the
+backing store with named-property forwarding and prefix-stripping
+key(i), #274 EventSource registrations dedupe with native-bound
+removeEventListener, once-drop and AbortSignal support, #275
+ZlWorker/ZlSharedWorker constructors enforce new-only semantics,
+#284 relay listeners filter object-style listeners through a
+wrapper registry; Zeolite a3406c0, CI run 39137417144 all 5 jobs
+green, suite 1297 incl. 6 new tests), zlswSha 49896d2b07867e9f
+unchanged and bootstrapSha 8c7520cbfad8035d (bootstrap-only wave;
+verify the served /zlsw/bootstrap.js hash). This matches the
+Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
+b0296f8 because the wave is bootstrap-only, and
 server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
