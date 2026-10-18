@@ -935,7 +935,25 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js e890e6083be75719 -> 1e55ec0f04f848b9 (27962
 # bytes). Cargo-side pin stays b0296f8 (SW-only fixes; the
 # rewriter crate is not a server dep).
-ARG ZEOLITE_COMMIT=bee555feb932e595fd579a1db8c6e93605637661
+# Pin 87: Zeolite dist 13d9b85. One engine wave since pin 86:
+# #297 (extensions appeared installed but never ran in the
+# host-embedded browsing pane): every proxied document arrives
+# with sec-fetch-dest iframe and csInjectUrls treated any
+# iframe/object destination as a genuine subframe, so
+# resolveContentScripts dropped every non-all_frames content
+# script - and with content scripts dead, MV3 backgrounds
+# never boot on demand, so extension service workers never
+# initialized. A frame whose parent referrer is a host page
+# (neither a NAVH nor an engine route) is now the pane main
+# surface for content-script matching; genuine subframes of
+# proxied documents keep subframe semantics; absent, about:,
+# or unparseable parents fail closed (Zeolite 9d33b44 on
+# 1ae6cdc, CI run 39129225053 all 5 jobs green, suite 1278
+# incl. 5 new cs-inject tests). sw.js 3a6e775447488fe4 ->
+# 8ef1ef7239120397 (362825 bytes); bootstrap.js
+# 1e55ec0f04f848b9 unchanged. Cargo-side pin stays b0296f8
+# (SW-only fix).
+ARG ZEOLITE_COMMIT=13d9b85d5776a84defe259afc25c9b97f98d5b3a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -995,6 +1013,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3a6e775447488fe4 ZEOLITE_BOOTSTRAP_SHA=1e55ec0f04f848b9 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8ef1ef7239120397 ZEOLITE_BOOTSTRAP_SHA=1e55ec0f04f848b9 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
