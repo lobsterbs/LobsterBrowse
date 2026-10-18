@@ -159,9 +159,18 @@ export default function App() {
        then fall back to wisp and fail with error 35. Re-register on a
        timer; the registration itself is cached, so this is cheap. */
     const keep = window.setInterval(zlRelayInit, 15000);
+    /* Zeolite #354: the timer heals within 15s; the engine also asks
+       directly (zl:relayLost broadcast) when a relay fetch finds no
+       channel, and we re-register at once so the wait resolves
+       without falling back to wisp. */
+    const onRelayLost = (ev: MessageEvent) => {
+      if ((ev.data as { type?: string } | null)?.type === "zl:relayLost") re();
+    };
+    navigator.serviceWorker?.addEventListener("message", onRelayLost);
     return () => {
       window.clearInterval(keep);
       navigator.serviceWorker?.removeEventListener("controllerchange", re);
+      navigator.serviceWorker?.removeEventListener("message", onRelayLost);
     };
   }, []);
 
