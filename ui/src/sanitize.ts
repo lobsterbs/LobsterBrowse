@@ -11,7 +11,11 @@
    failure reports useless. */
 
 const SECRET_QUERY_KEYS =
-  "token|access_token|refresh_token|api_key|apikey|password|passwd|pwd|secret|authorization|session|sessionid|session_id|sid|client_secret";
+  "token|access_token|refresh_token|api_key|apikey|password|passwd|pwd|secret|authorization|session|sessionid|session_id|sid|client_secret" +
+  /* #124: OAuth implicit-flow and OIDC tokens ride the fragment,
+     and so do short-lived authorization codes and presigned
+     signatures. */
+  "|id_token|auth_token|oauth_token|code|x-amz-signature|x-amz-credential|x-amz-security-token";
 
 /** Redact URL user-info credentials (scheme://user:pass@host).
     #111: credentials embedded in a URL never persist; the host/path
@@ -31,8 +35,9 @@ export function sanitizeUrl(u: string): string {
      b64u mojibake) must not inject into log/diagnostics surfaces. */
   s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   s = stripUrlUserinfo(s);
+  /* #124: tokens after a '#' fragment are credentials too. */
   s = s.replace(
-    new RegExp(`([?&])(${SECRET_QUERY_KEYS})=[^&]*`, "gi"),
+    new RegExp(`([?#&])(${SECRET_QUERY_KEYS})=[^&]*`, "gi"),
     "$1$2=[redacted]",
   );
   /* JWTs leak into URLs less often, but they do (auth redirects). */
@@ -50,12 +55,15 @@ export function sanitizeText(t: string): string {
   /* #111: URLs pasted into console text lose user-info credentials
      too. */
   s = stripUrlUserinfo(s);
-  s = s.replace(/(bearer|basic)\s+[a-z0-9._+/=-]{16,}/gi, "$1 [redacted]");
+  /* #125: short basic-auth values leak too; floor 8, and '!' is
+     a common password character. */
+  s = s.replace(/(bearer|basic)\s+[a-z0-9._+/=!-]{8,}/gi, "$1 [redacted]");
   s = s.replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}/g, "[redacted-jwt]");
-  s = s.replace(/(api[_-]?key|apikey|password|secret|token)\s*[:=]\s*"?[a-z0-9._+/=-]{8,}"?/gi, "$1=[redacted]");
+  /* #125: Cookie/Set-Cookie values are credentials in logs. */
+  s = s.replace(/(api[_-]?key|apikey|password|secret|token|(?:set-)?cookie)\s*[:=]\s*"?[a-z0-9._+/=!-]{8,}"?/gi, "$1=[redacted]");
   /* URLs pasted into console text get the query treatment too. */
   s = s.replace(
-    new RegExp(`([?&])(${SECRET_QUERY_KEYS})=[^&\\s]*`, "gi"),
+    new RegExp(`([?#&])(${SECRET_QUERY_KEYS})=[^&\\s]*`, "gi"),
     "$1$2=[redacted]",
   );
   return s;

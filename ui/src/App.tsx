@@ -178,13 +178,15 @@ export default function App() {
   const closeTab = useCallback(
     (id: number) => {
       const tab = tabs.find((t) => t.id === id);
-      if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
+      /* #123: an incognito tab never enters the reopen list; a
+         reopened incognito URL would land in the normal profile. */
+      if (tab && !incognito) closedTabs.current = [...closedTabs.current, tab].slice(-10);
       const next = tabs.filter((t) => t.id !== id);
       setTabs(next);
       if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
       if (next.length === 0) setView("home");
     },
-    [tabs, activeId]
+    [tabs, activeId, incognito]
   );
 
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
@@ -203,6 +205,9 @@ export default function App() {
         /* Fresh cookie jar per incognito window (#1): the server-side
            session client is keyed by sid, so a new sid = an empty jar. */
         resetIncognitoSid();
+        /* #123: normal-session closed tabs must not be reopenable
+           into the incognito profile either. */
+        closedTabs.current = [];
         suspendedTabs.current = tabs;
         const t = freshTab();
         setTabs([t]);
