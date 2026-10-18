@@ -56,11 +56,11 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 
 /* The proxy browser wants every pixel it can get. */
 /* Browser view fills the viewport: no scrolling, no chrome. */
-.lb-shell:has(.lb-browser) { height: 100vh; overflow: hidden; }
+.lb-shell:has(.lb-browser-host:not([hidden])) { height: 100vh; overflow: hidden; }
 /* Home view: the hero fits one viewport, no page scroll. */
 .lb-shell:has(.lb-home) { height: 100vh; overflow: hidden; }
-.app-content:has(.lb-browser) { padding: 0; max-width: none; height: 100%; }
-.app-content:has(.lb-browser) .lb-view { max-width: none; height: 100%; }
+.app-content:has(.lb-browser-host:not([hidden])) { padding: 0; max-width: none; height: 100%; }
+.app-content:has(.lb-browser-host:not([hidden])) .lb-browser-host { max-width: none; height: 100%; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
@@ -97,6 +97,15 @@ body.lb-fancy .lb-ac {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+}
+/* The frosted rail needs something behind it to blur: the fancy
+   setting paints a soft colour field on the shell that the rail,
+   search bar and suggestion list blur through. */
+body.lb-fancy .lb-shell {
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent), transparent 55%),
+    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--md-sys-color-tertiary, var(--md-sys-color-primary)) 30%, transparent), transparent 60%),
+    var(--md-sys-color-surface);
 }
 body.lb-fancy m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 35%, transparent);
@@ -407,7 +416,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
 }
 .lb-dock.tucked { pointer-events: none; }
-.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); }
+.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); display: none; }
 .lb-dock:focus-within .lb-dock-pill { transform: translateY(0); }
 .lb-toolbar {
   display: block;
@@ -1254,7 +1263,7 @@ m3e-snackbar {
   .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
-  .app-content:has(.lb-browser) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
+  .app-content:has(.lb-browser-host:not([hidden])) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
   .app-content {
     padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
   }
