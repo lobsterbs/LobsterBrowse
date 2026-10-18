@@ -1,0 +1,52 @@
+name: apply-pin85fix
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/apply-pin85fix.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply pin85 hash fix and push
+        env:
+          PATCH_B64: |
+            ZGlmZiAtLWdpdCBhL0RFUExPWS5tZCBiL0RFUExPWS5tZAppbmRleCAxNGYxZGRmLi5hNDUyZTZhIDEwMDY0NAotLS0gYS9ERVBMT1kubWQKKysrIGIvREVQ
+            TE9ZLm1kCkBAIC00NCw3ICs0NCw3IEBAIGRlY29kZSBmaXgsIENJIHJ1biAzOTExNzI4MjcwNSBhbGwgZ3JlZW4sIHN1aXRlIDEyNDk6ICMyOTEKIG1hcFJl
+            ZnJlc2hIZWFkZXIgcXVvdGVkIHVybD0gcGFyc2luZywgIzI5MiBSRkMgNjI2NiBmaWxlbmFtZSoKIGV4dC12YWx1ZXMsICMyOTMgaG9uZXN0IFdTIHNoaW0g
+            YnVmZmVyZWRBbW91bnQsICMyOTQgY2FwcGVkCiBwYWdlLXJlYWxtIG1pbnQgbWVtbywgIzI5NSBob3N0LWJvdW5kIHJld3JpdGUgcnVsZXMpLCB6bHN3U2hh
+            Ci04ODExY2E1ZmU4MWJlZDYwIGFuZCBib290c3RyYXBTaGEgYmFlZmVlMDY2MDcxODNlNCAoYm90aCBjaGFuZ2VkOworZDI5YjAxN2FmZWVmNjNlYiBhbmQg
+            Ym9vdHN0cmFwU2hhIGU4OTBlNjA4M2JlNzU3MTkgKGJvdGggY2hhbmdlZDsKIHZlcmlmeSB0aGUgc2VydmVkIGZpbGUgaGFzaGVzKS4gVGhpcyBtYXRjaGVz
+            IHRoZSBEb2NrZXJmaWxlCiBaRU9MSVRFX0NPTU1JVDsgdGhlIHplb2xpdGUtc2VydmVyIGdpdCByZXYgc3RheXMgYjAyOTZmOCBiZWNhdXNlCiB0aGUgd2F2
+            ZSBpcyBTVy1vbmx5LCBhbmQgc2VydmVyL0NhcmdvLmxvY2sgaXMgY29uc2lzdGVudCB3aXRoIHRoZSBwaW4uCmRpZmYgLS1naXQgYS9Eb2NrZXJmaWxlIGIv
+            RG9ja2VyZmlsZQppbmRleCBjYjU5NDFiLi42NWYyNGJjIDEwMDY0NAotLS0gYS9Eb2NrZXJmaWxlCisrKyBiL0RvY2tlcmZpbGUKQEAgLTkxMyw4ICs5MTMs
+            OCBAQCBGUk9NIGRlYmlhbjpib29rd29ybS1zbGltIEFTIHpsLWJ1aWxkZXIKICMgYnVmZmVyZWRBbW91bnQgKHBhZ2UgKyB3b3JrZXIgcmVhbG1zKSwgIzI5
+            NCB0aGUgcGFnZS1yZWFsbSBtaW50CiAjIG1lbW8gaXMgY2FwcGVkIGF0IDI1NiBlbnRyaWVzIHdpdGggTFJVIHJlLWluc2VydCBhbmQgZXZpY3Rpb24sCiAj
+            ICMyOTUgcmV3cml0ZSBydWxlcyBiaW5kIHRvIHRoZSBmcm9tLWhvc3QgYm91bmRhcnkuIHN3LmpzCi0jIDQyZGRhMTMzY2I4ZDlhNzAgLT4gODgxMWNhNWZl
+            ODFiZWQ2MCAoMzY4NjQwIGJ5dGVzKTsKLSMgYm9vdHN0cmFwLmpzIGVjZWQwMzNlOTE5ZGZiMzggLT4gYmFlZmVlMDY2MDcxODNlNC4gQ2FyZ28tc2lkZQor
+            IyA0MmRkYTEzM2NiOGQ5YTcwIC0+IGQyOWIwMTdhZmVlZjYzZWIgKDM2MDMzNCBieXRlcyk7CisjIGJvb3RzdHJhcC5qcyBlY2VkMDMzZTkxOWRmYjM4IC0+
+            IGU4OTBlNjA4M2JlNzU3MTkuIENhcmdvLXNpZGUKICMgcGluIHN0YXlzIGIwMjk2ZjggKFNXLW9ubHkgZml4ZXMpLgogQVJHIFpFT0xJVEVfQ09NTUlUPTY1
+            YmRmNjEyZjdkZGNjOTI2NTg3M2IzZDgzZGQxNGU2NmY0ZTMyNmQKIFJVTiBhcHQtZ2V0IHVwZGF0ZSBcCkBAIC05NzYsNiArOTc2LDYgQEAgRVhQT1NFIDYw
+            MDEKICMgWkVPTElURV9DT01NSVQgYWJvdmUgKHN3LmpzLCBib290c3RyYXAuanMpLiBUaGUgc2VydmVyIGNvbXBhcmVzIHRoZW0KICMgYXQgc3RhcnR1cCBh
+            bmQgZmxhZ3MgL2J1aWxkIHN0YWxlIHdoZW4gdGhlIHpsLWJ1aWxkZXIgbGF5ZXIgY2FjaGUKICMgc2VydmVzIGFuIG9sZGVyIHRhcmJhbGwuCi1FTlYgUE9S
+            VD02MDAxIFdJU1BfUEFUSD0vd2lzcC8gWkVPTElURV9TV19TSEE9ODgxMWNhNWZlODFiZWQ2MCBaRU9MSVRFX0JPT1RTVFJBUF9TSEE9YmFlZmVlMDY2MDcx
+            ODNlNCBTQ1JBTUpFVF9WRVJTSU9OPTIuMC42Ny1hbHBoYS4yCitFTlYgUE9SVD02MDAxIFdJU1BfUEFUSD0vd2lzcC8gWkVPTElURV9TV19TSEE9ZDI5YjAx
+            N2FmZWVmNjNlYiBaRU9MSVRFX0JPT1RTVFJBUF9TSEE9ZTg5MGU2MDgzYmU3NTcxOSBTQ1JBTUpFVF9WRVJTSU9OPTIuMC42Ny1hbHBoYS4yCiBFTlRSWVBP
+            SU5UIFsiL2FwcC9sb2JzdGVyLXNlcnZlciJdCiAK
+        run: |
+          test "$(git rev-parse HEAD^)" = "7e3f46711bbd4ee85b4a8cb81fad29238cb05e05"
+          printf '%s' "$PATCH_B64" | base64 -d > pin85fix.patch
+          git apply --check pin85fix.patch
+          git apply pin85fix.patch
+          git rm -q .github/workflows/apply-pin85fix.yml
+          git add -A Dockerfile DEPLOY.md
+          git config user.name "agent"
+          git config user.email "agent@users.noreply.github.com"
+          git commit -q -m "fix(deploy): pin 85 hash correction: sw.js d29b017afeef63eb, bootstrap e890e6083be75719 (file bytes, not archive headers)"
+          test "$(git rev-parse HEAD^{tree})" = "fc22c8e4928502c8104b3b02fcacd161fb1d29fb"
+          git push origin HEAD:main
