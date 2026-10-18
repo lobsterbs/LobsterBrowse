@@ -24,4 +24,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wreq = { version = "0.16", features = ["cookies", "stream", "gzip", "brotli", "zstd", "deflate"] }
 wreq-util = "0.2"
 serde_json = "1"
+# #115: real URL parsing for the relay destination guard. Already a
+# locked transitive dependency (wreq); a hand-rolled host parser is a
+# bypass waiting to happen (numeric IP spellings, userinfo, ports).
+url = "2"
 sha2 = { workspace = true }

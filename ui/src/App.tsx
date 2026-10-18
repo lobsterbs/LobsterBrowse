@@ -456,7 +456,20 @@ export default function App() {
     };
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
-    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
+    /* #109 (bounded LB-side fix): the worker profile is global, so
+       with two LobsterBrowse windows open a background window's
+       jarProfile push switches the jar for every window. Re-assert
+       this window's profile whenever it becomes the foreground one,
+       so the window the user is actually using always browses with
+       the right jar. True per-window isolation needs engine-side
+       per-client jar state (tracked as Zeolite #267). */
+    window.addEventListener("focus", post);
+    window.addEventListener("pageshow", post);
+    return () => {
+      navigator.serviceWorker?.removeEventListener("controllerchange", post);
+      window.removeEventListener("focus", post);
+      window.removeEventListener("pageshow", post);
+    };
   }, [incognito]);
 
   /* ---- Zeolite engine page options: HTTPS upgrade (Zeolite #53) and

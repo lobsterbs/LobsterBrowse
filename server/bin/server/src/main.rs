@@ -17,7 +17,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::Router;
 use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower_http::services::{ServeDir, ServeFile};
@@ -36,6 +36,15 @@ struct AppState {
     /// resolve-then-validate SSRF resolver, no cookie store (the
     /// engine's jar owns cookies; they ride as headers).
     relay_client: reqwest::Client,
+    /// #110: optional deployment relay capability token
+    /// (ZL_RELAY_TOKEN). When set, only requests carrying the same
+    /// value in x-zl-relay-token are relayed at all.
+    relay_token: Option<String>,
+    /// #110: bounds concurrent upstream relay connects; a relay that
+    /// cannot take a permit fails fast instead of piling up.
+    relay_permits: tokio::sync::Semaphore,
+    /// #110: per-client-IP sliding window of relay uses.
+    relay_rate: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
@@ -169,8 +178,31 @@ fn redact_secrets(s: &str) -> String {
     out
 }
 
+/// URL user-info credentials (scheme://user:pass@host) never
+/// persist; the host and path stay for debugging. Mirrors the client
+/// sanitizer (ui/src/sanitize.ts) - keep the patterns in sync.
+fn redact_userinfo(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let Some(p) = s.find("://") else {
+        out.push_str(s);
+        return out;
+    };
+    out.push_str(&s[..p + 3]);
+    let rest = &s[p + 3..];
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    match authority.rfind('@') {
+        Some(a) if a > 0 => {
+            out.push_str("[redacted-userinfo]");
+            out.push_str(&rest[a..]);
+        }
+        _ => out.push_str(rest),
+    }
+    out
+}
+
 fn push_log(state: &AppState, level: &str, msg: &str) {
-    let msg = redact_secrets(msg);
+    let msg = redact_secrets(&redact_userinfo(msg));
     let line = format!(
         "{{\"ts\":{},\"level\":\"{}\",\"msg\":\"{}\"}}",
         now_secs(),
@@ -236,7 +268,7 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
         push_log(state, level, msg);
         return;
     };
-    let msg = redact_secrets(msg);
+    let msg = redact_secrets(&redact_userinfo(msg));
     let line = format!(
         "{{\"ts\":{},\"level\":\"{}\",\"msg\":\"{}\"}}",
         now_secs(),
@@ -347,8 +379,11 @@ mod persona {
 }
 
 /// Shared lookup client: manual redirects (reqwest never follows a
-/// 3xx on its own), the PolicyDns SSRF guard at connect time, and its
-/// own cookie jar.
+/// 3xx on its own), the PolicyDns SSRF guard at connect time, and NO
+/// cookie jar (#114): /suggest and /cert are stateless lookups, and a
+/// shared jar would replay one user's provider cookies onto another
+/// user's lookups. The engine's jar owns browser cookies; they ride
+/// the relay as headers.
 fn build_engine_client() -> reqwest::Client {
     reqwest::Client::builder()
         // Chrome persona TLS/HTTP2 emulation (CHROME_EMULATION): must
@@ -364,7 +399,7 @@ fn build_engine_client() -> reqwest::Client {
         .timeout(std::time::Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .dns_resolver(std::sync::Arc::new(PolicyDns))
-        .cookie_store(true)
+        .cookie_store(false)
         .build()
         .expect("reqwest client")
 }
@@ -406,6 +441,14 @@ fn build_relay_client() -> reqwest::Client {
 /// resolves at the first response header, so a healthy streamed body
 /// never pays it; the 30s read timeout still bounds a stalled one.
 const RELAY_HEADER_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// #110: relay resource bounds. Concurrent upstream CONNECTS are
+/// semaphore-bounded (the permit lives until the response headers are
+/// in; bodies then stream under the client read timeout), and each
+/// client IP may start at most this many relay connects per window.
+const RELAY_MAX_CONCURRENT_CONNECTS: usize = 16;
+const RELAY_RATE_WINDOW_SECS: u64 = 10;
+const RELAY_RATE_MAX_PER_WINDOW: usize = 30;
 
 async fn relay_send_wait(
     req: reqwest::RequestBuilder,
@@ -465,6 +508,193 @@ mod relay_wait {
             ),
             Ok(_) => panic!("a stalled upstream must not produce headers"),
         }
+    }
+}
+
+#[cfg(test)]
+mod relay_guard_tests {
+    use super::*;
+
+    /* ---- #115: literal-IP destinations ---- */
+    #[test]
+    fn relay_dest_rejects_private_ip_literals() {
+        for d in [
+            "http://127.0.0.1/",
+            "http://127.0.0.1:8080/x?y=1",
+            "http://0.0.0.0/",
+            "http://10.0.0.1/",
+            "http://172.16.0.9/",
+            "http://192.168.1.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://100.64.0.1/",
+            "http://198.18.0.5/",
+            "http://[::1]/",
+            "http://[::]/",
+            "http://[fe80::1]/",
+            "http://[fc00::5]/",
+            "http://[::ffff:127.0.0.1]/",
+        ] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_numeric_spellings_normalize_before_the_policy_check() {
+        // Same loopback destinations in alternate numeric spellings:
+        // the URL parser canonicalizes, the string is never prefix-checked.
+        for d in ["http://2130706433/", "http://0x7f.0.0.1/"] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_allows_policy_clean_destinations() {
+        for d in [
+            "https://example.com/",
+            "http://8.8.8.8/",
+            "https://[2606:4700::1111]/",
+            "http://1.1.1.1:443/x",
+        ] {
+            assert!(relay_dest_rejected(d).is_none(), "must allow {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_rejects_malformed_and_non_http_schemes() {
+        for d in [
+            "ftp://example.com/",
+            "file:///etc/passwd",
+            "not a url",
+            "http://",
+        ] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    /* ---- #110: authorization + resource bounds ---- */
+    #[test]
+    fn relay_authorizes_same_origin_browser_requests() {
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-origin"), None, None),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("none"), None, None),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(Some("https://lb.test"), Some("lb.test"), None, None, None),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn relay_rejects_cross_site_and_unauthorized_direct_requests() {
+        assert_eq!(
+            relay_client_authorized(None, None, Some("cross-site"), None, None),
+            Err("relay: cross-site relay use is not allowed")
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-site"), None, None),
+            Err("relay: cross-site relay use is not allowed")
+        );
+        // Bare direct POST: no Sec-Fetch-Site, no Origin, no token.
+        assert_eq!(
+            relay_client_authorized(None, None, None, None, None),
+            Err("relay: unauthorized")
+        );
+        // Foreign Origin.
+        assert_eq!(
+            relay_client_authorized(Some("https://evil.test"), Some("lb.test"), None, None, None),
+            Err("relay: origin is not allowed")
+        );
+    }
+
+    #[test]
+    fn relay_token_mode_requires_the_capability_on_every_request() {
+        let want = Some("deploy-secret");
+        assert_eq!(
+            relay_client_authorized(None, None, None, Some("deploy-secret"), want),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-origin"), None, want),
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, None, Some("wrong"), want),
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        );
+    }
+
+    #[test]
+    fn relay_rate_window_bounds_each_ip_independently() {
+        let map = Mutex::new(HashMap::new());
+        let ip: IpAddr = "203.0.113.9".parse().unwrap();
+        for _ in 0..RELAY_RATE_MAX_PER_WINDOW {
+            assert!(relay_rate_allow(&map, ip, 1000));
+        }
+        assert!(!relay_rate_allow(&map, ip, 1005), "window is full");
+        let other: IpAddr = "203.0.113.10".parse().unwrap();
+        assert!(relay_rate_allow(&map, other, 1005), "per-IP window");
+        // The window slides: after it expires the IP is allowed again.
+        assert!(relay_rate_allow(&map, ip, 1000 + RELAY_RATE_WINDOW_SECS));
+    }
+
+    /* ---- #111 mirror: user-info credentials never persist ---- */
+    #[test]
+    fn redact_userinfo_strips_embedded_credentials() {
+        let out = redact_userinfo("engine GET https://user:secret@example.com/reset");
+        assert!(out.contains("[redacted-userinfo]@"), "{out}");
+        assert!(out.contains("example.com/reset"), "{out}");
+        assert!(!out.contains("secret"), "{out}");
+        assert_eq!(redact_userinfo("no url here"), "no url here");
+        assert_eq!(
+            redact_userinfo("https://example.com/x"),
+            "https://example.com/x"
+        );
+    }
+}
+
+#[cfg(test)]
+mod engine_client_cookie_tests {
+    use super::*;
+
+    /* #114: the shared lookup client (/suggest, /cert) must be
+    cookie-less. A Set-Cookie answer from one user's lookup must
+    never be replayed on another user's request to the same provider.
+    The upstream is addressed by literal IP, so PolicyDns is not
+    consulted (literal destinations bypass the DNS resolver). */
+    #[tokio::test]
+    async fn lookup_client_never_replays_upstream_cookies() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen2 = seen.clone();
+        tokio::spawn(async move {
+            let app = Router::new().route(
+                "/",
+                get(move |hm: axum::http::HeaderMap| async move {
+                    seen2.lock().unwrap().push(
+                        hm.get(header::COOKIE)
+                            .and_then(|v| v.to_str().ok().map(String::from)),
+                    );
+                    ([(header::SET_COOKIE, "probe=1; Path=/")], "ok")
+                }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = build_engine_client();
+        client.get(format!("http://{addr}/")).send().await.unwrap();
+        client.get(format!("http://{addr}/")).send().await.unwrap();
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        assert!(seen[0].is_none(), "first request carries no cookie");
+        assert!(
+            seen[1].is_none(),
+            "Set-Cookie must not persist into a later lookup: {:?}",
+            seen[1]
+        );
     }
 }
 
@@ -584,6 +814,112 @@ fn relay_response_header_allowed(name: &str) -> bool {
     )
 }
 
+/// #115: validate a relay destination BEFORE any upstream connect.
+/// PolicyDns only sees DNS names - literal-IP destinations bypass the
+/// resolver entirely - so the destination is parsed once with the URL
+/// parser (every numeric spelling normalizes inside it: 2130706433,
+/// 0x7f.0.0.1 and [::ffff:127.0.0.1] all become canonical hosts, no
+/// string-prefix checks) and the canonical host is judged by the SAME
+/// DestinationPolicy the resolver applies to resolved addresses.
+/// Malformed destinations and non-HTTP(S) schemes never reach the
+/// client. DNS names keep the resolve-then-validate path (PolicyDns
+/// checks every resolved address, fail-closed) and also get the
+/// local-name pre-check here.
+fn relay_dest_rejected(dest: &str) -> Option<String> {
+    let url = match ::url::Url::parse(dest) {
+        Ok(u) => u,
+        Err(_) => return Some("relay: dest must be an absolute http(s) URL".into()),
+    };
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Some("relay: dest must be http(s)".into());
+    }
+    let Some(host_raw) = url.host_str() else {
+        return Some("relay: dest has no host".into());
+    };
+    // URL parsers keep the brackets on IPv6 literals; strip them so
+    // the IP parser below sees a bare address.
+    let host = host_raw
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_string();
+    let policy = zeolite_server::policy::DestinationPolicy::default();
+    match policy.check_hostname(&host) {
+        zeolite_server::policy::Verdict::Allow => None,
+        zeolite_server::policy::Verdict::Block => {
+            Some(format!("relay: destination {host} is blocked by policy"))
+        }
+    }
+}
+
+/// #110: authorization model for the public relay endpoint, enforced
+/// server-side before any outbound work. Browser requests must be
+/// same-origin: Sec-Fetch-Site (always set by the Chromium engine
+/// host, on every fetch method) must be same-origin/none, which kills
+/// cross-site form/simple-request abuse; without it, an explicit
+/// Origin matching the deployment's own Host passes, everything else
+/// is refused. A deployment that sets ZL_RELAY_TOKEN requires the
+/// same capability value in x-zl-relay-token on EVERY request - that
+/// is the authorization boundary for direct (non-browser) clients.
+/// A bare direct POST (no Sec-Fetch-Site, no Origin) is refused; a
+/// forged-header client is only stopped by the token mode, which the
+/// engine host cannot use yet (the SW would have to send it).
+fn relay_client_authorized(
+    origin: Option<&str>,
+    host: Option<&str>,
+    sec_fetch_site: Option<&str>,
+    token: Option<&str>,
+    want_token: Option<&str>,
+) -> Result<(), &'static str> {
+    if let Some(want) = want_token {
+        return if Some(want) == token {
+            Ok(())
+        } else {
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        };
+    }
+    match sec_fetch_site {
+        Some("same-origin") | Some("none") => Ok(()),
+        Some(_) => Err("relay: cross-site relay use is not allowed"),
+        None => match origin {
+            None => Err("relay: unauthorized"),
+            Some(o) => {
+                let host = host.unwrap_or("");
+                if o == format!("https://{host}") || o == format!("http://{host}") {
+                    Ok(())
+                } else {
+                    Err("relay: origin is not allowed")
+                }
+            }
+        },
+    }
+}
+
+/// #110: per-IP sliding window for relay connects. The now parameter
+/// is injected so the regression test can move the window without
+/// sleeping.
+fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now: u64) -> bool {
+    let mut map = map.lock().unwrap();
+    if map.len() > 4096 {
+        // Bound map growth: drop fully-expired idle windows.
+        map.retain(|_, w| !w.is_empty());
+    }
+    let win = map.entry(ip).or_default();
+    while let Some(&t) = win.front() {
+        if now.saturating_sub(t) >= RELAY_RATE_WINDOW_SECS {
+            win.pop_front();
+        } else {
+            break;
+        }
+    }
+    if win.len() < RELAY_RATE_MAX_PER_WINDOW {
+        win.push_back(now);
+        true
+    } else {
+        false
+    }
+}
+
 /// Zeolite #137 embedder relay endpoint. The service worker relays
 /// fetches for hosts whose wasm TLS ClientHello is fingerprint-
 /// blocked (engine policy route "relay"); the UI performs them here
@@ -600,9 +936,40 @@ fn relay_response_header_allowed(name: &str) -> bool {
 /// not a use case.
 async fn zl_relay_endpoint(
     State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
     let bad = |code: StatusCode, msg: &str| -> Response { (code, msg.to_string()).into_response() };
+    /* #110: authorize BEFORE any JSON parsing or outbound work. The
+    request body stays bounded by axum's default 2 MiB extractor
+    limit, so a relay envelope can never balloon memory. */
+    if let Err(msg) = relay_client_authorized(
+        headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
+        headers.get(header::HOST).and_then(|v| v.to_str().ok()),
+        headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-zl-relay-token")
+            .and_then(|v| v.to_str().ok()),
+        state.relay_token.as_deref(),
+    ) {
+        return bad(StatusCode::FORBIDDEN, msg);
+    }
+    if !relay_rate_allow(&state.relay_rate, peer.ip(), now_secs()) {
+        return bad(
+            StatusCode::TOO_MANY_REQUESTS,
+            "relay: rate limit exceeded, retry later",
+        );
+    }
+    let _relay_permit = match state.relay_permits.try_acquire() {
+        Ok(p) => p,
+        Err(_) => {
+            return bad(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "relay: too many concurrent relay connects",
+            )
+        }
+    };
     let req: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => return bad(StatusCode::BAD_REQUEST, &format!("relay body: {}", e)),
@@ -610,8 +977,10 @@ async fn zl_relay_endpoint(
     let Some(dest) = req.get("dest").and_then(|v| v.as_str()) else {
         return bad(StatusCode::BAD_REQUEST, "relay: dest missing");
     };
-    if !(dest.starts_with("http://") || dest.starts_with("https://")) {
-        return bad(StatusCode::BAD_REQUEST, "relay: dest must be http(s)");
+    /* #115: literal-IP destinations bypass PolicyDns; the parsed,
+    canonical host must pass the same DestinationPolicy first. */
+    if let Some(msg) = relay_dest_rejected(dest) {
+        return bad(StatusCode::FORBIDDEN, &msg);
     }
     let method_s = req
         .get("method")
@@ -1554,6 +1923,15 @@ async fn main() {
     let state = Arc::new(AppState {
         client,
         relay_client: build_relay_client(),
+        /* #110: strict token mode is opt-in per deployment; unset on
+        Render so the engine's unauthenticated SW relay keeps working
+        (the origin gate plus the rate/concurrency bounds are the
+        default posture). */
+        relay_token: std::env::var("ZL_RELAY_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty()),
+        relay_permits: tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS),
+        relay_rate: Mutex::new(HashMap::new()),
         logs: Mutex::new(VecDeque::new()),
         sessions: Mutex::new(HashMap::new()),
     });
@@ -1896,6 +2274,9 @@ mod session_log_tests {
         AppState {
             client: reqwest::Client::new(),
             relay_client: reqwest::Client::new(),
+            relay_token: None,
+            relay_permits: tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS),
+            relay_rate: Mutex::new(HashMap::new()),
             logs: Mutex::new(VecDeque::new()),
             sessions: Mutex::new(HashMap::new()),
         }
