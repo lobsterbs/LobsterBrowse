@@ -199,7 +199,15 @@ export function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      engine: ENGINES[parsed.engine as EngineId] ? (parsed.engine as EngineId) : DEFAULT_SETTINGS.engine,
+      /* #149: hasOwnProperty guards the record lookup - a stored
+         "constructor" or "toString" hits Object.prototype and passed the
+         old truthiness check, then searchUrl crashed on the
+         undefined entry during render. */
+      engine:
+        typeof parsed.engine === "string" &&
+        Object.prototype.hasOwnProperty.call(ENGINES, parsed.engine)
+          ? (parsed.engine as EngineId)
+          : DEFAULT_SETTINGS.engine,
       /* The Lobster scheme was removed: migrate stored picks to Baseline. */
       seed: !parsed.seed || parsed.seed === "#E8552F" ? DEFAULT_SETTINGS.seed : parsed.seed,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
@@ -214,7 +222,10 @@ export function loadSettings(): Settings {
       uaPreset:
         !parsed.uaPreset || parsed.uaPreset === "server-default"
           ? DEFAULT_SETTINGS.uaPreset
-          : parsed.uaPreset === "custom" || UA_PRESETS[parsed.uaPreset as Exclude<UaPresetId, "custom">]
+          : /* #149: hasOwnProperty, not truthiness -
+             "toString" passed the old UA_PRESETS check. */
+            parsed.uaPreset === "custom" ||
+            Object.prototype.hasOwnProperty.call(UA_PRESETS, parsed.uaPreset)
             ? parsed.uaPreset
             : DEFAULT_SETTINGS.uaPreset,
       fingerprintProfile:
@@ -251,7 +262,11 @@ export function loadSiteRules(): SiteRule[] {
     const raw = localStorage.getItem(RULES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SiteRule[]) : [];
+    /* #149: null or malformed entries would throw in
+       rules.find((r) => r.domain ...) during render. */
+    return Array.isArray(parsed)
+      ? parsed.filter((r): r is SiteRule => !!r && typeof (r as SiteRule).domain === "string")
+      : [];
   } catch {
     return [];
   }
@@ -398,7 +413,11 @@ export function normalizeUrl(input: string): string {
 /* Heuristic: a URL has a scheme, or looks like a bare domain/host
    (contains a dot, no spaces). Everything else is a search query. */
 export function looksLikeUrl(s: string): boolean {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return true;
+  /* #140: the address bar only navigates http(s). Any other scheme
+     (javascript:, file:, data:) is treated as a search query,
+     never a navigation target; both call sites gate through this
+     helper, so the allowlist lives here once. */
+  if (/^https?:\/\//i.test(s)) return true;
   if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/|$)/i.test(s)) return true;
   return /^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(" ");
 }

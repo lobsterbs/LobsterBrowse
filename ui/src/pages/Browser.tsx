@@ -298,6 +298,9 @@ export default function BrowserView(props: Props) {
      many CSP meta tags and SRI integrity attributes it stripped; log
      each distinct report once, not on every poll tick. */
   const lastDiag = useRef<Map<number, string>>(new Map());
+  /* #131: the zl-error mirror branch dedupes like lastDiag;
+     without it every 1.2 s poll tick re-logs the same failure. */
+  const lastErr = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
   /* Consecutive poll ticks a frame has spent stuck on about:blank
@@ -1441,25 +1444,33 @@ export default function BrowserView(props: Props) {
           /* unparsable payload: keep the generic line */
         }
         setStatus((prev) => ({ ...prev, [t.id]: { loading: false } }));
-        pushLog("error", "load failed: " + msg);
-        setDtState((prev) => {
-          const base = prev[t.id] ?? emptyDt();
-          return {
-            ...prev,
-            [t.id]: {
-              ...base,
-              console: [
-                ...base.console,
-                {
-                  id: nextEntryId(),
-                  kind: "error" as const,
-                  text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
-                  ts: Date.now(),
-                },
-              ].slice(-500),
-            },
-          };
-        });
+        /* #131: log and mirror the failure once per (tab, message).
+           The 1.2 s poll re-fires this branch while the card is
+           up; the undeduped pushLog grew the persisted log and
+           re-rendered the page every tick (the blank-frame and
+           lb-diag branches already dedupe this way). */
+        if (lastErr.current.get(t.id) !== msg) {
+          lastErr.current.set(t.id, msg);
+          pushLog("error", "load failed: " + msg);
+          setDtState((prev) => {
+            const base = prev[t.id] ?? emptyDt();
+            return {
+              ...prev,
+              [t.id]: {
+                ...base,
+                console: [
+                  ...base.console,
+                  {
+                    id: nextEntryId(),
+                    kind: "error" as const,
+                    text: "[LobsterBrowse] load failed: " + msg + " (" + sanitizeUrl(t.url) + ")",
+                    ts: Date.now(),
+                  },
+                ].slice(-500),
+              },
+            };
+          });
+        }
         return;
       }
       /* 74.7 CSP/SRI diagnostics: the rewriter strips CSP meta tags and
@@ -2068,6 +2079,7 @@ export default function BrowserView(props: Props) {
       blankPolls.current.delete(id);
       blankLogged.current.delete(id);
       lastDiag.current.delete(id);
+      lastErr.current.delete(id);
       for (const k of lastEscape.current) {
         if (k.startsWith(id + "|")) lastEscape.current.delete(k);
       }

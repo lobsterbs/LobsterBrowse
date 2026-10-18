@@ -27,6 +27,11 @@ function readJson<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
+    /* #149: corrupted storage can hold any shape; when the
+       caller expects an array (history, tabs, logs), a
+       non-array value would throw in the first downstream
+       .filter/.find during render. */
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
     return (parsed ?? fallback) as T;
   } catch {
     return fallback;
