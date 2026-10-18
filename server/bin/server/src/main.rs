@@ -134,11 +134,17 @@ fn redact_secrets(s: &str) -> String {
             }
             let run: String = chars[i..end].iter().collect();
             let parts: Vec<&str> = run.split('.').collect();
+            /* #127: the run holds only alnum/_/-/. bytes, so no other
+            pattern can start inside it - advance to the end either
+            way. Rescanning from i+1 on every non-JWT "eyJ" made
+            redaction quadratic on hostile input. */
             if parts.len() == 3 && parts.iter().all(|p| !p.is_empty()) && run.len() >= 20 {
                 out.push_str("[redacted-jwt]");
-                i = end;
-                continue;
+            } else {
+                out.push_str(&run);
             }
+            i = end;
+            continue;
         }
         // Labeled credentials in free text: "Bearer x", "apikey: x".
         let lower_ctx: String = chars[i..(i + 12).min(chars.len())]
@@ -1341,11 +1347,14 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             providers.push(fallback);
         }
     }
+    /* #127: the query is attacker-sized input; a 256-char prefix
+    keeps the log useful while bounding the redaction scan. */
+    let q_log: String = q.chars().take(256).collect();
     push_log_sess(
         &state,
         sess.as_deref(),
         "info",
-        &format!("suggest {} {}", engine, q),
+        &format!("suggest {} {}", engine, q_log),
     );
     let mut list: Vec<String> = Vec::new();
     /* Which provider actually answered: the fallback chain can hide the
@@ -1613,7 +1622,19 @@ fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
 /// binary); the deployment identifier from the git commit the platform
 /// built from (RENDER_GIT_COMMIT on Render, LB_BUILD_ID as a portable
 /// fallback, "unknown" honestly when neither is set). No invented data.
-async fn build_endpoint() -> Response {
+/// #128: browsers set Sec-Fetch-Site: same-origin for a
+/// same-origin fetch; non-browser clients and cross-site pages
+/// do not. The wisp URL bypasses the standalone wisp service's
+/// own password, so only the UI boot gets to see it.
+fn same_origin_fetch(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get("sec-fetch-site")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("same-origin"))
+        .unwrap_or(false)
+}
+
+async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     let build = std::env::var("RENDER_GIT_COMMIT")
         .or_else(|_| std::env::var("LB_BUILD_ID"))
         .unwrap_or_else(|_| "unknown".to_string());
@@ -1658,7 +1679,10 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => "unknown".to_string(),
     };
-    let sj_wisp = std::env::var("SCRAMJET_WISP_URL").unwrap_or_default();
+    let sj_wisp = match std::env::var("SCRAMJET_WISP_URL") {
+        Ok(v) if !v.is_empty() && same_origin_fetch(&headers) => v,
+        _ => String::new(),
+    };
     let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",

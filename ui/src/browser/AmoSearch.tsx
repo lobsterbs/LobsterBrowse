@@ -21,6 +21,7 @@ type AmoHit = {
   users: number;
   rating: number | null;
   size: number;
+  hash: string;
   xpiUrl: string;
 };
 
@@ -37,7 +38,7 @@ function loc(v: unknown): string {
 }
 
 function toHit(r: Record<string, unknown>): AmoHit | null {
-  const cv = r.current_version as { version?: unknown; file?: { url?: unknown; size?: unknown } } | undefined;
+  const cv = r.current_version as { version?: unknown; file?: { url?: unknown; size?: unknown; hash?: unknown } } | undefined;
   const xpiUrl = cv && cv.file && typeof cv.file.url === "string" ? cv.file.url : "";
   if (typeof r.slug !== "string" || !xpiUrl) return null;
   const ratings = r.ratings as { average?: unknown } | undefined;
@@ -50,6 +51,7 @@ function toHit(r: Record<string, unknown>): AmoHit | null {
     users: Number(r.average_daily_users) || 0,
     rating: ratings && typeof ratings.average === "number" ? ratings.average : null,
     size: cv && cv.file && Number(cv.file.size) ? Number(cv.file.size) : 0,
+    hash: cv && cv.file && typeof cv.file.hash === "string" ? cv.file.hash : "",
     xpiUrl,
   };
 }
@@ -105,8 +107,8 @@ export default function AmoSearch() {
     setSerr("");
     setSok("");
     try {
-      let bytes: Uint8Array | null = null;
-      const isXpi = (b: Uint8Array | null): b is Uint8Array =>
+      let bytes: Uint8Array<ArrayBuffer> | null = null;
+      const isXpi = (b: Uint8Array<ArrayBuffer> | null): b is Uint8Array<ArrayBuffer> =>
         !!b && b.length > 3 && b[0] === 0x50 && b[1] === 0x4b;
       try {
         const r = await fetch(h.xpiUrl);
@@ -120,6 +122,18 @@ export default function AmoSearch() {
       }
       if (!isXpi(bytes)) {
         throw new Error("the add-on CDN refused the download (tried direct and engine routes)");
+      }
+      /* #126: PK magic bytes alone prove nothing; the download must
+         match the size and sha256 the AMO API reported. */
+      if (h.size > 0 && bytes.length !== h.size) {
+        throw new Error(`add-on size mismatch (expected ${h.size} B, got ${bytes.length} B)`);
+      }
+      if (h.hash) {
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const hex = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+        if (hex !== h.hash.toLowerCase()) {
+          throw new Error("add-on sha256 mismatch (download was tampered or truncated)");
+        }
       }
       const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
       if (!rep || !rep.ok) {

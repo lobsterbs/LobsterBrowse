@@ -136,4 +136,19 @@ assert(
   "no raw JWT segment persists"
 );
 
+/* ---- #124/#125: fragment tokens, cookie values, short basic auth ---- */
+store.clearLogs();
+store.pushLog("info", "nav https://app.example/cb#access_token=ABCDEF1234567890xyz&token_type=bearer");
+store.pushLog("info", "upstream Set-Cookie: session_id=9f8e7d6c5b4a3210zz; Path=/ kept");
+store.pushLog("info", "auth failed Authorization: Basic dXNlcjpwYXNz end");
+store.pushLog("info", "config password=Correct-Horse9!Staple leaked");
+store.pushLog("info", "aws https://x.test/s?X-Amz-Signature=deadbeef1234&keep=1");
+const priv = store.getLogs().map((l) => l.msg);
+assert(!priv.some((m) => m.includes("ABCDEF1234567890xyz")), "#124: fragment access_token redacted");
+assert(!priv.some((m) => m.includes("9f8e7d6c5b4a3210zz")), "#125: cookie value redacted");
+assert(!priv.some((m) => m.includes("dXNlcjpwYXNz")), "#125: short basic auth redacted");
+assert(!priv.some((m) => m.includes("Correct-Horse9!Staple")), "#125: full password value redacted");
+assert(!priv.some((m) => m.includes("deadbeef1234")), "#124: presigned signature redacted");
+assert(priv.some((m) => m.includes("keep=1")), "benign param stays");
+
 console.log("log-privacy check: incognito separation + URL redaction ok");
