@@ -66,18 +66,6 @@ export function reasonText(code: string): string {
   return REASON_TEXT[code] ?? code;
 }
 
-/* Human labels for the engine's transport fallback reasons. Fallbacks
-   are expected routing decisions (every HTML document and CSS load is
-   one by design), not load failures. */
-const FALLBACK_TEXT: Record<string, string> = {
-  DOCUMENT_REWRITE_REQUIRED: "document needs the rewriter (normal)",
-  CSS_URL_REWRITE_REQUIRED: "CSS needs url() rewriting (normal)",
-};
-
-function fallbackText(code: string): string {
-  return FALLBACK_TEXT[code] ?? code;
-}
-
 export type DtState = {
   open: boolean;
   page: "console" | "network" | "diagnostics";
@@ -198,8 +186,13 @@ type ZlDiagEvent = {
   technicalReason?: string;
 };
 
+/* Failures and abnormal events only. Every TRANSPORT_FALLBACK stage
+   record (document/CSS/JS-literal rewrite routing) is expected by
+   design, so those info rows are routine routing, not failures, and
+   no longer show. The redirect-surfaced marker stays: it names the
+   visible reload-cycle symptom, which is not a routine decision. */
 const zlNotable = (e: ZlDiagEvent) =>
-  e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK";
+  e.severity === "error" || e.severity === "warning" || e.message.startsWith("redirect surfaced");
 
 /* The rows ZeoliteDiagnostics renders live in component state that
    dies on unmount; Copy logs needs them after the section is gone or
@@ -208,9 +201,8 @@ const zlNotable = (e: ZlDiagEvent) =>
 const zlDiagSnapshot: {
   native: number | null;
   fallbackCount: number;
-  fallbacks: ZlFallback[];
   notable: ZlDiagEvent[];
-} = { native: null, fallbackCount: 0, fallbacks: [], notable: [] };
+} = { native: null, fallbackCount: 0, notable: [] };
 
 function ZeoliteDiagnostics() {
   const [stats, setStats] = useState<ZlStats | null>(null);
@@ -259,7 +251,6 @@ function ZeoliteDiagnostics() {
   useEffect(() => {
     zlDiagSnapshot.native = stats?.native ?? null;
     zlDiagSnapshot.fallbackCount = stats?.fallback ?? 0;
-    zlDiagSnapshot.fallbacks = stats?.fallbacks ?? [];
     zlDiagSnapshot.notable = events.filter(zlNotable).slice(-25).reverse();
   }, [stats, events]);
 
@@ -269,27 +260,11 @@ function ZeoliteDiagnostics() {
     <div className="lb-net" style={{ marginBottom: "12px" }}>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
-        {stats.fallbacks.length > 0 && (
-          <span className="lb-diag-chip lb-diag-bad">Rewrite fallbacks: {stats.fallbacks.length}</span>
-        )}
+        <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
       </div>
-      {stats.fallbacks
-        .slice(-10)
-        .reverse()
-        .map((f, i) => (
-          <details key={f.ts + "-" + i} className="lb-net-row">
-            <summary className="lb-net-summary">
-              <span className="lb-net-status lb-bad">FB</span>
-              <span className="lb-net-method">{fallbackText(f.reason)}</span>
-              <span className="lb-net-url">{f.url}</span>
-              <span className="lb-net-dur">{ts(f.ts)}</span>
-            </summary>
-            <div className="lb-net-detail">
-              <div>Reason code: {f.reason}</div>
-              <div>Time: {ts(f.ts)}</div>
-            </div>
-          </details>
-        ))}
+      {notable.length === 0 && (
+        <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No transport or rewrite failures.</p>
+      )}
       {notable.map((e) => (
         <details key={e.seq} className="lb-net-row">
           <summary className="lb-net-summary">
@@ -512,9 +487,14 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     ].join("\n");
     const zl: string[] = [];
     if (zlDiagSnapshot.native !== null)
-      zl.push("Zeolite NativeTransit requests: " + zlDiagSnapshot.native + ", rewrite fallbacks: " + zlDiagSnapshot.fallbackCount);
-    for (const f of zlDiagSnapshot.fallbacks.slice(-10).reverse())
-      zl.push(line(f.ts, "FB", fallbackText(f.reason) + " " + f.url));
+      zl.push(
+        "Zeolite NativeTransit requests: " +
+          zlDiagSnapshot.native +
+          ", rewrite-routed loads (normal): " +
+          zlDiagSnapshot.fallbackCount +
+          ", failures: " +
+          zlDiagSnapshot.notable.length,
+      );
     for (const e of zlDiagSnapshot.notable)
       zl.push(
         line(
@@ -1003,8 +983,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
             are the rows marked FAIL; successful loads are in the Network section. The engine
-            transport section shows routing decisions, not failures: FB rows are expected rewrite
-            fallbacks (every HTML and CSS load uses one).
+            transport section lists failures and abnormal events only: rewrite-routed loads
+            (every HTML, CSS and JS load is routed through the rewriter by design) are counted,
+            not listed.
           </p>
           <ZeoliteEngineTools frame={frame} />
           <ZeoliteDiagnostics />
