@@ -1088,11 +1088,11 @@ fn percent_decode(s: &str) -> String {
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
             /* #136: the hex pair is read from the BYTE slice;
-               slicing the &str at i+1..i+3 panics on a char
-               boundary when raw multi-byte characters follow
-               the '%' (http 1.5 accepts high bytes in
-               the query string). An invalid-UTF-8 or non-hex
-               pair falls through as literal bytes. */
+            slicing the &str at i+1..i+3 panics on a char
+            boundary when raw multi-byte characters follow
+            the '%' (http 1.5 accepts high bytes in
+            the query string). An invalid-UTF-8 or non-hex
+            pair falls through as literal bytes. */
             if let Ok(pair) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
                 if let Ok(v) = u8::from_str_radix(pair, 16) {
                     out.push(v);
@@ -1112,8 +1112,8 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 /* #136 regression: the hex pair read must never slice the &str
-   on a char boundary; a raw UTF-8 query used to panic the
-   connection handler here. */
+on a char boundary; a raw UTF-8 query used to panic the
+connection handler here. */
 #[cfg(test)]
 mod percent_decode_tests {
     use super::percent_decode;
