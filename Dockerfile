@@ -903,7 +903,20 @@ FROM debian:bookworm-slim AS zl-builder
 # c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
-ARG ZEOLITE_COMMIT=d5a2a6683a2726c7f481b57c206044dcddf4e020
+# Pin 85: Zeolite dist 65bdf61. One engine wave since pin 84, the
+# 2026-10-18 small-issue wave (Zeolite 7fca90e on top of the #290
+# deref fix, CI run 39117282705 all green, suite 1249):
+# #291 mapRefreshHeader ends a quoted url= at its closing quote and
+# an unquoted one at the next semicolon, #292 downloadFilename
+# decodes RFC 6266 filename* ext-values with a plain-filename
+# fallback, #293 the WS shims count pre-handshake queued sends in
+# bufferedAmount (page + worker realms), #294 the page-realm mint
+# memo is capped at 256 entries with LRU re-insert and eviction,
+# #295 rewrite rules bind to the from-host boundary. sw.js
+# 42dda133cb8d9a70 -> 8811ca5fe81bed60 (368640 bytes);
+# bootstrap.js eced033e919dfb38 -> baefee06607183e4. Cargo-side
+# pin stays b0296f8 (SW-only fixes).
+ARG ZEOLITE_COMMIT=65bdf612f7ddcc9265873b3d83dd14e66f4e326d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -963,6 +976,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42dda133cb8d9a70 ZEOLITE_BOOTSTRAP_SHA=eced033e919dfb38 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8811ca5fe81bed60 ZEOLITE_BOOTSTRAP_SHA=baefee06607183e4 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
