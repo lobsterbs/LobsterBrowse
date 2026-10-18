@@ -251,6 +251,14 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
             aria-activedescendant={listShown && suggestions[idx] ? "lb-home-opt-" + idx : undefined}
           />
         </m3e-search-bar>
+        {/* #120: polite count announcement; the listbox itself stays
+            quiet so rapid typing does not read every option. */}
+        <div className="lb-sr-only" role="status" aria-live="polite">
+          {listShown
+            ? suggestions.length +
+              (suggestions.length === 1 ? " suggestion available" : " suggestions available")
+            : ""}
+        </div>
         {listShown && (
           <div
             className="lb-ac"

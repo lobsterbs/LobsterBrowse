@@ -2215,10 +2215,21 @@ export default function BrowserView(props: Props) {
         {/* #86: the tucked dock leaves a 12px sliver; the grip makes
             that sliver an intentional, visible handle (touch has no
             hover). Tapping it reveals the toolbar like any activity. */}
+        {/* #121: the grip is a real button while it is visible
+            (tucked); hidden and unfocusable otherwise. */}
         <div
           className="lb-dock-grip"
-          aria-hidden={true}
+          role="button"
+          tabIndex={dockTucked ? 0 : -1}
+          aria-hidden={dockTucked ? undefined : true}
+          aria-label="Show browser toolbar"
           onClick={() => {
+            setDockTucked(false);
+            hideSoon();
+          }}
+          onKeyDown={(ev) => {
+            if (ev.key !== "Enter" && ev.key !== " ") return;
+            ev.preventDefault();
             setDockTucked(false);
             hideSoon();
           }}

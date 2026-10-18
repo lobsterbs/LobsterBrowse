@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
   UA_PRESETS,
@@ -50,14 +50,21 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
 }
 
 function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
+  /* #116: the visible label names the switch and toggles it too. */
+  const labelId = useId();
   return (
     <m3e-list-item>
       <div className="lb-setting-row">
-        <span className="lb-setting-label">
+        <span className="lb-setting-label" id={labelId} onClick={props.toggle}>
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
         </span>
-        <m3e-switch checked={props.on ? "" : undefined} icons="selected" onClick={props.toggle} />
+        <m3e-switch
+          aria-labelledby={labelId}
+          checked={props.on ? "" : undefined}
+          icons="selected"
+          onClick={props.toggle}
+        />
       </div>
     </m3e-list-item>
   );

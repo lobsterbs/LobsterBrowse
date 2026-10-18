@@ -1448,3 +1448,16 @@ body .lb-ext-panel {
   .lb-tab-preview { width: 116px; }
   .lb-tab-preview iframe { width: 464px; }
 }
+
+/* #120: visually hidden, announced to assistive technology. */
+.lb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
