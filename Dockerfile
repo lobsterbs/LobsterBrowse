@@ -913,8 +913,8 @@ FROM debian:bookworm-slim AS zl-builder
 # bufferedAmount (page + worker realms), #294 the page-realm mint
 # memo is capped at 256 entries with LRU re-insert and eviction,
 # #295 rewrite rules bind to the from-host boundary. sw.js
-# 42dda133cb8d9a70 -> 8811ca5fe81bed60 (368640 bytes);
-# bootstrap.js eced033e919dfb38 -> baefee06607183e4. Cargo-side
+# 42dda133cb8d9a70 -> d29b017afeef63eb (360334 bytes);
+# bootstrap.js eced033e919dfb38 -> e890e6083be75719. Cargo-side
 # pin stays b0296f8 (SW-only fixes).
 ARG ZEOLITE_COMMIT=65bdf612f7ddcc9265873b3d83dd14e66f4e326d
 RUN apt-get update \
@@ -976,6 +976,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8811ca5fe81bed60 ZEOLITE_BOOTSTRAP_SHA=baefee06607183e4 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d29b017afeef63eb ZEOLITE_BOOTSTRAP_SHA=e890e6083be75719 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 

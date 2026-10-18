@@ -44,7 +44,7 @@ decode fix, CI run 39117282705 all green, suite 1249: #291
 mapRefreshHeader quoted url= parsing, #292 RFC 6266 filename*
 ext-values, #293 honest WS shim bufferedAmount, #294 capped
 page-realm mint memo, #295 host-bound rewrite rules), zlswSha
-8811ca5fe81bed60 and bootstrapSha baefee06607183e4 (both changed;
+d29b017afeef63eb and bootstrapSha e890e6083be75719 (both changed;
 verify the served file hashes). This matches the Dockerfile
 ZEOLITE_COMMIT; the zeolite-server git rev stays b0296f8 because
 the wave is SW-only, and server/Cargo.lock is consistent with the pin.
