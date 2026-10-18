@@ -38,23 +38,22 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist bee555f (pin 86: the 2026-10-18 fix-wave
-completion, Zeolite a43aeb10 on top of the agent commits 514471f8,
-79b3377a, 4aeb5e3e and the d8126d64 tabs.ts splice repair, CI run
-39124338300 all green, suite 1273: #270 32-bit fnv1a site hash
-with jar origin migration, #289 durable-jar-only origins records,
-#262/#263/#264 honest IndexedDB/cmp/caches.match shims, #265
-siteconfig key normalization, #272 webRequest listener detail
-copies, #282 live webRequest permission views, #271
-tabs.onUpdated changeInfo gating, #278 host-visible filtered
-tab queries, #283 tab op deadlines, #286 query title globs,
-#281 cookies.onChanged scoping, #285 content-script asset
-validation, #276 credentials-gated cookie jar, #288
-permission-correct webRequest URLs), zlswSha 3a6e775447488fe4
-and bootstrapSha 1e55ec0f04f848b9 (both changed; verify the
-served file hashes). This matches the Dockerfile ZEOLITE_COMMIT;
-the zeolite-server git rev stays b0296f8 because the wave is
-SW-only, and server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist 13d9b85 (pin 87: #297 - extensions
+appeared installed but never ran in the embedded browsing
+pane: every proxied document arrives with sec-fetch-dest
+iframe and the engine treated any iframe destination as a
+genuine subframe, so every non-all_frames content script was
+dropped and MV3 backgrounds never booted. A frame whose
+parent referrer is a host page is now the pane main surface
+for content-script matching, genuine subframes of proxied
+documents keep subframe semantics, unparseable parents fail
+closed; Zeolite 9d33b44 on 1ae6cdc, CI run 39129225053 all
+5 jobs green, suite 1278 incl. 5 new cs-inject tests),
+zlswSha 8ef1ef7239120397 and bootstrapSha 1e55ec0f04f848b9
+(sw.js changed; verify the served file hash). This matches
+the Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev
+stays b0296f8 because the fix is SW-only, and
+server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
