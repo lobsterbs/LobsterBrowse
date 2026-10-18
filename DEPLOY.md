@@ -38,15 +38,16 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist e6ea8c6 (pin 54: the epoxy wisp-mux
-death fix, treating Wisp(MuxTaskEnded) ("Multiplexor task ended")
-and the epoxy dead-transport error surface as connect-class so
-the #74 reset+retry fires instead of a terminal 502 error page,
-from Zeolite main 7548235, CI all-green), zlswSha 1c67b54c12821a2b
-(sw.js changed; verify the served file hash). This matches the
-Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
-deccb43 because no crate change shipped since it, and
-server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist 65bdf61 (pin 85: the 2026-10-18 small-issue
+wave, Zeolite 7fca90e on top of the #290 derefSelfRoute cross-origin
+decode fix, CI run 39117282705 all green, suite 1249: #291
+mapRefreshHeader quoted url= parsing, #292 RFC 6266 filename*
+ext-values, #293 honest WS shim bufferedAmount, #294 capped
+page-realm mint memo, #295 host-bound rewrite rules), zlswSha
+8811ca5fe81bed60 and bootstrapSha baefee06607183e4 (both changed;
+verify the served file hashes). This matches the Dockerfile
+ZEOLITE_COMMIT; the zeolite-server git rev stays b0296f8 because
+the wave is SW-only, and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
