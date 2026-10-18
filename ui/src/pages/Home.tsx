@@ -112,6 +112,11 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
       return;
     }
     const ac = new AbortController();
+    /* #113: the previous query's suggestions never stay visible under
+       the new query - the list clears when this query's fetch starts,
+       and the cleanup abort below kills any out-of-order reply before
+       it lands, so a failed or stale fetch cannot show wrong rows. */
+    setRemote([]);
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, q, ac.signal).then((res) => {
         setRemote(res.items.map((text) => ({ text, src: res.source })));
