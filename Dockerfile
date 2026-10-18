@@ -1017,6 +1017,25 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 93: Zeolite dist 6727cba (from CI build 39166714671,
+# Zeolite main a6d37ed, all 5 jobs green, suite 1318 incl. 5 new
+# tests). Three engine-side changes since pin 92: the Vary
+# honor fix #346 (Zeolite PR #355, conservative form: any
+# non-empty Vary makes a response non-storable, so the URL-only
+# cache key can never serve a variant; the roadmap docs #353
+# ride along, docs-only), the relay re-registration fix #354
+# (Zeolite 7292e71: a relay-routed fetch that finds no channel
+# broadcasts zl:relayLost to window clients and waits once,
+# bounded 3s with a 30s backoff; the LB App.tsx listener
+# re-registers at once - fixes the fast.com/chatgpt.com SSL
+# error 35 class after an idle SW restart, LB #156), and the
+# SharedWorker identity scoping fix #260 (Zeolite a6d37ed: the
+# ctor folds the opaque site token into the worker name, both
+# arg forms, so two virtual sites on the one engine origin
+# never share a worker context). sw.js 248fc6aea789e2f2 ->
+# 7db69875af0b35a8 (366753 bytes); bootstrap.js
+# 8c7520cbfad8035d -> 790c52c7c4beb41c (29462 bytes).
+# Cargo-side pin stays a385fa9 (all fixes SW-side).
 # Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Two
 # waves plus a fix since pin 91: the 2026-10-18 rewriter wave
 # (Zeolite e4f997f on main: #345/#342/#339; the ride is in
@@ -1050,7 +1069,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=7b9593f198019fa010ef3afcf164cf10cfd2e352
+ARG ZEOLITE_COMMIT=6727cba403c9e4b66ca4502e830ccf4c861e156c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1110,6 +1129,6 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=248fc6aea789e2f2 ZEOLITE_BOOTSTRAP_SHA=8c7520cbfad8035d SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7db69875af0b35a8 ZEOLITE_BOOTSTRAP_SHA=790c52c7c4beb41c SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
 
