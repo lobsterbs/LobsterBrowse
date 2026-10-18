@@ -38,16 +38,23 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 65bdf61 (pin 85: the 2026-10-18 small-issue
-wave, Zeolite 7fca90e on top of the #290 derefSelfRoute cross-origin
-decode fix, CI run 39117282705 all green, suite 1249: #291
-mapRefreshHeader quoted url= parsing, #292 RFC 6266 filename*
-ext-values, #293 honest WS shim bufferedAmount, #294 capped
-page-realm mint memo, #295 host-bound rewrite rules), zlswSha
-d29b017afeef63eb and bootstrapSha e890e6083be75719 (both changed;
-verify the served file hashes). This matches the Dockerfile
-ZEOLITE_COMMIT; the zeolite-server git rev stays b0296f8 because
-the wave is SW-only, and server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist bee555f (pin 86: the 2026-10-18 fix-wave
+completion, Zeolite a43aeb10 on top of the agent commits 514471f8,
+79b3377a, 4aeb5e3e and the d8126d64 tabs.ts splice repair, CI run
+39124338300 all green, suite 1273: #270 32-bit fnv1a site hash
+with jar origin migration, #289 durable-jar-only origins records,
+#262/#263/#264 honest IndexedDB/cmp/caches.match shims, #265
+siteconfig key normalization, #272 webRequest listener detail
+copies, #282 live webRequest permission views, #271
+tabs.onUpdated changeInfo gating, #278 host-visible filtered
+tab queries, #283 tab op deadlines, #286 query title globs,
+#281 cookies.onChanged scoping, #285 content-script asset
+validation, #276 credentials-gated cookie jar, #288
+permission-correct webRequest URLs), zlswSha 3a6e775447488fe4
+and bootstrapSha 1e55ec0f04f848b9 (both changed; verify the
+served file hashes). This matches the Dockerfile ZEOLITE_COMMIT;
+the zeolite-server git rev stays b0296f8 because the wave is
+SW-only, and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
