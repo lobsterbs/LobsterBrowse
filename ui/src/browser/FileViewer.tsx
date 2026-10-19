@@ -4,13 +4,17 @@
    pass through the DOMPurify wrapper (#44) and render in a fully
    sandboxed iframe; proxied page content NEVER enters here - that
    path keeps iframe/origin isolation plus CSP as its boundary. */
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { FileKind } from "./fileKind";
 import { sanitizeOwnedHtml } from "./htmlPreview";
-import PdfViewer from "./PdfViewer";
 import ArchiveViewer from "./ArchiveViewer";
 import { fmtBytes } from "./browserShared";
 import "./fileViewer.css";
+
+/* PDF.js is a large parser and is only needed after the user opens a PDF.
+   Keep it behind a real chunk boundary so ordinary browsing and other file
+   previews do not download or evaluate the PDF runtime. */
+const PdfViewer = lazy(() => import("./PdfViewer"));
 
 const TEXT_CAP = 2 * 1024 * 1024;
 
@@ -71,7 +75,11 @@ export default function FileViewer(props: { name: string; blob: Blob; kind: File
           </m3e-icon-button>
         </div>
         <div slot="content" className="lb-fv-body">
-          {props.kind === "pdf" && <PdfViewer blob={props.blob} />}
+          {props.kind === "pdf" && (
+            <Suspense fallback={<p className="lb-muted">Loading PDF viewer...</p>}>
+              <PdfViewer blob={props.blob} />
+            </Suspense>
+          )}
           {(props.kind === "zip" || props.kind === "gzip" || props.kind === "zlib") && (
             <ArchiveViewer name={props.name} blob={props.blob} kind={props.kind} />
           )}

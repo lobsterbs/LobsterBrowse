@@ -1,6 +1,19 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@m3e/web/all";
+/* Register the M3E set used by the app shell and Home. Lazy pages
+   register their own components when their chunks load. */
+import "@m3e/web/button";
+import "@m3e/web/button-group";
+import "@m3e/web/chips";
+import "@m3e/web/dialog";
+import "@m3e/web/icon";
+import "@m3e/web/icon-button";
+import "@m3e/web/loading-indicator";
+import "@m3e/web/nav-bar";
+import "@m3e/web/nav-rail";
+import "@m3e/web/search";
+import "@m3e/web/snackbar";
+import "@m3e/web/theme";
 import "material-symbols/outlined.css";
 /* Typography is self-hosted too: Google Sans Flex variable (wght + wdth
    axes) bundled from npm, no Google Fonts CDN request at runtime. */

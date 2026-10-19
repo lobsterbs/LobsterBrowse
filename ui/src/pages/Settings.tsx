@@ -1,3 +1,14 @@
+/* Settings controls are registered with this lazy route, not Home. */
+import "@m3e/web/divider";
+import "@m3e/web/expansion-panel";
+import "@m3e/web/form-field";
+import "@m3e/web/heading";
+import "@m3e/web/list";
+import "@m3e/web/option";
+import "@m3e/web/segmented-button";
+import "@m3e/web/select";
+import "@m3e/web/switch";
+
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
