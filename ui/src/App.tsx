@@ -397,7 +397,15 @@ export default function App() {
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const p = r.active || r.installing || r.waiting;
-          if (p && new URL(p.scriptURL).pathname !== "/zlsw/sw.js") {
+          /* #133: the ScramJet controller worker at /sj/sw.js is a
+             legitimate engine worker too; unregistering it on every
+             boot silently broke the ScramJet engine until the next
+             reinstall. */
+          if (
+            p &&
+            new URL(p.scriptURL).pathname !== "/zlsw/sw.js" &&
+            new URL(p.scriptURL).pathname !== "/sj/sw.js"
+          ) {
             await r.unregister();
           }
         }
@@ -613,9 +621,31 @@ export default function App() {
     uncloakFavicon();
   };
 
-  const deleteAll = () => {
+  const deleteAll = async () => {
     store.clearAllData();
     store.pushLog("warn", "all local data deleted");
+    /* #134: clearAllData covers localStorage only; Service Worker
+       caches and IndexedDB survive it. Best-effort wipe before the
+       reload so a deleted session cannot rehydrate from storage. */
+    try {
+      if (typeof caches !== "undefined") {
+        for (const k of await caches.keys()) await caches.delete(k);
+      }
+    } catch {
+      /* best effort: the reload still lands on a clean shell */
+    }
+    try {
+      const idb = indexedDB as unknown as {
+        databases?: () => Promise<Array<{ name?: string }>>;
+      };
+      if (typeof idb.databases === "function") {
+        for (const db of await idb.databases()) {
+          if (db.name) indexedDB.deleteDatabase(db.name);
+        }
+      }
+    } catch {
+      /* best effort */
+    }
     window.location.replace("/");
   };
 

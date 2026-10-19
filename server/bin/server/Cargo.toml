@@ -29,3 +29,5 @@ serde_json = "1"
 # bypass waiting to happen (numeric IP spellings, userinfo, ports).
 url = "2"
 sha2 = { workspace = true }
+# LB #137/#138: StreamExt for the capped relay and lookup body reads.
+futures-util = "0.3"

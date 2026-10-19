@@ -236,7 +236,16 @@ function ZeoliteDiagnostics() {
       if (!dead && dg && dg.ok && Array.isArray(dg.events)) {
         if (typeof dg.lastSeq === "number" && dg.lastSeq > diagSeq.current) diagSeq.current = dg.lastSeq;
         setEvents((prev) =>
-          [...prev, ...(dg.events as ZlDiagEvent[]).filter((ev) => !prev.some((p) => p.seq === ev.seq))].slice(-60),
+          [...prev, ...(dg.events as ZlDiagEvent[])
+            .filter((ev) => !prev.some((p) => p.seq === ev.seq))
+            /* #148: event fields carry upstream-derived strings; sanitize
+               at the merge so nothing raw reaches React state or Copy logs. */
+            .map((ev) => ({
+              ...ev,
+              message: sanitizeText(ev.message),
+              url: ev.url ? sanitizeUrl(ev.url) : ev.url,
+              technicalReason: ev.technicalReason ? sanitizeText(ev.technicalReason) : ev.technicalReason,
+            }))].slice(-60),
         );
       }
     };

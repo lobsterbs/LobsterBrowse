@@ -319,6 +319,8 @@ export default function BrowserView(props: Props) {
   const lastErr = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
+  /* #139: per-tab escape-recovery timestamps for the 3-per-60 s cap. */
+  const escapeTimes = useRef<Map<number, number[]>>(new Map());
   /* Consecutive poll ticks a frame has spent stuck on about:blank
      (Zeolite #31: engine bootstrap never attached). */
   const blankPolls = useRef<Map<number, number>>(new Map());
@@ -520,7 +522,9 @@ export default function BrowserView(props: Props) {
            dialog falls back to the capped in-memory Blob path below.
            A user dismissal is an honest cancel, not a failure. */
         const picker: SavePickerFn | undefined = (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
-        if (res.body && typeof picker === "function") {
+        /* #141: never stream an .xpi to disk - the install prompt needs the
+           bytes in memory, a picker save would strand them in a file. */
+        if (res.body && typeof picker === "function" && !/\.xpi$/i.test(name)) {
           try {
             const handle = await picker({ suggestedName: name.slice(0, 120) });
             writable = await handle.createWritable();
@@ -1577,9 +1581,26 @@ export default function BrowserView(props: Props) {
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
           if (!intended.startsWith("http")) return;
-          const key = t.id + "|" + intended;
-          if (lastEscape.current.has(key)) return;
+          /* #139: key on the path only - query churn on the same
+             escaped URL must not multiply recoveries - and cap the
+             rate at 3 recoveries per tab per 60 s so a pathological
+             frame park cannot drive an unbounded re-drive loop. */
+          const key = t.id + "|" + loc.pathname;
+          const now = Date.now();
+          const stamps = (escapeTimes.current.get(t.id) ?? []).filter(
+            (ts) => now - ts < 60_000
+          );
+          if (lastEscape.current.has(key) || stamps.length >= 3) {
+            escapeTimes.current.set(t.id, stamps);
+            return;
+          }
+          stamps.push(now);
+          escapeTimes.current.set(t.id, stamps);
           lastEscape.current.add(key);
+          /* #139: drop the recovery if a newer navigation started
+             after the escape was detected; the re-drive must never
+             clobber a fresher load's frame assignment. */
+          const gen = navGen.current.get(t.id) ?? 0;
           pushLog(
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
@@ -1587,6 +1608,7 @@ export default function BrowserView(props: Props) {
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
           void initialRoute(t.id, intended).then((href) => {
+            if (navGen.current.get(t.id) !== gen) return;
             f.src = href;
           });
           /* Record the recovered URL as this tab's last navigation so
@@ -2098,6 +2120,7 @@ export default function BrowserView(props: Props) {
       delete settleRef.current[id];
       lastNav.current.delete(id);
       navGen.current.delete(id);
+      escapeTimes.current.delete(id);
       navId.current.delete(id);
       blankPolls.current.delete(id);
       blankLogged.current.delete(id);
