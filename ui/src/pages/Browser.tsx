@@ -12,6 +12,25 @@
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
 
+/* M3E components specific to the lazily loaded browser workspace. */
+import "@m3e/web/badge";
+import "@m3e/web/breadcrumb";
+import "@m3e/web/card";
+import "@m3e/web/checkbox";
+import "@m3e/web/form-field";
+import "@m3e/web/heading";
+import "@m3e/web/option";
+import "@m3e/web/paginator";
+import "@m3e/web/progress-indicator";
+import "@m3e/web/select";
+import "@m3e/web/skeleton";
+import "@m3e/web/switch";
+import "@m3e/web/tabs";
+import "@m3e/web/textarea-autosize";
+import "@m3e/web/toolbar";
+import "@m3e/web/tooltip";
+import "@m3e/web/tree";
+
 import { useEffect, useRef, useState } from "react";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
@@ -50,6 +69,7 @@ import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
+import { displayAddressUrl } from "../browser/displayAddress";
 
 /* ---- DevTools capture (#106): the engine exposes no page console
    or request surface to the embedder, so the Console and Network
@@ -2013,7 +2033,9 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const draft = active ? (drafts[active.id] ?? active.url) : "";
+  /* Display a readable destination for Google challenge URLs without
+     changing the actual tab URL or its history entry. */
+  const draft = active ? (drafts[active.id] ?? displayAddressUrl(active.url)) : "";
   /* Query the search engine for completions of the current draft.
      Debounced 160ms; must run before the empty-tab early return so the
      hook order never changes between renders. */
