@@ -16,10 +16,12 @@ jobs:
       - name: Delete merged branches
         run: |
           set -e
+          W=$(mktemp -d)
+          git init -q "$W"
           REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/lobsterbs/LobsterBrowse.git"
           for b in fix/lobsterbrowse-audit-2026-10-19 fix/ui-gaps-98-104 fix/ui-tab-dock-rail-2026-10-18; do
             if git ls-remote --exit-code "$REPO" "refs/heads/$b" >/dev/null 2>&1; then
-              git push "$REPO" --delete "$b"
+              git -C "$W" push "$REPO" --delete "$b"
               echo "deleted $b"
             else
               echo "branch $b already gone"
