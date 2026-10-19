@@ -17,7 +17,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { zlRelayInit, zlSend, zlWispInit } from "./zeolite";
+import { engineSwSource, zlRelayInit, zlSend, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -85,6 +85,8 @@ export default function App() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const onMsg = (ev: MessageEvent) => {
+      /* #142: engine broadcasts only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
       const d = ev.data as { type?: string; sha?: string | null; version?: unknown } | null;
       if (!d || d.type !== "zl:engineUpdate") return;
       const key = typeof d.sha === "string" && d.sha ? d.sha : "v:" + String(d.version ?? "");
@@ -164,6 +166,8 @@ export default function App() {
        channel, and we re-register at once so the wait resolves
        without falling back to wisp. */
     const onRelayLost = (ev: MessageEvent) => {
+      /* #142: relay-loss broadcasts only from the engine worker. */
+      if (!engineSwSource(ev)) return;
       if ((ev.data as { type?: string } | null)?.type === "zl:relayLost") re();
     };
     navigator.serviceWorker?.addEventListener("message", onRelayLost);
