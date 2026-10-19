@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import HomePage from "./pages/Home";
-import SettingsPanel from "./pages/Settings";
-import LogsPage from "./pages/Logs";
-import BrowserView from "./pages/Browser";
+const SettingsPanel = lazy(() => import("./pages/Settings"));
+const LogsPage = lazy(() => import("./pages/Logs"));
 import {
   engineRoutePrefix,
   loadSettings,
@@ -23,6 +22,8 @@ import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
 import "./extensions.css";
 
+const BrowserView = lazy(() => import("./pages/Browser"));
+
 type View = "home" | "browser" | "settings" | "logs";
 
 let tabSeq = 1;
@@ -42,6 +43,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
   const [view, setView] = useState<View>("home");
+  const [browserMounted, setBrowserMounted] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
@@ -187,6 +189,13 @@ export default function App() {
   useEffect(() => {
     if (view === "browser" && tabs.length === 0) setView("home");
   }, [view, tabs.length]);
+
+  /* Keep the browser workspace alive after its first use so tabs and
+     frames retain their lifecycle, but don't load it on the initial
+     Home visit. */
+  useEffect(() => {
+    if (view === "browser") setBrowserMounted(true);
+  }, [view]);
 
   const newTab = useCallback((url?: string) => {
     const tab = freshTab(url ?? "");
@@ -764,7 +773,12 @@ export default function App() {
       label: "Open extensions",
       run: () => {
         setView("browser");
-        window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
+        /* The Browser chunk may not be downloaded on the first use.
+           Dispatch after it is loaded and mounted, preserving the
+           command-palette bridge used before code splitting. */
+        void import("./pages/Browser").then(() => {
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
+        });
       },
     },
     {
@@ -773,7 +787,9 @@ export default function App() {
       label: "Focus omnibox",
       run: () => {
         if (view === "browser") {
-          window.dispatchEvent(new CustomEvent("lb-focus-omnibox"));
+          void import("./pages/Browser").then(() => {
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-focus-omnibox")), 60);
+          });
           return;
         }
         const el = document.getElementById("lb-search-input") as HTMLInputElement | null;
@@ -877,35 +893,43 @@ export default function App() {
                 />
               )}
               {view === "settings" && (
-                <SettingsPanel
-                  settings={settings}
-                  onChange={update}
-                  rules={rules}
-                  onRulesChange={updateRules}
-                  onOpenLogs={() => setView("logs")}
-                  onDeleteAll={deleteAll}
-                />
+                <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading settings" />}>
+                  <SettingsPanel
+                    settings={settings}
+                    onChange={update}
+                    rules={rules}
+                    onRulesChange={updateRules}
+                    onOpenLogs={() => setView("logs")}
+                    onDeleteAll={deleteAll}
+                  />
+                </Suspense>
               )}
               {view === "logs" && (
-                <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
+                <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading logs" />}>
+                  <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
+                </Suspense>
               )}
             </div>
           <div className="lb-browser-host" hidden={view !== "browser"}>
-            <BrowserView
-              settings={settings}
-              rules={rules}
-              tabs={tabs}
-              activeId={activeId}
-              setActiveId={setActiveId}
-              updateTab={updateTab}
-              newTab={newTab}
-              closeTab={closeTab}
-              onHistory={addHistory}
-              incognito={incognito}
-              onIncognitoChange={toggleIncognito}
-              onOpenLogs={() => setView("logs")}
-              onRulesChange={updateRules}
-            />
+            {(browserMounted || view === "browser") && (
+              <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading browser" />}>
+                <BrowserView
+                  settings={settings}
+                  rules={rules}
+                  tabs={tabs}
+                  activeId={activeId}
+                  setActiveId={setActiveId}
+                  updateTab={updateTab}
+                  newTab={newTab}
+                  closeTab={closeTab}
+                  onHistory={addHistory}
+                  incognito={incognito}
+                  onIncognitoChange={toggleIncognito}
+                  onOpenLogs={() => setView("logs")}
+                  onRulesChange={updateRules}
+                />
+              </Suspense>
+            )}
           </div>
           </div>
         </div>
