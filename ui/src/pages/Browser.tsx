@@ -29,7 +29,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -728,6 +728,8 @@ export default function BrowserView(props: Props) {
   startDlRef.current = startDownload;
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
+      /* #142: handoffs only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
       const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string; id?: number } };
       /* Trust boundary: the engine relays extension-supplied values. */
       if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || typeof d.op.url !== "string" || !d.op.url) return;
@@ -803,6 +805,8 @@ export default function BrowserView(props: Props) {
   };
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
+      /* #142: handoffs only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
       const d = ev.data as {
         type?: string;
         op?: {
