@@ -14,6 +14,13 @@ import "./fileViewer.css";
 
 const TEXT_CAP = 2 * 1024 * 1024;
 
+/* #145: the sandboxed preview is a second layer, not the only one: a
+   CSP meta pinned ahead of the document keeps an inline preview from
+   loading remote subresources or submitting forms even if the
+   sandbox attribute were ever loosened. */
+const PREVIEW_CSP =
+  '<meta http-equiv="Content-Security-Policy" content="default-src ' + "'none'" + '; img-src data: blob:; style-src ' + "'unsafe-inline'" + '; font-src data:; media-src data: blob:; form-action ' + "'none'" + '">';
+
 function saveBlob(name: string, blob: Blob) {
   const objUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -82,7 +89,7 @@ export default function FileViewer(props: { name: string; blob: Blob; kind: File
             ))}
           {props.kind === "html" &&
             (html !== null ? (
-              <iframe title="HTML preview" className="lb-fv-preview" sandbox="" srcDoc={html} />
+              <iframe title="HTML preview" className="lb-fv-preview" sandbox="" srcDoc={PREVIEW_CSP + html} />
             ) : (
               <p className="lb-muted">{props.blob.size > TEXT_CAP ? "File above the 2 MiB preview cap - use Download." : "Loading..."}</p>
             ))}

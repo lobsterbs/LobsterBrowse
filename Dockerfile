@@ -1124,11 +1124,26 @@ COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
 COPY --from=sj-builder /sj /app/sj
-EXPOSE 6001
 # Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
 ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7db69875af0b35a8 ZEOLITE_BOOTSTRAP_SHA=790c52c7c4beb41c SCRAMJET_VERSION=2.0.67-alpha.2
+# #129/#143: verify the SERVED artifacts against the pins at build
+# time: a mismatch (poisoned or stale cached tarball) fails the
+# Docker build itself instead of shipping silently. Stronger than
+# hashing the tarball: this proves what /zlsw/ actually serves.
+RUN set -e; \
+    sw_sha=$(sha256sum /app/zlsw/sw.js | cut -c1-16); \
+    boot_sha=$(sha256sum /app/zlsw/bootstrap.js | cut -c1-16); \
+    if [ "$sw_sha" != "$ZEOLITE_SW_SHA" ] || [ "$boot_sha" != "$ZEOLITE_BOOTSTRAP_SHA" ]; then \
+      echo "FATAL: zlsw bundle sha mismatch (sw $sw_sha, bootstrap $boot_sha)" >&2; \
+      exit 1; \
+    fi
+EXPOSE 6001
+# #132: drop root - the server needs no privilege to read /app.
+RUN useradd --system --uid 10001 --no-create-home appuser \
+ && chown -R appuser:appuser /app
+USER appuser
 ENTRYPOINT ["/app/lobster-server"]
 

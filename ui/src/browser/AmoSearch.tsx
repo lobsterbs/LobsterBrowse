@@ -37,10 +37,24 @@ function loc(v: unknown): string {
   return "";
 }
 
+/* #147: an AMO record's file URL must point at the Mozilla family
+   (addons.mozilla.org plus its mozilla.org / allizom.org CDNs); a
+   record whose XPI lives anywhere else is untrusted and dropped
+   here, before any install or fetch uses it. */
+const amoFileUrlAllowed = (u: string): boolean => {
+  let h: string;
+  try {
+    h = new URL(u).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return h === "addons.mozilla.org" || h.endsWith(".mozilla.org") || h.endsWith(".allizom.org");
+};
+
 function toHit(r: Record<string, unknown>): AmoHit | null {
   const cv = r.current_version as { version?: unknown; file?: { url?: unknown; size?: unknown; hash?: unknown } } | undefined;
   const xpiUrl = cv && cv.file && typeof cv.file.url === "string" ? cv.file.url : "";
-  if (typeof r.slug !== "string" || !xpiUrl) return null;
+  if (typeof r.slug !== "string" || !xpiUrl || !amoFileUrlAllowed(xpiUrl)) return null;
   const ratings = r.ratings as { average?: unknown } | undefined;
   return {
     slug: r.slug,
