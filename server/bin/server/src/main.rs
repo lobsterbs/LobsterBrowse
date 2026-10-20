@@ -1814,12 +1814,182 @@ fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
 /// same-origin fetch; non-browser clients and cross-site pages
 /// do not. The wisp URL bypasses the standalone wisp service's
 /// own password, so only the UI boot gets to see it.
+/// #107: the provisioned distinct origin for proxied documents
+/// (ZL_CONTENT_ORIGIN). Inert until the operator provisions a second
+/// hostname on this service. https is required in production;
+/// http://localhost[:port] (loopback) is allowed for local
+/// verification of the cross-origin design. Returns the normalized
+/// origin (scheme://host[:port]) or None on anything else.
+fn content_origin_from(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let url = url::Url::parse(raw).ok()?;
+    let scheme = url.scheme();
+    let host = url.host_str()?;
+    let is_loopback = matches!(host, "localhost" | "127.0.0.1" | "[::1]");
+    if scheme != "https" && !(scheme == "http" && is_loopback) {
+        return None;
+    }
+    // Normalize to scheme://host[:port]; a configured path, query or
+    // fragment is a configuration mistake, not something to honor
+    // silently.
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        return None;
+    }
+    match url.port() {
+        Some(p) => Some(format!("{scheme}://{host}:{p}")),
+        None => Some(format!("{scheme}://{host}")),
+    }
+}
+
+#[cfg(test)]
+mod content_origin_tests {
+    use super::content_origin_from;
+
+    #[test]
+    fn https_origin_normalizes() {
+        assert_eq!(
+            content_origin_from("https://content.lobsterbrowse.example"),
+            Some("https://content.lobsterbrowse.example".to_string())
+        );
+        // Whitespace and a bare trailing slash are tolerated.
+        assert_eq!(
+            content_origin_from("  https://content.lobsterbrowse.example/ "),
+            Some("https://content.lobsterbrowse.example".to_string())
+        );
+    }
+
+    #[test]
+    fn explicit_port_is_kept() {
+        assert_eq!(
+            content_origin_from("https://content.local:8443"),
+            Some("https://content.local:8443".to_string())
+        );
+    }
+
+    #[test]
+    fn loopback_http_is_allowed_for_local_verification() {
+        assert_eq!(
+            content_origin_from("http://localhost:3001"),
+            Some("http://localhost:3001".to_string())
+        );
+        assert_eq!(
+            content_origin_from("http://127.0.0.1:3001"),
+            Some("http://127.0.0.1:3001".to_string())
+        );
+    }
+
+    #[test]
+    fn plain_http_paths_and_junk_are_rejected() {
+        assert_eq!(content_origin_from("http://content.example.com"), None);
+        assert_eq!(
+            content_origin_from("https://content.example.com/some/path"),
+            None
+        );
+        assert_eq!(content_origin_from("ftp://content.example.com"), None);
+        assert_eq!(content_origin_from("https://content.example.com?q=1"), None);
+        assert_eq!(content_origin_from(""), None);
+        assert_eq!(content_origin_from("   "), None);
+        assert_eq!(content_origin_from("not a url"), None);
+    }
+}
+
 fn same_origin_fetch(headers: &axum::http::HeaderMap) -> bool {
     headers
         .get("sec-fetch-site")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.eq_ignore_ascii_case("same-origin"))
         .unwrap_or(false)
+}
+
+/// #107: service-worker registration page for a provisioned content
+/// origin. The app UI cannot register a worker on an origin it does
+/// not inhabit, so it embeds this page (served identically on every
+/// hostname this service answers) in a hidden iframe. The page
+/// registers the engine worker at the "/" scope on ITS OWN origin,
+/// opens the same relay channel and wisp announcement the app origin
+/// gets, then posts one ack to the parent and expects to be removed.
+/// The relay fetch is same-origin from this page's perspective, so
+/// the relay authorization (#110) accepts it exactly like the app
+/// origin's channel. Inert unless a parent embeds the page.
+async fn zlsw_register() -> Response {
+    let body = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Zeolite SW registration</title></head>
+<body><script type="module">
+(async () => {
+  const post = (m) => { try { parent.postMessage(Object.assign({ zlReg: true }, m), "*"); } catch (e) {} };
+  try {
+    const reg = await navigator.serviceWorker.register("/zlsw/sw.js", { scope: "/", type: "module" });
+    await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 8000))]);
+    const sw = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+    if (!sw) { post({ ok: false, error: "no worker instance" }); return; }
+    const u8ToB64 = (u) => {
+      let s = "";
+      for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      return btoa(s);
+    };
+    const ch = new MessageChannel();
+    const controllers = new Map();
+    ch.port1.onmessage = (ev) => {
+      const m = ev.data || {};
+      if (m.type === "zl:fetchRelay" && typeof m.rid === "number") {
+        const ac = new AbortController();
+        controllers.set(m.rid, ac);
+        (async () => {
+          const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
+          try {
+            const resp = await fetch("/zlrelay", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              signal: ac.signal,
+              body: JSON.stringify({
+                dest: m.dest, method: m.method, headers: m.headers,
+                ...(typeof m.body === "string" ? { body: m.body } : {}),
+                ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
+              }),
+            });
+            const status = Number(resp.headers.get("x-zl-relay-status"));
+            if (!Number.isFinite(status) || status <= 0) throw new Error("relay endpoint unavailable (" + resp.status + ")");
+            const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
+            const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
+            ch.port1.postMessage({ type: "zl:relayHead", rid: m.rid, status, statusText: "", headers, setCookies });
+            const reader = resp.body.getReader();
+            for (;;) {
+              const r = await reader.read();
+              if (r.done) break;
+              if (r.value && r.value.length) ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value });
+            }
+            ch.port1.postMessage({ type: "zl:relayEnd", rid: m.rid });
+          } catch (e) {
+            fail(e && e.message ? e.message : String(e));
+          } finally {
+            controllers.delete(m.rid);
+          }
+        })();
+      } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
+        const ac = controllers.get(m.rid);
+        if (ac) ac.abort();
+      }
+    };
+    sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+    try {
+      const b = await (await fetch("/build", { cache: "no-store" })).json();
+      if (typeof b.sjWisp === "string" && b.sjWisp) sw.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
+    } catch (e) { /* honest: relay-only, same as the app origin when unset */ }
+    post({ ok: true });
+  } catch (e) {
+    post({ ok: false, error: String(e) });
+  }
+})();
+</script></body></html>"#;
+    Response::builder()
+        .status(200)
+        .header("content-type", "text/html; charset=utf-8")
+        .header("cache-control", "no-store")
+        .body(body.into())
+        .unwrap()
 }
 
 async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
@@ -1871,15 +2041,22 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         Ok(v) if !v.is_empty() && same_origin_fetch(&headers) => v,
         _ => String::new(),
     };
+    // #107: the provisioned content origin for proxied documents;
+    // empty (inert) until ZL_CONTENT_ORIGIN is configured.
+    let content_origin = std::env::var("ZL_CONTENT_ORIGIN")
+        .ok()
+        .and_then(|v| content_origin_from(&v))
+        .unwrap_or_default();
     let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
         json_escape(&scramjet),
         json_escape(&sj_sha),
         json_escape(&sj_wisp),
+        json_escape(&content_origin),
         json_escape(&build),
         json_escape(&build_short),
     );
@@ -2229,6 +2406,9 @@ async fn main() {
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
+        // #107: SW registration page for the provisioned content
+        // origin (see zlsw_register).
+        .route("/zlsw-register", get(zlsw_register))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
         // The service worker script gets Service-Worker-Allowed so it
         // registers at the "/" scope (ui/src/zeolite.ts): it intercepts

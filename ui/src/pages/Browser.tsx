@@ -48,7 +48,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { engineSwSource, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentOrigin, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -152,64 +152,6 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     cw.addEventListener("unhandledrejection", (ev) => {
       post({ lb: "console", data: { level: "error", text: "Unhandled rejection: " + fmt((ev as PromiseRejectionEvent).reason), ts: Date.now() } });
     });
-    /* Network view: wrap the frame fetch/XHR after the engine's own
-       hooks (the bootstrap has wrapped them by load time), so what
-       DevTools sees is what the page actually calls. The URL is
-       recorded exactly as the page passed it: relative paths stay
-       readable, and resolving against the opaque engine location
-       would only add noise. */
-    const origFetch = cw.fetch.bind(cw);
-    const urlOf = (input: RequestInfo | URL): string => {
-      if (typeof input === "string") return input;
-      const u = (input as { url?: unknown }).url;
-      if (typeof u === "string") return u;
-      try {
-        return input.toString();
-      } catch {
-        return String(input);
-      }
-    };
-    cw.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const t0 = Date.now();
-      const url = urlOf(input);
-      const im = (input as { method?: unknown }).method;
-      const method = String(init?.method ?? (typeof im === "string" ? im : "GET")).toUpperCase();
-      return origFetch(input, init).then(
-        (r) => {
-          post({ lb: "net", data: { url, method, status: r.status, ok: r.ok, dur: Date.now() - t0, ts: Date.now() } });
-          return r;
-        },
-        (err) => {
-          post({ lb: "net", data: { url, method, error: fmt(err), dur: Date.now() - t0, ts: Date.now() } });
-          throw err;
-        },
-      );
-    }) as typeof fetch;
-    const xo = cw.XMLHttpRequest.prototype;
-    type XH = XMLHttpRequest & { __lbDt?: { method: string; url: string; t0: number } };
-    const origOpen = xo.open as unknown as (this: XH, method: string, url: string | URL, ...rest: unknown[]) => void;
-    xo.open = function (this: XH, method: string, url: string | URL, ...rest: unknown[]) {
-      try {
-        this.__lbDt = { method: String(method).toUpperCase(), url: String(url), t0: 0 };
-      } catch {
-        /* a sealed xhr just goes untracked */
-      }
-      return origOpen.call(this, method, url, ...rest);
-    } as typeof XMLHttpRequest.prototype.open;
-    const origSend = xo.send;
-    xo.send = function (this: XH, body?: Document | XMLHttpRequestBodyInit | null) {
-      const meta = this.__lbDt;
-      if (meta) {
-        meta.t0 = Date.now();
-        this.addEventListener("loadend", () => {
-          if (this.status === 0)
-            post({ lb: "net", data: { url: meta.url, method: meta.method, error: this.statusText || "network error", dur: Date.now() - meta.t0, ts: Date.now() } });
-          else
-            post({ lb: "net", data: { url: meta.url, method: meta.method, status: this.status, ok: this.status >= 200 && this.status < 300, dur: Date.now() - meta.t0, ts: Date.now() } });
-        });
-      }
-      return origSend.call(this, body);
-    };
   } catch {
     /* The capture surface must never break the page: any failure
        here just leaves that frame without DevTools data. */
@@ -1227,12 +1169,6 @@ export default function BrowserView(props: Props) {
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
-  const addNet = (id: number, entry: { url: string; method: string; status: number; ok?: boolean; dur?: number; error?: string }) => {
-    setDtState((prev) => {
-      const base = prev[id] ?? emptyDt();
-      return { ...prev, [id]: { ...base, net: [...base.net, { id: nextEntryId(), ts: Date.now(), ...entry }] } };
-    });
-  };
 
   /* ---- Favicon: read from the same-origin frame document, fetch the
      icon through the engine, cache per icon URL. ---- */
@@ -1839,7 +1775,13 @@ export default function BrowserView(props: Props) {
       /* Sender + origin validation: proxied frames are same-origin by
          architecture (that is what gives DevTools its page access), so
          a message from any other origin is not one of ours. */
-      if (e.origin !== window.location.origin) return;
+      /* #107: proxied frames are same-origin until the operator
+         provisions a distinct content origin (ZL_CONTENT_ORIGIN,
+         announced by /build). When one is provisioned, frames post
+         from that origin; anything else is still not one of ours. */
+      const zlco = zlContentOrigin();
+      if (e.origin !== window.location.origin && (!zlco || e.origin !== zlco)) return;
+
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
@@ -1883,24 +1825,6 @@ export default function BrowserView(props: Props) {
            console array silently dropped the first entry. #106 */
         setDt(tabId, (base) => ({
           console: [...base.console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
-        }));
-      } else if (ev.lb === "net") {
-        /* Same functional form as console: net events must append to
-           the freshest state, not the live.current snapshot. */
-        setDt(tabId, (base) => ({
-          net: [
-            ...base.net,
-            {
-              id: nextEntryId(),
-              url: sanitizeUrl(cap(d.url, 2000)),
-              method: cap(d.method, 10) || "GET",
-              status: Number(d.status ?? 0),
-              ok: d.ok === undefined ? undefined : Boolean(d.ok),
-              dur: d.dur === undefined ? undefined : Number(d.dur),
-              error: d.error === undefined ? undefined : sanitizeText(cap(d.error, 500)),
-              ts: Number(d.ts ?? Date.now()),
-            },
-          ].slice(-500),
         }));
       } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
