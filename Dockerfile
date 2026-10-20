@@ -957,6 +957,20 @@ FROM debian:bookworm-slim AS zl-builder
 # c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
+# Pin 98: Zeolite dist 7d855ef (from CI build 39424088091,
+# Zeolite main 1297742, all 5 jobs green, app suite 1383 tests).
+# Script src split routes: script src/href attributes under the
+# keyed codec mint a path-preserving route (origin + /zl/ +
+# keyed origin-only token + the real path), decoded at the SW
+# fetch seams with the existing recoverPath, so loaders that
+# validate their own script URL PATH pass again (YouTube
+# ytembeds Oe wants "/_/js/" + "/k=": the opaque token broke
+# it, "writeEmbed is not defined" and Error: O on every
+# YouTube embed; the #296 src-surgery class). Long tails
+# (capped 2000 chars), query-only and bare-origin srcs keep
+# the opaque route. sw.js 63f678ad6fb2b335 -> 81253c4706ca2dae
+# (373551 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged.
+# Cargo-side pin stays a385fa9 (rewriter + SW-side only).
 # Pin 97: Zeolite dist d78bb5a (from CI build 39413168260,
 # Zeolite main 1074e6d, all 5 jobs green, app suite 1382 tests).
 # Recovery-transport wave: flag-surgery and flat-asset recovery
@@ -1025,7 +1039,7 @@ FROM debian:bookworm-slim AS zl-builder
 # pin b0296f8 -> a385fa9 (first beta server-dep bump since pin
 # 76; ships the deferred server waves a515b17
 # #343/#350/#351/#352/#340 with the regenerated server/Cargo.lock).
-ARG ZEOLITE_COMMIT=d78bb5a5cdd4965accfe58075d3cae62a97a6777
+ARG ZEOLITE_COMMIT=7d855efa65cf27aca14f7f7538b9eec7a48eabdd7
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1085,5 +1099,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=63f678ad6fb2b335 ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=81253c4706ca2dae ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
