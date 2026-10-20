@@ -47,6 +47,11 @@ struct AppState {
     relay_permits: Arc<tokio::sync::Semaphore>,
     /// #110: per-client-IP sliding window of relay uses.
     relay_rate: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
+    /// Proxy hops in front of this server whose X-Forwarded-For entries
+    /// are trusted (env TRUSTED_PROXY_HOPS). 0 means the TCP peer is the
+    /// client, the safe default: X-Forwarded-For is client-controlled
+    /// unless the proxy in front sets it.
+    trusted_proxy_hops: usize,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
@@ -698,6 +703,28 @@ mod relay_guard_tests {
     }
 
     #[test]
+    fn client_ip_for_rate_ignores_headers_by_default() {
+        let peer: IpAddr = "10.0.0.9".parse().unwrap();
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-forwarded-for", "203.0.113.7".parse().unwrap());
+        assert_eq!(client_ip_for_rate(&h, peer, 0), peer);
+    }
+
+    #[test]
+    fn client_ip_for_rate_takes_entry_from_the_right() {
+        let peer: IpAddr = "10.0.0.9".parse().unwrap();
+        let mut h = axum::http::HeaderMap::new();
+        // The client may prepend anything; only the trusted hop's entry counts.
+        h.insert("x-forwarded-for", "198.51.100.1, 203.0.113.7".parse().unwrap());
+        assert_eq!(client_ip_for_rate(&h, peer, 1), "203.0.113.7".parse::<IpAddr>().unwrap());
+        assert_eq!(client_ip_for_rate(&h, peer, 2), "198.51.100.1".parse::<IpAddr>().unwrap());
+        // Too few entries, or junk: fall back to the peer.
+        assert_eq!(client_ip_for_rate(&h, peer, 3), peer);
+        h.insert("x-forwarded-for", "not-an-ip".parse().unwrap());
+        assert_eq!(client_ip_for_rate(&h, peer, 1), peer);
+    }
+
+    #[test]
     fn relay_rate_window_bounds_each_ip_independently() {
         let map = Mutex::new(HashMap::new());
         let ip: IpAddr = "203.0.113.9".parse().unwrap();
@@ -968,6 +995,26 @@ fn relay_client_authorized(
 /// #110: per-IP sliding window for relay connects. The now parameter
 /// is injected so the regression test can move the window without
 /// sleeping.
+/// The address the relay rate limit keys on. With no trusted proxy
+/// (hops == 0) that is the TCP peer. With N trusted hops it is the entry
+/// N places from the right of X-Forwarded-For, the address the nearest
+/// trusted proxy recorded for the client. An absent or malformed header
+/// falls back to the peer, so a spoofed header can only change the key
+/// when the operator has said proxies are trusted.
+fn client_ip_for_rate(headers: &axum::http::HeaderMap, peer: IpAddr, hops: usize) -> IpAddr {
+    if hops == 0 {
+        return peer;
+    }
+    let Some(raw) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) else {
+        return peer;
+    };
+    let entries: Vec<&str> = raw.split(',').map(str::trim).collect();
+    if entries.len() < hops {
+        return peer;
+    }
+    entries[entries.len() - hops].parse().unwrap_or(peer)
+}
+
 fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now: u64) -> bool {
     let mut map = map.lock().unwrap();
     if map.len() > 4096 {
@@ -1025,7 +1072,8 @@ async fn zl_relay_endpoint(
     ) {
         return bad(StatusCode::FORBIDDEN, msg);
     }
-    if !relay_rate_allow(&state.relay_rate, peer.ip(), now_secs()) {
+    let rate_ip = client_ip_for_rate(&headers, peer.ip(), state.trusted_proxy_hops);
+    if !relay_rate_allow(&state.relay_rate, rate_ip, now_secs()) {
         return bad(
             StatusCode::TOO_MANY_REQUESTS,
             "relay: rate limit exceeded, retry later",
@@ -2174,6 +2222,10 @@ async fn main() {
             .filter(|t| !t.is_empty()),
         relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
         relay_rate: Mutex::new(HashMap::new()),
+        trusted_proxy_hops: std::env::var("TRUSTED_PROXY_HOPS")
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
             bytes: 0,
@@ -2525,6 +2577,7 @@ mod session_log_tests {
             relay_token: None,
             relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
             relay_rate: Mutex::new(HashMap::new()),
+            trusted_proxy_hops: 0,
             logs: Mutex::new(LogRing {
                 ring: VecDeque::new(),
                 bytes: 0,
