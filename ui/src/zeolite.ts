@@ -272,3 +272,14 @@ export function zlWispInit(url: string): void {
     sw.postMessage({ type: "zl:wispRegister", url });
   });
 }
+
+/* Settings > WISP servers: the active server carries all traffic. The
+   engine swaps its primary transport endpoint; "" restores the engine's
+   build-time endpoint. Engines without zl:wispPrimary ignore the message
+   (no reply port), so an older pin keeps working unchanged. */
+export function zlPrimaryWispInit(url: string): void {
+  void zlWorker().then((sw) => {
+    if (!sw) return;
+    sw.postMessage({ type: "zl:wispPrimary", url });
+  });
+}

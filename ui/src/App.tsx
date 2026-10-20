@@ -17,7 +17,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { zlRelayInit, zlSend, zlWispInit } from "./zeolite";
+import { zlPrimaryWispInit, zlRelayInit, zlSend, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -135,23 +135,28 @@ export default function App() {
      mount fell back to the wisp transport and died on this
      deployment password-authed wisp ("tls handshake eof" 502s).
      A worker restart drops the engine stored port, so re-register
-     on controller change. Registration is idempotent. */
+     on controller change. Registration is idempotent.
+     #151: the announced endpoint is the selected WISP server, a
+     custom wss:// entry from Settings or the deployment endpoint
+     from /build (the LobsterBrowse default). The selection can
+     change at any time, so the announce callback lives behind a
+     ref that both this boot effect and the selection effect below
+     keep current. */
+  const sjWispRef = useRef("");
+  const wispAnnounceRef = useRef<() => void>(() => {});
   useEffect(() => {
     zlRelayInit();
-    let wispUrl = "";
     void fetch("/build", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         const u = b && typeof b.sjWisp === "string" ? b.sjWisp : "";
-        if (u) {
-          wispUrl = u;
-          zlWispInit(u);
-        }
+        sjWispRef.current = u;
+        wispAnnounceRef.current();
       })
       .catch(() => {});
     const re = () => {
       zlRelayInit();
-      if (wispUrl) zlWispInit(wispUrl);
+      wispAnnounceRef.current();
     };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
     /* The relay channel lives in service-worker memory. An idle worker
@@ -173,6 +178,20 @@ export default function App() {
       navigator.serviceWorker?.removeEventListener("message", onRelayLost);
     };
   }, []);
+
+  /* #151: (re-)announce the selected WISP endpoint whenever the
+     Settings selection changes. A custom pick overrides the
+     deployment endpoint; with neither present the empty
+     announcement withdraws the endpoint and per-host wisp policy
+     falls back to relay. */
+  useEffect(() => {
+    wispAnnounceRef.current = () => {
+      const custom = settings.wispServers.find((s) => s.id === settings.wispServerId);
+      zlWispInit(custom ? custom.url : sjWispRef.current);
+      zlPrimaryWispInit(custom ? custom.url : "");
+    };
+    wispAnnounceRef.current();
+  }, [settings.wispServerId, settings.wispServers]);
 
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {

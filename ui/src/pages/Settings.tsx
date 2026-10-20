@@ -132,6 +132,73 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     if (confirmDelete) deleteDialogRef.current?.show();
   }, [confirmDelete]);
 
+  /* #151: custom WISP servers. wss:// only (ws://localhost for local
+     development); the LobsterBrowse server is always the default and
+     cannot be deleted. Ping is an on-demand WebSocket connect time
+     (constructor to open event), not ICMP, and never runs on load. */
+  const [wispPings, setWispPings] = useState<Record<string, string>>({});
+  const [wispNameDraft, setWispNameDraft] = useState("");
+  const [wispUrlDraft, setWispUrlDraft] = useState("");
+  const lbWispUrl = () =>
+    (window.location.protocol === "https:" ? "wss://" : "ws://") +
+    window.location.host +
+    "/wisp/";
+  const wispUrlOk =
+    /^wss:\/\/\S+/.test(wispUrlDraft.trim()) ||
+    /^ws:\/\/localhost(:\d+)?(\/|$)/.test(wispUrlDraft.trim());
+  const pingWisp = (id: string, url: string) => {
+    setWispPings((prev) => ({ ...prev, [id]: "..." }));
+    let done = false;
+    const finish = (v: string) => {
+      if (done) return;
+      done = true;
+      setWispPings((prev) => ({ ...prev, [id]: v }));
+    };
+    let ws: WebSocket;
+    const t0 = Date.now();
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      finish("unreachable");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        /* already gone */
+      }
+      finish("unreachable");
+    }, 8000);
+    ws.onopen = () => {
+      window.clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        /* race with teardown is fine */
+      }
+      finish(String(Date.now() - t0) + " ms");
+    };
+    ws.onerror = () => {
+      window.clearTimeout(timer);
+      finish("unreachable");
+    };
+  };
+  const addWispServer = () => {
+    const url = wispUrlDraft.trim();
+    if (!wispUrlOk) return;
+    /* Id derived from the URL so the same endpoint stays one entry;
+       a suffix breaks the collision when URLs differ by one char. */
+    let id = "ws-" + url.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 40);
+    while (settings.wispServers.some((s) => s.id === id)) id += "-";
+    onChange({
+      wispServers: [...settings.wispServers, { id, name: wispNameDraft.trim() || url, url }],
+      wispServerId: id,
+    });
+    setWispNameDraft("");
+    setWispUrlDraft("");
+  };
+
   const [ruleDomain, setRuleDomain] = useState("");
   /* Per-site rule domains: accept an optional scheme+path and strip
      them, but the stored key itself must be a bare host. Anything
@@ -435,6 +502,87 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes — that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
           </p>
+        </div>
+        <m3e-divider />
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">WISP servers</div>
+          <M3eSelect
+            label="Active WISP server"
+            value={settings.wispServerId}
+            options={[
+              ["", "LobsterBrowse server (default)"],
+              ...settings.wispServers.map((s) => [s.id, s.name] as [string, string]),
+            ]}
+            onChange={(v) => onChange({ wispServerId: v })}
+          />
+          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+            The active WISP server sees every destination you visit and relays your traffic.
+            Applies to new requests; existing streams are unaffected. Ping is a WebSocket
+            connect time, not ICMP. Password-protected servers are not supported (the engine
+            wisp client carries no credentials); an auth-requiring server refuses honestly.
+          </p>
+          <m3e-list>
+            <m3e-list-item>
+              <div className="lb-setting-row">
+                <span className="lb-setting-label">
+                  <m3e-icon name="dns" aria-hidden={true} /> LobsterBrowse server (default)
+                </span>
+                <span>
+                  <m3e-button onClick={() => pingWisp("", lbWispUrl())}>
+                    <m3e-icon name="speed" aria-hidden={true} /> Ping
+                  </m3e-button>
+                  {wispPings[""] && <span className="lb-muted"> {wispPings[""]}</span>}
+                </span>
+              </div>
+            </m3e-list-item>
+            {settings.wispServers.map((s) => (
+              <m3e-list-item key={s.id}>
+                <div className="lb-setting-row">
+                  <span className="lb-setting-label">
+                    <m3e-icon name="lan" aria-hidden={true} /> {s.name}
+                  </span>
+                  <span>
+                    <m3e-button onClick={() => pingWisp(s.id, s.url)}>
+                      <m3e-icon name="speed" aria-hidden={true} /> Ping
+                    </m3e-button>
+                    {wispPings[s.id] && <span className="lb-muted"> {wispPings[s.id]}</span>}
+                    <m3e-icon-button
+                      aria-label={"Delete " + s.name}
+                      onClick={() =>
+                        onChange({
+                          wispServers: settings.wispServers.filter((x) => x.id !== s.id),
+                          ...(settings.wispServerId === s.id ? { wispServerId: "" } : {}),
+                        })
+                      }
+                    >
+                      <m3e-icon name="delete" aria-hidden={true} />
+                    </m3e-icon-button>
+                  </span>
+                </div>
+                <div className="lb-muted" style={{ fontSize: 12 }}>{s.url}</div>
+              </m3e-list-item>
+            ))}
+          </m3e-list>
+          <div className="lb-setting-label" style={{ marginTop: 12 }}>Add a server</div>
+          <TextInput
+            label="Server name"
+            value={wispNameDraft}
+            placeholder="My WISP server"
+            onChange={setWispNameDraft}
+          />
+          <TextInput
+            label="wss:// URL"
+            value={wispUrlDraft}
+            placeholder="wss://example.com/wisp/"
+            hint="Only wss:// is accepted; ws://localhost is allowed for local development."
+            onChange={setWispUrlDraft}
+          />
+          {wispUrlDraft.trim() !== "" && !wispUrlOk && (
+            <p className="lb-muted lb-ua-bad">Only wss:// URLs are accepted (ws://localhost for local development).</p>
+          )}
+          <m3e-button disabled={!wispUrlOk ? true : undefined} onClick={addWispServer}>
+            <m3e-icon name="add" aria-hidden={true} /> Add server
+          </m3e-button>
         </div>
         <m3e-divider />
         <div className="lb-setting-group">
