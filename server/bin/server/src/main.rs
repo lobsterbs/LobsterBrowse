@@ -47,6 +47,14 @@ struct AppState {
     relay_permits: Arc<tokio::sync::Semaphore>,
     /// #110: per-client-IP sliding window of relay uses.
     relay_rate: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
+    /// LB #163: trusted reverse-proxy CIDRs (LB_TRUSTED_PROXY_CIDRS,
+    /// comma-separated). Empty by default: the rate-limit key stays the
+    /// TCP peer IP and a spoofable x-forwarded-for is never honored.
+    /// When the peer sits inside one of these CIDRs, the rightmost
+    /// x-forwarded-for hop outside the trusted set becomes the
+    /// rate-limit key, so distinct clients behind a shared load
+    /// balancer get separate buckets.
+    relay_trusted_proxies: Vec<Cidr>,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
@@ -711,6 +719,76 @@ mod relay_guard_tests {
         assert!(relay_rate_allow(&map, ip, 1000 + RELAY_RATE_WINDOW_SECS));
     }
 
+    /* ---- LB #163: rate-limit key selection ---- */
+    #[test]
+    fn relay_rate_key_ignores_xff_without_trusted_proxies() {
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        // No trusted proxies configured: the header is never honored.
+        assert_eq!(relay_rate_key(peer, Some("198.51.100.9"), &[]), peer);
+        // Peer outside the trusted set: still never honored (spoof guard).
+        let trusted = vec![Cidr::parse("192.0.2.0/24").unwrap()];
+        assert_eq!(relay_rate_key(peer, Some("198.51.100.9"), &trusted), peer);
+        assert_eq!(relay_rate_key(peer, None, &trusted), peer);
+    }
+
+    #[test]
+    fn relay_rate_key_uses_rightmost_untrusted_xff_hop() {
+        let trusted: Vec<Cidr> = ["10.0.0.0/8", "192.0.2.0/24"]
+            .iter()
+            .map(|s| Cidr::parse(s).unwrap())
+            .collect();
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        let client: IpAddr = "198.51.100.9".parse().unwrap();
+        // client, trusted proxy, trusted proxy (the TCP peer).
+        assert_eq!(
+            relay_rate_key(peer, Some("198.51.100.9, 10.1.2.3, 10.0.0.7"), &trusted),
+            client
+        );
+        // Every hop trusted: conservative fallback to the peer key.
+        assert_eq!(
+            relay_rate_key(peer, Some("10.1.2.3, 10.0.0.7"), &trusted),
+            peer
+        );
+        // Garbage header: the peer key, never an error path.
+        assert_eq!(
+            relay_rate_key(peer, Some("not-an-ip, junk"), &trusted),
+            peer
+        );
+    }
+
+    #[test]
+    fn relay_rate_key_cidr_matching_and_rejects_malformed() {
+        let v4 = Cidr::parse("192.0.2.0/24").unwrap();
+        assert!(v4.contains("192.0.2.130".parse::<IpAddr>().unwrap()));
+        assert!(!v4.contains("192.0.3.1".parse::<IpAddr>().unwrap()));
+        // Family mismatch is a non-match; /0 matches everything in-family.
+        assert!(!v4.contains("2001:db8::1".parse::<IpAddr>().unwrap()));
+        let any6 = Cidr::parse("::/0").unwrap();
+        assert!(any6.contains("2001:db8::1".parse::<IpAddr>().unwrap()));
+        let net6 = Cidr::parse("2001:db8::/32").unwrap();
+        assert!(net6.contains("2001:db8:ffff::1".parse::<IpAddr>().unwrap()));
+        assert!(!net6.contains("2001:db9::1".parse::<IpAddr>().unwrap()));
+        // Malformed entries are rejected by the parser (startup exit).
+        assert!(Cidr::parse("10.0.0.0/33").is_none());
+        assert!(Cidr::parse("10.0.0.0").is_none());
+        assert!(Cidr::parse("junk/8").is_none());
+        assert!(Cidr::parse("").is_none());
+    }
+
+    #[test]
+    fn relay_rate_window_bounds_xff_clients_independently() {
+        let map = Mutex::new(HashMap::new());
+        let trusted = vec![Cidr::parse("10.0.0.0/8").unwrap()];
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        for _ in 0..RELAY_RATE_MAX_PER_WINDOW {
+            let key = relay_rate_key(peer, Some("198.51.100.9"), &trusted);
+            assert!(relay_rate_allow(&map, key, 1000));
+        }
+        // A second client behind the same trusted proxy still gets its own window.
+        let key = relay_rate_key(peer, Some("198.51.100.10"), &trusted);
+        assert!(relay_rate_allow(&map, key, 1005), "per-client window");
+    }
+
     /* ---- #111 mirror: user-info credentials never persist ---- */
     #[test]
     fn redact_userinfo_strips_embedded_credentials() {
@@ -965,6 +1043,74 @@ fn relay_client_authorized(
     }
 }
 
+/// LB #163: a parsed CIDR from LB_TRUSTED_PROXY_CIDRS. v4 and v6
+/// match within their own family only; list both entries when a v4
+/// client sits behind a v6 proxy (or vice versa).
+struct Cidr {
+    net: IpAddr,
+    bits: u8,
+}
+
+impl Cidr {
+    fn parse(s: &str) -> Option<Cidr> {
+        let (addr, bits) = s.trim().split_once('/')?;
+        let net: IpAddr = addr.trim().parse().ok()?;
+        let bits: u8 = bits.trim().parse().ok()?;
+        let max = match net {
+            IpAddr::V4(_) => 32,
+            IpAddr::V6(_) => 128,
+        };
+        if bits > max {
+            return None;
+        }
+        Some(Cidr { net, bits })
+    }
+
+    fn contains(&self, ip: IpAddr) -> bool {
+        match (self.net, ip) {
+            (IpAddr::V4(n), IpAddr::V4(i)) => {
+                if self.bits == 0 {
+                    return true;
+                }
+                let m = u32::MAX << (32 - u32::from(self.bits));
+                u32::from(n) & m == u32::from(i) & m
+            }
+            (IpAddr::V6(n), IpAddr::V6(i)) => {
+                if self.bits == 0 {
+                    return true;
+                }
+                let m = u128::MAX << (128 - u32::from(self.bits));
+                u128::from(n) & m == u128::from(i) & m
+            }
+            _ => false,
+        }
+    }
+}
+
+/// LB #163: pick the relay rate-limit key. x-forwarded-for is honored
+/// only when the TCP peer sits inside an operator-declared trusted
+/// proxy CIDR; otherwise (or when the header is missing/garbage) the
+/// key is the peer IP, so a spoofable header can never widen the
+/// limit. Within the trusted set, the rightmost hop that is NOT
+/// trusted is the client the window should bound; if every hop is
+/// trusted the key falls back to the peer (a conservative shared
+/// bucket, never a client-authored entry).
+fn relay_rate_key(peer: IpAddr, xff: Option<&str>, trusted: &[Cidr]) -> IpAddr {
+    if trusted.is_empty() || !trusted.iter().any(|c| c.contains(peer)) {
+        return peer;
+    }
+    let Some(xff) = xff else { return peer };
+    for hop in xff.rsplit(',').map(str::trim) {
+        let Ok(ip) = hop.parse::<IpAddr>() else {
+            return peer;
+        };
+        if !trusted.iter().any(|c| c.contains(ip)) {
+            return ip;
+        }
+    }
+    peer
+}
+
 /// #110: per-IP sliding window for relay connects. The now parameter
 /// is injected so the regression test can move the window without
 /// sleeping.
@@ -1025,7 +1171,15 @@ async fn zl_relay_endpoint(
     ) {
         return bad(StatusCode::FORBIDDEN, msg);
     }
-    if !relay_rate_allow(&state.relay_rate, peer.ip(), now_secs()) {
+    if !relay_rate_allow(
+        &state.relay_rate,
+        relay_rate_key(
+            peer.ip(),
+            headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
+            &state.relay_trusted_proxies,
+        ),
+        now_secs(),
+    ) {
         return bad(
             StatusCode::TOO_MANY_REQUESTS,
             "relay: rate limit exceeded, retry later",
@@ -2350,6 +2504,19 @@ async fn main() {
             .ok()
             .filter(|t| !t.is_empty()),
         relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
+        /* LB #163: fail-closed config. A malformed trusted-proxy entry
+        is a startup error, not a silently ignored limit change. */
+        relay_trusted_proxies: match std::env::var("LB_TRUSTED_PROXY_CIDRS") {
+            Ok(s) if !s.trim().is_empty() => s
+                .split(',')
+                .map(Cidr::parse)
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_else(|| {
+                    eprintln!("invalid LB_TRUSTED_PROXY_CIDRS value: {s}");
+                    std::process::exit(2);
+                }),
+            _ => Vec::new(),
+        },
         relay_rate: Mutex::new(HashMap::new()),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
@@ -2705,6 +2872,7 @@ mod session_log_tests {
             relay_token: None,
             relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
             relay_rate: Mutex::new(HashMap::new()),
+            relay_trusted_proxies: Vec::new(),
             logs: Mutex::new(LogRing {
                 ring: VecDeque::new(),
                 bytes: 0,
