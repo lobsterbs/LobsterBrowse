@@ -1,7 +1,7 @@
 # Playwright test plan for LobsterBrowse + Zeolite
 
 Fixed site list. Run every Group A/B/C site through LobsterBrowse (beta, Zeolite
-engine) at https://lobsterbrowse-beta-dr2h.onrender.com. Run Groups B and C a
+engine) at https://lobsterbrowse-beta-gq13.onrender.com. Run Groups B and C a
 second time direct for comparison. One navigation per site unless the steps say
 otherwise; a broken site must show exactly 1 navigation (no reload loops).
 
@@ -14,7 +14,7 @@ Engine run:
 3. Page.enable; count every Page.frameNavigated whose frame URL starts with the
    app origin (this is the navigation+reload count).
 4. page.on("console") and page.on("pageerror") collected per site.
-5. page.goto("https://lobsterbrowse-beta-dr2h.onrender.com",
+5. page.goto("https://lobsterbrowse-beta-gq13.onrender.com",
    waitUntil domcontentloaded); settle 1.5s.
 6. page.fill("#lb-search-input", "<URL>"); page.press("#lb-search-input","Enter").
 7. Wait the site-specific settle time; then evaluate PASS criteria inside the
