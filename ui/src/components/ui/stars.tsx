@@ -5,6 +5,7 @@ import {
   type SpringOptions,
   type Transition,
   useMotionValue,
+  useReducedMotion,
   useSpring,
 } from "motion/react";
 
@@ -36,6 +37,7 @@ function StarLayer({
   className,
   ...props
 }: StarLayerProps) {
+  const reduced = useReducedMotion();
   const [boxShadow, setBoxShadow] = React.useState<string>("");
 
   React.useEffect(() => {
@@ -45,8 +47,9 @@ function StarLayer({
   return (
     <motion.div
       data-slot="star-layer"
-      animate={{ y: [0, -2000] }}
-      transition={transition}
+      /* #119: reduced motion means a static starfield, no repeating translate. */
+      animate={reduced ? undefined : { y: [0, -2000] }}
+      transition={reduced ? { repeat: 0, duration: 0 } : transition}
       className={cn("lb-stars-layer", className)}
       {...props}
     >
@@ -86,6 +89,7 @@ export function StarsBackground({
   starColor = "#fff",
   ...props
 }: StarsBackgroundProps) {
+  const reduced = useReducedMotion();
   const offsetX = useMotionValue(1);
   const offsetY = useMotionValue(1);
 
@@ -97,7 +101,9 @@ export function StarsBackground({
      portaled behind the app chrome (z-index -1), so a div-level
      onMouseMove would only fire over uncovered background pixels
      and the parallax would look broken everywhere else. */
+  /* #119: reduced motion disables the pointer parallax too. */
   React.useEffect(() => {
+    if (reduced) return;
     const onMove = (e: MouseEvent) => {
       const centerX = window.innerWidth / 2;
       const centerY = window.innerHeight / 2;
@@ -106,7 +112,7 @@ export function StarsBackground({
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
-  }, [offsetX, offsetY, factor]);
+  }, [offsetX, offsetY, factor, reduced]);
 
   return (
     <div data-slot="stars-background" className={cn("lb-stars", className)} {...props}>

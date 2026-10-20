@@ -47,8 +47,14 @@ jobs:
       - run: npm run build
       - name: Navigation poll regression check
         run: node --experimental-strip-types ../tests/poll-recovery/check.mjs
+      - name: Log privacy regression check
+        run: node --experimental-strip-types ../tests/log-privacy/check.mjs
 
-  transit:
+  # #130: fixture-only self-test of the transit router against the
+  # in-repo fixtures; it never exercises a deployed pair (that is
+  # transit-live below), so the bare "transit" name oversold it.
+  transit-fixture:
+    name: Tier-0 fixture self-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

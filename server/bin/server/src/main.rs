@@ -17,7 +17,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::Router;
 use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower_http::services::{ServeDir, ServeFile};
@@ -36,14 +36,38 @@ struct AppState {
     /// resolve-then-validate SSRF resolver, no cookie store (the
     /// engine's jar owns cookies; they ride as headers).
     relay_client: reqwest::Client,
+    /// #110: optional deployment relay capability token
+    /// (ZL_RELAY_TOKEN). When set, only requests carrying the same
+    /// value in x-zl-relay-token are relayed at all.
+    relay_token: Option<String>,
+    /// #110: bounds concurrent upstream relay connects; a relay that
+    /// cannot take a permit fails fast instead of piling up. Arc so the
+    /// permit can be owned by the streamed body (#137): a borrowing
+    /// permit would die with the handler while the body lives on.
+    relay_permits: Arc<tokio::sync::Semaphore>,
+    /// #110: per-client-IP sliding window of relay uses.
+    relay_rate: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
+    /// LB #163: trusted reverse-proxy CIDRs (LB_TRUSTED_PROXY_CIDRS,
+    /// comma-separated). Empty by default: the rate-limit key stays the
+    /// TCP peer IP and a spoofable x-forwarded-for is never honored.
+    /// When the peer sits inside one of these CIDRs, the rightmost
+    /// x-forwarded-for hop outside the trusted set becomes the
+    /// rate-limit key, so distinct clients behind a shared load
+    /// balancer get separate buckets.
+    relay_trusted_proxies: Vec<Cidr>,
     /// Ring buffer of recent log lines (JSON objects), newest last.
     /// Untagged (server-level) lines only; session-tagged lines live in
     /// `sessions` so /logs can never mix diagnostics across sessions.
-    logs: Mutex<VecDeque<String>>,
+    logs: Mutex<LogRing>,
     /// Per-session log rings keyed by the tab's lb_sess token. /logs
     /// requires the caller's token and returns only that ring, so one
     /// browser session can never read another's diagnostics.
     sessions: Mutex<HashMap<String, SessionRing>>,
+    /// LB #138: TTL caches and a shared concurrency cap for the
+    /// unauthenticated /suggest and /cert upstream lookups.
+    suggest_cache: Mutex<HashMap<String, (u64, String)>>,
+    cert_cache: Mutex<HashMap<String, (u64, String)>>,
+    lookup_permits: tokio::sync::Semaphore,
 }
 
 fn now_secs() -> u64 {
@@ -125,11 +149,17 @@ fn redact_secrets(s: &str) -> String {
             }
             let run: String = chars[i..end].iter().collect();
             let parts: Vec<&str> = run.split('.').collect();
+            /* #127: the run holds only alnum/_/-/. bytes, so no other
+            pattern can start inside it - advance to the end either
+            way. Rescanning from i+1 on every non-JWT "eyJ" made
+            redaction quadratic on hostile input. */
             if parts.len() == 3 && parts.iter().all(|p| !p.is_empty()) && run.len() >= 20 {
                 out.push_str("[redacted-jwt]");
-                i = end;
-                continue;
+            } else {
+                out.push_str(&run);
             }
+            i = end;
+            continue;
         }
         // Labeled credentials in free text: "Bearer x", "apikey: x".
         let lower_ctx: String = chars[i..(i + 12).min(chars.len())]
@@ -169,8 +199,31 @@ fn redact_secrets(s: &str) -> String {
     out
 }
 
+/// URL user-info credentials (scheme://user:pass@host) never
+/// persist; the host and path stay for debugging. Mirrors the client
+/// sanitizer (ui/src/sanitize.ts) - keep the patterns in sync.
+fn redact_userinfo(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let Some(p) = s.find("://") else {
+        out.push_str(s);
+        return out;
+    };
+    out.push_str(&s[..p + 3]);
+    let rest = &s[p + 3..];
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    match authority.rfind('@') {
+        Some(a) if a > 0 => {
+            out.push_str("[redacted-userinfo]");
+            out.push_str(&rest[a..]);
+        }
+        _ => out.push_str(rest),
+    }
+    out
+}
+
 fn push_log(state: &AppState, level: &str, msg: &str) {
-    let msg = redact_secrets(msg);
+    let msg = truncate_bytes(&redact_secrets(&redact_userinfo(msg)), LOG_LINE_MAX_BYTES);
     let line = format!(
         "{{\"ts\":{},\"level\":\"{}\",\"msg\":\"{}\"}}",
         now_secs(),
@@ -178,10 +231,16 @@ fn push_log(state: &AppState, level: &str, msg: &str) {
         json_escape(&msg)
     );
     let mut logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
-    if logs.len() >= 1000 {
-        logs.pop_front();
-    }
-    logs.push_back(line);
+    /* Split the guard deref once: two &mut guard.field borrows at one
+    call would overlap through DerefMut. */
+    let LogRing { ring, bytes, .. } = &mut *logs;
+    ring_push_capped(ring, bytes, &line, 1000, GLOBAL_RING_MAX_BYTES);
+}
+
+/// Global (server-level) log ring with its byte budget (#135).
+struct LogRing {
+    ring: VecDeque<String>,
+    bytes: usize,
 }
 
 /// Per-session diagnostic ring. Bounded independently so one noisy
@@ -189,7 +248,40 @@ fn push_log(state: &AppState, level: &str, msg: &str) {
 /// are evicted so the map itself stays bounded.
 struct SessionRing {
     ring: VecDeque<String>,
+    bytes: usize,
     last_seen: u64,
+}
+
+/// LB #135: cap a log message at a byte budget without splitting a
+/// UTF-8 character; the marker keeps truncation visible in /logs.
+fn truncate_bytes(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…[truncated]", &s[..end])
+}
+
+/// LB #135: push a line into a ring, evicting oldest lines until both
+/// the line-count cap and the byte budget hold.
+fn ring_push_capped(
+    ring: &mut VecDeque<String>,
+    bytes: &mut usize,
+    line: &str,
+    max_lines: usize,
+    max_bytes: usize,
+) {
+    while !ring.is_empty() && (ring.len() >= max_lines || *bytes + line.len() > max_bytes) {
+        match ring.pop_front() {
+            Some(old) => *bytes = bytes.saturating_sub(old.len()),
+            None => break,
+        }
+    }
+    ring.push_back(line.to_string());
+    *bytes += line.len();
 }
 
 /// Cap on the session map (LRU-evicted) and idle expiry. Combined with
@@ -198,6 +290,12 @@ struct SessionRing {
 const SESSIONS_CAP: usize = 128;
 const SESSION_LOG_CAP: usize = 500;
 const SESSION_IDLE_SECS: u64 = 1800;
+/// LB #135: line-count caps alone let a few huge lines claim
+/// megabytes, so every line is truncated and every ring also carries
+/// a byte budget.
+const LOG_LINE_MAX_BYTES: usize = 4 * 1024;
+const SESSION_RING_MAX_BYTES: usize = 64 * 1024;
+const GLOBAL_RING_MAX_BYTES: usize = 512 * 1024;
 
 /// Session tokens are generated by the UI (crypto.randomUUID) and
 /// echoed on /r/ routes as lb_sess. Only well-formed tokens are
@@ -236,7 +334,7 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
         push_log(state, level, msg);
         return;
     };
-    let msg = redact_secrets(msg);
+    let msg = truncate_bytes(&redact_secrets(&redact_userinfo(msg)), LOG_LINE_MAX_BYTES);
     let line = format!(
         "{{\"ts\":{},\"level\":\"{}\",\"msg\":\"{}\"}}",
         now_secs(),
@@ -249,12 +347,16 @@ fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
     prune_sessions(&mut sessions);
     let ring = sessions.entry(sess.to_string()).or_insert(SessionRing {
         ring: VecDeque::new(),
+        bytes: 0,
         last_seen: 0,
     });
-    if ring.ring.len() >= SESSION_LOG_CAP {
-        ring.ring.pop_front();
-    }
-    ring.ring.push_back(line);
+    ring_push_capped(
+        &mut ring.ring,
+        &mut ring.bytes,
+        &line,
+        SESSION_LOG_CAP,
+        SESSION_RING_MAX_BYTES,
+    );
     ring.last_seen = now_secs();
     prune_sessions(&mut sessions);
 }
@@ -347,8 +449,11 @@ mod persona {
 }
 
 /// Shared lookup client: manual redirects (reqwest never follows a
-/// 3xx on its own), the PolicyDns SSRF guard at connect time, and its
-/// own cookie jar.
+/// 3xx on its own), the PolicyDns SSRF guard at connect time, and NO
+/// cookie jar (#114): /suggest and /cert are stateless lookups, and a
+/// shared jar would replay one user's provider cookies onto another
+/// user's lookups. The engine's jar owns browser cookies; they ride
+/// the relay as headers.
 fn build_engine_client() -> reqwest::Client {
     reqwest::Client::builder()
         // Chrome persona TLS/HTTP2 emulation (CHROME_EMULATION): must
@@ -364,7 +469,7 @@ fn build_engine_client() -> reqwest::Client {
         .timeout(std::time::Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .dns_resolver(std::sync::Arc::new(PolicyDns))
-        .cookie_store(true)
+        .cookie_store(false)
         .build()
         .expect("reqwest client")
 }
@@ -406,6 +511,22 @@ fn build_relay_client() -> reqwest::Client {
 /// resolves at the first response header, so a healthy streamed body
 /// never pays it; the 30s read timeout still bounds a stalled one.
 const RELAY_HEADER_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// LB #137: total wall-clock budget for one relayed response body.
+/// Generous by design - a healthy slow stream must never pay it - but
+/// it exists so a drip-fed upstream cannot hold a relay task, socket
+/// and permit forever. The stream errors at the deadline and the
+/// engine surfaces the honest failure. ponytail: 10 min flat; make it
+/// a per-request policy knob if a site legitimately needs longer.
+const RELAY_TOTAL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// #110: relay resource bounds. Concurrent upstream CONNECTS are
+/// semaphore-bounded (the permit lives until the response headers are
+/// in; bodies then stream under the client read timeout), and each
+/// client IP may start at most this many relay connects per window.
+const RELAY_MAX_CONCURRENT_CONNECTS: usize = 16;
+const RELAY_RATE_WINDOW_SECS: u64 = 10;
+const RELAY_RATE_MAX_PER_WINDOW: usize = 30;
 
 async fn relay_send_wait(
     req: reqwest::RequestBuilder,
@@ -465,6 +586,263 @@ mod relay_wait {
             ),
             Ok(_) => panic!("a stalled upstream must not produce headers"),
         }
+    }
+}
+
+#[cfg(test)]
+mod relay_guard_tests {
+    use super::*;
+
+    /* ---- #115: literal-IP destinations ---- */
+    #[test]
+    fn relay_dest_rejects_private_ip_literals() {
+        for d in [
+            "http://127.0.0.1/",
+            "http://127.0.0.1:8080/x?y=1",
+            "http://0.0.0.0/",
+            "http://10.0.0.1/",
+            "http://172.16.0.9/",
+            "http://192.168.1.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://100.64.0.1/",
+            "http://198.18.0.5/",
+            "http://[::1]/",
+            "http://[::]/",
+            "http://[fe80::1]/",
+            "http://[fc00::5]/",
+            "http://[::ffff:127.0.0.1]/",
+        ] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_numeric_spellings_normalize_before_the_policy_check() {
+        // Same loopback destinations in alternate numeric spellings:
+        // the URL parser canonicalizes, the string is never prefix-checked.
+        for d in ["http://2130706433/", "http://0x7f.0.0.1/"] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_allows_policy_clean_destinations() {
+        for d in [
+            "https://example.com/",
+            "http://8.8.8.8/",
+            "https://[2606:4700::1111]/",
+            "http://1.1.1.1:443/x",
+        ] {
+            assert!(relay_dest_rejected(d).is_none(), "must allow {d}");
+        }
+    }
+
+    #[test]
+    fn relay_dest_rejects_malformed_and_non_http_schemes() {
+        for d in [
+            "ftp://example.com/",
+            "file:///etc/passwd",
+            "not a url",
+            "http://",
+        ] {
+            assert!(relay_dest_rejected(d).is_some(), "must reject {d}");
+        }
+    }
+
+    /* ---- #110: authorization + resource bounds ---- */
+    #[test]
+    fn relay_authorizes_same_origin_browser_requests() {
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-origin"), None, None),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("none"), None, None),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(Some("https://lb.test"), Some("lb.test"), None, None, None),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn relay_rejects_cross_site_and_unauthorized_direct_requests() {
+        assert_eq!(
+            relay_client_authorized(None, None, Some("cross-site"), None, None),
+            Err("relay: cross-site relay use is not allowed")
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-site"), None, None),
+            Err("relay: cross-site relay use is not allowed")
+        );
+        // Bare direct POST: no Sec-Fetch-Site, no Origin, no token.
+        assert_eq!(
+            relay_client_authorized(None, None, None, None, None),
+            Err("relay: unauthorized")
+        );
+        // Foreign Origin.
+        assert_eq!(
+            relay_client_authorized(Some("https://evil.test"), Some("lb.test"), None, None, None),
+            Err("relay: origin is not allowed")
+        );
+    }
+
+    #[test]
+    fn relay_token_mode_requires_the_capability_on_every_request() {
+        let want = Some("deploy-secret");
+        assert_eq!(
+            relay_client_authorized(None, None, None, Some("deploy-secret"), want),
+            Ok(())
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, Some("same-origin"), None, want),
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        );
+        assert_eq!(
+            relay_client_authorized(None, None, None, Some("wrong"), want),
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        );
+    }
+
+    #[test]
+    fn relay_rate_window_bounds_each_ip_independently() {
+        let map = Mutex::new(HashMap::new());
+        let ip: IpAddr = "203.0.113.9".parse().unwrap();
+        for _ in 0..RELAY_RATE_MAX_PER_WINDOW {
+            assert!(relay_rate_allow(&map, ip, 1000));
+        }
+        assert!(!relay_rate_allow(&map, ip, 1005), "window is full");
+        let other: IpAddr = "203.0.113.10".parse().unwrap();
+        assert!(relay_rate_allow(&map, other, 1005), "per-IP window");
+        // The window slides: after it expires the IP is allowed again.
+        assert!(relay_rate_allow(&map, ip, 1000 + RELAY_RATE_WINDOW_SECS));
+    }
+
+    /* ---- LB #163: rate-limit key selection ---- */
+    #[test]
+    fn relay_rate_key_ignores_xff_without_trusted_proxies() {
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        // No trusted proxies configured: the header is never honored.
+        assert_eq!(relay_rate_key(peer, Some("198.51.100.9"), &[]), peer);
+        // Peer outside the trusted set: still never honored (spoof guard).
+        let trusted = vec![Cidr::parse("192.0.2.0/24").unwrap()];
+        assert_eq!(relay_rate_key(peer, Some("198.51.100.9"), &trusted), peer);
+        assert_eq!(relay_rate_key(peer, None, &trusted), peer);
+    }
+
+    #[test]
+    fn relay_rate_key_uses_rightmost_untrusted_xff_hop() {
+        let trusted: Vec<Cidr> = ["10.0.0.0/8", "192.0.2.0/24"]
+            .iter()
+            .map(|s| Cidr::parse(s).unwrap())
+            .collect();
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        let client: IpAddr = "198.51.100.9".parse().unwrap();
+        // client, trusted proxy, trusted proxy (the TCP peer).
+        assert_eq!(
+            relay_rate_key(peer, Some("198.51.100.9, 10.1.2.3, 10.0.0.7"), &trusted),
+            client
+        );
+        // Every hop trusted: conservative fallback to the peer key.
+        assert_eq!(
+            relay_rate_key(peer, Some("10.1.2.3, 10.0.0.7"), &trusted),
+            peer
+        );
+        // Garbage header: the peer key, never an error path.
+        assert_eq!(
+            relay_rate_key(peer, Some("not-an-ip, junk"), &trusted),
+            peer
+        );
+    }
+
+    #[test]
+    fn relay_rate_key_cidr_matching_and_rejects_malformed() {
+        let v4 = Cidr::parse("192.0.2.0/24").unwrap();
+        assert!(v4.contains("192.0.2.130".parse::<IpAddr>().unwrap()));
+        assert!(!v4.contains("192.0.3.1".parse::<IpAddr>().unwrap()));
+        // Family mismatch is a non-match; /0 matches everything in-family.
+        assert!(!v4.contains("2001:db8::1".parse::<IpAddr>().unwrap()));
+        let any6 = Cidr::parse("::/0").unwrap();
+        assert!(any6.contains("2001:db8::1".parse::<IpAddr>().unwrap()));
+        let net6 = Cidr::parse("2001:db8::/32").unwrap();
+        assert!(net6.contains("2001:db8:ffff::1".parse::<IpAddr>().unwrap()));
+        assert!(!net6.contains("2001:db9::1".parse::<IpAddr>().unwrap()));
+        // Malformed entries are rejected by the parser (startup exit).
+        assert!(Cidr::parse("10.0.0.0/33").is_none());
+        assert!(Cidr::parse("10.0.0.0").is_none());
+        assert!(Cidr::parse("junk/8").is_none());
+        assert!(Cidr::parse("").is_none());
+    }
+
+    #[test]
+    fn relay_rate_window_bounds_xff_clients_independently() {
+        let map = Mutex::new(HashMap::new());
+        let trusted = vec![Cidr::parse("10.0.0.0/8").unwrap()];
+        let peer: IpAddr = "10.0.0.7".parse().unwrap();
+        for _ in 0..RELAY_RATE_MAX_PER_WINDOW {
+            let key = relay_rate_key(peer, Some("198.51.100.9"), &trusted);
+            assert!(relay_rate_allow(&map, key, 1000));
+        }
+        // A second client behind the same trusted proxy still gets its own window.
+        let key = relay_rate_key(peer, Some("198.51.100.10"), &trusted);
+        assert!(relay_rate_allow(&map, key, 1005), "per-client window");
+    }
+
+    /* ---- #111 mirror: user-info credentials never persist ---- */
+    #[test]
+    fn redact_userinfo_strips_embedded_credentials() {
+        let out = redact_userinfo("engine GET https://user:secret@example.com/reset");
+        assert!(out.contains("[redacted-userinfo]@"), "{out}");
+        assert!(out.contains("example.com/reset"), "{out}");
+        assert!(!out.contains("secret"), "{out}");
+        assert_eq!(redact_userinfo("no url here"), "no url here");
+        assert_eq!(
+            redact_userinfo("https://example.com/x"),
+            "https://example.com/x"
+        );
+    }
+}
+
+#[cfg(test)]
+mod engine_client_cookie_tests {
+    use super::*;
+
+    /* #114: the shared lookup client (/suggest, /cert) must be
+    cookie-less. A Set-Cookie answer from one user's lookup must
+    never be replayed on another user's request to the same provider.
+    The upstream is addressed by literal IP, so PolicyDns is not
+    consulted (literal destinations bypass the DNS resolver). */
+    #[tokio::test]
+    async fn lookup_client_never_replays_upstream_cookies() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen2 = seen.clone();
+        tokio::spawn(async move {
+            let app = Router::new().route(
+                "/",
+                get(move |hm: axum::http::HeaderMap| async move {
+                    seen2.lock().unwrap().push(
+                        hm.get(header::COOKIE)
+                            .and_then(|v| v.to_str().ok().map(String::from)),
+                    );
+                    ([(header::SET_COOKIE, "probe=1; Path=/")], "ok")
+                }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = build_engine_client();
+        client.get(format!("http://{addr}/")).send().await.unwrap();
+        client.get(format!("http://{addr}/")).send().await.unwrap();
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        assert!(seen[0].is_none(), "first request carries no cookie");
+        assert!(
+            seen[1].is_none(),
+            "Set-Cookie must not persist into a later lookup: {:?}",
+            seen[1]
+        );
     }
 }
 
@@ -584,6 +962,180 @@ fn relay_response_header_allowed(name: &str) -> bool {
     )
 }
 
+/// #115: validate a relay destination BEFORE any upstream connect.
+/// PolicyDns only sees DNS names - literal-IP destinations bypass the
+/// resolver entirely - so the destination is parsed once with the URL
+/// parser (every numeric spelling normalizes inside it: 2130706433,
+/// 0x7f.0.0.1 and [::ffff:127.0.0.1] all become canonical hosts, no
+/// string-prefix checks) and the canonical host is judged by the SAME
+/// DestinationPolicy the resolver applies to resolved addresses.
+/// Malformed destinations and non-HTTP(S) schemes never reach the
+/// client. DNS names keep the resolve-then-validate path (PolicyDns
+/// checks every resolved address, fail-closed) and also get the
+/// local-name pre-check here.
+fn relay_dest_rejected(dest: &str) -> Option<String> {
+    let url = match ::url::Url::parse(dest) {
+        Ok(u) => u,
+        Err(_) => return Some("relay: dest must be an absolute http(s) URL".into()),
+    };
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Some("relay: dest must be http(s)".into());
+    }
+    let Some(host_raw) = url.host_str() else {
+        return Some("relay: dest has no host".into());
+    };
+    // URL parsers keep the brackets on IPv6 literals; strip them so
+    // the IP parser below sees a bare address.
+    let host = host_raw
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_string();
+    let policy = zeolite_server::policy::DestinationPolicy::default();
+    match policy.check_hostname(&host) {
+        zeolite_server::policy::Verdict::Allow => None,
+        zeolite_server::policy::Verdict::Block => {
+            Some(format!("relay: destination {host} is blocked by policy"))
+        }
+    }
+}
+
+/// #110: authorization model for the public relay endpoint, enforced
+/// server-side before any outbound work. Browser requests must be
+/// same-origin: Sec-Fetch-Site (always set by the Chromium engine
+/// host, on every fetch method) must be same-origin/none, which kills
+/// cross-site form/simple-request abuse; without it, an explicit
+/// Origin matching the deployment's own Host passes, everything else
+/// is refused. A deployment that sets ZL_RELAY_TOKEN requires the
+/// same capability value in x-zl-relay-token on EVERY request - that
+/// is the authorization boundary for direct (non-browser) clients.
+/// A bare direct POST (no Sec-Fetch-Site, no Origin) is refused; a
+/// forged-header client is only stopped by the token mode, which the
+/// engine host cannot use yet (the SW would have to send it).
+fn relay_client_authorized(
+    origin: Option<&str>,
+    host: Option<&str>,
+    sec_fetch_site: Option<&str>,
+    token: Option<&str>,
+    want_token: Option<&str>,
+) -> Result<(), &'static str> {
+    if let Some(want) = want_token {
+        return if Some(want) == token {
+            Ok(())
+        } else {
+            Err("relay: unauthorized (missing or wrong x-zl-relay-token)")
+        };
+    }
+    match sec_fetch_site {
+        Some("same-origin") | Some("none") => Ok(()),
+        Some(_) => Err("relay: cross-site relay use is not allowed"),
+        None => match origin {
+            None => Err("relay: unauthorized"),
+            Some(o) => {
+                let host = host.unwrap_or("");
+                if o == format!("https://{host}") || o == format!("http://{host}") {
+                    Ok(())
+                } else {
+                    Err("relay: origin is not allowed")
+                }
+            }
+        },
+    }
+}
+
+/// LB #163: a parsed CIDR from LB_TRUSTED_PROXY_CIDRS. v4 and v6
+/// match within their own family only; list both entries when a v4
+/// client sits behind a v6 proxy (or vice versa).
+struct Cidr {
+    net: IpAddr,
+    bits: u8,
+}
+
+impl Cidr {
+    fn parse(s: &str) -> Option<Cidr> {
+        let (addr, bits) = s.trim().split_once('/')?;
+        let net: IpAddr = addr.trim().parse().ok()?;
+        let bits: u8 = bits.trim().parse().ok()?;
+        let max = match net {
+            IpAddr::V4(_) => 32,
+            IpAddr::V6(_) => 128,
+        };
+        if bits > max {
+            return None;
+        }
+        Some(Cidr { net, bits })
+    }
+
+    fn contains(&self, ip: IpAddr) -> bool {
+        match (self.net, ip) {
+            (IpAddr::V4(n), IpAddr::V4(i)) => {
+                if self.bits == 0 {
+                    return true;
+                }
+                let m = u32::MAX << (32 - u32::from(self.bits));
+                u32::from(n) & m == u32::from(i) & m
+            }
+            (IpAddr::V6(n), IpAddr::V6(i)) => {
+                if self.bits == 0 {
+                    return true;
+                }
+                let m = u128::MAX << (128 - u32::from(self.bits));
+                u128::from(n) & m == u128::from(i) & m
+            }
+            _ => false,
+        }
+    }
+}
+
+/// LB #163: pick the relay rate-limit key. x-forwarded-for is honored
+/// only when the TCP peer sits inside an operator-declared trusted
+/// proxy CIDR; otherwise (or when the header is missing/garbage) the
+/// key is the peer IP, so a spoofable header can never widen the
+/// limit. Within the trusted set, the rightmost hop that is NOT
+/// trusted is the client the window should bound; if every hop is
+/// trusted the key falls back to the peer (a conservative shared
+/// bucket, never a client-authored entry).
+fn relay_rate_key(peer: IpAddr, xff: Option<&str>, trusted: &[Cidr]) -> IpAddr {
+    if trusted.is_empty() || !trusted.iter().any(|c| c.contains(peer)) {
+        return peer;
+    }
+    let Some(xff) = xff else { return peer };
+    for hop in xff.rsplit(',').map(str::trim) {
+        let Ok(ip) = hop.parse::<IpAddr>() else {
+            return peer;
+        };
+        if !trusted.iter().any(|c| c.contains(ip)) {
+            return ip;
+        }
+    }
+    peer
+}
+
+/// #110: per-IP sliding window for relay connects. The now parameter
+/// is injected so the regression test can move the window without
+/// sleeping.
+fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now: u64) -> bool {
+    let mut map = map.lock().unwrap();
+    if map.len() > 4096 {
+        // Bound map growth: drop fully-expired idle windows.
+        map.retain(|_, w| !w.is_empty());
+    }
+    let win = map.entry(ip).or_default();
+    while let Some(&t) = win.front() {
+        if now.saturating_sub(t) >= RELAY_RATE_WINDOW_SECS {
+            win.pop_front();
+        } else {
+            break;
+        }
+    }
+    if win.len() < RELAY_RATE_MAX_PER_WINDOW {
+        win.push_back(now);
+        true
+    } else {
+        false
+    }
+}
+
 /// Zeolite #137 embedder relay endpoint. The service worker relays
 /// fetches for hosts whose wasm TLS ClientHello is fingerprint-
 /// blocked (engine policy route "relay"); the UI performs them here
@@ -600,9 +1152,48 @@ fn relay_response_header_allowed(name: &str) -> bool {
 /// not a use case.
 async fn zl_relay_endpoint(
     State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
     let bad = |code: StatusCode, msg: &str| -> Response { (code, msg.to_string()).into_response() };
+    /* #110: authorize BEFORE any JSON parsing or outbound work. The
+    request body stays bounded by axum's default 2 MiB extractor
+    limit, so a relay envelope can never balloon memory. */
+    if let Err(msg) = relay_client_authorized(
+        headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
+        headers.get(header::HOST).and_then(|v| v.to_str().ok()),
+        headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-zl-relay-token")
+            .and_then(|v| v.to_str().ok()),
+        state.relay_token.as_deref(),
+    ) {
+        return bad(StatusCode::FORBIDDEN, msg);
+    }
+    if !relay_rate_allow(
+        &state.relay_rate,
+        relay_rate_key(
+            peer.ip(),
+            headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
+            &state.relay_trusted_proxies,
+        ),
+        now_secs(),
+    ) {
+        return bad(
+            StatusCode::TOO_MANY_REQUESTS,
+            "relay: rate limit exceeded, retry later",
+        );
+    }
+    let relay_permit = match state.relay_permits.clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            return bad(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "relay: too many concurrent relay connects",
+            )
+        }
+    };
     let req: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => return bad(StatusCode::BAD_REQUEST, &format!("relay body: {}", e)),
@@ -610,8 +1201,10 @@ async fn zl_relay_endpoint(
     let Some(dest) = req.get("dest").and_then(|v| v.as_str()) else {
         return bad(StatusCode::BAD_REQUEST, "relay: dest missing");
     };
-    if !(dest.starts_with("http://") || dest.starts_with("https://")) {
-        return bad(StatusCode::BAD_REQUEST, "relay: dest must be http(s)");
+    /* #115: literal-IP destinations bypass PolicyDns; the parsed,
+    canonical host must pass the same DestinationPolicy first. */
+    if let Some(msg) = relay_dest_rejected(dest) {
+        return bad(StatusCode::FORBIDDEN, &msg);
     }
     let method_s = req
         .get("method")
@@ -685,8 +1278,77 @@ async fn zl_relay_endpoint(
         }
         _ => return bad(StatusCode::INTERNAL_SERVER_ERROR, "relay: header encode"),
     }
-    let streamed = Body::from_stream(upstream.bytes_stream());
+    /* LB #137: the permit moves into the stream so it is held for the
+    body's whole life, and the stream carries a total deadline - the
+    idle read_timeout cannot stop a drip-fed upstream. */
+    let deadline = tokio::time::Instant::now() + RELAY_TOTAL_DEADLINE;
+    let mut upstream_stream = Box::pin(upstream.bytes_stream());
+    let streamed = Body::from_stream(futures_util::stream::poll_fn(move |cx| {
+        let _hold_permit = &relay_permit;
+        if tokio::time::Instant::now() >= deadline {
+            return std::task::Poll::Ready(Some(Err(
+                "relay: total body deadline exceeded".to_string()
+            )));
+        }
+        futures_util::Stream::poll_next(upstream_stream.as_mut(), cx)
+            .map(|opt| opt.map(|res| res.map_err(|e| e.to_string())))
+    }));
     (StatusCode::OK, hm, streamed).into_response()
+}
+
+/// LB #138: bounds for the unauthenticated /suggest and /cert
+/// upstream lookups: response body caps, TTL caches and a shared
+/// concurrency cap so neither endpoint can be turned into an
+/// unbounded-memory or connection-flooding primitive.
+const SUGGEST_BODY_CAP: usize = 256 * 1024;
+const CT_BODY_CAP: usize = 1024 * 1024;
+const SUGGEST_CACHE_TTL_SECS: u64 = 120;
+const CERT_CACHE_TTL_SECS: u64 = 300;
+const LOOKUP_CACHE_MAX: usize = 256;
+const LOOKUP_MAX_CONCURRENT: usize = 8;
+
+/* LB #138: read a response body up to a byte cap. reqwest's .text()
+buffers the whole body; the cap is the honest bound for an
+unauthenticated endpoint fed by upstreams we do not control. */
+async fn read_body_capped(resp: reqwest::Response, cap: usize) -> Result<String, String> {
+    use futures_util::StreamExt;
+    let mut stream = resp.bytes_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("body read failed: {}", e))?;
+        if buf.len() + chunk.len() > cap {
+            return Err("body exceeds cap".to_string());
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
+/* LB #138: TTL cache get/put shared by the suggest and cert lookups. */
+fn cache_get(cache: &Mutex<HashMap<String, (u64, String)>>, key: &str, now: u64) -> Option<String> {
+    let map = cache.lock().unwrap_or_else(|e| e.into_inner());
+    match map.get(key) {
+        Some((expires, v)) if *expires > now => Some(v.clone()),
+        _ => None,
+    }
+}
+
+fn cache_put(
+    cache: &Mutex<HashMap<String, (u64, String)>>,
+    key: &str,
+    value: String,
+    ttl_secs: u64,
+    now: u64,
+) {
+    let mut map = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if map.len() >= LOOKUP_CACHE_MAX && !map.contains_key(key) {
+        // ponytail: arbitrary eviction at the cap; a real LRU only if
+        // hit locality ever measurably matters.
+        if let Some(oldest) = map.keys().next().cloned() {
+            map.remove(&oldest);
+        }
+    }
+    map.insert(key.to_string(), (now + ttl_secs, value));
 }
 
 /// Firefox User-Agent for the /suggest provider fetches (Brave and
@@ -996,12 +1658,38 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             providers.push(fallback);
         }
     }
+    /* #127: the query is attacker-sized input; a 256-char prefix
+    keeps the log useful while bounding the redaction scan. */
+    let q_log: String = q.chars().take(256).collect();
     push_log_sess(
         &state,
         sess.as_deref(),
         "info",
-        &format!("suggest {} {}", engine, q),
+        &format!("suggest {} {}", engine, q_log),
     );
+    let now = now_secs();
+    let cache_key = format!("{}|{}", engine, q);
+    /* LB #138: repeats inside the TTL serve from the cache, and the
+    upstream fan-out holds one of a small shared permit set. */
+    if let Some(cached) = cache_get(&state.suggest_cache, &cache_key, now) {
+        return ([("content-type", "application/json")], cached).into_response();
+    }
+    let _lookup_permit = match state.lookup_permits.try_acquire() {
+        Ok(p) => p,
+        Err(_) => {
+            push_log_sess(
+                &state,
+                sess.as_deref(),
+                "warn",
+                "suggest lookup capacity exceeded",
+            );
+            return (
+                [("content-type", "application/json")],
+                "{\"suggestions\":[],\"source\":\"\"}",
+            )
+                .into_response();
+        }
+    };
     let mut list: Vec<String> = Vec::new();
     /* Which provider actually answered: the fallback chain can hide the
     asked-for engine, and the suggestion UI tells the user where
@@ -1017,11 +1705,14 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
             .header("Accept", "*/*")
             .header("Sec-GPC", "1")
             .header("DNT", "1")
+            // LB #138: per-try budget so one dead provider cannot pin
+            // the shared permit for the client timeout.
+            .timeout(std::time::Duration::from_secs(8))
             .send()
             .await
         {
             Ok(r) => match r.error_for_status() {
-                Ok(r) => match r.text().await {
+                Ok(r) => match read_body_capped(r, SUGGEST_BODY_CAP).await {
                     Ok(text) => {
                         list = parse_osjson(&text);
                         if !list.is_empty() {
@@ -1056,6 +1747,13 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
         "{{\"suggestions\":[{}],\"source\":\"{}\"}}",
         list.join(","),
         source
+    );
+    cache_put(
+        &state.suggest_cache,
+        &cache_key,
+        out.clone(),
+        SUGGEST_CACHE_TTL_SECS,
+        now,
     );
     ([("content-type", "application/json")], out).into_response()
 }
@@ -1183,9 +1881,7 @@ async fn ct_fetch(state: &AppState, url: &str) -> Result<String, String> {
     if !status.is_success() {
         return Err(format!("status {}", status));
     }
-    resp.text()
-        .await
-        .map_err(|e| format!("body read failed: {}", e))
+    read_body_capped(resp, CT_BODY_CAP).await
 }
 
 /* Does a crt.sh record cover the host? crt.sh matches substring, so a
@@ -1268,7 +1964,189 @@ fn best_certspotter(body: &str, host: &str) -> Option<(String, String)> {
 /// binary); the deployment identifier from the git commit the platform
 /// built from (RENDER_GIT_COMMIT on Render, LB_BUILD_ID as a portable
 /// fallback, "unknown" honestly when neither is set). No invented data.
-async fn build_endpoint() -> Response {
+/// #128: browsers set Sec-Fetch-Site: same-origin for a
+/// same-origin fetch; non-browser clients and cross-site pages
+/// do not. The wisp URL bypasses the standalone wisp service's
+/// own password, so only the UI boot gets to see it.
+/// #107: the provisioned distinct origin for proxied documents
+/// (ZL_CONTENT_ORIGIN). Inert until the operator provisions a second
+/// hostname on this service. https is required in production;
+/// http://localhost[:port] (loopback) is allowed for local
+/// verification of the cross-origin design. Returns the normalized
+/// origin (scheme://host[:port]) or None on anything else.
+fn content_origin_from(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let url = url::Url::parse(raw).ok()?;
+    let scheme = url.scheme();
+    let host = url.host_str()?;
+    let is_loopback = matches!(host, "localhost" | "127.0.0.1" | "[::1]");
+    if scheme != "https" && !(scheme == "http" && is_loopback) {
+        return None;
+    }
+    // Normalize to scheme://host[:port]; a configured path, query or
+    // fragment is a configuration mistake, not something to honor
+    // silently.
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        return None;
+    }
+    match url.port() {
+        Some(p) => Some(format!("{scheme}://{host}:{p}")),
+        None => Some(format!("{scheme}://{host}")),
+    }
+}
+
+#[cfg(test)]
+mod content_origin_tests {
+    use super::content_origin_from;
+
+    #[test]
+    fn https_origin_normalizes() {
+        assert_eq!(
+            content_origin_from("https://content.lobsterbrowse.example"),
+            Some("https://content.lobsterbrowse.example".to_string())
+        );
+        // Whitespace and a bare trailing slash are tolerated.
+        assert_eq!(
+            content_origin_from("  https://content.lobsterbrowse.example/ "),
+            Some("https://content.lobsterbrowse.example".to_string())
+        );
+    }
+
+    #[test]
+    fn explicit_port_is_kept() {
+        assert_eq!(
+            content_origin_from("https://content.local:8443"),
+            Some("https://content.local:8443".to_string())
+        );
+    }
+
+    #[test]
+    fn loopback_http_is_allowed_for_local_verification() {
+        assert_eq!(
+            content_origin_from("http://localhost:3001"),
+            Some("http://localhost:3001".to_string())
+        );
+        assert_eq!(
+            content_origin_from("http://127.0.0.1:3001"),
+            Some("http://127.0.0.1:3001".to_string())
+        );
+    }
+
+    #[test]
+    fn plain_http_paths_and_junk_are_rejected() {
+        assert_eq!(content_origin_from("http://content.example.com"), None);
+        assert_eq!(
+            content_origin_from("https://content.example.com/some/path"),
+            None
+        );
+        assert_eq!(content_origin_from("ftp://content.example.com"), None);
+        assert_eq!(content_origin_from("https://content.example.com?q=1"), None);
+        assert_eq!(content_origin_from(""), None);
+        assert_eq!(content_origin_from("   "), None);
+        assert_eq!(content_origin_from("not a url"), None);
+    }
+}
+
+fn same_origin_fetch(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get("sec-fetch-site")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("same-origin"))
+        .unwrap_or(false)
+}
+
+/// #107: service-worker registration page for a provisioned content
+/// origin. The app UI cannot register a worker on an origin it does
+/// not inhabit, so it embeds this page (served identically on every
+/// hostname this service answers) in a hidden iframe. The page
+/// registers the engine worker at the "/" scope on ITS OWN origin,
+/// opens the same relay channel and wisp announcement the app origin
+/// gets, then posts one ack to the parent and expects to be removed.
+/// The relay fetch is same-origin from this page's perspective, so
+/// the relay authorization (#110) accepts it exactly like the app
+/// origin's channel. Inert unless a parent embeds the page.
+async fn zlsw_register() -> Response {
+    let body = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Zeolite SW registration</title></head>
+<body><script type="module">
+(async () => {
+  const post = (m) => { try { parent.postMessage(Object.assign({ zlReg: true }, m), "*"); } catch (e) {} };
+  try {
+    const reg = await navigator.serviceWorker.register("/zlsw/sw.js", { scope: "/", type: "module" });
+    await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 8000))]);
+    const sw = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+    if (!sw) { post({ ok: false, error: "no worker instance" }); return; }
+    const u8ToB64 = (u) => {
+      let s = "";
+      for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      return btoa(s);
+    };
+    const ch = new MessageChannel();
+    const controllers = new Map();
+    ch.port1.onmessage = (ev) => {
+      const m = ev.data || {};
+      if (m.type === "zl:fetchRelay" && typeof m.rid === "number") {
+        const ac = new AbortController();
+        controllers.set(m.rid, ac);
+        (async () => {
+          const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
+          try {
+            const resp = await fetch("/zlrelay", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              signal: ac.signal,
+              body: JSON.stringify({
+                dest: m.dest, method: m.method, headers: m.headers,
+                ...(typeof m.body === "string" ? { body: m.body } : {}),
+                ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
+              }),
+            });
+            const status = Number(resp.headers.get("x-zl-relay-status"));
+            if (!Number.isFinite(status) || status <= 0) throw new Error("relay endpoint unavailable (" + resp.status + ")");
+            const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
+            const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
+            ch.port1.postMessage({ type: "zl:relayHead", rid: m.rid, status, statusText: "", headers, setCookies });
+            const reader = resp.body.getReader();
+            for (;;) {
+              const r = await reader.read();
+              if (r.done) break;
+              if (r.value && r.value.length) ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value });
+            }
+            ch.port1.postMessage({ type: "zl:relayEnd", rid: m.rid });
+          } catch (e) {
+            fail(e && e.message ? e.message : String(e));
+          } finally {
+            controllers.delete(m.rid);
+          }
+        })();
+      } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
+        const ac = controllers.get(m.rid);
+        if (ac) ac.abort();
+      }
+    };
+    sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+    try {
+      const b = await (await fetch("/build", { cache: "no-store" })).json();
+      if (typeof b.sjWisp === "string" && b.sjWisp) sw.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
+    } catch (e) { /* honest: relay-only, same as the app origin when unset */ }
+    post({ ok: true });
+  } catch (e) {
+    post({ ok: false, error: String(e) });
+  }
+})();
+</script></body></html>"#;
+    Response::builder()
+        .status(200)
+        .header("content-type", "text/html; charset=utf-8")
+        .header("cache-control", "no-store")
+        .body(body.into())
+        .unwrap()
+}
+
+async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     let build = std::env::var("RENDER_GIT_COMMIT")
         .or_else(|_| std::env::var("LB_BUILD_ID"))
         .unwrap_or_else(|_| "unknown".to_string());
@@ -1313,16 +2191,26 @@ async fn build_endpoint() -> Response {
         }
         Err(_) => "unknown".to_string(),
     };
-    let sj_wisp = std::env::var("SCRAMJET_WISP_URL").unwrap_or_default();
+    let sj_wisp = match std::env::var("SCRAMJET_WISP_URL") {
+        Ok(v) if !v.is_empty() && same_origin_fetch(&headers) => v,
+        _ => String::new(),
+    };
+    // #107: the provisioned content origin for proxied documents;
+    // empty (inert) until ZL_CONTENT_ORIGIN is configured.
+    let content_origin = std::env::var("ZL_CONTENT_ORIGIN")
+        .ok()
+        .and_then(|v| content_origin_from(&v))
+        .unwrap_or_default();
     let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
         json_escape(&scramjet),
         json_escape(&sj_sha),
         json_escape(&sj_wisp),
+        json_escape(&content_origin),
         json_escape(&build),
         json_escape(&build_short),
     );
@@ -1422,6 +2310,29 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
         "info",
         &format!("cert lookup {}", host),
     );
+    /* LB #138: same cache-and-cap posture as /suggest - repeats serve
+    from the TTL cache, and the upstream fan-out holds one of the
+    shared lookup permits. */
+    let now = now_secs();
+    if let Some(cached) = cache_get(&state.cert_cache, &host, now) {
+        return ([(header::CONTENT_TYPE, "application/json")], cached).into_response();
+    }
+    let _lookup_permit = match state.lookup_permits.try_acquire() {
+        Ok(p) => p,
+        Err(_) => {
+            push_log(
+                &state,
+                "warn",
+                &format!("cert lookup {}: lookup capacity exceeded", host),
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"ok\":false,\"error\":\"certificate lookup busy\"}",
+            )
+                .into_response();
+        }
+    };
     /* crt.sh first: query the host, pick the best record. */
     let crtsh_url = format!("https://crt.sh/?q={}&output=json", pct_enc(&host));
     let picked = match ct_fetch(&state, &crtsh_url).await {
@@ -1480,6 +2391,13 @@ async fn cert_endpoint(State(state): State<Arc<AppState>>, RawQuery(q): RawQuery
                 &state,
                 "info",
                 &format!("cert lookup {} ok: {} ({} days left)", host, issuer, days),
+            );
+            cache_put(
+                &state.cert_cache,
+                &host,
+                out.clone(),
+                CERT_CACHE_TTL_SECS,
+                now,
             );
             ([(header::CONTENT_TYPE, "application/json")], out).into_response()
         }
@@ -1578,8 +2496,36 @@ async fn main() {
     let state = Arc::new(AppState {
         client,
         relay_client: build_relay_client(),
-        logs: Mutex::new(VecDeque::new()),
+        /* #110: strict token mode is opt-in per deployment; unset on
+        Render so the engine's unauthenticated SW relay keeps working
+        (the origin gate plus the rate/concurrency bounds are the
+        default posture). */
+        relay_token: std::env::var("ZL_RELAY_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty()),
+        relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
+        /* LB #163: fail-closed config. A malformed trusted-proxy entry
+        is a startup error, not a silently ignored limit change. */
+        relay_trusted_proxies: match std::env::var("LB_TRUSTED_PROXY_CIDRS") {
+            Ok(s) if !s.trim().is_empty() => s
+                .split(',')
+                .map(Cidr::parse)
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_else(|| {
+                    eprintln!("invalid LB_TRUSTED_PROXY_CIDRS value: {s}");
+                    std::process::exit(2);
+                }),
+            _ => Vec::new(),
+        },
+        relay_rate: Mutex::new(HashMap::new()),
+        logs: Mutex::new(LogRing {
+            ring: VecDeque::new(),
+            bytes: 0,
+        }),
         sessions: Mutex::new(HashMap::new()),
+        suggest_cache: Mutex::new(HashMap::new()),
+        cert_cache: Mutex::new(HashMap::new()),
+        lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
     });
     push_log(&state, "info", "server log buffer initialised");
 
@@ -1627,6 +2573,9 @@ async fn main() {
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
+        // #107: SW registration page for the provisioned content
+        // origin (see zlsw_register).
+        .route("/zlsw-register", get(zlsw_register))
         // Zeolite engine bundle, vendored into zlsw/ at build time.
         // The service worker script gets Service-Worker-Allowed so it
         // registers at the "/" scope (ui/src/zeolite.ts): it intercepts
@@ -1920,8 +2869,18 @@ mod session_log_tests {
         AppState {
             client: reqwest::Client::new(),
             relay_client: reqwest::Client::new(),
-            logs: Mutex::new(VecDeque::new()),
+            relay_token: None,
+            relay_permits: Arc::new(tokio::sync::Semaphore::new(RELAY_MAX_CONCURRENT_CONNECTS)),
+            relay_rate: Mutex::new(HashMap::new()),
+            relay_trusted_proxies: Vec::new(),
+            logs: Mutex::new(LogRing {
+                ring: VecDeque::new(),
+                bytes: 0,
+            }),
             sessions: Mutex::new(HashMap::new()),
+            suggest_cache: Mutex::new(HashMap::new()),
+            cert_cache: Mutex::new(HashMap::new()),
+            lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
         }
     }
 
@@ -2030,7 +2989,7 @@ mod session_log_tests {
     fn tagged_lines_never_land_in_the_global_ring() {
         let state = test_state();
         push_log_sess(&state, Some("session-a-token-111"), "info", "secret to A");
-        assert!(state.logs.lock().unwrap().is_empty());
+        assert!(state.logs.lock().unwrap().ring.is_empty());
     }
 
     #[test]
@@ -2071,6 +3030,7 @@ mod session_log_tests {
             "session-old-but-valid1".to_string(),
             SessionRing {
                 ring: VecDeque::new(),
+                bytes: 0,
                 last_seen: now_secs().saturating_sub(SESSION_IDLE_SECS + 60),
             },
         );
@@ -2086,8 +3046,62 @@ mod session_log_tests {
     fn invalid_tokens_fall_back_to_the_global_ring() {
         let state = test_state();
         push_log_sess(&state, Some("bad token!"), "info", "unified");
-        assert_eq!(state.logs.lock().unwrap().len(), 1);
+        assert_eq!(state.logs.lock().unwrap().ring.len(), 1);
         assert!(state.sessions.lock().unwrap().is_empty());
+    }
+
+    /* LB #135 regression tests: the byte budgets are real bounds - a
+    huge line must come back truncated and a noisy session must not
+    blow past its ring budget. */
+    #[test]
+    fn log_lines_are_truncated_and_byte_capped() {
+        let state = test_state();
+        let big = "x".repeat(64 * 1024);
+        push_log(&state, "info", &big);
+        let logs = state.logs.lock().unwrap();
+        assert_eq!(logs.ring.len(), 1);
+        let line = logs.ring.back().unwrap();
+        assert!(line.len() < big.len());
+        assert!(line.contains("[truncated]"));
+        assert!(line.len() <= LOG_LINE_MAX_BYTES + 256);
+    }
+
+    #[test]
+    fn session_ring_respects_byte_budget() {
+        let state = test_state();
+        // 60 x ~2KiB lines exceed the 64KiB session budget; eviction
+        // must keep the ring's byte total under the cap.
+        for i in 0..60 {
+            let msg = format!("line {i} {}", "y".repeat(2048));
+            push_log_sess(&state, Some("session-a-token-111"), "info", &msg);
+        }
+        let sessions = state.sessions.lock().unwrap();
+        let ring = sessions.get("session-a-token-111").unwrap();
+        assert!(ring.bytes <= SESSION_RING_MAX_BYTES);
+        assert!(!ring.ring.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod lookup_cache_tests {
+    use super::*;
+
+    #[test]
+    fn cache_put_then_get_within_ttl() {
+        let cache = Mutex::new(HashMap::new());
+        cache_put(&cache, "k", "v".to_string(), 100, 1);
+        assert_eq!(cache_get(&cache, "k", 50).as_deref(), Some("v"));
+        assert_eq!(cache_get(&cache, "k", 101), None); /* expired */
+    }
+
+    #[test]
+    fn cache_is_capped() {
+        let cache = Mutex::new(HashMap::new());
+        for i in 0..(LOOKUP_CACHE_MAX + 10) {
+            cache_put(&cache, &format!("k{i}"), "v".to_string(), 100, 1);
+        }
+        let map = cache.lock().unwrap();
+        assert!(map.len() <= LOOKUP_CACHE_MAX);
     }
 }
 

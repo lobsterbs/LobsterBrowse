@@ -36,6 +36,20 @@ async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   }
 }
 
+/* #142 (LB): engine handoff broadcasts (zl:downloadOp, zl:notifyOp,
+   zl:engineUpdate, zl:relayLost) arrive as container message events,
+   and the ServiceWorkerContainer is an EventTarget any same-origin
+   frame can dispatch synthetic events on. Accept them only when the
+   source is the engine worker itself. Honest limit: a hostile
+   same-origin page can still pass this by forging source as the
+   controller object; the complete fix is an engine-side MessageChannel
+   port or the #107 origin-isolation work. This check still stops every
+   other window, frame and lazy forgery at the boundary. */
+export const engineSwSource = (ev: MessageEvent): boolean => {
+  const s = ev.source;
+  return s instanceof ServiceWorker && new URL(s.scriptURL).pathname === "/zlsw/sw.js";
+};
+
 /* #61: zlSend fires every few seconds (DevTools polls netLog/diag
    at 5s, downloads at 2s), and register() + update() on every call
    meant a sw.js revalidation request each time. One acquisition per
@@ -271,4 +285,43 @@ export function zlWispInit(url: string): void {
     if (!sw) return;
     sw.postMessage({ type: "zl:wispRegister", url });
   });
+}
+
+/* #107: the provisioned content origin for proxied documents
+   (ZL_CONTENT_ORIGIN on the server, announced by /build). Empty
+   until the operator provisions a second hostname for this service;
+   the UI keeps its same-origin frame design until then, and the
+   frame message handler accepts only this origin in addition to
+   the app origin. */
+let contentOrigin = "";
+
+export function zlSetContentOrigin(o: string): void {
+  contentOrigin = o;
+}
+
+export function zlContentOrigin(): string {
+  return contentOrigin;
+}
+
+/* Register the engine service worker on the content origin by
+   embedding its /zlsw-register page in a hidden iframe (a page can
+   only register workers for its own origin). The register page also
+   opens the relay channel and announces the wisp endpoint for that
+   origin's own worker instance, then posts one origin-validated
+   ack; the iframe is removed on receipt. Idempotent. */
+export function zlContentRegister(co: string): void {
+  if (document.querySelector("iframe[data-lb-zlreg]")) return;
+  const f = document.createElement("iframe");
+  f.setAttribute("data-lb-zlreg", "1");
+  f.style.display = "none";
+  const onMsg = (ev: MessageEvent) => {
+    if (ev.origin !== co) return;
+    const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
+    if (!d || d.zlReg !== true) return;
+    window.removeEventListener("message", onMsg);
+    f.remove();
+  };
+  window.addEventListener("message", onMsg);
+  f.src = co + "/zlsw-register";
+  document.body.appendChild(f);
 }

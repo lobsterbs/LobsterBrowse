@@ -25,6 +25,7 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
   - `WISP_PATH` — Wisp endpoint path, defaults to `/wisp/`. Randomize per deployment.
   - `WISP_PASSWORD` / `WISP_USERNAME` — optional password auth (extension 0x02).
   - `DATABASE_URL` — Neon Postgres connection string (used by the upcoming sessions crate).
+  - `LB_TRUSTED_PROXY_CIDRS` — optional comma-separated trusted-proxy CIDR list. When the TCP peer sits inside one of these ranges, the relay rate limit keys on the rightmost `x-forwarded-for` hop outside the trusted set instead of the shared peer address (#163). Unset by default: the peer IP stays the key and a client-controlled `x-forwarded-for` is never honored. A malformed entry is a startup error.
 - Health check: `GET /healthz`.
 
 ## Zeolite engine pin
@@ -55,14 +56,20 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist e6ea8c6 (pin 54: the epoxy wisp-mux
-death fix, treating Wisp(MuxTaskEnded) ("Multiplexor task ended")
-and the epoxy dead-transport error surface as connect-class so
-the #74 reset+retry fires instead of a terminal 502 error page,
-from Zeolite main 7548235, CI all-green), zlswSha 1c67b54c12821a2b
-(sw.js changed; verify the served file hash). This matches the
-Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
-deccb43 because no crate change shipped since it, and
+Current pin: Zeolite dist 81b3474 (pin 96: the 2026-10-20 scout wave -
+#368 comment-aware frame-buster folding, #369 non-executable
+script bodies pass through, #370 chained cross-frame sinks
+(rewriter-side), #364 the ws:// shim throws SyntaxError, #371
+srcdoc script bodies, #372 window.open noopener mint, #373
+backslash-form URLs stay cross-origin, #374 EventSource
+stringifies relayed URLs, #375 postMessage transfer list, #376
+cache refresh redirect hop gates, #377 page-cache clear on
+fingerprint/UA change (Zeolite b2c21c3, CI run 39392562420
+all 5 jobs green, suite 1377)), zlswSha 6975a139819b198b ->
+5a88a06a57303672, bootstrapSha eb91c2a989aa89f0 ->
+9d1cb1fba82b9ba8 (30349 bytes). This matches the Dockerfile
+ZEOLITE_COMMIT; the zeolite-server git rev stays a385fa9
+because the wave does not touch zeolite-server, and
 server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)

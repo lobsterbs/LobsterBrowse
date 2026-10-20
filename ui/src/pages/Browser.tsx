@@ -12,6 +12,25 @@
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
 
+/* M3E components specific to the lazily loaded browser workspace. */
+import "@m3e/web/badge";
+import "@m3e/web/breadcrumb";
+import "@m3e/web/card";
+import "@m3e/web/checkbox";
+import "@m3e/web/form-field";
+import "@m3e/web/heading";
+import "@m3e/web/option";
+import "@m3e/web/paginator";
+import "@m3e/web/progress-indicator";
+import "@m3e/web/select";
+import "@m3e/web/skeleton";
+import "@m3e/web/switch";
+import "@m3e/web/tabs";
+import "@m3e/web/textarea-autosize";
+import "@m3e/web/toolbar";
+import "@m3e/web/tooltip";
+import "@m3e/web/tree";
+
 import { useEffect, useRef, useState } from "react";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
@@ -29,7 +48,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentOrigin, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -50,6 +69,7 @@ import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
+import { displayAddressUrl } from "../browser/displayAddress";
 
 /* ---- DevTools capture (#106): the engine exposes no page console
    or request surface to the embedder, so the Console and Network
@@ -67,13 +87,29 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     const cw = cw0 as Window & typeof globalThis & { __lbDtShim?: boolean };
     if (cw.__lbDtShim) return;
     cw.__lbDtShim = true;
-    const post = (ev: { lb: string; data: Record<string, unknown> }): void => {
-      try {
-        cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
-      } catch {
-        /* a torn-down frame cannot report; nothing to do */
-      }
-    };
+    /* #106 realm fix: this closure runs in the app realm, so every
+       postMessage it makes is stamped with the APP window as
+       ev.source, and the handler's strict frame match drops every
+       event. Mint the post function in the FRAME realm instead, so
+       the browser stamps the genuine frame window. A page CSP that
+       forbids eval keeps the parent-realm fallback (capture stays
+       unattributed, the pre-fix behavior). */
+    let post: (ev: { lb: string; data: Record<string, unknown> }) => void;
+    try {
+      const frameFn = (cw as unknown as { Function: typeof Function }).Function;
+      post = frameFn(
+        "ev",
+        "try{parent.postMessage({lb:'batch',data:{events:[ev]}},'*')}catch(e){}",
+      ) as typeof post;
+    } catch {
+      post = (ev) => {
+        try {
+          cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
+        } catch {
+          /* a torn-down frame cannot report; nothing to do */
+        }
+      };
+    }
     const fmt = (v: unknown): string => {
       if (typeof v === "string") return v;
       if (v instanceof Error) return v.stack || String(v);
@@ -116,64 +152,6 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     cw.addEventListener("unhandledrejection", (ev) => {
       post({ lb: "console", data: { level: "error", text: "Unhandled rejection: " + fmt((ev as PromiseRejectionEvent).reason), ts: Date.now() } });
     });
-    /* Network view: wrap the frame fetch/XHR after the engine's own
-       hooks (the bootstrap has wrapped them by load time), so what
-       DevTools sees is what the page actually calls. The URL is
-       recorded exactly as the page passed it: relative paths stay
-       readable, and resolving against the opaque engine location
-       would only add noise. */
-    const origFetch = cw.fetch.bind(cw);
-    const urlOf = (input: RequestInfo | URL): string => {
-      if (typeof input === "string") return input;
-      const u = (input as { url?: unknown }).url;
-      if (typeof u === "string") return u;
-      try {
-        return input.toString();
-      } catch {
-        return String(input);
-      }
-    };
-    cw.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const t0 = Date.now();
-      const url = urlOf(input);
-      const im = (input as { method?: unknown }).method;
-      const method = String(init?.method ?? (typeof im === "string" ? im : "GET")).toUpperCase();
-      return origFetch(input, init).then(
-        (r) => {
-          post({ lb: "net", data: { url, method, status: r.status, ok: r.ok, dur: Date.now() - t0, ts: Date.now() } });
-          return r;
-        },
-        (err) => {
-          post({ lb: "net", data: { url, method, error: fmt(err), dur: Date.now() - t0, ts: Date.now() } });
-          throw err;
-        },
-      );
-    }) as typeof fetch;
-    const xo = cw.XMLHttpRequest.prototype;
-    type XH = XMLHttpRequest & { __lbDt?: { method: string; url: string; t0: number } };
-    const origOpen = xo.open as unknown as (this: XH, method: string, url: string | URL, ...rest: unknown[]) => void;
-    xo.open = function (this: XH, method: string, url: string | URL, ...rest: unknown[]) {
-      try {
-        this.__lbDt = { method: String(method).toUpperCase(), url: String(url), t0: 0 };
-      } catch {
-        /* a sealed xhr just goes untracked */
-      }
-      return origOpen.call(this, method, url, ...rest);
-    } as typeof XMLHttpRequest.prototype.open;
-    const origSend = xo.send;
-    xo.send = function (this: XH, body?: Document | XMLHttpRequestBodyInit | null) {
-      const meta = this.__lbDt;
-      if (meta) {
-        meta.t0 = Date.now();
-        this.addEventListener("loadend", () => {
-          if (this.status === 0)
-            post({ lb: "net", data: { url: meta.url, method: meta.method, error: this.statusText || "network error", dur: Date.now() - meta.t0, ts: Date.now() } });
-          else
-            post({ lb: "net", data: { url: meta.url, method: meta.method, status: this.status, ok: this.status >= 200 && this.status < 300, dur: Date.now() - meta.t0, ts: Date.now() } });
-        });
-      }
-      return origSend.call(this, body);
-    };
   } catch {
     /* The capture surface must never break the page: any failure
        here just leaves that frame without DevTools data. */
@@ -303,6 +281,8 @@ export default function BrowserView(props: Props) {
   const lastErr = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
+  /* #139: per-tab escape-recovery timestamps for the 3-per-60 s cap. */
+  const escapeTimes = useRef<Map<number, number[]>>(new Map());
   /* Consecutive poll ticks a frame has spent stuck on about:blank
      (Zeolite #31: engine bootstrap never attached). */
   const blankPolls = useRef<Map<number, number>>(new Map());
@@ -504,7 +484,9 @@ export default function BrowserView(props: Props) {
            dialog falls back to the capped in-memory Blob path below.
            A user dismissal is an honest cancel, not a failure. */
         const picker: SavePickerFn | undefined = (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
-        if (res.body && typeof picker === "function") {
+        /* #141: never stream an .xpi to disk - the install prompt needs the
+           bytes in memory, a picker save would strand them in a file. */
+        if (res.body && typeof picker === "function" && !/\.xpi$/i.test(name)) {
           try {
             const handle = await picker({ suggestedName: name.slice(0, 120) });
             writable = await handle.createWritable();
@@ -708,6 +690,8 @@ export default function BrowserView(props: Props) {
   startDlRef.current = startDownload;
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
+      /* #142: handoffs only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
       const d = ev.data as { type?: string; op?: { op?: string; url?: string; filename?: string; id?: number } };
       /* Trust boundary: the engine relays extension-supplied values. */
       if (!d || d.type !== "zl:downloadOp" || !d.op || d.op.op !== "download" || typeof d.op.url !== "string" || !d.op.url) return;
@@ -783,6 +767,8 @@ export default function BrowserView(props: Props) {
   };
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
+      /* #142: handoffs only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
       const d = ev.data as {
         type?: string;
         op?: {
@@ -1183,12 +1169,6 @@ export default function BrowserView(props: Props) {
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
-  const addNet = (id: number, entry: { url: string; method: string; status: number; ok?: boolean; dur?: number; error?: string }) => {
-    setDtState((prev) => {
-      const base = prev[id] ?? emptyDt();
-      return { ...prev, [id]: { ...base, net: [...base.net, { id: nextEntryId(), ts: Date.now(), ...entry }] } };
-    });
-  };
 
   /* ---- Favicon: read from the same-origin frame document, fetch the
      icon through the engine, cache per icon URL. ---- */
@@ -1296,7 +1276,7 @@ export default function BrowserView(props: Props) {
           .then((fr) => fr.prefix + encodeURIComponent(url))
           .catch(() => routeUrl(url))
       : zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
-  const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
+  const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
     /* New navigation generation: older generations' results are stale. */
@@ -1305,7 +1285,9 @@ export default function BrowserView(props: Props) {
     const nid = "NAV-" + gen.toString(16).toUpperCase().padStart(4, "0").slice(-4);
     navId.current.set(tab.id, nid);
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
-    const idx = push ? stack.length - 1 : tab.idx;
+    /* #122: an explicit idx wins - back/forward must move it before
+       the render-time snapshot in `tab` goes stale. */
+    const idx = opts?.idx ?? (push ? stack.length - 1 : tab.idx);
     props.updateTab(tab.id, { url, stack, idx, title: "" });
     /* Navigating away collapses the pill back to name mode (an empty
      * tab keeps it expanded via the empty-tab effect). */
@@ -1559,9 +1541,26 @@ export default function BrowserView(props: Props) {
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
           if (!intended.startsWith("http")) return;
-          const key = t.id + "|" + intended;
-          if (lastEscape.current.has(key)) return;
+          /* #139: key on the path only - query churn on the same
+             escaped URL must not multiply recoveries - and cap the
+             rate at 3 recoveries per tab per 60 s so a pathological
+             frame park cannot drive an unbounded re-drive loop. */
+          const key = t.id + "|" + loc.pathname;
+          const now = Date.now();
+          const stamps = (escapeTimes.current.get(t.id) ?? []).filter(
+            (ts) => now - ts < 60_000
+          );
+          if (lastEscape.current.has(key) || stamps.length >= 3) {
+            escapeTimes.current.set(t.id, stamps);
+            return;
+          }
+          stamps.push(now);
+          escapeTimes.current.set(t.id, stamps);
           lastEscape.current.add(key);
+          /* #139: drop the recovery if a newer navigation started
+             after the escape was detected; the re-drive must never
+             clobber a fresher load's frame assignment. */
+          const gen = navGen.current.get(t.id) ?? 0;
           pushLog(
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
@@ -1569,6 +1568,7 @@ export default function BrowserView(props: Props) {
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
           void initialRoute(t.id, intended).then((href) => {
+            if (navGen.current.get(t.id) !== gen) return;
             f.src = href;
           });
           /* Record the recovered URL as this tab's last navigation so
@@ -1775,7 +1775,13 @@ export default function BrowserView(props: Props) {
       /* Sender + origin validation: proxied frames are same-origin by
          architecture (that is what gives DevTools its page access), so
          a message from any other origin is not one of ours. */
-      if (e.origin !== window.location.origin) return;
+      /* #107: proxied frames are same-origin until the operator
+         provisions a distinct content origin (ZL_CONTENT_ORIGIN,
+         announced by /build). When one is provisioned, frames post
+         from that origin; anything else is still not one of ours. */
+      const zlco = zlContentOrigin();
+      if (e.origin !== window.location.origin && (!zlco || e.origin !== zlco)) return;
+
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
@@ -1798,7 +1804,6 @@ export default function BrowserView(props: Props) {
       }
       if (tabId === null || !tab) return;
       const d = ev.data ?? {};
-      const dtBase = () => L.dt[tabId as number] ?? emptyDt();
       /* Maximum string lengths: a hostile or broken page must not be
          able to stuff megabytes into DevTools state. */
       const cap = (v: unknown, n: number) => String(v ?? "").slice(0, n);
@@ -1814,25 +1819,13 @@ export default function BrowserView(props: Props) {
           pushLog(kind === "error" || kind === "warn" ? "error" : "info",
             "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
         }
-        setDt(tabId, {
-          console: [...dtBase().console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
-        });
-      } else if (ev.lb === "net") {
-        setDt(tabId, {
-          net: [
-            ...dtBase().net,
-            {
-              id: nextEntryId(),
-              url: sanitizeUrl(cap(d.url, 2000)),
-              method: cap(d.method, 10) || "GET",
-              status: Number(d.status ?? 0),
-              ok: d.ok === undefined ? undefined : Boolean(d.ok),
-              dur: d.dur === undefined ? undefined : Number(d.dur),
-              error: d.error === undefined ? undefined : sanitizeText(cap(d.error, 500)),
-              ts: Number(d.ts ?? Date.now()),
-            },
-          ].slice(-500),
-        });
+        /* Functional patch: two events dispatched back to back (log
+           then error) both build their patch against live.current, which
+           only refreshes on the next render, so the second dtBase()-built
+           console array silently dropped the first entry. #106 */
+        setDt(tabId, (base) => ({
+          console: [...base.console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
+        }));
       } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
@@ -1964,7 +1957,9 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const draft = active ? (drafts[active.id] ?? active.url) : "";
+  /* Display a readable destination for Google challenge URLs without
+     changing the actual tab URL or its history entry. */
+  const draft = active ? (drafts[active.id] ?? displayAddressUrl(active.url)) : "";
   /* Query the search engine for completions of the current draft.
      Debounced 160ms; must run before the empty-tab early return so the
      hook order never changes between renders. */
@@ -2046,18 +2041,18 @@ export default function BrowserView(props: Props) {
     load(active, looksLikeUrl(q) ? normalizeUrl(q) : searchUrl(settings, q), { push: true });
   };
 
+  /* #122: the idx travels inside load(). The old separate
+     updateTab wrote the new idx and then load() overwrote it with
+     the stale snapshot idx, so Back reloaded the same entry forever
+     and Forward never moved. */
   const back = () => {
     if (active.idx > 0) {
-      const url = active.stack[active.idx - 1];
-      props.updateTab(active.id, { idx: active.idx - 1, url });
-      load(active, url, { push: false });
+      load(active, active.stack[active.idx - 1], { push: false, idx: active.idx - 1 });
     }
   };
   const forward = () => {
     if (active.idx < active.stack.length - 1) {
-      const url = active.stack[active.idx + 1];
-      props.updateTab(active.id, { idx: active.idx + 1, url });
-      load(active, url, { push: false });
+      load(active, active.stack[active.idx + 1], { push: false, idx: active.idx + 1 });
     }
   };
   /* Smooth close: the tab collapses first (.closing), the real close
@@ -2075,6 +2070,7 @@ export default function BrowserView(props: Props) {
       delete settleRef.current[id];
       lastNav.current.delete(id);
       navGen.current.delete(id);
+      escapeTimes.current.delete(id);
       navId.current.delete(id);
       blankPolls.current.delete(id);
       blankLogged.current.delete(id);
@@ -2292,10 +2288,11 @@ export default function BrowserView(props: Props) {
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
             {tbSuggOpen && (
-              <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+              <div id="lb-tb-suggest" className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
                   <button
                     key={it.url}
+                    id={"lb-tb-opt-" + i}
                     type="button"
                     role="option"
                     aria-selected={i === tbSuggIdx}
@@ -2326,10 +2323,21 @@ export default function BrowserView(props: Props) {
               </>
             )}
             {tbExpanded || !active.url ? (
+              /* #102: this URL field stays a raw input on purpose. It is
+                 the compact editor that expands in place inside the
+                 center pill (AGENTS.md: toolbar URL editing remains
+                 inside the pill); an m3e-search-bar or m3e-form-field
+                 frame would break that layout. It is labelled by
+                 aria-label. */
               <input
                 ref={urlInputRef}
                 className="lb-url-input"
                 aria-label="URL or search"
+                role="combobox"
+                aria-expanded={tbSuggOpen}
+                aria-controls={tbSuggOpen ? "lb-tb-suggest" : undefined}
+                aria-autocomplete="list"
+                aria-activedescendant={tbSuggOpen && tbSugg[tbSuggIdx] ? "lb-tb-opt-" + tbSuggIdx : undefined}
                 placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                 value={draft}
                 spellCheck={false}

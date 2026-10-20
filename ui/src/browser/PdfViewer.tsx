@@ -28,11 +28,14 @@ export default function PdfViewer(props: { blob: Blob }) {
   /* Load the document once per blob. */
   useEffect(() => {
     let dead = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
     void (async () => {
       try {
         const data = new Uint8Array(await props.blob.arrayBuffer());
-        const d = await pdfjsLib.getDocument({ data }).promise;
-        if (dead) { void d.destroy(); return; }
+        const task = pdfjsLib.getDocument({ data });
+        loadingTask = task;
+        const d = await task.promise;
+        if (dead) { void task.destroy(); return; }
         setDoc(d);
         setNumPages(d.numPages);
       } catch (err) {
@@ -46,10 +49,11 @@ export default function PdfViewer(props: { blob: Blob }) {
         }
       }
     })();
-    return () => { dead = true; };
+    return () => {
+      dead = true;
+      if (loadingTask) void loadingTask.destroy().catch(() => {});
+    };
   }, [props.blob]);
-
-  useEffect(() => () => { void doc?.destroy(); }, [doc]);
 
   /* Render the current page (canvas + selection text layer). */
   useEffect(() => {
@@ -143,14 +147,16 @@ export default function PdfViewer(props: { blob: Blob }) {
           <m3e-icon name="rotate_right" aria-hidden={true} />
         </m3e-icon-button>
         <span className="lb-fv-searchbox">
-          <input
-            className="lb-input"
-            aria-label="Search in PDF"
-            placeholder="Search in PDF"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
-          />
+          <m3e-search-bar style={{ flex: "1 1 auto", minWidth: 0 }}>
+            <input
+              slot="input"
+              aria-label="Search in PDF"
+              placeholder="Search in PDF"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
+            />
+          </m3e-search-bar>
           <m3e-icon-button aria-label="Search in PDF" onClick={() => void runSearch()}>
             <m3e-icon name="search" aria-hidden={true} />
           </m3e-icon-button>

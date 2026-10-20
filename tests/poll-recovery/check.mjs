@@ -32,8 +32,12 @@ const cases = [
   /* ScramJet engine routes sync and decode through the controller
      codec (the controller and frame id segments are dropped). */
   ["http:", "/sj/r/ctrl1/fr1/https%3A%2F%2Fexample.com%2F", "https://example.com/", "sync"],
-  /* App-shell routes and the root wait for the engine to move on. */
-  ["http:", "/", "https://example.com/", "wait"],
+  /* #112: the app root inside a proxy tab is the SPA fallback
+  rendering the app shell in the tab - recover it (the recover
+  branch re-checks .lb-shell in the frame before re-driving), never
+  wait forever. A root path with no tab URL still waits. */
+  ["http:", "/", "https://example.com/", "recover"],
+  ["http:", "/", "", "wait"],
   ["http:", "/zlsw/sw.js", "https://example.com/", "wait"],
   ["http:", "/logs", "https://example.com/", "wait"],
   ["http:", "/build", "https://example.com/", "wait"],

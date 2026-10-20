@@ -1,10 +1,11 @@
 name: Generate server lockfile
 
+# #144: manual only. The push trigger re-resolved Cargo.lock and
+# pushed the result to main while the triggering push's CI was still
+# running, racing it; Cargo.lock updates now ride the push that
+# changes Cargo.toml, and this workflow remains as the manual
+# fallback.
 on:
-  push:
-    paths:
-      - "server/**"
-      - ".github/workflows/generate-rust-lockfile.yml"
   workflow_dispatch:
 
 permissions:

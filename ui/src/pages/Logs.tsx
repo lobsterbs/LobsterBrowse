@@ -1,6 +1,8 @@
 /* Technical logs: client-side ring buffer (navigations, proxy results,
    errors) plus the server-side proxy log served from /logs. */
 
+import "@m3e/web/heading";
+
 import { useEffect, useState } from "react";
 import { clearLogs, getLogs, pushLog, type LogEntry } from "../store";
 
