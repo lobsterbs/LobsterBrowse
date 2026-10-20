@@ -1017,6 +1017,26 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 99: Zeolite dist c3a1d78 (from CI build 39460354394,
+# Zeolite main 2b8c802, all 5 jobs green, app suite 1389 tests).
+# Correction and completion of pin 98: the pin-98 ARG pinned
+# 7d855ef, which is not a commit on the Zeolite dist branch
+# (the Render build 404ed on the tarball fetch; no service ever
+# went live on it). Pin 99 carries both engine fixes: (1) the
+# pin-98 payload, script src split routes (Zeolite 1297742:
+# script src/href under the keyed codec mints a path-preserving
+# route so loaders validating their own script URL PATH pass,
+# the YouTube ytembeds "writeEmbed is not defined" class);
+# (2) prel navigation redirect (Zeolite 2b8c802: a GET
+# navigation arriving on a __zl_prel__ tail under a NAVH parent
+# answers one same-origin 302 to the visible handle form,
+# token + real path + real query, so the reloaded document owns
+# a readable location.search - the Google SERP/AI-overview sei
+# reload parked on the opaque prel pathname and re-triggered,
+# the #290 class). sw.js 63f678ad6fb2b335 -> cae2519a33479628
+# (376066 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged;
+# rewriter_wasm_bg.wasm 51a9435ac25eac23 -> 38adf0597150389a
+# (the split-route rewriter ride). Cargo-side pin stays a385fa9.
 # Pin 98: Zeolite dist 7d855ef (from CI build 39424088091,
 # Zeolite main 1297742, all 5 jobs green, app suite 1383 tests).
 # Script src split routes: script src/href attributes under the
@@ -1145,7 +1165,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=7d855efa65cf27aca14f7f7538b9eec7a48eabdd7
+ARG ZEOLITE_COMMIT=c3a1d7850184c207f8d944ecb679bc44f32dc22a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1204,7 +1224,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=81253c4706ca2dae ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cae2519a33479628 ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
