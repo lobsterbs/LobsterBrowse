@@ -1,0 +1,50 @@
+name: w32-beta-merge
+on:
+  push:
+    paths: ['.github/workflows/w32-beta-merge.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  merge-main-into-beta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beta/zeolite-nativetransit
+          fetch-depth: 0
+      - name: merge main into beta, main side wins every conflict
+        run: |
+          set -euo pipefail
+          git config user.name 'fad 6767'
+          git config user.email 'fad6767@users.noreply.github.com'
+          MAIN_SHA=81482c7f9698fa6a280a93f5a6147258ea2b4131
+          EXPECT_TREE=9859c5913fe5b0a3563ae92e7753b03aa0c15448
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$MAIN_SHA" || { echo 'main moved, aborting'; exit 1; }
+          git merge --no-commit --no-ff "$MAIN_SHA" || true
+          for f in docs/BETA-ZEOLITE-NATIVETRANSIT.md server/bin/server/src/main.rs ui/src/App.tsx ui/src/pages/Browser.tsx ui/src/pages/DevTools.tsx ui/src/pages/Home.tsx ui/src/settings.ts ui/src/store.ts ui/src/theme.css ui/src/zeolite.ts; do
+            git checkout --theirs -- "$f"
+            git add "$f"
+          done
+          git rm -q .github/workflows/w32-beta-merge.yml
+          git add -A
+          TREE=$(git write-tree)
+          echo "merge tree: $TREE (expected $EXPECT_TREE)"
+          test "$TREE" = "$EXPECT_TREE" || { echo 'tree mismatch, aborting'; exit 1; }
+          git commit -q -m "merge: port main-only fixes to beta (Eruda #150, custom WISP #151, content origin #107, hardening waves)
+
+Merge main 81482c7 into beta/zeolite-nativetransit. Every beta-side
+commit since the merge base is patch-mirrored on main, so every
+conflict takes the main side and the merge result tree is
+byte-identical to main 81482c7 (tree 9859c59 verified in-workflow).
+
+Brings the beta service: Eruda DevTools consolidation (#150), custom
+WISP server selection (#151), content-origin config surface (#107),
+server hardening + UI security (#129-#148), deferred browser UI deps,
+source-checked engine handoff broadcasts (#142), keep-Browse-mounted /
+frost-rail UI wave, history undo (#99), and the relay rate limit fix
+(#163). Pin 100 lineage (Zeolite dist 812cfd7, sw 828ad258ba730e20,
+boot watchdog) is identical on both parents."
+          git push origin HEAD:beta/zeolite-nativetransit
+          echo 'MERGE_PUSHED'
