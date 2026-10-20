@@ -747,82 +747,28 @@ FROM debian:bookworm-slim AS zl-builder
 # The relay stays the default for everything else. sw.js
 # e575b078e13e2193 -> 2c036ac7ea643f7b; bootstrap.js
 # 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23.
-# Pin 71: Zeolite dist 6ef511c. Engine-side fixes since pin 70:
-# the route MAC comparison folds all 16 bytes before deciding
-# (constant time, Zeolite #203; codec.js and worker-prelude.js
-# move with it) and the streaming rewriter compares url(/@import
-# prefixes on bytes, not str slices. sw.js
-# 2c036ac7ea643f7b -> 3c4ab45cce61c488; bootstrap.js
-# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23 (the
-# 2026-10-15 small-issue wave, Zeolite #197/#209-#213, is
-# zeolite-server only and ships with the next server-dep bump,
-# so the rev gap here is expected, not a miss).
-# Pin 72: Zeolite dist 32c942e. Engine-side fixes since pin 71:
-# the NAVH handle tail now binds to the minted origin (separator-
-# led and cross-origin tails decode to the honest null, surplus
-# leading slashes round-trip percent-escaped; Zeolite #202) and a
-# Range request on a cached rewritable entry (HTML/CSS/JS)
-# bypasses to the live path so the origin owns range semantics
-# (Zeolite #204). sw.js 3c4ab45cce61c488 -> 6085e72118592e42;
-# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
-# 63b4f23 (both fixes are SW-side, so the server-rev gap noted at
-# pin 71 persists until the next server-dep bump).
-# Pin 73: Zeolite dist eaff2a7. Engine-side fixes since pin 72:
-# navigation bodies get the same idle stall bound as subresources
-# (a document that stalls after its first body byte errors into the
-# honest failure path instead of loading forever, Zeolite #200) and
-# the stream lifecycle tears down (consumer cancel reaches the
-# upstream reader, redirect hop bodies are cancelled, pre-pump
-# rejections settle the worker heartbeat, Zeolite #201). sw.js
-# 6085e72118592e42 -> b238040b761eadf0; bootstrap.js
-# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23 (both
-# fixes are SW-side, so the server-rev gap noted at pin 71 persists
-# until the next server-dep bump).
-# Pin 74: Zeolite dist 20c5f67. Engine-side fixes since pin 73:
-# the control-plane sender gates fail closed (Zeolite #169/#170/#171/
-# #185 wave: the window relay arm requires a same-origin self-posted
-# sender, host-only control messages require a host-page sender,
-# workers get per-site storage scoping, tab message replies bind to
-# the sending extension via per-send nonces), the #132 identity-race
-# follow-up converges the mint relabel and the contentWindow getter
-# on one proxy identity (bootstrap.js grows to 25115 bytes; the
-# Zeolite CI budget is raised 25088 -> 25600 with the rationale
-# recorded in the gate), and the fingerprint consistency wave fixes
-# timezoneName-without-utcOffsetMin forcing a UTC Date patch (#223),
-# double-perturbed canvas toDataURL/toBlob reads (#224), the worker
-# transferToImageBitmap source clear (#225), and cooldown relay
-# failures carrying their traceId with retry stalls recorded (#226).
-# Cargo-side pin stays 63b4f23 (all SW-side, no server crate change).
-# Pin 75: Zeolite dist b866d45. Engine-side fixes since pin 74: the
-# SVG paint rewriter parses the leading url() token (honoring quotes)
-# so external references with a fallback tail (filter:
-# url(f.svg#g) blur(2px), fill/mask fallback chains) are routed and
-# the tail kept verbatim (#227, rewriter_wasm_bg.wasm rebuilt);
-# b64decode rejects a stripped length of 4k+1 instead of silently
-# dropping the trailing 6-bit group (#228); the worker mint memo is
-# capped at 256 with LRU-by-recency eviction so long-lived workers
-# cannot grow it without bound (#229). sw.js 3a33c20f49502192 ->
-# cd12f976230ddba9; bootstrap.js cf8b76ad53488959 unchanged;
-# Cargo-side pin stays 63b4f23 (no server crate change).
-# Pin 76: Zeolite dist 7cdf6fc. Engine-side fixes since pin 75:
-# mid-body transport errors surface as stream errors instead of a
-# clean EOF (#180); redirect hop requests re-enter the full gate
-# chain and engine-injected headers stay scoped to same-origin
-# hops (#186, #194); cookie __Host-/__Secure- prefixes and Secure
-# cookies set from http are rejected per RFC 6265bis (#191);
-# download eviction releases buffered bytes and the global partial
-# buffer is capped with honest resume errors (#192); NAVH handle
-# pages recover their virtual origin (#193); page cache gains
-# session/auth scope, credentials handling and redirect-final URL
-# keys (#179, #184, #195); DevTools rows are keyboard-accessible
-# with column sort (#220); css url() fragments survive engine-
-# route unwrap (#199). sw.js cd12f976230ddba9 -> 88e39dd016c4ad30;
-# bootstrap.js cf8b76ad53488959 unchanged. Cargo-side pin moves
-# 63b4f23 -> b0296f8: the deferred zeolite-server wave ships
-# (session liveness, one stalled upstream no longer freezing the
-# session, connection budgets + handshake timeout + per-IP cap,
-# client-to-server byte budget, password auth rate limit + PBKDF2
-# KDF; Zeolite #181, #182, #183, #189, #196, #198).
+# Pin 76 (main release bump; pins 71-75 were beta-only and
+# their fixes ride this bundle): Zeolite dist 7cdf6fc.
+# Engine-side fixes since pin 70: control-plane sender gates
+# fail closed, worker/blob storage scoping, tab reply binding
+# (#169, #170, #171, #185); page cache session/auth scope,
+# credentials handling, redirect-final URL keys and a body
+# size cap (#179, #184, #195); mid-body transport errors
+# surface as stream errors, not a clean EOF (#180); redirect
+# hops re-enter the full gate chain and injected headers stay
+# same-origin (#186, #194); NAVH pages recover their virtual
+# origin (#193); cookie __Host-/__Secure- prefixes (#191);
+# download partial-buffer cap with honest resume errors
+# (#192); css url() fragments survive engine-route unwrap
+# (#199); DevTools keyboard access (#220); fingerprint tz/
+# canvas consistency (#223-#226); svg paint tail, b64decode
+# len%4 rejection, bounded mint memo (#227-#229); plus the
+# wave 18-20 fixes beta rode at pins 71-73 (#200-#204,
+# #205-#208). sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30;
+# bootstrap.js 423b16b806b7f4cc -> cf8b76ad53488959.
+# Cargo-side pin moves 63b4f23 -> b0296f8: ships the
+# zeolite-server hardening wave (#181, #182, #183, #189,
+# #196, #198) and the deferred server wave (#197, #209-#213).
 # Pin 77: Zeolite dist db17179. Engine-side fix since pin 76: the
 # route search replaces a token-encoded destination query instead of
 # concatenating onto it (a query-only relative navigation "?x" has
@@ -957,6 +903,140 @@ FROM debian:bookworm-slim AS zl-builder
 # c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
+# Pin 85: Zeolite dist 65bdf61. One engine wave since pin 84, the
+# 2026-10-18 small-issue wave (Zeolite 7fca90e on top of the #290
+# deref fix, CI run 39117282705 all green, suite 1249):
+# #291 mapRefreshHeader ends a quoted url= at its closing quote and
+# an unquoted one at the next semicolon, #292 downloadFilename
+# decodes RFC 6266 filename* ext-values with a plain-filename
+# fallback, #293 the WS shims count pre-handshake queued sends in
+# bufferedAmount (page + worker realms), #294 the page-realm mint
+# memo is capped at 256 entries with LRU re-insert and eviction,
+# #295 rewrite rules bind to the from-host boundary. sw.js
+# 42dda133cb8d9a70 -> d29b017afeef63eb (360334 bytes);
+# bootstrap.js eced033e919dfb38 -> e890e6083be75719. Cargo-side
+# pin stays b0296f8 (SW-only fixes).
+# Pin 86: Zeolite dist bee555f. One engine wave since pin 85, the
+# 2026-10-18 fix-wave completion (Zeolite a43aeb10 on top of the
+# agent commits 514471f8, 79b3377a, 4aeb5e3e and the d8126d64
+# tabs.ts splice repair, CI run 39124338300 all 5 jobs green,
+# suite 1273): #270 32-bit fnv1a site hash with jar origin
+# migration, #289 durable-jar-only origins records, #262/#263/
+# #264 honest IndexedDB/cmp/caches.match shims, #265 siteconfig
+# key normalization, #272 webRequest listener detail copies,
+# #282 live webRequest permission views, #271 tabs.onUpdated
+# changeInfo gating (an empty gated changeInfo is not delivered),
+# #278 host-visible filtered tab queries, #283 tab op deadlines
+# with closed-tab rejection, #286 query title globs, #281
+# cookies.onChanged scoping with revoke-on-delivery, #285
+# content-script asset validation, #276 credentials-gated
+# cookie jar, #288 permission-correct webRequest URLs. sw.js
+# d29b017afeef63eb -> 3a6e775447488fe4 (362658 bytes);
+# bootstrap.js e890e6083be75719 -> 1e55ec0f04f848b9 (27962
+# bytes). Cargo-side pin stays b0296f8 (SW-only fixes; the
+# rewriter crate is not a server dep).
+# Pin 87: Zeolite dist 13d9b85. One engine wave since pin 86:
+# #297 (extensions appeared installed but never ran in the
+# host-embedded browsing pane): every proxied document arrives
+# with sec-fetch-dest iframe and csInjectUrls treated any
+# iframe/object destination as a genuine subframe, so
+# resolveContentScripts dropped every non-all_frames content
+# script - and with content scripts dead, MV3 backgrounds
+# never boot on demand, so extension service workers never
+# initialized. A frame whose parent referrer is a host page
+# (neither a NAVH nor an engine route) is now the pane main
+# surface for content-script matching; genuine subframes of
+# proxied documents keep subframe semantics; absent, about:,
+# or unparseable parents fail closed (Zeolite 9d33b44 on
+# 1ae6cdc, CI run 39129225053 all 5 jobs green, suite 1278
+# incl. 5 new cs-inject tests). sw.js 3a6e775447488fe4 ->
+# 8ef1ef7239120397 (362825 bytes); bootstrap.js
+# 1e55ec0f04f848b9 unchanged. Cargo-side pin stays b0296f8
+# (SW-only fix).
+# Pin 88: Zeolite dist 7e29d525. Two engine waves since pin 87.
+# #250 the control-plane messageListener (control.ts/sw.ts) keeps
+# the message event alive for the whole handler (waitUntil) and a
+# failed dispatch answers a structured {ok:false,error:"control
+# handler failed"} reply with a RUNTIME diag instead of an unhandled
+# rejection; #252 engine init() resolves only on ack.ok===true,
+# setSiteRoute persists only after the worker acks, post() settles
+# exactly once (settled flag, timeout cleared, port closed);
+# #253 docCookiePorts are capped at 16 per client with shift+close
+# eviction (Zeolite ce9eb6b, CI runs 39132519199 + 39133625103 all
+# 5 jobs green, suite 1288 incl. +10 tests).
+# #266 the storage-event isolation filter recognizes object-style
+# listeners ({handleEvent}) too, keyed by the raw listener so
+# removeEventListener finds both shapes; #261 the cooldown relay
+# branch carries its own first-byte deadline: an embedder that never
+# answers aborts with zl:relayCancel (WispStallError) instead of
+# hanging, and caller aborts stay honest AbortErrors (Zeolite
+# 1a70811, suite 1291 incl. +3 tests). sw.js 8ef1ef7239120397 ->
+# 49896d2b07867e9f (363469 bytes); bootstrap.js 1e55ec0f04f848b9 ->
+# d00b5e4270b011f1 (28080 bytes). Cargo-side pin stays b0296f8
+# (SW-only fixes).
+# Pin 89: Zeolite dist 9eee560. One engine wave since pin 88, the
+# bootstrap compat wave (Zeolite a3406c0 on main 6cd18b6, CI run
+# 39137417144 all 5 jobs green, suite 1297 incl. 6 new tests):
+# #268 the vorigin relabel/remove pass recognizes object-style
+# (EventListener {handleEvent}) listeners, not just functions;
+# #269 ScopedChannel subclasses the real BroadcastChannel
+# constructor with its own name getter; #273 the scoped storage
+# store is a Proxy over the backing store (named-property
+# forwarding, key(i) strips the site prefix); #274 EventSource
+# registrations dedupe with native-bound removeEventListener,
+# once-drop and AbortSignal support; #275 ZlWorker/ZlSharedWorker
+# constructors enforce new-only semantics; #284 relay listeners
+# filter object-style listeners through a wrapper registry so
+# removeEventListener finds the real listener shape.
+# bootstrap.js d00b5e4270b011f1 -> 8c7520cbfad8035d (29383 of
+# the 29696 budget, raised 28672 -> 29696 in the Zeolite CI gate);
+# sw.js unchanged 49896d2b07867e9f (bootstrap-only wave, so the
+# /build zlswSha cannot distinguish this bump - verify the served
+# /zlsw/bootstrap.js hash instead). Cargo-side pin stays b0296f8
+# (bootstrap-only change).
+# Pin 90: Zeolite dist 3826f41. Two engine waves since pin 89, the
+# 2026-10-18 bug-hunt fix wave.
+# #314 (range serving OOM): a single Range request against a cached
+# entry buffered the whole body with arrayBuffer() before deciding
+# the range lay outside it, so a byte-range probe on a huge cached
+# document could balloon the worker. The range path now prechecks
+# the cached content-length against ZL_RANGE_MAX and refuses the
+# range before buffering (Zeolite 54053ce, CI run 39139691546 all
+# 5 jobs green, suite 1300 incl. 3 new range tests). sw.js
+# 49896d2b07867e9f -> e20a18398c4d25a8 (363561 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d.
+# #322 (blocked-element swallow unbounded): drop_raw swallowed raw
+# text until the close tag, so a blocked script with no close tag
+# buffered the rest of the document without bound. The swallow
+# buffer is capped at 256 KiB and keeps only the longest suffix
+# that is a prefix of the close marker, so no close tag can be
+# missed (Zeolite 0213393, CI run 39141278968, cargo suite incl. 2
+# new bounded-drop_raw tests). Rust-only: sw.js and bootstrap.js
+# unchanged (e20a18398c4d25a8 / 8c7520cbfad8035d); the ride is in
+# rewriter_wasm_bg.wasm (7908d03c7920f8a7), so the alarm pins
+# cannot distinguish this bump - verify the served
+# /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
+# b0296f8 (the rewriter crate is not a server dep).
+# Pin 99: Zeolite dist c3a1d78 (from CI build 39460354394,
+# Zeolite main 2b8c802, all 5 jobs green, app suite 1389 tests).
+# Correction and completion of pin 98: the pin-98 ARG pinned
+# 7d855ef, which is not a commit on the Zeolite dist branch
+# (the Render build 404ed on the tarball fetch; no service ever
+# went live on it). Pin 99 carries both engine fixes: (1) the
+# pin-98 payload, script src split routes (Zeolite 1297742:
+# script src/href under the keyed codec mints a path-preserving
+# route so loaders validating their own script URL PATH pass,
+# the YouTube ytembeds "writeEmbed is not defined" class);
+# (2) prel navigation redirect (Zeolite 2b8c802: a GET
+# navigation arriving on a __zl_prel__ tail under a NAVH parent
+# answers one same-origin 302 to the visible handle form,
+# token + real path + real query, so the reloaded document owns
+# a readable location.search - the Google SERP/AI-overview sei
+# reload parked on the opaque prel pathname and re-triggered,
+# the #290 class). sw.js 63f678ad6fb2b335 -> cae2519a33479628
+# (376066 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged;
+# rewriter_wasm_bg.wasm 51a9435ac25eac23 -> 38adf0597150389a
+# (the split-route rewriter ride). Cargo-side pin stays a385fa9.
 # Pin 98: Zeolite dist 7d855ef (from CI build 39424088091,
 # Zeolite main 1297742, all 5 jobs green, app suite 1383 tests).
 # Script src split routes: script src/href attributes under the
@@ -987,23 +1067,52 @@ FROM debian:bookworm-slim AS zl-builder
 # sync XHR Chrome never routes through the SW).
 # Pin 96: Zeolite dist 81b3474 (from CI build 39392562420,
 # Zeolite main b2c21c3, all 5 jobs green, app suite 1377
-# tests). Beta jumps from pin 93, so this bump also rides
-# every main-branch engine wave from pins 94 and 95 (see
-# the main-branch pin comments for the per-wave breakdown).
-# The 2026-10-20 scout wave: rewriter-side #368 comment-aware
-# frame-buster folding, #369 non-executable script bodies,
-# #370 chained cross-frame sinks (riding rewriter_wasm_bg.wasm;
-# verify the served wasm hash for those three), and the
-# bootstrap/SW series #364 ws:// shim SyntaxError, #371 srcdoc
-# script bodies, #372 window.open noopener mint, #373
-# backslash-form URLs, #374 EventSource stringify, #375
-# postMessage transfer list, #376 cache refresh redirect hop
-# gates, #377 page-cache clear on fingerprint/UA change
-# (bootstrap budget 30400). sw.js 7db69875af0b35a8 ->
+# tests). The 2026-10-20 scout wave: rewriter-side #368
+# comment-aware frame-buster folding, #369 non-executable
+# script bodies pass through, #370 chained cross-frame
+# sinks (riding rewriter_wasm_bg.wasm; verify the served
+# wasm hash for those three), and the bootstrap/SW series
+# #364 ws:// shim SyntaxError, #371 srcdoc script bodies,
+# #372 window.open noopener mint, #373 backslash-form
+# URLs, #374 EventSource stringify, #375 postMessage
+# transfer list, #376 cache refresh redirect hop gates,
+# #377 page-cache clear on fingerprint/UA change
+# (bootstrap budget 30400). sw.js 6975a139819b198b ->
 # 5a88a06a57303672 (372972 bytes); bootstrap.js
-# 790c52c7c4beb41c -> 9d1cb1fba82b9ba8 (30349 bytes).
+# eb91c2a989aa89f0 -> 9d1cb1fba82b9ba8 (30349 bytes).
 # Cargo-side pin stays a385fa9 (the wave does not touch
 # zeolite-server).
+# Pin 95: Zeolite dist de70643 (from CI build 39377475538,
+# Zeolite main 7e95110, all 5 jobs green, app suite 1359
+# tests). One engine-side change since pin 94, SW-side: the
+# #256 build-time static plugin registry (7e95110: the
+# registry generates plugins-static.mjs at build time so the
+# service worker resolves plugin modules from a static
+# origin-local map instead of dynamic import; inert until a
+# plugin is requested; e2e plugin suite 5/5 on the local
+# toolchain). sw.js 9b924b1e1e5a4d42 -> 6975a139819b198b
+# (372152 bytes); bootstrap.js unchanged eb91c2a989aa89f0
+# (29649 bytes). Cargo-side pin stays a385fa9 (no
+# zeolite-server changes since pin 92).
+# Pin 94: Zeolite dist ac68e9c (from CI build 39316637933,
+# Zeolite main 525e4de, all 5 jobs green, app suite 1354+
+# tests). Four engine-side changes since pin 93, all SW-side
+# or rewriter-side: the #331 rewriter location renames for
+# computed member reads and optional chains (Zeolite 76354a1;
+# the ride is in rewriter_wasm_bg.wasm), the #290 keyed-route
+# diagnostics fix (21bca01: request.ts diag entries name the
+# requesting page and url), the #359 bound script recovery
+# with honest unavailable-plugin reporting (PR #360,
+# ded2ef2; partial for #256, the static plugin loader stays
+# open), and the #361 client-lineage cookie jar binding
+# (PR #362, 525e4de: jar profiles key on the host-window
+# lineage so incognito and normal windows stop clobbering
+# each other's profiles - the Zeolite half of LB #109; the
+# LB two-window regression still needs a live deploy).
+# sw.js 7db69875af0b35a8 -> 9b924b1e1e5a4d42 (371639
+# bytes); bootstrap.js 790c52c7c4beb41c -> eb91c2a989aa89f0
+# (29649 bytes). Cargo-side pin stays a385fa9 (no
+# zeolite-server changes since pin 92).
 # Pin 93: Zeolite dist 6727cba (from CI build 39166714671,
 # Zeolite main a6d37ed, all 5 jobs green, suite 1318 incl. 5 new
 # tests). Three engine-side changes since pin 92: the Vary
@@ -1023,23 +1132,40 @@ FROM debian:bookworm-slim AS zl-builder
 # 7db69875af0b35a8 (366753 bytes); bootstrap.js
 # 8c7520cbfad8035d -> 790c52c7c4beb41c (29462 bytes).
 # Cargo-side pin stays a385fa9 (all fixes SW-side).
-# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Beta
-# jumps from pin 84 (d5a2a66), so this bump rides every engine
-# wave from pins 85 through 91 (see main-branch pin comments for
-# the per-wave breakdown; latest: the rewriter wave Zeolite
-# e4f997f #345/#342/#339 with rewriter_wasm_bg.wasm
-# 7908d03c7920f8a7 -> fc58b70eee7ab936b - the alarm pins cannot
-# distinguish it, verify the served wasm hash instead) plus the
-# app fix #296 flag-surgery script URL recovery (Zeolite a385fa9
-# on main, CI run 39162909529 all 5 jobs green, suite 1313 incl.
-# 4 new tests; fixes the Google /sorry/httpd=1/... script 404
-# class that broke search results and the AI overview). sw.js
-# 42dda133cb8d9a70 -> 248fc6aea789e2f2 (366108 bytes);
-# bootstrap.js eced033e919dfb38 -> 8c7520cbfad8035d. Cargo-side
-# pin b0296f8 -> a385fa9 (first beta server-dep bump since pin
-# 76; ships the deferred server waves a515b17
-# #343/#350/#351/#352/#340 with the regenerated server/Cargo.lock).
-ARG ZEOLITE_COMMIT=7d855efa65cf27aca14f7f7538b9eec7a48eabdd7
+# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Two
+# waves plus a fix since pin 91: the 2026-10-18 rewriter wave
+# (Zeolite e4f997f on main: #345/#342/#339; the ride is in
+# rewriter_wasm_bg.wasm 7908d03c7920f8a7 -> fc58b70eee7ab936b,
+# so the alarm pins cannot distinguish it - verify the served
+# wasm hash instead), the 2026-10-18 server wave (Zeolite
+# a515b17 on main: #343/#350/#351/#352/#340; server-side only,
+# not in the dist bundle - it ships via the Cargo-side rev bump
+# below), and the app fix #296 flag-surgery script URL recovery
+# (Zeolite a385fa9 on main, CI run 39162909529 all 5 jobs green,
+# suite 1313 incl. 4 new tests; fixes the Google
+# /sorry/httpd=1/... script 404 class that broke search results
+# and the AI overview). sw.js 54e173c073e5de4b ->
+# 248fc6aea789e2f2 (366108 bytes); bootstrap.js unchanged
+# 8c7520cbfad8035d. Cargo-side pin b0296f8 -> a385fa9 (first
+# server-dep bump since pin 76; ships the 2026-10-18 server wave
+# a515b17 with the regenerated server/Cargo.lock).
+# Pin 91: Zeolite dist 9927bd7. One engine wave since pin 90, the
+# 2026-10-18 app security wave (Zeolite 60b9404a on main, CI run
+# 39142882453 all 5 jobs green, suite 1309 incl. 9 new tests):
+# #337 document.cookie cannot overwrite or delete an HttpOnly
+# cookie, #338 the x-zl-cached-at / x-zl-final-url internal view
+# headers are stripped from served cache copies, #341 an If-Range
+# validator mismatch serves the full body instead of a range
+# slice, #344 WEBNAV.domContentLoaded fires from the
+# sender-derived dest, #349 cookie names and values reject
+# control characters at jar admission, #336 the compat doc
+# discloses the zl:ext one-world limit (the page-visible bridge
+# cfg URL makes per-token scoping impossible). sw.js
+# e20a18398c4d25a8 -> 54e173c073e5de4b (364388 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
+# 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
+# fixes).
+ARG ZEOLITE_COMMIT=c3a1d7850184c207f8d944ecb679bc44f32dc22a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1094,10 +1220,26 @@ COPY --from=builder /build/target/release/lobster-server /app/lobster-server
 COPY --from=ui-builder /ui/dist /app/ui
 COPY --from=zl-builder /bundle /app/zlsw
 COPY --from=sj-builder /sj /app/sj
-EXPOSE 6001
 # Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=81253c4706ca2dae ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cae2519a33479628 ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
+# #129/#143: verify the SERVED artifacts against the pins at build
+# time: a mismatch (poisoned or stale cached tarball) fails the
+# Docker build itself instead of shipping silently. Stronger than
+# hashing the tarball: this proves what /zlsw/ actually serves.
+RUN set -e; \
+    sw_sha=$(sha256sum /app/zlsw/sw.js | cut -c1-16); \
+    boot_sha=$(sha256sum /app/zlsw/bootstrap.js | cut -c1-16); \
+    if [ "$sw_sha" != "$ZEOLITE_SW_SHA" ] || [ "$boot_sha" != "$ZEOLITE_BOOTSTRAP_SHA" ]; then \
+      echo "FATAL: zlsw bundle sha mismatch (sw $sw_sha, bootstrap $boot_sha)" >&2; \
+      exit 1; \
+    fi
+EXPOSE 6001
+# #132: drop root - the server needs no privilege to read /app.
+RUN useradd --system --uid 10001 --no-create-home appuser \
+ && chown -R appuser:appuser /app
+USER appuser
 ENTRYPOINT ["/app/lobster-server"]
+
