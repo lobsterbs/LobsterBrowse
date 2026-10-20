@@ -822,7 +822,7 @@ announces the backend (/build sjWisp, the standalone ScramJet
 wisp service on beta; empty on main) to the worker with
 zl:wispRegister and re-announces on controller change. No
 endpoint or a failed wisp fetch falls back to the default route
-(relay). Main stays relay-only honestly: sjWisp is unset there.
+(relay). Main stayed relay-only until the 2026-10-20 Render account migration; both deployments now set SCRAMJET_WISP_URL to the standalone wisp backend.
 Pin 70: Zeolite dist ced0c3f, sw.js e575b078e13e2193 ->
 2c036ac7ea643f7b, bootstrap.js unchanged. LB wiring: zlWispInit
 in ui/src/zeolite.ts plus the /build fetch in Browser.tsx
