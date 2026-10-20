@@ -112,6 +112,10 @@ export type SiteRule = {
   adblock?: boolean;
 };
 
+/* #151: a custom WISP transit endpoint. The LobsterBrowse server
+   (empty id) is not in this list: it is the always-present default. */
+export type WispServer = { id: string; name: string; url: string };
+
 export type Settings = {
   seed: string;
   engine: EngineId;
@@ -143,6 +147,12 @@ export type Settings = {
      epoxy (rustls+hyper, different TLS fingerprint). Applied on the
      next engine init; no mid-session swap. */
   transport: "libcurl" | "epoxy";
+  /* #151: custom WISP transit endpoints. wispServerId "" is the
+     LobsterBrowse server (the /build-announced deployment endpoint);
+     any other id must match a wispServers entry. Entries are wss://
+     only, except ws://localhost for local development. */
+  wispServers: WispServer[];
+  wispServerId: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -177,6 +187,8 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsUpgrade: true,
   imageLazy: true,
   transport: "libcurl",
+  wispServers: [],
+  wispServerId: "",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -199,6 +211,21 @@ export function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      /* #151: stored server lists are re-validated on load: only
+         structurally sane wss:// entries (ws://localhost for dev)
+         survive a hand-edited or corrupted store. */
+      wispServers: Array.isArray(parsed.wispServers)
+        ? parsed.wispServers.filter(
+            (s): s is WispServer =>
+              !!s &&
+              typeof s === "object" &&
+              typeof s.id === "string" &&
+              typeof s.name === "string" &&
+              typeof s.url === "string" &&
+              (s.url.startsWith("wss://") || s.url.startsWith("ws://localhost")),
+          )
+        : [],
+      wispServerId: typeof parsed.wispServerId === "string" ? parsed.wispServerId : "",
       /* #149: hasOwnProperty guards the record lookup - a stored
          "constructor" or "toString" hits Object.prototype and passed the
          old truthiness check, then searchUrl crashed on the

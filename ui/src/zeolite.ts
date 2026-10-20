@@ -286,3 +286,42 @@ export function zlWispInit(url: string): void {
     sw.postMessage({ type: "zl:wispRegister", url });
   });
 }
+
+/* #107: the provisioned content origin for proxied documents
+   (ZL_CONTENT_ORIGIN on the server, announced by /build). Empty
+   until the operator provisions a second hostname for this service;
+   the UI keeps its same-origin frame design until then, and the
+   frame message handler accepts only this origin in addition to
+   the app origin. */
+let contentOrigin = "";
+
+export function zlSetContentOrigin(o: string): void {
+  contentOrigin = o;
+}
+
+export function zlContentOrigin(): string {
+  return contentOrigin;
+}
+
+/* Register the engine service worker on the content origin by
+   embedding its /zlsw-register page in a hidden iframe (a page can
+   only register workers for its own origin). The register page also
+   opens the relay channel and announces the wisp endpoint for that
+   origin's own worker instance, then posts one origin-validated
+   ack; the iframe is removed on receipt. Idempotent. */
+export function zlContentRegister(co: string): void {
+  if (document.querySelector("iframe[data-lb-zlreg]")) return;
+  const f = document.createElement("iframe");
+  f.setAttribute("data-lb-zlreg", "1");
+  f.style.display = "none";
+  const onMsg = (ev: MessageEvent) => {
+    if (ev.origin !== co) return;
+    const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
+    if (!d || d.zlReg !== true) return;
+    window.removeEventListener("message", onMsg);
+    f.remove();
+  };
+  window.addEventListener("message", onMsg);
+  f.src = co + "/zlsw-register";
+  document.body.appendChild(f);
+}
