@@ -9,6 +9,43 @@
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    /* Boot watchdog (grey-screen class): a transient boot failure - a UI
+       asset request that wedged on the SW fetch path, a bundle script that
+       never executed - leaves the tab on an empty grey root with no error
+       surface, because React never mounts (the RootBoundary fallback only
+       covers render throws AFTER mount). If the root is still empty 12s
+       in, reload once; the sessionStorage guard stops a persistent failure
+       from looping, and a successful boot clears it so a later incident
+       can self-heal the same way. */
+    (function () {
+      var KEY = "lb-boot-reload";
+      try {
+        if (sessionStorage.getItem(KEY)) return;
+      } catch (e) {
+        return;
+      }
+      var checks = 0;
+      var timer = setInterval(function () {
+        checks++;
+        var root = document.getElementById("root");
+        if (root && root.childElementCount > 0) {
+          clearInterval(timer);
+          try {
+            sessionStorage.removeItem(KEY);
+          } catch (e) {}
+          return;
+        }
+        if (checks >= 3) {
+          clearInterval(timer);
+          try {
+            sessionStorage.setItem(KEY, "1");
+          } catch (e) {}
+          location.reload();
+        }
+      }, 4000);
+    })();
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
