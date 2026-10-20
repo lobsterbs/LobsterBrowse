@@ -1,5 +1,22 @@
 # Deploying LobsterBrowse
 
+## Render services (workspace migrated 2026-10-20)
+
+The previous workspace and its onrender.com domains are gone (suspended
+account). Current free-tier services, region frankfurt, autoDeploy off:
+
+- lobsterbrowse (main branch): https://lobsterbrowse-plud.onrender.com
+- lobsterbrowse-beta (beta/zeolite-nativetransit):
+  https://lobsterbrowse-beta-gq13.onrender.com
+- lobsterbeta-scramjet-wisp (Dockerfile.wisp, the wisp-js backend):
+  https://lobsterbeta-scramjet-wisp-90su.onrender.com — set
+  SCRAMJET_WISP_URL=wss://lobsterbeta-scramjet-wisp-90su.onrender.com/
+  on the app services (surfaced by /build as sjWisp).
+- lobsterbrowse-fixture (node, "node tests/transit/fixture.mjs",
+  PORT=10000, FIXTURE_HOST=0.0.0.0):
+  https://lobsterbrowse-fixture-oy53.onrender.com — the FIXTURE_ORIGIN
+  of the transit-live CI job.
+
 ## Server (Render web service, Docker)
 
 - Runtime: Docker, Dockerfile at repo root (builds the Rust workspace).

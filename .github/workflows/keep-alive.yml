@@ -15,10 +15,10 @@ jobs:
       - name: Ping free-tier services
         run: |
           for url in \
-            https://lobsterbeta-scramjet-wisp.onrender.com/ \
-            https://lobsterbrowse.onrender.com/healthz \
-            https://lobsterbrowse-beta-dr2h.onrender.com/healthz \
-            https://lobsterbrowse-fixture-qzhp.onrender.com/ ; do
+            https://lobsterbeta-scramjet-wisp-90su.onrender.com/ \
+            https://lobsterbrowse-plud.onrender.com/healthz \
+            https://lobsterbrowse-beta-gq13.onrender.com/healthz \
+            https://lobsterbrowse-fixture-oy53.onrender.com/ ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::warning::keep-alive ping failed: $url"
             fi
