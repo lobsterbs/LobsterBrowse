@@ -76,7 +76,7 @@ const WORKERS_HTML = [
   "  setTimeout(function () { try { ws.send(\"wsprobe\"); } catch (e) {} }, 600);",
   "} catch (e) { set(\"wsrel\", \"throw: \" + String(e)); }",
   "try {",
-  "  var ws2 = new WebSocket(\"wss://lobsterbrowse-fixture-qzhp.onrender.com/ws\");",
+  "  var ws2 = new WebSocket(\"wss://lobsterbrowse-fixture-oy53.onrender.com/ws\");",
   "  ws2.onopen = function () { set(\"wsabs\", \"open (direct)\"); };",
   "  ws2.onmessage = function (e) { set(\"wsabs\", \"echo: \" + e.data); };",
   "  ws2.onerror = function () { set(\"wsabs\", \"error\"); };",
