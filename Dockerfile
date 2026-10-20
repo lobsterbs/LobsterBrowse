@@ -957,6 +957,25 @@ FROM debian:bookworm-slim AS zl-builder
 # c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
 # bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
 # stays b0296f8 (SW-only fixes).
+# Pin 96: Zeolite dist 81b3474 (from CI build 39392562420,
+# Zeolite main b2c21c3, all 5 jobs green, app suite 1377
+# tests). Beta jumps from pin 93, so this bump also rides
+# every main-branch engine wave from pins 94 and 95 (see
+# the main-branch pin comments for the per-wave breakdown).
+# The 2026-10-20 scout wave: rewriter-side #368 comment-aware
+# frame-buster folding, #369 non-executable script bodies,
+# #370 chained cross-frame sinks (riding rewriter_wasm_bg.wasm;
+# verify the served wasm hash for those three), and the
+# bootstrap/SW series #364 ws:// shim SyntaxError, #371 srcdoc
+# script bodies, #372 window.open noopener mint, #373
+# backslash-form URLs, #374 EventSource stringify, #375
+# postMessage transfer list, #376 cache refresh redirect hop
+# gates, #377 page-cache clear on fingerprint/UA change
+# (bootstrap budget 30400). sw.js 7db69875af0b35a8 ->
+# 5a88a06a57303672 (372972 bytes); bootstrap.js
+# 790c52c7c4beb41c -> 9d1cb1fba82b9ba8 (30349 bytes).
+# Cargo-side pin stays a385fa9 (the wave does not touch
+# zeolite-server).
 # Pin 93: Zeolite dist 6727cba (from CI build 39166714671,
 # Zeolite main a6d37ed, all 5 jobs green, suite 1318 incl. 5 new
 # tests). Three engine-side changes since pin 92: the Vary
@@ -992,7 +1011,7 @@ FROM debian:bookworm-slim AS zl-builder
 # pin b0296f8 -> a385fa9 (first beta server-dep bump since pin
 # 76; ships the deferred server waves a515b17
 # #343/#350/#351/#352/#340 with the regenerated server/Cargo.lock).
-ARG ZEOLITE_COMMIT=6727cba403c9e4b66ca4502e830ccf4c861e156c
+ARG ZEOLITE_COMMIT=81b34740277950af9b6d07085461953da091ae32
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1052,5 +1071,5 @@ EXPOSE 6001
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7db69875af0b35a8 ZEOLITE_BOOTSTRAP_SHA=790c52c7c4beb41c SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5a88a06a57303672 ZEOLITE_BOOTSTRAP_SHA=9d1cb1fba82b9ba8 SCRAMJET_VERSION=2.0.67-alpha.2
 ENTRYPOINT ["/app/lobster-server"]
