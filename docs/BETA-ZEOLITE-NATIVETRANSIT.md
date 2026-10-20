@@ -827,92 +827,14 @@ Pin 70: Zeolite dist ced0c3f, sw.js e575b078e13e2193 ->
 2c036ac7ea643f7b, bootstrap.js unchanged. LB wiring: zlWispInit
 in ui/src/zeolite.ts plus the /build fetch in Browser.tsx
 (e944c7a main / 0fc91d1 beta).
-
-Pin 70 deploy verified live 2026-10-15T16:02:43Z (wisp route Zeolite #168: Brave search results render through the beta engine, PoW passes; this push re-runs transit-live CI against the live pin-70 pair)
-
-Pin 71: Zeolite dist 6ef511c, sw.js 2c036ac7ea643f7b ->
-3c4ab45cce61c488, bootstrap.js unchanged. Engine changes since
-pin 70: the route MAC comparison folds all 16 bytes before
-deciding (constant time, Zeolite #203; codec.js and
-worker-prelude.js move with it) and the streaming rewriter
-compares url( and @import prefixes on bytes, not str slices.
-Cargo-side pin stays 63b4f23: the 2026-10-15 small-issue wave
-(Zeolite #197, #209-#213) is zeolite-server only, not in the
-dist bundle, so it lands with the next server-dep bump.
-Pin 71 deploy verified live 2026-10-15T19:45:49Z (build aa5e725, zlswSha 3c4ab45cce61c488; this push re-runs transit-live CI against the live pin-71 pair)
-
-
-Pin 72: Zeolite dist 32c942e, sw.js 3c4ab45cce61c488 ->
-6085e72118592e42, bootstrap.js unchanged. Engine changes since
-pin 71: the NAVH handle tail binds to the minted origin
-(separator-led and cross-origin tails decode to the honest null,
-surplus leading slashes round-trip percent-escaped, Zeolite
-#202) and a Range request on a cached rewritable entry (HTML/
-CSS/JS) bypasses to the live path so the origin owns range
-semantics (Zeolite #204). Cargo-side pin stays 63b4f23: both
-fixes are SW-side, not in the server crate.
-
-
-Pin 72 deploy verified live 2026-10-15T20:18:29Z (build b8905d9, zlswSha 6085e72118592e42; this push re-runs transit-live CI against the live pin-72 pair)
-
-Pin 73: Zeolite dist eaff2a7, sw.js 6085e72118592e42 ->
-b238040b761eadf0, bootstrap.js unchanged. Engine changes since
-pin 72: navigation bodies carry the idle stall bound (a document
-that stalls after its first body byte errors into the honest
-failure path instead of loading forever, Zeolite #200) and the
-stream lifecycle tears down (consumer cancel reaches the upstream
-reader, redirect hop bodies are cancelled before the next hop,
-pre-pump rejections settle the heartbeat, Zeolite #201).
-Cargo-side pin stays 63b4f23: both fixes are SW-side, not in the
-server crate.
-
-Pin 73 deploy verified live 2026-10-15T20:56:51Z (build 67a8a7d, zlswSha b238040b761eadf0; this push re-runs transit-live CI against the live pin-73 pair)
-
-
-Pin 74: Zeolite dist 20c5f67, sw.js b238040b761eadf0 ->
-3a33c20f49502192, bootstrap.js 423b16b806b7f4cc ->
-cf8b76ad53488959. Engine changes since pin 73: the control-plane
-sender gates fail closed (the window relay arm requires a
-same-origin self-posted sender, host-only control messages require
-a host-page sender, workers get per-site storage scoping, tab
-message replies bind to the sending extension via per-send nonces,
-Zeolite #169/#170/#171/#185), the #132 identity-race follow-up
-converges the mint relabel and the contentWindow getter on one
-proxy identity (bootstrap 25115 bytes; the Zeolite CI budget is
-raised 25088 -> 25600, rationale recorded in the gate), and the
-fingerprint consistency wave (timezoneName without utcOffsetMin no
-longer forces a UTC Date patch, canvas copy paths read pristine
-pixels, worker transferToImageBitmap clears the source, cooldown
-relay failures carry their traceId and retry stalls are recorded,
-Zeolite #223/#224/#225/#226). Cargo-side pin stays 63b4f23: all
-changes are SW-side, not in the server crate.
-
-
-Pin 75: Zeolite dist b866d45, sw.js 3a33c20f49502192 ->
-cd12f976230ddba9, bootstrap.js unchanged. Engine changes since
-pin 74: the SVG paint rewriter parses the leading url() token so
-external references with a fallback tail (filter: url(f.svg#g)
-blur(2px), fill/mask fallback chains) are routed and the tail is
-kept verbatim (Zeolite #227, rewriter_wasm_bg.wasm rebuilt),
-b64decode rejects a stripped length of 4k+1 instead of silently
-dropping the trailing 6-bit group (Zeolite #228), and the worker
-mint memo is capped at 256 with LRU-by-recency eviction so
-long-lived workers cannot grow it without bound (Zeolite #229).
-Cargo-side pin stays 63b4f23: all changes are SW-side or in the
-dist wasm bundle, not in the server crate.
-
-Pin 76: Zeolite dist 7cdf6fc, sw.js cd12f976230ddba9 ->
-88e39dd016c4ad30, bootstrap.js unchanged. Engine changes since
-pin 75: mid-body transport errors surface as stream errors, not
-a clean EOF (#180); redirect hop gates + cross-origin header
-scoping (#186, #194); cookie prefix and Secure admission rules
-(#191); download buffer budget with honest resume errors (#192);
-NAVH virtual origin recovery (#193); page cache session/auth
-scope, credentials and redirect-final URL keys (#179, #184,
-#195); DevTools keyboard access (#220); css url() fragment
-survival (#199). Cargo-side pin moves 63b4f23 -> b0296f8: the
-deferred zeolite-server wave ships (session liveness, stream
-freeze fix, connection budgets, handshake timeout, client byte
-budget, auth rate limit + PBKDF2; #181/#182/#183/#189/#196/#198).
-
-Pin 76 deploy verified live 2026-10-16T14:35:09Z (build 96ee943, zlswSha 88e39dd016c4ad30, healthz ok; this push re-runs transit-live CI against the live pin-76 pair)
+Pin 76 (main release bump, 2026-10-16): Zeolite dist 7cdf6fc,
+sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30, bootstrap.js
+423b16b806b7f4cc -> cf8b76ad53488959. Main jumps 70 -> 76;
+pins 71-75 were beta-only, so this bundle carries every
+engine-side fix since pin 70 (#169-#171, #179-#185, #189-#204,
+#205-#208, #215-#222 triage, #223-#229). Cargo-side pin
+63b4f23 -> b0296f8 ships the zeolite-server hardening
+(#181-#183, #189, #196, #198) plus the deferred server wave
+(#197, #209-#213). Main UI is unchanged: the beta-only
+app-level relay/wisp registration (c29ac93) is not on main,
+so main keeps the Browser.tsx-only relay registration.

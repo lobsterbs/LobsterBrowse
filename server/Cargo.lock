@@ -1182,12 +1182,14 @@ name = "lobster-server"
 version = "0.5.0"
 dependencies = [
  "axum",
+ "futures-util",
  "serde_json",
  "sha2",
  "tokio",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "url",
  "wreq",
  "wreq-util",
  "zeolite-server",

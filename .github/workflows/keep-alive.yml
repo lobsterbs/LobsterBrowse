@@ -1,0 +1,25 @@
+# Keep the free-tier Render services awake. They spin down after
+# 15 idle minutes; a cold wisp backend kills Brave search through the
+# engine (the search.brave.com route rides the wisp transport), and a
+# cold fixture/beta flakes the transit-live CI job. Public repo: the
+# scheduled runner is free.
+name: Keep-alive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping free-tier services
+        run: |
+          for url in \
+            https://lobsterbeta-scramjet-wisp-90su.onrender.com/ \
+            https://lobsterbrowse-plud.onrender.com/healthz \
+            https://lobsterbrowse-beta-gq13.onrender.com/healthz \
+            https://lobsterbrowse-fixture-oy53.onrender.com/ ; do
+            if ! curl -fsS --max-time 120 "$url" > /dev/null; then
+              echo "::warning::keep-alive ping failed: $url"
+            fi
+          done
