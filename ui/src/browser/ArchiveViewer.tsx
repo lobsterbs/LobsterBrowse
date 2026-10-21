@@ -108,6 +108,7 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
         const entry = raw.find((e) => e.filename === path);
         /* #146: refuse oversize entries before zip.js inflates them. */
         if (entry && !entry.directory && Number(entry.uncompressedSize ?? 0) > DECOMP_CAP) {
+          await reader.close();
           setError("entry is above the 256 MiB decompression cap");
           return;
         }
@@ -161,7 +162,11 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
     }
     return n;
   };
+  /* #177: duplicated paths in one archive must not render duplicate keys. */
+  const seen = new Set<string>();
   for (const e of entries ?? []) {
+    if (seen.has(e.path)) continue;
+    seen.add(e.path);
     if (e.isDir) {
       dirNode(e.path.replace(/\/$/, ""));
       continue;
