@@ -449,7 +449,10 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
       /* Engine display name when the provider id is a known one. */
       source: (ENGINES as Record<string, { name: string }>)[src]?.name ?? src,
     };
-  } catch {
+  } catch (e) {
+    /* An aborted lookup (the user kept typing) must not look like an
+       empty result: the caller's catch treats it as "no answer". */
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
     return { items: [], source: "" };
   }
 }
