@@ -570,8 +570,33 @@ wave with honest gaps; a shipped-invisible DevTools panel was
 found and fixed in wave 36 (the docs-claim audit working). Open:
 the final pre-1.0 sweep.
 
-Iridium stays open. 1.0 Osmium is blocked until the compatibility
-crawl at the current pin and the phase-3 review land.
+Iridium compatibility record (2026-10-21, the required full crawl
+at pin 103; engine suite harness, 397 sites, local wisp engine):
+
+- 346/397 rendered (250 ok, 96 small-ok, 87.2 percent).
+  Failure classes: 35 no-frame, 4 loadfail, 4 error-page, 2
+  thin-or-error, 6 botwall.
+- Root-cause verification (reproduction against the local engine
+  plus live probes through the real UI on main): the no-frame,
+  loadfail, error-page and thin-or-error classes are the LOCAL
+  wisp transport failing at TLS (curl error 35/60 and silent
+  stalls; 33 of the 35 no-frame rows sat at the Starting-engine
+  status while the wasm TLS stream to the destination opened and
+  never completed). This is the documented #149
+  wasm-ClientHello class, not a rendering defect: wikipedia.org,
+  docs.python.org and techcrunch.com all render live on main
+  through the embedder relay (wikipedia 1197 elements at 5.3 s,
+  techcrunch 2015 elements at 6.9 s; the live deployment rides
+  the default-relay rule for every upstream). Honest residual:
+  the engine standalone on wisp keeps this class, and the crawl
+  harness itself should drive the LB deployment to measure the
+  live bar (follow-up).
+- The 6 botwall rows (homedepot, wordpress.com, autotrader, kbb,
+  trenitalia, krunker) are genuine upstream bot walls on the
+  datacenter egress; honest upstream, not an engine defect.
+
+Iridium stays open. 1.0 Osmium is blocked until the live-deployment
+crawl and the phase-3 review land.
 
 ---
 
