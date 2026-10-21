@@ -303,6 +303,8 @@ export default function BrowserView(props: Props) {
   const lastErr = useRef<Map<number, string>>(new Map());
   /* URLs already recovered from an escaped navigation, per tab+URL. */
   const lastEscape = useRef<Set<string>>(new Set());
+  /* Tabs with an escape recovery in flight (#169). */
+  const recovering = useRef<Set<number>>(new Set());
   /* Consecutive poll ticks a frame has spent stuck on about:blank
      (Zeolite #31: engine bootstrap never attached). */
   const blankPolls = useRef<Map<number, number>>(new Map());
@@ -360,20 +362,28 @@ export default function BrowserView(props: Props) {
     if (!s) return true;
     let count = 0;
     let done = true;
+    let blank = false;
     try {
       const w = f?.contentWindow;
       count = w?.performance?.getEntriesByType("resource")?.length ?? 0;
       done = w?.document?.readyState !== "loading";
+      blank = w?.location?.protocol === "about:";
     } catch {
       return true;
     }
+    /* The document has not started yet: genuinely loading; a slow
+       upstream can sit blank for many ticks (never settle early). */
+    if (blank) return false;
     if (count !== s.last) {
       s.last = count;
       s.streak = 0;
       return false;
     }
     s.streak += 1;
-    return (done && s.streak >= 3) || Date.now() - s.t0 > 45000;
+    /* #172: a document whose parser never finishes (eternal
+       "loading") but with no subresource activity settles after a
+       long quiet streak instead of holding the bar the full 45s. */
+    return (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
   };
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
@@ -1301,10 +1311,22 @@ export default function BrowserView(props: Props) {
       ? sjFrame(frames.current.get(tabId) ?? null)
           .then((fr) => fr.prefix + encodeURIComponent(url))
           .catch(() => routeUrl(url))
-      : zlWaitActive().then(() => zlNavHandle(url, 3000)).then((h) => h ?? routeUrl(url));
+      : zlWaitActive()
+          .then(() => zlNavHandle(url, 3000).catch(() => null))
+          /* One retry: a cold or just-restarted worker can miss the
+             first 3s mint claim (#168). */
+          .then((h) => h ?? zlNavHandle(url, 3000).catch(() => null))
+          .then((h) => {
+            if (!h) {
+              pushLog("warn", "route mint failed, using legacy route for " + sanitizeUrl(url));
+              return routeUrl(url);
+            }
+            return h;
+          });
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
+    recovering.current.delete(tab.id);
     /* New navigation generation: older generations' results are stale. */
     const gen = (navGen.current.get(tab.id) ?? 0) + 1;
     navGen.current.set(tab.id, gen);
@@ -1329,7 +1351,6 @@ export default function BrowserView(props: Props) {
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
     settleRef.current[tab.id] = { last: -1, streak: 0, t0: Date.now() };
-    const frame = frames.current.get(tab.id);
     /* 74.9: incognito tabs ride the engine's throwaway jar profile
        (zl:jarProfile) so their cookies never mix into the default
        one.
@@ -1349,8 +1370,14 @@ export default function BrowserView(props: Props) {
     void initialRoute(tab.id, url).then((href) => {
       if (navGen.current.get(tab.id) !== gen) return;
       const hopMs = Date.now() - mintT0;
-      if (frame) frame.src = href;
-      pushLog("info", "engine nav " + url + " (" + nid + ", route mint " + hopMs + " ms)");
+      /* Re-read the frame: it can be remounted while the mint was
+         pending; a captured element would strand the load (#171). */
+      const f = frames.current.get(tab.id);
+      if (f) f.src = href;
+      /* Route form in the log (#168): handle routes are opaque, the
+         legacy b64u fallback is not. */
+      const form = href.startsWith("/__zl_navh__/") ? "handle" : settings.proxyEngine === "scramjet" ? "scramjet" : "legacy";
+      pushLog("info", "engine nav " + url + " (" + nid + ", route mint " + hopMs + " ms, " + form + ")");
     });
   };
   /* Stable handle to the current load(): the mount-once message
@@ -1365,6 +1392,10 @@ export default function BrowserView(props: Props) {
     const t = active;
     if (!t || !t.url) return;
     if (lastNav.current.get(t.id) === t.url) return;
+    /* An escape recovery is in flight for this tab: the recovered
+       target is already loading; a settings/rules change re-running
+       this effect must not re-drive the escaped-from URL (#169). */
+    if (recovering.current.has(t.id)) return;
     load(t, t.url, { push: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id, active?.url, settings, rules]);
@@ -1570,14 +1601,18 @@ export default function BrowserView(props: Props) {
           const key = t.id + "|" + intended;
           if (lastEscape.current.has(key)) return;
           lastEscape.current.add(key);
+          recovering.current.add(t.id);
           pushLog(
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
+          /* The frame handle is re-read in the callback: the captured
+             element can be gone by then (#171). */
           void initialRoute(t.id, intended).then((href) => {
-            f.src = href;
+            const fr = frames.current.get(t.id);
+            if (fr) fr.src = href;
           });
           /* Record the recovered URL as this tab's last navigation so
              the URL sync (once the frame loads it) never triggers a
@@ -1627,6 +1662,11 @@ export default function BrowserView(props: Props) {
         lastNav.current.set(t.id, real);
         props.updateTab(t.id, patch);
         pushLog("info", "url sync " + sanitizeUrl(real));
+        /* The frame reached this URL for real: the per-path escape
+           guard has done its job and can admit a later genuine escape
+           to the same path again (#170); the recovery is complete. */
+        lastEscape.current.delete(t.id + "|" + real);
+        recovering.current.delete(t.id);
       }
       const title = (doc.title || "").trim();
       if (title && title !== t.title) props.updateTab(t.id, { title });
@@ -2091,6 +2131,7 @@ export default function BrowserView(props: Props) {
       for (const k of lastEscape.current) {
         if (k.startsWith(id + "|")) lastEscape.current.delete(k);
       }
+      recovering.current.delete(id);
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
         if (!(id in prev)) return prev;
         const n = { ...prev };
