@@ -153,10 +153,6 @@ export type Settings = {
   prefetchLinks: boolean;
   /* Tuck the toolbar and tab strip when the app is idle. */
   autoHideChrome: boolean;
-  /* Diagnostic mode: log every failed resource/console message
-     verbosely in the app log, and surface expected proxy
-     interventions (CSP/SRI stripping) as failure entries. */
-  diagnostics: boolean;
   /* Enhanced UI: animated starfield background on the Home page
      instead of the flat surface. Transform-composited animation,
      opt-in. */
@@ -183,7 +179,6 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
-  diagnostics: true,
   density: "normal",
   fancyBackground: false,
 };
@@ -213,7 +208,6 @@ export function loadSettings(): Settings {
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
-      diagnostics: parsed.diagnostics === undefined ? false : Boolean(parsed.diagnostics),
       /* SameSite option removed from Settings: pinned on (approx). */
       sameSitePolicy: "approx",
       /* "Server default" UA option removed from Settings: stored picks

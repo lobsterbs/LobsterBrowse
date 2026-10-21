@@ -28,11 +28,14 @@ export default function PdfViewer(props: { blob: Blob }) {
   /* Load the document once per blob. */
   useEffect(() => {
     let dead = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
     void (async () => {
       try {
         const data = new Uint8Array(await props.blob.arrayBuffer());
-        const d = await pdfjsLib.getDocument({ data }).promise;
-        if (dead) { void d.destroy(); return; }
+        const task = pdfjsLib.getDocument({ data });
+        loadingTask = task;
+        const d = await task.promise;
+        if (dead) { void task.destroy(); return; }
         setDoc(d);
         setNumPages(d.numPages);
       } catch (err) {
@@ -46,10 +49,13 @@ export default function PdfViewer(props: { blob: Blob }) {
         }
       }
     })();
-    return () => { dead = true; };
+    return () => {
+      dead = true;
+      /* Cancel the in-flight parse too: destroying only the opened
+         doc left the loading task (and its worker) alive. */
+      if (loadingTask) void loadingTask.destroy().catch(() => {});
+    };
   }, [props.blob]);
-
-  useEffect(() => () => { void doc?.destroy(); }, [doc]);
 
   /* Render the current page (canvas + selection text layer). */
   useEffect(() => {
