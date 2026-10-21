@@ -466,7 +466,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted">
             Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
             it. The new window has no connection back to this one and starts from a fresh view of
-            the app (settings sync there only after a reload).          </p>
+            the app (settings sync there only after a reload).
+          </p>
         </div>
       </Panel>
 
