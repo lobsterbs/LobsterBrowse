@@ -222,22 +222,44 @@ async function zlRelayFetch(
         : m.body instanceof ArrayBuffer
           ? u8ToB64(new Uint8Array(m.body))
           : undefined;
-    const resp = await fetch("/zlrelay", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal: ac.signal,
-      body: JSON.stringify({
-        dest: m.dest,
-        method: m.method,
-        headers: m.headers,
-        ...(typeof m.body === "string" ? { body } : {}),
-        ...(typeof body === "string" && typeof m.body !== "string" ? { body_b64: body } : {}),
-      }),
+    const relayBody = JSON.stringify({
+      dest: m.dest,
+      method: m.method,
+      headers: m.headers,
+      ...(typeof m.body === "string" ? { body } : {}),
+      ...(typeof body === "string" && typeof m.body !== "string" ? { body_b64: body } : {}),
     });
-    const status = Number(resp.headers.get("x-zl-relay-status"));
-    if (!Number.isFinite(status) || status <= 0) {
-      throw new Error("relay endpoint unavailable (" + resp.status + ")");
+    /* #157: a 429 rate-window or 503 concurrency rejection is transient;
+       retry with backoff instead of failing the rid, which would drop the
+       engine fetch onto the doomed wisp fallback. Bounded so the honest
+       error still fires; other statuses fail immediately as before. */
+    let resp: Response | null = null;
+    for (let attempt = 0; ; attempt++) {
+      const r = await fetch("/zlrelay", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: ac.signal,
+        body: relayBody,
+      });
+      const st = Number(r.headers.get("x-zl-relay-status"));
+      if (Number.isFinite(st) && st > 0) {
+        resp = r;
+        break;
+      }
+      if ((r.status === 429 || r.status === 503) && attempt < 5) {
+        try {
+          if (r.body) await r.body.cancel();
+        } catch {
+          /* the rejected body is already gone */
+        }
+        await new Promise((res) => setTimeout(res, 300 * (attempt + 1)));
+        if (ac.signal.aborted) throw new Error("relay aborted during retry");
+        continue;
+      }
+      throw new Error("relay endpoint unavailable (" + r.status + ")");
     }
+    if (!resp) throw new Error("relay endpoint unavailable");
+    const status = Number(resp.headers.get("x-zl-relay-status"));
     const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
     const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
     port.postMessage({ type: "zl:relayHead", rid, status, statusText: "", headers, setCookies });
