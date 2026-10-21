@@ -1035,6 +1035,23 @@ FROM debian:bookworm-slim AS zl-builder
 # c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
 # unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
 # Cargo-side pin stays a385fa9.
+# Pin 104: Zeolite dist 397bce562c0f18ec0a916b00c7a149548a99f6e6
+# (from CI build 39656714434, Zeolite main fb845658, all 5 jobs
+# green, app suite 1415 tests). Pin 104 fixes LB #154: the
+# Google gapi loader sanity-validates generated module URLs
+# against an apis.google.com literal and threw before any fetch
+# because the JS literal pass rewrites the "https://apis.google.com"
+# literal into an opaque route token. The shipped gapi-native
+# policy rule (route "native", types script, host apis.google.com)
+# demotes the literal pass for that host, and the new
+# transportMatch() composes behavior rules with transport rules
+# so the load still rides the embedder relay (default-relay)
+# instead of falling through to the dead wisp transport; engine
+# issue #34 keeps every cross-origin fetch from controlled pages
+# inside the engine, so nothing leaks direct. sw.js
+# ce02ad5c6c73bd90 -> 96b27c209b7f596e (626218 bytes);
+# bootstrap.js unchanged 37460e146d217cb7. Cargo-side pin
+# stays a385fa9.
 # Pin 103: Zeolite dist ec7fd8fe27d7b10ffd7349e5a238cb1fd72bebc9
 # (from CI build 39636675089, Zeolite main 2b1633b, all 5 jobs
 # green, app suite 1411 tests). Pin 103 fixes the two roots of
@@ -1238,7 +1255,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=ec7fd8fe27d7b10ffd7349e5a238cb1fd72bebc9
+ARG ZEOLITE_COMMIT=397bce562c0f18ec0a916b00c7a149548a99f6e6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1297,7 +1314,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ce02ad5c6c73bd90 ZEOLITE_BOOTSTRAP_SHA=37460e146d217cb7 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=96b27c209b7f596e ZEOLITE_BOOTSTRAP_SHA=37460e146d217cb7 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
