@@ -146,6 +146,24 @@ Update (2026-10-21, wave 37): the content origin is provisioned as a FREE Render
 
 Update (2026-10-21, wave 38, #107 phase 2): the cross-origin URL/title sync bridge is landed. The embedded frame asks the engine for its embedder (zl:getEmbedder page message, answered with the boot-page-registered embedder origin plus the frame's own SW-decoded virtual URL); the bootstrap embedsync module then re-emits the existing {lb:"nav", url, title} message to the parent on load, virtual-location moves and title mutations, and Browser.tsx applies it to the URL bar and the tab title. The /zlsw-register boot page learns the app origin from the UI's zlRegAsk postMessage (accepted only from https:// origins) and registers it with the worker (zl:embedderOrigin); the relay self-heal re-registers both after a channel loss. Honest residual while split mode is enabled: the URL bar is frame-reported, so a hostile content-origin page can forge {lb:"nav"} for its own tab only (bounded spoof, the same trust shape as the same-origin poll); in-frame console capture, the context menu and DevTools document access still do not reach cross-origin frames; downloads initiated by content pages still register in the content-origin worker; extensions still do not ride content-origin pages; the engine cookie jar is still per-origin; the free tier still sleeps after 15 idle minutes. #107 stays open for the phase-3 bridge review.
 
+Update (2026-10-21, wave 38 fix, #107 phase 2 completion):
+the phase-2 bridge shipped silent. The fail-closed host gate
+(#170) classified the /zlsw-register boot page as a proxied
+sender, so the worker refused its zl:relayRegister /
+zl:wispRegister / zl:embedderOrigin host-only registrations
+(the wave-37 relay channel never actually worked; content
+loads rode the content service own open wisp endpoint), and
+decodeClientUrl nulled every /zl/<b64u> client because the
+content-origin worker keeps the default /j/ prefix (nothing
+sends zl:config there), so zl:getEmbedder answered url:null
+and no {lb:"nav"} reached the UI. Pin 103 (Zeolite 2b1633b:
+/zlsw-register joins HOST_PATHS, decodeClientUrl falls back
+to decodeLegacyRoute) fixes both roots. The content service
+/wisp/ endpoint is closed with WISP_PASSWORD to match the
+main service (verified open by an unauthenticated probe
+before; the engine wisp client has no auth support, so
+content-origin pages ride the relay).
+
 ## Anubis and challenge pages (honest gap, ScramJet removal 2026-10-01)
 ScramJet's anubis_bridge and the /.within.website/ server route are gone. The Zeolite engine is challenge-DETECT only (no solve verb), so PoW-protected hosts - Anubis; Startpage, the DEFAULT search engine, fronts every page with one - show the honest engine error instead of solving. Filed against Zeolite as a challenge-cookie handoff surface. Third-party widget frames must stay genuinely cross-origin; the engine's navguard owns that decision (Zeolite #28). Never fake a solved challenge, and never claim challenge support the code does not have.
 
