@@ -388,6 +388,30 @@ in AGENTS.md. #107 stays open for the phase-3 review. Pin 102
 (Zeolite dist dc16a50c, sw.js 628614de5754a91f, bootstrap.js
 37460e146d217cb7) carries the engine side.
 
+Origin isolation fix record (2026-10-21, #107 phase 2
+completion, pin 103): the phase-2 bridge shipped silent -
+two engine roots, both probed live. First, the fail-closed
+host gate (#170) classified the /zlsw-register boot page as
+a proxied sender, so the worker silently refused its
+host-only zl:relayRegister / zl:wispRegister /
+zl:embedderOrigin registrations: the content-origin relay
+never opened (the wave-37 relay channel never actually
+worked) and content loads rode the content service own
+wisp endpoint instead. Second, nothing sends zl:config to
+the content-origin worker, so its prefix stays the default
+/j/ and decodeClientUrl nulled every /zl/<b64u> client -
+zl:getEmbedder answered url:null and no {lb:"nav"} reached
+the UI. Pin 103 (Zeolite main 2b1633b, dist ec7fd8fe,
+sw.js ce02ad5c6c73bd90, bootstrap.js unchanged
+37460e146d217cb7) adds /zlsw-register to HOST_PATHS
+(grants no new capability: "/" is already a host path) and
+a decodeClientUrl fallback to decodeLegacyRoute. Security
+finding, verified by unauthenticated probe: the content
+service /wisp/ endpoint was open (the engine wasm wisp
+client has no auth support); the main service endpoint is
+password-authed, and the content service is closed to
+match it - the engine keeps the relay transport.
+
 Zirconium status record (2026-10-21): tabs (lifecycle, isolation,
 incognito, restoration with the per-tab history stack) and
 sessions (persistence, crash recovery, restore, export/import)
