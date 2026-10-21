@@ -1,0 +1,17 @@
+name: branch-cleanup (one-shot)
+on:
+  push:
+    paths:
+      - .github/workflows/branch-cleanup.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: delete superseded branches
+        run: |
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/lobsterbs/LobsterBrowse.git" --delete fix/scout-2026-10-20 fix/relay-proxy-hops feat/user-wisp-primary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
