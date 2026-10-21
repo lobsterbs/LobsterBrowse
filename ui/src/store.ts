@@ -116,6 +116,78 @@ export function saveSessionTabs(tabs: Tab[]) {
   writeJson(TABS_KEY, tabs.map((t) => ({ id: t.id, url: t.url, title: t.title, stack: t.stack, idx: t.idx })));
 }
 
+/* ---- Session export/import (0.7 Zirconium) ----
+   Settings (Data group) offers a local-file backup of the persisted
+   session: browsing history plus the open tabs with their per-tab
+   history stacks. Export follows the #111 redaction posture at this
+   boundary; import never trusts the file: every URL and title is
+   sanitized before it can reach storage or app state, and session
+   tokens are minted fresh. */
+
+export type SessionExport = {
+  exportedAt: string;
+  history: string[];
+  tabs: Array<{ id: number; url: string; title: string; stack: string[]; idx: number }>;
+};
+
+export function exportSessionData(): SessionExport {
+  const saved = readJson<SessionExport["tabs"]>(TABS_KEY, []);
+  return {
+    exportedAt: new Date().toISOString(),
+    history: loadHistory().map(sanitizeUrl),
+    tabs: (Array.isArray(saved) ? saved : []).map((t) => ({
+      id: t.id,
+      url: sanitizeUrl(t.url),
+      title: sanitizeText(t.title),
+      stack: (Array.isArray(t.stack) ? t.stack : [t.url]).map(sanitizeUrl),
+      idx: t.idx,
+    })),
+  };
+}
+
+/* Returns the merged history and tabs ready to append (fresh sess,
+   id 0 as a placeholder: the caller assigns fresh ids), or null when
+   the decoded file is not a session export. */
+export function importSessionData(raw: unknown): { history: string[]; tabs: Tab[] } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const hasHistory = Array.isArray(o.history);
+  const hasTabs = Array.isArray(o.tabs);
+  if (!hasHistory && !hasTabs) return null;
+  const freshSess = () =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Math.random()).slice(2) + String(Date.now());
+  const history = hasHistory
+    ? (o.history as unknown[]).filter((u): u is string => typeof u === "string").map(sanitizeUrl)
+    : [];
+  const tabs: Tab[] = [];
+  if (hasTabs) {
+    for (const t of o.tabs as unknown[]) {
+      if (!t || typeof t !== "object") continue;
+      const to = t as Record<string, unknown>;
+      const url = typeof to.url === "string" ? sanitizeUrl(to.url) : "";
+      if (!url) continue;
+      const stack = Array.isArray(to.stack) && to.stack.every((u) => typeof u === "string")
+        ? (to.stack as string[]).map(sanitizeUrl).filter(Boolean)
+        : [url];
+      const norm = stack.length > 0 ? stack : [url];
+      const idx = typeof to.idx === "number" && to.idx >= 0 && to.idx < norm.length ? to.idx : norm.length - 1;
+      tabs.push({
+        id: 0,
+        url,
+        title: typeof to.title === "string" ? sanitizeText(to.title) : "",
+        stack: norm,
+        idx,
+        sess: freshSess(),
+      });
+    }
+  }
+  /* A hostile file could carry thousands of tabs; a real export
+     cannot (the browser never opens that many). Cap honestly. */
+  return { history: hasHistory ? restoreHistory(history) : loadHistory(), tabs: tabs.slice(0, 100) };
+}
+
 /* ---- Client-side technical log ring ---- */
 
 const LOGS_KEY = "lobsterbrowse-logs";

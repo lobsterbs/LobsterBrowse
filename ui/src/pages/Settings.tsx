@@ -10,6 +10,7 @@ import "@m3e/web/select";
 import "@m3e/web/switch";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { exportSessionData } from "../store";
 import {
   ENGINES,
   UA_PRESETS,
@@ -52,6 +53,7 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
+  onImportSession: (data: unknown) => "ok" | "invalid" | "incognito";
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -141,7 +143,41 @@ function TextInput(props: {
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onImportSession }: Props) {
+  /* 0.7 Zirconium: session data backup, local file only. Export
+     serializes the persisted history and open tabs (the store
+     redacts secret-bearing URL values at that boundary); import
+     never trusts the file and reports through a snackbar. */
+  const importRef = useRef<HTMLInputElement>(null);
+  const exportData = () => {
+    const href = URL.createObjectURL(new Blob([JSON.stringify(exportSessionData(), null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "lobsterbrowse-session.json";
+    a.click();
+    /* Revoking synchronously can cancel the fetch the browser has
+       only queued, not started (the DevTools export discipline). */
+    setTimeout(() => URL.revokeObjectURL(href), 10000);
+  };
+  const importData = async (file: File) => {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      /* not JSON: reported as an invalid file below */
+    }
+    const r = onImportSession(parsed);
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(
+        r === "ok"
+          ? "Session imported: history merged and tabs restored"
+          : r === "incognito"
+            ? "Exit incognito mode before importing a session"
+            : "That file is not a LobsterBrowse session export",
+        { duration: 4000 },
+      );
+    }
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({
     /* #90: only Search & browse starts expanded; the accordion
        keeps its multi-open behavior. */
@@ -494,12 +530,32 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
-            One place for destructive actions: clear the proxied page cache on
-            this device, or delete every stored history, session and setting.
+            Export the persisted session (history and open tabs) to a local file,
+            import one back, clear the proxied page cache on this device, or
+            delete every stored history, session and setting.
           </p>
-          <m3e-button onClick={() => setConfirmDelete(true)}>
-            <m3e-icon name="delete" aria-hidden={true} /> Manage data
-          </m3e-button>
+          <div className="lb-seed-row">
+            <m3e-button onClick={exportData}>
+              <m3e-icon name="download" aria-hidden={true} /> Export session
+            </m3e-button>
+            <m3e-button onClick={() => importRef.current?.click()}>
+              <m3e-icon name="upload" aria-hidden={true} /> Import session
+            </m3e-button>
+            <m3e-button onClick={() => setConfirmDelete(true)}>
+              <m3e-icon name="delete" aria-hidden={true} /> Manage data
+            </m3e-button>
+          </div>
+          <input
+            hidden
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importData(f);
+            }}
+          />
           {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
               handling and alertdialog semantics (alert attribute). */}
           <m3e-dialog
