@@ -36,6 +36,20 @@ async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   }
 }
 
+/* #142 (LB): engine handoff broadcasts (zl:downloadOp, zl:notifyOp,
+   zl:engineUpdate, zl:relayLost) arrive as container message events,
+   and the ServiceWorkerContainer is an EventTarget any same-origin
+   frame can dispatch synthetic events on. Accept them only when the
+   source is the engine worker itself. Honest limit: a hostile
+   same-origin page can still pass this by forging source as the
+   controller object; the complete fix is an engine-side MessageChannel
+   port or the #107 origin-isolation work. This check still stops every
+   other window, frame and lazy forgery at the boundary. */
+export const engineSwSource = (ev: MessageEvent): boolean => {
+  const s = ev.source;
+  return s instanceof ServiceWorker && new URL(s.scriptURL).pathname === "/zlsw/sw.js";
+};
+
 /* #61: zlSend fires every few seconds (DevTools polls netLog/diag
    at 5s, downloads at 2s), and register() + update() on every call
    meant a sw.js revalidation request each time. One acquisition per

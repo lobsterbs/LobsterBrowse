@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Comlink from "comlink";
 import { fmtBytes } from "./browserShared";
 import type { ArchiveApi } from "./archiveWorker";
+import { DECOMP_CAP } from "./archiveWorker";
 
 /* fflate handles ordinary archives fully in a worker; past this
    ceiling the zip.js streaming path takes over (also ZIP64). */
@@ -105,6 +106,11 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
         const reader = new z.ZipReader(new z.BlobReader(props.blob));
         const raw = await reader.getEntries();
         const entry = raw.find((e) => e.filename === path);
+        /* #146: refuse oversize entries before zip.js inflates them. */
+        if (entry && !entry.directory && Number(entry.uncompressedSize ?? 0) > DECOMP_CAP) {
+          setError("entry is above the 256 MiB decompression cap");
+          return;
+        }
         if (entry && !entry.directory) {
           const writer = new z.BlobWriter();
           await entry.getData(writer);
