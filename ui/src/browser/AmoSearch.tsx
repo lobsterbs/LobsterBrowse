@@ -74,9 +74,19 @@ function toHit(r: Record<string, unknown>): AmoHit | null {
    untouched (the XPI download CDN is the part that blocks server
    egress; the API itself is reachable from either). */
 async function amoGet(url: string): Promise<unknown> {
-  const r = await fetch(routeUrl(url));
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+  /* AMO's edge intermittently answers 502/503/504 to datacenter
+     egress (observed live: one search 503s, the identical next
+     request serves 200). The engine passes the upstream status
+     through, so retry those briefly instead of failing the search. */
+  let last = 0;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(routeUrl(url));
+    if (r.ok) return r.json();
+    last = r.status;
+    if (last !== 502 && last !== 503 && last !== 504) break;
+    await new Promise((res) => setTimeout(res, 900));
+  }
+  throw new Error("HTTP " + last);
 }
 
 export default function AmoSearch() {

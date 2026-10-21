@@ -351,7 +351,7 @@ export default function BrowserView(props: Props) {
       return false;
     }
     s.streak += 1;
-    return (done && s.streak >= 2) || Date.now() - s.t0 > 45000;
+    return (done && s.streak >= 3) || Date.now() - s.t0 > 45000;
   };
   /* Tabs animating closed; the real close lands after the collapse. */
   const [closingIds, setClosingIds] = useState<number[]>([]);
@@ -1483,12 +1483,14 @@ export default function BrowserView(props: Props) {
                  rewritten page, not a site failure. The scary FAIL
                  entries only appear in diagnostic mode; the console
                  warning always explains the intervention. */
-              const wantFails = settings.diagnostics;
+              /* Diagnostic mode is always on: the Settings toggle
+                 was removed on purpose, expected proxy interventions
+                 surface as failure entries unconditionally. */
               setDtState((prev) => {
                 const base = prev[t.id] ?? emptyDt();
                 const fails = [...base.fails];
-                if (wantFails && csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
-                if (wantFails && sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
+                if (csp > 0) fails.push(mk("csp-meta", "CSP_STRIPPED", csp));
+                if (sri > 0) fails.push(mk("sri-integrity", "SRI_STRIPPED", sri));
                 /* Own the proxy's own interventions in the page console:
                    entries explicitly prefixed as engine-caused, so a
                    broken page is never silently blamed on the site. */
@@ -1815,10 +1817,10 @@ export default function BrowserView(props: Props) {
         /* Diagnostic mode: every page console message lands in the app
            log too, with the tab id, so failures are traceable without
            opening DevTools. */
-        if (L.settings.diagnostics) {
-          pushLog(kind === "error" || kind === "warn" ? "error" : "info",
-            "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
-        }
+        /* Diagnostic mode is always on: every page console message
+           lands in the app log with the tab id. */
+        pushLog(kind === "error" || kind === "warn" ? "error" : "info",
+          "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
         /* Functional patch: two events dispatched back to back (log
            then error) both build their patch against live.current, which
            only refreshes on the next render, so the second dtBase()-built
@@ -1842,13 +1844,13 @@ export default function BrowserView(props: Props) {
         };
         /* Diagnostic mode: every failure goes to the app log with the
            full reason and note, not just the DevTools counter. */
-        if (L.settings.diagnostics) {
-          pushLog("error",
-            "resfail[" + tabId + "] " + entry.kind + " " + entry.reason +
-            (entry.status !== undefined ? " HTTP " + entry.status : "") +
-            " " + entry.url +
-            (entry.note ? " (" + entry.note + ")" : ""));
-        }
+        /* Diagnostic mode is always on: every failure goes to the
+           app log with the full reason and note. */
+        pushLog("error",
+          "resfail[" + tabId + "] " + entry.kind + " " + entry.reason +
+          (entry.status !== undefined ? " HTTP " + entry.status : "") +
+          " " + entry.url +
+          (entry.note ? " (" + entry.note + ")" : ""));
         setDtState((prev) => {
           const base = prev[tabId as number] ?? emptyDt();
           return {
@@ -2165,11 +2167,21 @@ export default function BrowserView(props: Props) {
           </div>
         ))}
 
-        {(st.loading || engineBusy) && (
-          <div className="lb-loading" aria-busy="true">
-            <m3e-loading-indicator variant="contained" aria-label="Loading page" />
-          </div>
-        )}
+        {/* Top loading bar (always mounted): glides in while the page
+            or the engine still moves work for the site and glides away
+            once everything settles; the class toggle drives the CSS
+            transition so both directions animate. st.loading flips off
+            only after the settle probe holds, and engineBusy tracks
+            engine in-flight work, so the bar stays up while small
+            resources are still loading after first paint. */}
+        <div
+          className={"lb-loadbar" + (st.loading || engineBusy ? " lb-loadbar-on" : "")}
+          role="progressbar"
+          aria-label="Loading page"
+          aria-hidden={!(st.loading || engineBusy)}
+        >
+          <span className="lb-loadbar-fill" />
+        </div>
 
         {/* Compaction 4: the in-page new-tab hero is gone. An empty
             tab expands and focuses the toolbar pill instead (see the

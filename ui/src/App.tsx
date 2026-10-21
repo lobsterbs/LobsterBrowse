@@ -140,12 +140,11 @@ export default function App() {
      deployment password-authed wisp ("tls handshake eof" 502s).
      A worker restart drops the engine stored port, so re-register
      on controller change. Registration is idempotent.
-     #151: the announced endpoint is the selected WISP server, a
-     custom wss:// entry from Settings or the deployment endpoint
-     from /build (the LobsterBrowse default). The selection can
-     change at any time, so the announce callback lives behind a
-     ref that both this boot effect and the selection effect below
-     keep current. */
+     The announced endpoint is the deployment endpoint from /build
+     (the LobsterBrowse default; the custom-server selection was
+     removed per product decision). The announce callback lives
+     behind a ref that this boot effect and the controllerchange
+     listener keep current. */
   const sjWispRef = useRef("");
   const wispAnnounceRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -194,18 +193,17 @@ export default function App() {
     };
   }, []);
 
-  /* #151: (re-)announce the selected WISP endpoint whenever the
-     Settings selection changes. A custom pick overrides the
-     deployment endpoint; with neither present the empty
-     announcement withdraws the endpoint and per-host wisp policy
-     falls back to relay. */
+  /* (Re-)announce the deployment WISP endpoint. The custom-server
+     selection was removed per product decision (the LobsterBrowse
+     server is the only supported endpoint), so the callback has no
+     settings dependency; an empty /build answer still withdraws the
+     endpoint and per-host wisp policy falls back to relay. */
   useEffect(() => {
     wispAnnounceRef.current = () => {
-      const custom = settings.wispServers.find((s) => s.id === settings.wispServerId);
-      zlWispInit(custom ? custom.url : sjWispRef.current);
+      zlWispInit(sjWispRef.current);
     };
     wispAnnounceRef.current();
-  }, [settings.wispServerId, settings.wispServers]);
+  }, []);
 
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
