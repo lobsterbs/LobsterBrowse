@@ -366,11 +366,23 @@ current Zeolite capabilities.
 Origin isolation record (2026-10-21, #107 phase 1): proxied
 frames now navigate a distinct content origin (free Render
 service lobsterbrowse-content.onrender.com) behind ZL_CONTENT_ORIGIN
-(enabled on main, inert on beta pending the seam port); the
+(enabled on main and beta; see the beta seam port record); the
 boot page self-heals the relay channel, and the navigation seam
 skips the per-origin navHandle mint in favor of the b64u route.
 Honest gaps and the provisioned origins are recorded in AGENTS.md.
 #107 stays open.
+
+Beta seam port record (2026-10-21, wave 39): the #107 split-origin
+seam is ported to the beta UI line (ui/src/zeolite.ts contentOrigin
+plumbing with the zlRegAsk handshake, App.tsx /build wiring,
+Browser.tsx split-mode initialRoute + frame-message origin gate +
+phase-2 title sync, TabSwitcherCard preview tiles, main.rs zlRegAsk
+listener with zl:embedderOrigin registration), and beta rides
+engine pin 103 (dist ec7fd8fe, sw.js ce02ad5c6c73bd90,
+bootstrap.js 37460e146d217cb7). ZL_CONTENT_ORIGIN is set on the
+beta UI service: split mode is live on both deployments. The
+phase-2 URL/title sync and the wave-37 honest-gap list apply to
+beta exactly as to main (AGENTS.md wave 39 record).
 
 ### Downloads
 

@@ -17,7 +17,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlRelayInit, zlSend, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -148,6 +148,15 @@ export default function App() {
         if (u) {
           wispUrl = u;
           zlWispInit(u);
+        }
+        /* #107: a provisioned content origin (ZL_CONTENT_ORIGIN on
+           the server) is inert configuration until the operator
+           provisions it; when present, remember it and register the
+           engine worker on that origin. */
+        const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
+        if (co) {
+          zlSetContentOrigin(co);
+          zlContentRegister(co);
         }
       })
       .catch(() => {});
