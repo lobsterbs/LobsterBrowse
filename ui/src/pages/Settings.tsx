@@ -12,6 +12,28 @@ import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 
+/* Cloaking popout: a fresh window whose address bar reads about:blank.
+   The window inherits this origin, so the app and its service worker run
+   normally inside the iframe; severing opener removes the window.opener
+   link. Settings changes sync only after the new window reloads. */
+function openInAboutBlank() {
+  const w = window.open("about:blank", "_blank");
+  if (!w) {
+    pushLog("warn", "settings: the browser blocked the about:blank popout (popup blocker)");
+    return;
+  }
+  w.opener = null;
+  const d = w.document;
+  d.title = "about:blank";
+  const style = d.createElement("style");
+  style.textContent = "html,body{margin:0;height:100%;overflow:hidden;background:#fff}iframe{border:0;width:100%;height:100%}";
+  d.head.appendChild(style);
+  const frame = d.createElement("iframe");
+  frame.src = window.location.origin + "/";
+  d.body.appendChild(frame);
+  pushLog("info", "settings: opened LobsterBrowse in an about:blank window");
+}
+
 type Props = {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -398,6 +420,17 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             When you switch away from this tab, the tab title changes and a harmless site is staged. When
             you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
+          </p>
+        </div>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Open in about:blank</div>
+          <m3e-button onClick={openInAboutBlank}>
+            <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
+          </m3e-button>
+          <p className="lb-muted">
+            Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
+            it. The new window has no connection back to this one and starts from a fresh view of
+            the app (settings sync there only after a reload).
           </p>
         </div>
       </Panel>
