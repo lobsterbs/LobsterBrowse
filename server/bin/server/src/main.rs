@@ -2064,8 +2064,11 @@ fn same_origin_fetch(headers: &axum::http::HeaderMap) -> bool {
 /// hostname this service answers) in a hidden iframe. The page
 /// registers the engine worker at the "/" scope on ITS OWN origin,
 /// opens the same relay channel and wisp announcement the app origin
-/// gets, then posts one ack to the parent and expects to be removed.
-/// The relay fetch is same-origin from this page's perspective, so
+/// gets, then posts one ack to the parent. The UI keeps this page
+/// embedded (hidden, never navigated) so its zl:relayLost listener
+/// can re-open the channel after a worker restart, mirroring the
+/// app origin's heal. The relay fetch is same-origin from this
+/// page's perspective, so
 /// the relay authorization (#110) accepts it exactly like the app
 /// origin's channel. Inert unless a parent embeds the page.
 async fn zlsw_register() -> Response {
@@ -2084,53 +2087,75 @@ async fn zlsw_register() -> Response {
       for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
       return btoa(s);
     };
-    const ch = new MessageChannel();
-    const controllers = new Map();
-    ch.port1.onmessage = (ev) => {
-      const m = ev.data || {};
-      if (m.type === "zl:fetchRelay" && typeof m.rid === "number") {
-        const ac = new AbortController();
-        controllers.set(m.rid, ac);
-        (async () => {
-          const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
-          try {
-            const resp = await fetch("/zlrelay", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              signal: ac.signal,
-              body: JSON.stringify({
-                dest: m.dest, method: m.method, headers: m.headers,
-                ...(typeof m.body === "string" ? { body: m.body } : {}),
-                ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
-              }),
-            });
-            const status = Number(resp.headers.get("x-zl-relay-status"));
-            if (!Number.isFinite(status) || status <= 0) throw new Error("relay endpoint unavailable (" + resp.status + ")");
-            const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
-            const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
-            ch.port1.postMessage({ type: "zl:relayHead", rid: m.rid, status, statusText: "", headers, setCookies });
-            const reader = resp.body.getReader();
-            for (;;) {
-              const r = await reader.read();
-              if (r.done) break;
-              if (r.value && r.value.length) ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value });
+    let wispUrl = "";
+    const openRelay = () => {
+      const swc = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+      if (!swc) return;
+      const ch = new MessageChannel();
+      const controllers = new Map();
+      ch.port1.onmessage = (ev) => {
+        const m = ev.data || {};
+        if (m.type === "zl:fetchRelay" && typeof m.rid === "number") {
+          const ac = new AbortController();
+          controllers.set(m.rid, ac);
+          (async () => {
+            const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
+            try {
+              const resp = await fetch("/zlrelay", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                signal: ac.signal,
+                body: JSON.stringify({
+                  dest: m.dest, method: m.method, headers: m.headers,
+                  ...(typeof m.body === "string" ? { body: m.body } : {}),
+                  ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
+                }),
+              });
+              const status = Number(resp.headers.get("x-zl-relay-status"));
+              if (!Number.isFinite(status) || status <= 0) throw new Error("relay endpoint unavailable (" + resp.status + ")");
+              const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
+              const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
+              ch.port1.postMessage({ type: "zl:relayHead", rid: m.rid, status, statusText: "", headers, setCookies });
+              const reader = resp.body.getReader();
+              for (;;) {
+                const r = await reader.read();
+                if (r.done) break;
+                if (r.value && r.value.length) ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value });
+              }
+              ch.port1.postMessage({ type: "zl:relayEnd", rid: m.rid });
+            } catch (e) {
+              fail(e && e.message ? e.message : String(e));
+            } finally {
+              controllers.delete(m.rid);
             }
-            ch.port1.postMessage({ type: "zl:relayEnd", rid: m.rid });
-          } catch (e) {
-            fail(e && e.message ? e.message : String(e));
-          } finally {
-            controllers.delete(m.rid);
-          }
-        })();
-      } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
-        const ac = controllers.get(m.rid);
-        if (ac) ac.abort();
-      }
+          })();
+        } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
+          const ac = controllers.get(m.rid);
+          if (ac) ac.abort();
+        }
+      };
+      swc.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
     };
-    sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+    openRelay();
+    /* #107 self-heal: the relay channel lives in the worker's memory
+       and is dropped on a worker restart. The engine broadcasts
+       zl:relayLost to its clients when a relay fetch finds no
+       channel; this page re-opens the channel and re-announces
+       the wisp endpoint, mirroring the app origin's App.tsx
+       heal. */
+    navigator.serviceWorker.addEventListener("message", (ev) => {
+      if (ev.data && ev.data.type === "zl:relayLost") {
+        openRelay();
+        const swc2 = navigator.serviceWorker.controller || reg.active;
+        if (swc2 && wispUrl) swc2.postMessage({ type: "zl:wispRegister", url: wispUrl });
+      }
+    });
     try {
       const b = await (await fetch("/build", { cache: "no-store" })).json();
-      if (typeof b.sjWisp === "string" && b.sjWisp) sw.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
+      if (typeof b.sjWisp === "string" && b.sjWisp) {
+        wispUrl = b.sjWisp;
+        sw.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
+      }
     } catch (e) { /* honest: relay-only, same as the app origin when unset */ }
     post({ ok: true });
   } catch (e) {

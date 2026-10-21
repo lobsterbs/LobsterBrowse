@@ -310,20 +310,47 @@ export function zlContentOrigin(): string {
    only register workers for its own origin). The register page also
    opens the relay channel and announces the wisp endpoint for that
    origin's own worker instance, then posts one origin-validated
-   ack; the iframe is removed on receipt. Idempotent. */
+   ack. #107: the iframe STAYS embedded (hidden, never navigated,
+   the same invariant as the app origin's channel owner) so its
+   zl:relayLost self-heal keeps the content origin's channel alive
+   across worker restarts. Idempotent. */
+let contentReady: Promise<void> | null = null;
+
+/* Split-origin navigation readiness (#107): resolves when the
+   register page acks, or after a 30s bound (a free-tier cold start
+   or an outage) so a pending navigation degrades to an honest load
+   instead of hanging the tab. Resolves, never rejects. */
+export function zlContentReady(): Promise<void> {
+  return contentReady ?? Promise.resolve();
+}
+
+/* #107: prefix a same-origin engine route with the provisioned
+   content origin for frame sources, so proxied documents never
+   render on the app origin. Non-relative hrefs pass through. */
+export function zlContentHref(href: string): string {
+  const co = contentOrigin;
+  return co && href.startsWith("/") ? co + href : href;
+}
+
 export function zlContentRegister(co: string): void {
   if (document.querySelector("iframe[data-lb-zlreg]")) return;
   const f = document.createElement("iframe");
   f.setAttribute("data-lb-zlreg", "1");
   f.style.display = "none";
-  const onMsg = (ev: MessageEvent) => {
-    if (ev.origin !== co) return;
-    const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
-    if (!d || d.zlReg !== true) return;
-    window.removeEventListener("message", onMsg);
-    f.remove();
-  };
-  window.addEventListener("message", onMsg);
+  contentReady = new Promise<void>((resolve) => {
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.origin !== co) return;
+      const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
+      if (!d || d.zlReg !== true) return;
+      window.removeEventListener("message", onMsg);
+      resolve();
+    };
+    window.addEventListener("message", onMsg);
+    window.setTimeout(() => {
+      window.removeEventListener("message", onMsg);
+      resolve();
+    }, 30000);
+  });
   f.src = co + "/zlsw-register";
   document.body.appendChild(f);
 }
