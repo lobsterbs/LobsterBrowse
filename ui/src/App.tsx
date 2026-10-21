@@ -55,7 +55,7 @@ export default function App() {
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
   /* P0 data-flow: while incognito is on, the technical log ring stays
-     in memory only — page diagnostics must not be persisted into the
+     in memory only - page diagnostics must not be persisted into the
      normal profile's localStorage. */
   useEffect(() => {
     store.setIncognitoLogging(incognito);
@@ -334,7 +334,7 @@ export default function App() {
      interception, native wisp transport, in-worker rewriting). The
      legacy v3 page-cache worker is gone: it owned the "/" scope and
      kept the Zeolite worker from ever registering, so unregister it
-     and drop its caches when found, then push the engine route prefix —
+     and drop its caches when found, then push the engine route prefix -
      the prefix is runtime state in the worker and resets to /j/ on
      every worker restart, so this runs on every boot. ---- */
   useEffect(() => {
@@ -486,8 +486,8 @@ export default function App() {
      jar, and document-surface fingerprint spoofing on engine-routed
      pages. Both are worker-global and reset on restart, so re-send on
      change and on controllerchange (the jarProfile pattern above). The
-     spoof profile is a single field — the same UA the engine sends
-     on requests — and the engine derives platform, languages and the
+     spoof profile is a single field - the same UA the engine sends
+     on requests - and the engine derives platform, languages and the
      canvas seed from it; timezone and hardware stay native so local
      times and page layout keep working. ---- */
   useEffect(() => {

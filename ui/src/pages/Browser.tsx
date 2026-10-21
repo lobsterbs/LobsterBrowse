@@ -255,7 +255,7 @@ export default function BrowserView(props: Props) {
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 
   const frames = useRef<Map<number, HTMLIFrameElement>>(new Map());
-  /* Last URL each tab was asked to load — guards the auto-load effect
+  /* Last URL each tab was asked to load - guards the auto-load effect
      against double navigation. */
   const lastNav = useRef<Map<number, string>>(new Map());
   /* Per-tab navigation generation: every load() bumps it, so results
@@ -447,7 +447,7 @@ export default function BrowserView(props: Props) {
     /* Engine handoff (#46): when the download came from the engine's
        zl:downloadOp (an extension's downloads.download()), report
        state back over zl:downloadState so the engine's registry and
-       the extension's downloads.onChanged stay truthful — otherwise
+       the extension's downloads.onChanged stay truthful - otherwise
        the engine-side entry stays "active" forever. Fire-and-forget:
        a report for an already-finished id is answered ok:false and
        dropped, and zlSend never throws. Progress reports are
@@ -509,7 +509,7 @@ export default function BrowserView(props: Props) {
         }
         /* Streaming sink (P0 download architecture): when the File
            System Access API is available the bytes go straight to a
-           user-chosen file on disk — no Blob, no RAM ceiling. The
+           user-chosen file on disk - no Blob, no RAM ceiling. The
            picker needs transient user activation which the parent UI
            may not have (the click happened inside the proxied frame),
            so any picker failure other than the user dismissing the
@@ -560,7 +560,7 @@ export default function BrowserView(props: Props) {
               total += value.byteLength;
               if (!streaming && total > MAX_DL_BYTES) {
                 ac.abort();
-                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " — cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
+                fail("larger than " + fmtBytes(MAX_DL_BYTES) + " - cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
                 return;
               }
               setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
@@ -708,7 +708,7 @@ export default function BrowserView(props: Props) {
     pushLog("info", "xpi saved " + p.name);
   };
   /* ---- Engine download handoff (#46): an extension calling
-     downloads.download() hands the save to the UI — the engine
+     downloads.download() hands the save to the UI - the engine
      broadcasts zl:downloadOp to its window clients and owns nothing
      after that. Feed it into the same transfer machinery the
      a[download] capture uses. The broadcast reaches every LB window
@@ -1570,7 +1570,7 @@ export default function BrowserView(props: Props) {
       /* Escaped-navigation recovery: challenge pages (Anubis etc.) get
          no shim on their intermediate hosts, so their JS sometimes
          "solves" the challenge by navigating the frame to a bare app
-         path, which the SPA fallback answers with index.html — the
+         path, which the SPA fallback answers with index.html - the
          user sees our app shell pretending to be the site. Detect a
          frame sitting on a non-route app path while the tab has a real
          URL, reconstruct the intended target and reload it through the
@@ -1625,7 +1625,7 @@ export default function BrowserView(props: Props) {
       }
       if (act !== "sync") return;
       /* #55: a frame parked on an opaque Zeolite nav handle
-         (/__zl_navh__/<keyed token>) legacy-decodes to "" — the token
+         (/__zl_navh__/<keyed token>) legacy-decodes to "" - the token
          is keyed and must never be decoded as plain b64u (mojibake ->
          garbage url sync -> undecodable-route loop). The tab already
          holds the real destination, so fall back to it and keep
@@ -1946,7 +1946,7 @@ export default function BrowserView(props: Props) {
           }
         })();
         /* Scheme validation: only http(s) navigations. javascript:,
-           data:, blob:, file: and friends are rejected outright — a
+           data:, blob:, file: and friends are rejected outright - a
            proxied page must not script the browser surface. */
         if (!abs || !/^https?:/i.test(abs)) return;
         if (d.newTab) {
@@ -2076,7 +2076,7 @@ export default function BrowserView(props: Props) {
     if (tbExpanded) urlInputRef.current?.select();
   }, [tbExpanded]);
 
-  /* TLS certificate state: declared above the !active early return —
+  /* TLS certificate state: declared above the !active early return -
      a useState below a conditional return changes the hook count
      between renders and crashes React. */
 
@@ -2461,7 +2461,7 @@ export default function BrowserView(props: Props) {
               type="button"
               className="lb-diag-tb-chip"
               aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures — open diagnostics"}
+              title={activeDt.fails.length + " load failures - open diagnostics"}
               onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
             >
               <m3e-icon name="warning" aria-hidden={true} />
@@ -2520,7 +2520,7 @@ export default function BrowserView(props: Props) {
               (no font glyph exists), sized by CSS. */}
           {/* Incognito: the same m3e-icon-button primitive as every
               other toolbar control, with toggle semantics for the
-              on/off state (selected attribute via the ref effect —
+              on/off state (selected attribute via the ref effect -
               React 18 mangles boolean custom-element attributes). The
               domino mask is an inline SVG: the glyph is missing from
               the self-hosted Material Symbols font. */}

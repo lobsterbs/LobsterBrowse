@@ -1,4 +1,4 @@
-/* DevTools panel — console / network / diagnostics for the currently
+/* DevTools panel - console / network / diagnostics for the currently
    selected proxy tab. Each tab keeps its own state.
 
    Proxied pages are served from the LobsterBrowse origin (/zl/),
@@ -559,7 +559,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
        dt.console would drop it; prev is always the fresh state. */
     const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
     if (!w) {
-      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab — navigate to a site first.", ts: Date.now() }].slice(-500) }));
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab - navigate to a site first.", ts: Date.now() }].slice(-500) }));
       return;
     }
     try {
@@ -806,7 +806,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     >
       <div className="lb-devtools-head">
         <span className="lb-devtools-title">
-          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools — {tab.title || "tab"}
+          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools - {tab.title || "tab"}
         </span>
         <span className="lb-devtools-head-actions">
           <m3e-icon-button aria-label="View app logs" onClick={onOpenLogs}>
@@ -926,7 +926,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
             Requests the page's JavaScript makes (fetch/XHR) plus element load failures, captured live
             from the frame. Headers, byte sizes and bodies are not exposed to the page context by the
-            browser — this is a page-level view, not a network tap.
+            browser - this is a page-level view, not a network tap.
           </p>
           <ZeoliteDownloads />
           <div className="lb-net">
@@ -947,7 +947,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
                   <div>Status: {n.error ? n.error : n.status}</div>
                   {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
                   <div>Time: {ts(n.ts)}</div>
-                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable — the page context cannot read them.</div>
+                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
                 </div>
               </details>
             ))}

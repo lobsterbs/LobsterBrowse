@@ -14,7 +14,7 @@ export type Tab = {
   /* Session token: /logs is scoped to it server-side, so diagnostics
      from one tab never leak into another session's view. Generated
      client-side (crypto.randomUUID), never persisted, regenerated on
-     restore — guest pages cannot read it (it lives in UI state, not
+     restore - guest pages cannot read it (it lives in UI state, not
      the page). */
   sess: string;
 };
@@ -106,7 +106,7 @@ const LOGS_KEY = "lobsterbrowse-logs";
 /* Incognito mode (#108): page diagnostics (console lines, resfail
    entries) reach pushLog while an incognito session is active. They
    go to a SEPARATE throwaway ring that is discarded the moment
-   incognito ends — they can NEVER reach localStorage, not even after
+   incognito ends - they can NEVER reach localStorage, not even after
    exit via a later normal-mode flush or a pagehide flush (those only
    ever write the normal ring). The old single shared ring leaked
    private entries into the persistent log exactly that way. */
@@ -114,7 +114,7 @@ let incognitoMode = false;
 let incognitoRing: LogEntry[] = [];
 export function setIncognitoLogging(on: boolean) {
   incognitoMode = on;
-  /* Enter: the private ring starts empty. Exit: it is discarded —
+  /* Enter: the private ring starts empty. Exit: it is discarded -
      the entries die with the session, and nothing schedules a flush
      that could persist them (persistLogs writes logRing only). */
   incognitoRing = [];
@@ -183,7 +183,7 @@ export function getLogs(): LogEntry[] {
 export function clearLogs() {
   activeRing().length = 0;
   /* In incognito this flushes the NORMAL ring, which the private
-     session never touched — the discarded private entries can never
+     session never touched - the discarded private entries can never
      be written by it. */
   flushLogs();
 }
