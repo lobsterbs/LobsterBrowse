@@ -112,10 +112,6 @@ export type SiteRule = {
   adblock?: boolean;
 };
 
-/* #151: a custom WISP transit endpoint. The LobsterBrowse server
-   (empty id) is not in this list: it is the always-present default. */
-export type WispServer = { id: string; name: string; url: string };
-
 export type Settings = {
   seed: string;
   engine: EngineId;
@@ -147,12 +143,6 @@ export type Settings = {
      epoxy (rustls+hyper, different TLS fingerprint). Applied on the
      next engine init; no mid-session swap. */
   transport: "libcurl" | "epoxy";
-  /* #151: custom WISP transit endpoints. wispServerId "" is the
-     LobsterBrowse server (the /build-announced deployment endpoint);
-     any other id must match a wispServers entry. Entries are wss://
-     only, except ws://localhost for local development. */
-  wispServers: WispServer[];
-  wispServerId: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -187,8 +177,6 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsUpgrade: true,
   imageLazy: true,
   transport: "libcurl",
-  wispServers: [],
-  wispServerId: "",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -211,21 +199,6 @@ export function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      /* #151: stored server lists are re-validated on load: only
-         structurally sane wss:// entries (ws://localhost for dev)
-         survive a hand-edited or corrupted store. */
-      wispServers: Array.isArray(parsed.wispServers)
-        ? parsed.wispServers.filter(
-            (s): s is WispServer =>
-              !!s &&
-              typeof s === "object" &&
-              typeof s.id === "string" &&
-              typeof s.name === "string" &&
-              typeof s.url === "string" &&
-              (s.url.startsWith("wss://") || s.url.startsWith("ws://localhost")),
-          )
-        : [],
-      wispServerId: typeof parsed.wispServerId === "string" ? parsed.wispServerId : "",
       /* #149: hasOwnProperty guards the record lookup - a stored
          "constructor" or "toString" hits Object.prototype and passed the
          old truthiness check, then searchUrl crashed on the
@@ -433,17 +406,8 @@ export function searchUrl(s: Settings, query: string): string {
 /* Normalize a bare domain into a full URL. */
 export function normalizeUrl(input: string): string {
   const s = input.trim();
-  const candidate = s.includes("://") ? s : "https://" + s;
-  /* Parse the candidate: the platform parser inserts the implicit "/"
-     between the host and the query ("host?q=x" carries no path, and
-     the engine sends the decoded path verbatim upstream, so nginx 400s
-     on the empty request line). The parsed href is what a real browser
-     would navigate to; the raw candidate stays the fallback. */
-  try {
-    return new URL(candidate).href;
-  } catch {
-    return candidate;
-  }
+  if (input.includes("://")) return s;
+  return "https://" + s;
 }
 
 /* Heuristic: a URL has a scheme, or looks like a bare domain/host

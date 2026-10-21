@@ -12,10 +12,6 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    /* Explicit .ts import paths are legal under bundler resolution
-    and let the node --experimental-strip-types regression checks
-    (tests/poll-recovery, tests/log-privacy) import real sources. */
-    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }
   },
