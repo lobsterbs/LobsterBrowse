@@ -38,7 +38,8 @@ function StarLayer({
   ...props
 }: StarLayerProps) {
   const reduced = useReducedMotion();
-  const [boxShadow, setBoxShadow] = React.useState<string>("");
+  /* #178: fill the starfield on first render, no empty first paint. */
+  const [boxShadow, setBoxShadow] = React.useState<string>(() => generateStars(count, starColor));
 
   React.useEffect(() => {
     setBoxShadow(generateStars(count, starColor));
