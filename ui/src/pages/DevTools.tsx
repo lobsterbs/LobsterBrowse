@@ -572,9 +572,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
 
       {/* #103: the section switch is m3e-tabs (real tablist/tab roles,
           the component own roving focus, typeahead and ink bar). The
-          tab panels are siblings of the switcher, not children:
-          m3e-tabs sizes its internal slide to its content, which would
-          overflow this bounded card; sibling panels flex inside it.
+          tab panels are sibling plain divs, not m3e-tab-panel
+          elements: m3e-tab-panel assigns itself to the m3e-tabs panel
+          slot at connect, so a sibling of the switcher is never
+          slotted and renders nothing. A plain div flexes inside this
+          bounded card; theme.css restores the [hidden] override the
+          custom element used to provide.
           Panels stay mounted so each tab aria-controls keeps pointing
           at a live element, but their content stays React-conditional
           so the pollers (diagnostics, download registry) only run
@@ -601,7 +604,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
         ))}
       </m3e-tabs>
 
-      <m3e-tab-panel id="lb-dt-panel-diagnostics" {...{ hidden: dt.page === "diagnostics" ? undefined : true, class: "lb-dt-panel" }}>
+      <div id="lb-dt-panel-diagnostics" role="tabpanel" {...{ hidden: dt.page === "diagnostics" ? undefined : true, className: "lb-dt-panel" }}>
       {dt.page === "diagnostics" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
@@ -670,7 +673,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           )}
         </div>
       )}
-      </m3e-tab-panel>
+      </div>
 
     </m3e-card>
   );
