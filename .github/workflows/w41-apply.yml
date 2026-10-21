@@ -1,0 +1,33 @@
+name: w41-apply
+on:
+  push:
+    paths:
+      - '.github/workflows/w41-apply.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: apply-edits
+        run: |
+          set -e
+          if grep -q 'Welcome Back!' ui/src/App.tsx && grep -q 'Zirconium' server/bin/server/src/main.rs; then
+            echo "already applied"
+            exit 0
+          fi
+          sed -i 's/version = "0.5.0"/version = "0.7.0"/' server/Cargo.toml
+          sed -i '1182s/version = "0.5.0"/version = "0.7.0"/' server/Cargo.lock
+          sed -i 's/{} Cobalt/{} Zirconium/' server/bin/server/src/main.rs
+          node .github/workflows/w41-appedit.cjs ui/src/App.tsx
+          git config user.name "lb-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add server/Cargo.toml server/Cargo.lock server/bin/server/src/main.rs ui/src/App.tsx
+          git commit -q -m "feat: 0.7.0 Zirconium version bump + Welcome Back snackbar"
+          git rm -q .github/workflows/w41-apply.yml .github/workflows/w41-appedit.cjs
+          git commit -q -m "chore: remove w41 apply workflow"
+          git push origin HEAD:${{ github.ref_name }}
