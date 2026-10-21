@@ -247,7 +247,7 @@ export function saveSettings(s: Settings) {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
   } catch {
-    /* storage unavailable (private mode) — settings stay for this session only */
+    /* storage unavailable (private mode) - settings stay for this session only */
   }
 }
 
@@ -335,7 +335,7 @@ export function setSjPrefix(prefix: string): void {
 export function routeUrl(target: string): string {
   /* ScramJet engine: the controller route ("" until the engine
      initializes; the Zeolite route below then keeps the tab
-     functional — its worker owns /zl/ either way). */
+     functional - its worker owns /zl/ either way). */
   if (loadSettings().proxyEngine === "scramjet" && sjPrefix) {
     return sjPrefix + encodeURIComponent(target);
   }
@@ -459,8 +459,8 @@ export async function suggestFrom(engine: EngineId, q: string, signal?: AbortSig
 
 /* Suggestions for the search bars. The server's /suggest endpoint owns
    the fallback chain (a provider can be unreachable from the server's
-   network — DuckDuckGo drops TCP connects from the Render egress IP
-   class outright, LB #75; it escalated from rate-limiting — so the
+   network - DuckDuckGo drops TCP connects from the Render egress IP
+   class outright, LB #75; it escalated from rate-limiting - so the
    server retries Brave then Bing before answering empty). One round
    trip per keystroke; the client no longer double-fetches. */
 export async function fetchSuggestions(engine: EngineId, q: string, signal?: AbortSignal, sess?: string): Promise<SuggestResult> {

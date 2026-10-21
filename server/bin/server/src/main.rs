@@ -88,7 +88,7 @@ fn json_escape(s: &str) -> String {
 /// diagnostics routinely carry session tokens, API keys and JWTs, and
 /// the log ring is readable by anyone who can reach the deployment.
 /// Every push_log message passes through here, so no call site has to
-/// remember to redact. Mirrors ui/src/sanitize.ts — keep the patterns
+/// remember to redact. Mirrors ui/src/sanitize.ts - keep the patterns
 /// in sync. Deliberately conservative: over-redaction destroys the
 /// diagnostic value of the log.
 fn redact_secrets(s: &str) -> String {
@@ -326,8 +326,8 @@ fn prune_sessions(sessions: &mut HashMap<String, SessionRing>) {
     }
 }
 
-/// Session-tagged log push. Lines land ONLY in that session's ring —
-/// never in the global ring — so /logs with the matching token sees
+/// Session-tagged log push. Lines land ONLY in that session's ring -
+/// never in the global ring - so /logs with the matching token sees
 /// them and /logs without a token sees nothing of other sessions.
 fn push_log_sess(state: &AppState, sess: Option<&str>, level: &str, msg: &str) {
     let Some(sess) = sess.filter(|s| valid_session_token(s)) else {
@@ -2156,7 +2156,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     // of a hardcoded string (a stale "1.1 Chabazite" once lied here).
     // The bundle's sha256 goes out too: the zl-builder Docker layer
     // caches the dist tarball, so a deploy can silently ship an old
-    // engine — the hash makes that detectable from the outside.
+    // engine - the hash makes that detectable from the outside.
     // "unknown" when the bundle is missing or unreadable: never invented.
     let (zeolite, zlsw_sha) = match tokio::fs::read("zlsw/sw.js").await {
         Ok(bytes) => {
@@ -2169,7 +2169,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     };
     // ScramJet engine option: the vendored upstream bundle version
     // (pinned in the Dockerfile, surfaced via SCRAMJET_VERSION) and
-    // its scramjet.js sha256 prefix — same stale-bundle detection as
+    // its scramjet.js sha256 prefix - same stale-bundle detection as
     // zlswSha. The wisp URL (SCRAMJET_WISP_URL, the standalone
     // wisp-js backend service) is reported empty honestly when unset.
     let scramjet = {
@@ -2645,7 +2645,7 @@ async fn main() {
             }),
         )
         /* #18: no CorsLayer. The UI, engine frames and every subresource
-        are same-origin, so cross-origin ACAO headers serve nobody — the
+        are same-origin, so cross-origin ACAO headers serve nobody - the
         permissive layer that used to sit here turned the deployment
         into a CORS-stripping relay any web page could read. */
         .with_state(state);
@@ -2675,7 +2675,7 @@ async fn main() {
 /// browser. The server has no extension store, so direct requests that
 /// bypass the worker must fail honestly with a 404 instead of falling
 /// through the SPA fallback (which would hand back index.html with a
-/// 200 and a text/html MIME — a silent lie about the resource).
+/// 200 and a text/html MIME - a silent lie about the resource).
 ///
 /// Traversal safety: the path is never mapped to the filesystem here;
 /// ServeDir (used for the real static trees) rejects dot-dot sequences

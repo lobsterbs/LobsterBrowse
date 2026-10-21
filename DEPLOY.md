@@ -9,12 +9,12 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
 - lobsterbrowse-beta (beta/zeolite-nativetransit):
   https://lobsterbrowse-beta-gq13.onrender.com
 - lobsterbeta-scramjet-wisp (Dockerfile.wisp, the wisp-js backend):
-  https://lobsterbeta-scramjet-wisp-90su.onrender.com — set
+  https://lobsterbeta-scramjet-wisp-90su.onrender.com - set
   SCRAMJET_WISP_URL=wss://lobsterbeta-scramjet-wisp-90su.onrender.com/
   on the app services (surfaced by /build as sjWisp).
 - lobsterbrowse-fixture (node, "node tests/transit/fixture.mjs",
   PORT=10000, FIXTURE_HOST=0.0.0.0):
-  https://lobsterbrowse-fixture-oy53.onrender.com — the FIXTURE_ORIGIN
+  https://lobsterbrowse-fixture-oy53.onrender.com - the FIXTURE_ORIGIN
   of the transit-live CI job.
 
 ## Server (Render web service, Docker)
@@ -22,10 +22,10 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
 - Runtime: Docker, Dockerfile at repo root (builds the Rust workspace).
 - Env vars:
   - `PORT` (set by Render automatically; the server reads it).
-  - `WISP_PATH` — Wisp endpoint path, defaults to `/wisp/`. Randomize per deployment.
-  - `WISP_PASSWORD` / `WISP_USERNAME` — optional password auth (extension 0x02).
-  - `DATABASE_URL` — Neon Postgres connection string (used by the upcoming sessions crate).
-  - `LB_TRUSTED_PROXY_CIDRS` — optional comma-separated trusted-proxy CIDR list. When the TCP peer sits inside one of these ranges, the relay rate limit keys on the rightmost `x-forwarded-for` hop outside the trusted set instead of the shared peer address (#163). Unset by default: the peer IP stays the key and a client-controlled `x-forwarded-for` is never honored. A malformed entry is a startup error.
+  - `WISP_PATH` - Wisp endpoint path, defaults to `/wisp/`. Randomize per deployment.
+  - `WISP_PASSWORD` / `WISP_USERNAME` - optional password auth (extension 0x02).
+  - `DATABASE_URL` - Neon Postgres connection string (used by the upcoming sessions crate).
+  - `LB_TRUSTED_PROXY_CIDRS` - optional comma-separated trusted-proxy CIDR list. When the TCP peer sits inside one of these ranges, the relay rate limit keys on the rightmost `x-forwarded-for` hop outside the trusted set instead of the shared peer address (#163). Unset by default: the peer IP stays the key and a client-controlled `x-forwarded-for` is never honored. A malformed entry is a startup error.
 - Health check: `GET /healthz`.
 
 ## Zeolite engine pin

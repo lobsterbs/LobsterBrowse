@@ -44,7 +44,7 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
        server-side, so say so instead of showing a confusing 403. */
     if (!sess) {
       setServer([]);
-      setErr("No active tab — server logs are scoped to a browsing session.");
+      setErr("No active tab - server logs are scoped to a browsing session.");
       return () => {};
     }
     const refresh = () =>
