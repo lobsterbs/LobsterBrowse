@@ -1,0 +1,31 @@
+name: w34-beta-uirevert
+on:
+  push:
+    paths: ['.github/workflows/w34-beta-uirevert.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  revert-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beta/zeolite-nativetransit
+          fetch-depth: 0
+      - name: restore the pre-merge beta ui tree
+        run: |
+          set -euo pipefail
+          git config user.name 'fad 6767'
+          git config user.email 'fad6767@users.noreply.github.com'
+          PRE=9ea2eb74bbdbe08168e43803a933a5ffc5e97945
+          HEAD_SHA=$(git rev-parse HEAD)
+          test "$HEAD_SHA" = "2a796d509fe6a972029ea3a1c14d4705e6aa182a" || { echo beta moved, aborting; exit 1; }
+          git checkout "$PRE" -- ui/
+          git rm -q -f ui/src/browser/displayAddress.ts
+          git add -A ui/
+          TREE=$(git write-tree)
+          echo "revert tree: $TREE"
+          git commit -q -m 'revert(ui): restore the beta UI tree to 9ea2eb7'
+          git push origin HEAD:beta/zeolite-nativetransit
+          echo REVERT_PUSHED
