@@ -255,7 +255,9 @@ async function zlRelayFetch(
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
   } finally {
-    relayControllers.delete(rid);
+    /* Only drop our own controller: a reused rid must not remove the
+       entry of a newer fetch, or its cancel would become a no-op. */
+    if (relayControllers.get(rid) === ac) relayControllers.delete(rid);
   }
 }
 
