@@ -56,13 +56,17 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 397bce56 (pin 104: the 2026-10-21 #154 wave - gapi-native
-policy rule (host apis.google.com, types script, route native) so the gapi
-loader's origin sanity-check sees the native literal, plus transportMatch
-compose so behavior rules and transport rules no longer shadow each other
-(Zeolite main fb845658, CI run 39656714434 all 5 jobs green, suite 1415/1415)),
-zlswSha ce02ad5c6c73bd90 -> 96b27c209b7f596e, bootstrapSha unchanged
-37460e146d217cb7 (31406 bytes). This matches the Dockerfile ZEOLITE_COMMIT;
+Current pin: Zeolite dist 17c5165 (pin 105: the 2026-10-21 anchor read
+virtualization, Injector phase 1 fixing #180 - parser-inserted anchors read
+back as engine route URLs and Startpage derived its SERP breadcrumb from the
+anchor href, so the opaque route leaked into the visible display text; new
+bootstrap/anchorshim.ts serves the nav guard's swap-row getter plus an
+Element.getAttribute wrap from a route -> virtual-destination memo, decoding
+the page's own markup routes over the new zl:decodeRoutes control message,
+bounded 64 routes per message (Zeolite main 34737bc0, CI run 39677692896 all
+5 jobs green, suite 1420/1420)), zlswSha 96b27c209b7f596e -> 71d0bd6f016437e7,
+bootstrapSha 37460e146d217cb7 -> 509c8042d96c8ba7 (33782 bytes; the bootstrap
+size budget rose 31744 -> 33792). This matches the Dockerfile ZEOLITE_COMMIT;
 the zeolite-server git rev stays a385fa9 because the wave does not touch
 zeolite-server, and server/Cargo.lock is consistent with the pin.
 
