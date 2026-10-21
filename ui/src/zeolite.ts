@@ -365,6 +365,10 @@ export function zlContentRegister(co: string): void {
       const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
       if (!d || d.zlReg !== true) return;
       window.removeEventListener("message", onMsg);
+      /* #107 phase 2: introduce the app to the boot page; its worker
+         stores the embedder origin so proxied frames can sync URL and
+         title (the boot page re-registers it on its relayLost heal). */
+      try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
       resolve();
     };
     window.addEventListener("message", onMsg);

@@ -1035,6 +1035,21 @@ FROM debian:bookworm-slim AS zl-builder
 # c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
 # unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
 # Cargo-side pin stays a385fa9.
+# Pin 102: Zeolite dist dc16a50c8e95cdc59a0460fd4ba5431861fb7bcc
+# (from CI build 39628337530, Zeolite main 0c809c2, all 5 jobs
+# green, app suite 1410 tests). Pin 102 carries the #107 phase 2
+# embedder URL/title sync: zl:getEmbedder (page-facing, in
+# PAGE_MESSAGES) answers an embedded frame with the registered
+# embedder origin plus THIS client's own SW-decoded virtual URL;
+# zl:embedderOrigin (host-only, the boot page's zlRegAsk
+# handshake) registers the embedder origin; the bootstrap gained
+# the embedsync module (posts {lb:"nav",url,title} to the parent
+# on load, vloc moves and title mutations) and the vloc
+# onVlocChange hook at its real-path choke points; the bootstrap
+# size gate rose 30400 -> 31744 for it. sw.js
+# c7cb3102e12f9e57 -> 628614de5754a91f (626076 bytes);
+# bootstrap.js e15f38fb1b1557e2 -> 37460e146d217cb7 (31406
+# bytes). Cargo-side pin stays a385fa9.
 # Pin 100 (re-pointed to carry ALL fixes): Zeolite dist 12d9f83c
 # (from CI build 39487725296, Zeolite main fb6f8fa0, all 5 jobs
 # green; bootstrap budget 30381/30400). Pin 100 first shipped
@@ -1209,7 +1224,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=15a049461aca31f1862e3f791990cfc5f18d72eb
+ARG ZEOLITE_COMMIT=dc16a50c8e95cdc59a0460fd4ba5431861fb7bcc
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1268,7 +1283,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c7cb3102e12f9e57 ZEOLITE_BOOTSTRAP_SHA=e15f38fb1b1557e2 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=628614de5754a91f ZEOLITE_BOOTSTRAP_SHA=37460e146d217cb7 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than

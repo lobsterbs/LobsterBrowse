@@ -372,6 +372,30 @@ skips the per-origin navHandle mint in favor of the b64u route.
 Honest gaps and the provisioned origins are recorded in AGENTS.md.
 #107 stays open.
 
+Origin isolation record (2026-10-21, #107 phase 2): the
+cross-origin URL/title sync bridge is live on main. The embedded
+frame asks the engine (zl:getEmbedder) for the embedder origin and
+its own virtual URL; the bootstrap embedsync module re-emits the
+existing {lb:"nav", url, title} message to the parent on load,
+virtual-location moves and title mutations, and the UI applies it
+to the URL bar and the tab title; the boot page learns the app
+origin via the UI's zlRegAsk postMessage and registers it
+(zl:embedderOrigin), with the relay self-heal re-registering it
+after a channel loss. Honest residual: the URL bar is
+frame-reported, so a hostile content-origin page can spoof the URL
+for its own tab only (bounded); the remaining gaps stay recorded
+in AGENTS.md. #107 stays open for the phase-3 review. Pin 102
+(Zeolite dist dc16a50c, sw.js 628614de5754a91f, bootstrap.js
+37460e146d217cb7) carries the engine side.
+
+Zirconium status record (2026-10-21): tabs (lifecycle, isolation,
+incognito, restoration with the per-tab history stack) and
+sessions (persistence, crash recovery, restore, export/import)
+shipped; origin isolation is live in phases 1-2 (above). Open in
+this phase: the cookies/storage integration checklist against
+current Zeolite capabilities, and carrying the split-origin seam
+to the beta UI line.
+
 ### Downloads
 
 Provide a proper download flow rather than treating downloads as ordinary navigation.
@@ -407,6 +431,20 @@ Test actual extensions, not only internally-created demo extensions.
 Keep extension permissions explicit and isolated.
 
 Provide useful errors for manifest, permission, content-script, background, messaging and blocked-resource failures.
+
+Tungsten status record (2026-10-21): the WebExtension runtime is
+engine-owned (Zeolite app/src/extensions) and verified by its own
+e2e harness (15/15 checks: install/uninstall/enable/reload,
+manifest parsing with unknown-field preservation, permission
+gates, content scripts on real proxied pages, storage quotas,
+messaging, tabs from a Firefox-style MV3 background, options/popup
+pages, the host-only gate, lifecycle); LobsterBrowse owns XPI
+install, the extensions panel and per-site enable. Honest gaps:
+content scripts run in the page's JS context, not an isolated
+world; the suite runs 12 purpose-built test extensions, not
+store-distributed ones; while split-origin mode is enabled on
+main, extensions do not ride content-origin pages. Tungsten stays
+open.
 
 ---
 
@@ -478,6 +516,38 @@ Review:
 ### Documentation freeze
 
 Documentation must describe actual behavior. Do not present planned features as implemented and do not retain obsolete architecture diagrams.
+
+Iridium status record (2026-10-21, pre-freeze honest status;
+recorded per operator instruction, the project stops here and does
+not advance to 1.0 Osmium until the real-site bar is met):
+
+- Compatibility: the last full 397-site interaction crawl (engine
+suite harness) ran 2026-10-12 at pin 54 (264 ok, 89 small-ok, 18
+botwall, 18 no-frame, 8 error-page, 0 loadfail). It has NOT been
+re-run at pin 102; targeted live probes at pins 97-102 cover the
+Google AI-mode class, Brave, DuckDuckGo, games and app suites. A
+full crawl at the current pin is required before any freeze claim.
+- Performance: no systematic startup/memory/CPU/large-page
+measurements are recorded (relay TTFB for example.com was 105 ms
+at an earlier pin). Open.
+- Reliability: the transport-chaos harness proved honest failure
+and recovery under a mid-stream server kill; relay burst limits
+are sized for page loads (48 concurrent, 150 per 10 s, bounded
+429/503 retry, wave 38). Open: a long-running soak and
+crashed-tab coverage.
+- Security: the cross-origin hostile probe is verified live
+(parent title/localStorage/location/cookie blocked on the content
+origin; the same-origin contrast reads all four); SSRF
+resolve-then-validate and session-scoped /logs hold; downloads
+carry budgets. Open: the #107 phase-3 bridge review and the
+per-origin cookie-jar split.
+- Documentation freeze: AGENTS.md and ROADMAP.md are updated per
+wave with honest gaps; a shipped-invisible DevTools panel was
+found and fixed in wave 36 (the docs-claim audit working). Open:
+the final pre-1.0 sweep.
+
+Iridium stays open. 1.0 Osmium is blocked until the compatibility
+crawl at the current pin and the phase-3 review land.
 
 ---
 
@@ -644,3 +714,8 @@ AGENTS.md, /zl/ with Wisp and NativeTransit behavior is verified
 live on every deploy, engine builds are reproducible (dist pin plus
 sha256 checks in CI and in the Docker build), and the real-site
 regression suite runs in CI.
+
+Operator note (2026-10-21): status records for 0.7, 0.8 and 0.9
+are appended to their sections; the project does not advance to
+1.0 Osmium until the real-site compatibility bar is met.
+
