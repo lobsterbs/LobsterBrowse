@@ -2,7 +2,7 @@
    network URLs, failure notes). Every surface that persists or displays
    diagnostics MUST pass values through here instead of redacting at
    individual call sites. The server keeps a mirror of the URL part in
-   push_log (main.rs redact_secrets) — keep the patterns in sync.
+   push_log (main.rs redact_secrets) - keep the patterns in sync.
 
    Deliberately conservative: over-redaction destroys diagnostics.
    We redact secret-bearing query parameters, bearer/basic credentials,

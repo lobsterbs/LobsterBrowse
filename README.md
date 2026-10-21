@@ -38,16 +38,16 @@ The authoritative project roadmap is [ROADMAP.md](./ROADMAP.md). It uses chemica
           |
        upstream
 ## Server
-- server/bin/server — Tokio + Axum HTTP/WSS entrypoint.
-- server/crates/adblock — network filtering (workspace member).
-- /zl/<base64url target> — Zeolite engine route (worker-owned; the server answers only with the honest no-worker notice).
-- /r/, /lj/ — gone legacy prefixes; the server answers the honest gone-notice (502).
-- /wisp/ — Wisp endpoint.
-- /logs — bounded diagnostics.
-- /healthz — liveness.
-- /zlsw/ — published Zeolite bundle.
-- /zl-ext/ and /zl-cs/ — extension routes.
-- /suggest — search suggestion proxy.
+- server/bin/server - Tokio + Axum HTTP/WSS entrypoint.
+- server/crates/adblock - network filtering (workspace member).
+- /zl/<base64url target> - Zeolite engine route (worker-owned; the server answers only with the honest no-worker notice).
+- /r/, /lj/ - gone legacy prefixes; the server answers the honest gone-notice (502).
+- /wisp/ - Wisp endpoint.
+- /logs - bounded diagnostics.
+- /healthz - liveness.
+- /zlsw/ - published Zeolite bundle.
+- /zl-ext/ and /zl-cs/ - extension routes.
+- /suggest - search suggestion proxy.
 ## UI
 React + TypeScript + Vite with Material 3 Expressive components. Includes tabs, settings, incognito sessions, DevTools, site information, extension controls, search suggestions and link prefetch.
 ## Zeolite integration

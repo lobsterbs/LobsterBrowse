@@ -1,4 +1,4 @@
-/* ScramJet 2.0 (MercuryWorkshop) — the upstream proxy engine,
+/* ScramJet 2.0 (MercuryWorkshop) - the upstream proxy engine,
    driven from the LB UI. The server vendors the published client
    bundle same-origin under /sj/ (Dockerfile sj-builder stage); this
    module registers the controller worker at the /sj/ scope (it never
@@ -21,7 +21,7 @@ type SjBuildInfo = { sjWisp?: string };
    /sj/r/<controller id>/ and every frame it wraps owns
    /sj/r/<controller id>/<frame id>/<encodeURIComponent target>. The
    controller SW forwards any fetch under the controller prefix to the
-   controller, which finds the frame by pathname prefix — a request
+   controller, which finds the frame by pathname prefix - a request
    matching no frame prefix answers 500 "No frame found for request",
    so a frame per tab iframe is mandatory, not optional. */
 type SjFrameApi = {
@@ -45,7 +45,7 @@ let controller: SjControllerApi | null = null;
    frame, and a remounted element needs a fresh one. Closed tabs keep
    their frame in the upstream list (the controller API has no
    destroy); ponytail: the list grows with tab churn, dead frames
-   match no future navigation — add a destroy if upstream ships one. */
+   match no future navigation - add a destroy if upstream ships one. */
 const frameCache = new WeakMap<HTMLIFrameElement, SjFrameApi>();
 
 function loadScript(src: string): Promise<void> {

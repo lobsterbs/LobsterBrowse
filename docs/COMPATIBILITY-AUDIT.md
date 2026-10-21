@@ -10,14 +10,14 @@ behavior, the guest-origin threat model, and the honest-compatibility
 policy. This is the reference for what LobsterBrowse fakes, why, and
 what is genuinely unsupported.
 
-## 1. Inventory — every fake / stub / spoof / shim
+## 1. Inventory - every fake / stub / spoof / shim
 
 | Finding | Location | Class | Verdict |
 |---|---|---|---|
 | `navigator.serviceWorker` stub (register rejects, `ready` never resolved) | `server/bin/server/src/engine-compat.js` | compatibility shim | KEPT, fixed: `ready` now resolves (was a hanging promise), all paths fail immediately, one-time diagnostic explains why |
 | `Notification.permission = "denied"`, `requestPermission` → `"denied"` | `engine-compat.js` | deliberate policy | KEPT, documented: permission belongs to the proxy origin, not the site; never granted artificially; one-time diagnostic added |
 | `beforeinstallprompt` preventDefault | `engine-compat.js` | deliberate policy | KEPT: the prompt would offer installing LobsterBrowse (the host PWA), never the proxied site; documented in the file |
-| AMO Firefox spoof (UA header + `navigator.userAgent`/`vendor`/`oscpu`/`userAgentData`/`InstallTrigger` patch) | `main.rs` (`is_amo_host`, `amo_spoof_script`, `FIREFOX_UA` in `engine_proxy`) | site-scoped spoof | KEPT: scoped strictly to `addons.mozilla.org` (AMO gates .xpi downloads on a Firefox client). NOT generalized anywhere else. `userAgentData` is patched to `undefined` and `vendor` to `""` because that is what Firefox actually reports — the spoof describes a real browser, not a fake capability |
+| AMO Firefox spoof (UA header + `navigator.userAgent`/`vendor`/`oscpu`/`userAgentData`/`InstallTrigger` patch) | `main.rs` (`is_amo_host`, `amo_spoof_script`, `FIREFOX_UA` in `engine_proxy`) | site-scoped spoof | KEPT: scoped strictly to `addons.mozilla.org` (AMO gates .xpi downloads on a Firefox client). NOT generalized anywhere else. `userAgentData` is patched to `undefined` and `vendor` to `""` because that is what Firefox actually reports - the spoof describes a real browser, not a fake capability |
 | UA presets (Chrome/Firefox/Safari/Edge/...) | `ui/src/settings.ts` | configuration | Not a spoof: explicit user setting, applied server-side per-request as the `lb_ua` engine option |
 | Firefox UA header on `/suggest` proxy requests | `main.rs` `suggest_endpoint` | compatibility shim | KEPT: suggestion providers reject non-browser UAs; scoped to the suggest path only |
 | Challenge-host allowlist (Turnstile/hCaptcha/reCAPTCHA/Stripe frames left cross-origin) | `CHALLENGE_HOSTS` in `main.rs`, `CHALLENGE_HOST_RE` in `engine-shim.js` | intentional browser-emulation compat | KEPT: widgets must stay genuinely cross-origin or their own origin checks fail. Lists are documented as needing manual sync (regex comment in the shim mirrors the Rust const) |
@@ -25,7 +25,7 @@ what is genuinely unsupported.
 | fetch/XHR/element-setter routing patches | `engine-shim.js` | required for proxy operation | KEPT |
 | console/net/resfail diagnostics capture | `engine-shim.js` | diagnostics | KEPT; sanitized centrally (see §2) |
 | Decentraleyes local library substitution (jquery/lodash/moment/d3 from jsDelivr) | `ui/public/lobsterjet.js` | deliberate substitution | KEPT, user-toggleable, version mapping documented as approximate |
-| CSP meta / `integrity` attribute stripping | `main.rs` `strip_csp_meta` / `strip_integrity` | forced compat | KEPT: rewritten resources legitimately differ from upstream bytes, SRI would reject 100% of them; CSP would forbid the injected shim. Counted and reported per page (`lb-diag` meta) instead of silent. Header-level CSP never reaches the browser (engine_proxy forwards only content-type + cache headers) — documented in AGENTS.md |
+| CSP meta / `integrity` attribute stripping | `main.rs` `strip_csp_meta` / `strip_integrity` | forced compat | KEPT: rewritten resources legitimately differ from upstream bytes, SRI would reject 100% of them; CSP would forbid the injected shim. Counted and reported per page (`lb-diag` meta) instead of silent. Header-level CSP never reaches the browser (engine_proxy forwards only content-type + cache headers) - documented in AGENTS.md |
 | `<base>` tag stripping | `main.rs` `strip_base_tags` | forced compat | KEPT: the server resolves every relative URL against the real page URL, so a surviving `<base>` would re-anchor runtime-resolved URLs away from the engine route. Tests added for case/whitespace variants. Honest gap: pages that mutate `<base>` at runtime are not re-anchored |
 | engine error card (own HTML on load failure) | `engine_error_page` | intentional emulation | KEPT: never a fake success; carries `lb-load-error` meta + Try Again |
 | 429 captcha-page suppression | `engine_proxy` | deliberate policy | KEPT: a self-refreshing challenge that cannot be solved inside the proxy is replaced by an honest error card |
@@ -41,11 +41,11 @@ cannot work; documented in engine-compat.js).
 Website diagnostics are untrusted. Two central sanitizers now own
 redaction; individual call sites no longer remember to redact:
 
-- `ui/src/sanitize.ts` — `sanitizeUrl` / `sanitizeText`. Applied to
+- `ui/src/sanitize.ts` - `sanitizeUrl` / `sanitizeText`. Applied to
   every console text, net URL/error, resfail URL/note and the
   "url sync" app-log line in `Browser.tsx` before anything enters
   DevTools state or the persisted app log.
-- `main.rs` `redact_secrets()` — applied inside `push_log`, so the
+- `main.rs` `redact_secrets()` - applied inside `push_log`, so the
   entire `/logs` ring is sanitized at write time (secret query params,
   JWTs, Bearer/basic/labeled credentials). Patterns mirror the TS
   module. Unit tests in `redact_tests`.
@@ -56,7 +56,7 @@ redacted (they are page content; over-redaction destroys diagnostics).
 ## 3. Server log isolation (P0, fixed 2026-09-27 pass 2)
 
 `AppState.logs` was a single deployment-wide ring readable by anyone
-who could reach `/logs` — including any proxied guest page, since
+who could reach `/logs` - including any proxied guest page, since
 guests run same-origin. That was a cross-session and cross-tab
 diagnostic leak. Fix (per-session correlation, smallest mechanism that
 holds):
@@ -96,7 +96,7 @@ What a guest page CAN do today (accepted risk, documented):
 - read/write this origin's localStorage/sessionStorage and cookies
   (engine state, not user credentials; LB UI state stores no secrets)
 - reach internal endpoints: `/logs`, `/healthz`, `/build`, `/suggest`,
-  `/zlsw/`, `/zl-ext/`, `/zl-cs/` — same as any same-origin script
+  `/zlsw/`, `/zl-ext/`, `/zl-cs/` - same as any same-origin script
 - postMessage to the parent.
 
 Mitigations in place after this pass:
@@ -112,7 +112,7 @@ Mitigations in place after this pass:
 
 Known-unmitigated (backlog): a hostile guest can still read LB UI
 state keys from localStorage and reach `/healthz`, `/build`,
-`/zlsw/*` etc. — but `/logs` now refuses it (403 without a valid
+`/zlsw/*` etc. - but `/logs` now refuses it (403 without a valid
 session token, and tokens are not page-readable), and `/suggest` logs
 are scoped to the calling tab's ring. Full origin isolation per guest
 remains architectural (iframe `srcdoc`/portal-based isolation would
@@ -165,7 +165,7 @@ guest worker script routing; anchor/form runtime property bypass.)
 Zeolite-dependent deferred work (proxied WebSocket transport,
 in-worker subresource routing, session export, inspector, recording,
 fingerprint profiles, tracing, engine switching) is planned in
-ROADMAP.md "Phase: Zeolite Integration — Deferred"; it is future
+ROADMAP.md "Phase: Zeolite Integration - Deferred"; it is future
 planned work, not implemented.
 
 ## 8. Incognito data-flow (P0, fixed 2026-09-27)
@@ -188,8 +188,8 @@ incognito cookie jar in RAM until restart, Zeolite `/lj/` cookie jar
 ## 9. rewrite_html dropped all text nodes (P0, fixed 2026-09-27)
 
 Found during live verification of deploy e8e64f2: /r/ pages rendered
-with empty bodies — `<h1></h1><p></p>`, empty link labels, empty
-`<title>` — while tags, attributes and injected scripts survived.
+with empty bodies - `<h1></h1><p></p>`, empty link labels, empty
+`<title>` - while tags, attributes and injected scripts survived.
 Root cause (present since before this task's baseline): the
 `rewrite_html` scanner loop jumped straight to the next `<` and never
 emitted the bytes between `i` and the tag start, so every inter-tag
@@ -255,7 +255,7 @@ the previously reported text-node drop (§9).
 Classified and left alone (intentional or not fixable here):
 - window.open returns null: sites read it as popup-blocked; a fake
   Window object would be fake success. Honest null + navigate message
-  kept (backlog: return a minimal non-functional marker object? —
+  kept (backlog: return a minimal non-functional marker object? -
   rejected for now, it would be a lie).
 - /lj/ cookie jar shared between incognito and normal tabs, and /lj/
   has no session-log correlation (traffic never reaches the server
@@ -304,7 +304,7 @@ host injection, WS block diagnostics."` escape; a Rust
   engine-shim.js is include_str!'d, never executed as JS by tests.
 - Runtime property assignment bypass: `a.href = u` and
   `form.action = u` (and `setAttribute("formaction")` on submit
-  buttons) were NOT routed — only image/script/iframe/media/source/
+  buttons) were NOT routed - only image/script/iframe/media/source/
   link setters were. A runtime-assigned real URL navigated the tab
   straight off the proxy origin (same bypass class as the WebSocket
   hole). HTMLAnchorElement.href, HTMLFormElement.action and the
@@ -314,6 +314,6 @@ host injection, WS block diagnostics."` escape; a Rust
 - Foreign-origin Worker/SharedWorker script URLs: blocked loudly
   (SecurityError + WORKER_UNSUPPORTED), matching the WebSocket
   policy; same-origin/blob/data workers unchanged. See §5.
-- ROADMAP.md gained the "Phase: Zeolite Integration — Deferred"
+- ROADMAP.md gained the "Phase: Zeolite Integration - Deferred"
   section listing all future Zeolite-coupled work as planned, not
   implemented.
