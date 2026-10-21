@@ -84,7 +84,8 @@ async function amoGet(url: string): Promise<unknown> {
     if (r.ok) return r.json();
     last = r.status;
     if (last !== 502 && last !== 503 && last !== 504) break;
-    await new Promise((res) => setTimeout(res, 900));
+    /* #175: no sleep after the final attempt, the error surfaces at once. */
+    if (attempt < 2) await new Promise((res) => setTimeout(res, 900));
   }
   throw new Error("HTTP " + last);
 }
@@ -226,6 +227,9 @@ export default function AmoSearch() {
                     src={h.icon}
                     alt=""
                     loading="lazy"
+                    onLoad={(e) => {
+                      e.currentTarget.style.display = "";
+                    }}
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
                     }}
