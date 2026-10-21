@@ -29,7 +29,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { engineSwSource, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentHref, zlContentOrigin, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -1306,8 +1306,24 @@ export default function BrowserView(props: Props) {
      navigation (sjFrame is idempotent per element) and the route is
      minted from that frame. Any failure falls through to routeUrl's
      Zeolite route, so the tab stays functional instead of hanging. */
-  const initialRoute = (tabId: number, url: string) =>
-    settings.proxyEngine === "scramjet"
+  const initialRoute = (tabId: number, url: string) => {
+    /* #107 split-origin mode: the frame navigates the provisioned
+       content origin's engine routes directly, so proxied documents
+       are cross-origin to the app and hostile page scripts cannot
+       reach the host document or its storage. The opaque zl:navHandle
+       mint is skipped: the route key lives in the engine worker's
+       per-origin storage, so a handle minted by the app-origin
+       worker does not decode on the content origin's worker, and
+       the app page cannot message that worker. The legacy b64u
+       route (LB#53's designed fallback) keeps the destination
+       base64url-encoded. Await the boot registration so the first
+       navigation is not left uncontrolled; the wait resolves (not
+       rejects) on failure, so the load degrades honestly. */
+    const co = zlContentOrigin();
+    if (co) {
+      return zlContentReady().then(() => zlContentHref(routeUrl(url)));
+    }
+    return settings.proxyEngine === "scramjet"
       ? sjFrame(frames.current.get(tabId) ?? null)
           .then((fr) => fr.prefix + encodeURIComponent(url))
           .catch(() => routeUrl(url))
@@ -1323,6 +1339,7 @@ export default function BrowserView(props: Props) {
             }
             return h;
           });
+  };
   const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
@@ -1823,7 +1840,12 @@ export default function BrowserView(props: Props) {
       /* Sender + origin validation: proxied frames are same-origin by
          architecture (that is what gives DevTools its page access), so
          a message from any other origin is not one of ours. */
-      if (e.origin !== window.location.origin) return;
+      /* #107: proxied frames are same-origin until the operator
+         provisions a distinct content origin (ZL_CONTENT_ORIGIN,
+         announced by /build). When one is provisioned, frames post
+         from that origin; anything else is still not one of ours. */
+      const zlco = zlContentOrigin();
+      if (e.origin !== window.location.origin && (!zlco || e.origin !== zlco)) return;
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
@@ -1984,6 +2006,11 @@ export default function BrowserView(props: Props) {
           L.updateTab(tabId, patch);
           pushLog("info", "url sync " + sanitizeUrl(real));
         }
+        /* #107 phase 2: split-origin frames ride this schema for URL
+           and title sync (the engine's embedder channel); a same-origin
+           producer may omit the title. */
+        const title = cap(d.title, 300);
+        if (title && title !== tab.title) L.updateTab(tabId, { title });
         setStatus((prev) => {
           const cur = prev[tabId as number];
           return cur && cur.loading ? { ...prev, [tabId as number]: { loading: false } } : prev;

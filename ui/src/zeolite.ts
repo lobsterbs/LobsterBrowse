@@ -310,3 +310,73 @@ export function zlWispInit(url: string): void {
     sw.postMessage({ type: "zl:wispRegister", url });
   });
 }
+
+/* #107: the provisioned content origin for proxied documents
+   (ZL_CONTENT_ORIGIN on the server, announced by /build). Empty
+   until the operator provisions a second hostname for this service;
+   the UI keeps its same-origin frame design until then, and the
+   frame message handler accepts only this origin in addition to
+   the app origin. */
+let contentOrigin = "";
+
+export function zlSetContentOrigin(o: string): void {
+  contentOrigin = o;
+}
+
+export function zlContentOrigin(): string {
+  return contentOrigin;
+}
+
+/* Register the engine service worker on the content origin by
+   embedding its /zlsw-register page in a hidden iframe (a page can
+   only register workers for its own origin). The register page also
+   opens the relay channel and announces the wisp endpoint for that
+   origin's own worker instance, then posts one origin-validated
+   ack. #107: the iframe STAYS embedded (hidden, never navigated,
+   the same invariant as the app origin's channel owner) so its
+   zl:relayLost self-heal keeps the content origin's channel alive
+   across worker restarts. Idempotent. */
+let contentReady: Promise<void> | null = null;
+
+/* Split-origin navigation readiness (#107): resolves when the
+   register page acks, or after a 30s bound (a free-tier cold start
+   or an outage) so a pending navigation degrades to an honest load
+   instead of hanging the tab. Resolves, never rejects. */
+export function zlContentReady(): Promise<void> {
+  return contentReady ?? Promise.resolve();
+}
+
+/* #107: prefix a same-origin engine route with the provisioned
+   content origin for frame sources, so proxied documents never
+   render on the app origin. Non-relative hrefs pass through. */
+export function zlContentHref(href: string): string {
+  const co = contentOrigin;
+  return co && href.startsWith("/") ? co + href : href;
+}
+
+export function zlContentRegister(co: string): void {
+  if (document.querySelector("iframe[data-lb-zlreg]")) return;
+  const f = document.createElement("iframe");
+  f.setAttribute("data-lb-zlreg", "1");
+  f.style.display = "none";
+  contentReady = new Promise<void>((resolve) => {
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.origin !== co) return;
+      const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
+      if (!d || d.zlReg !== true) return;
+      window.removeEventListener("message", onMsg);
+      /* #107 phase 2: introduce the app to the boot page; its worker
+         stores the embedder origin so proxied frames can sync URL and
+         title (the boot page re-registers it on its relayLost heal). */
+      try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
+      resolve();
+    };
+    window.addEventListener("message", onMsg);
+    window.setTimeout(() => {
+      window.removeEventListener("message", onMsg);
+      resolve();
+    }, 30000);
+  });
+  f.src = co + "/zlsw-register";
+  document.body.appendChild(f);
+}
