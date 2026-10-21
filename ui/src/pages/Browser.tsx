@@ -2206,20 +2206,24 @@ export default function BrowserView(props: Props) {
           </div>
         ))}
 
-        {/* Top loading bar (always mounted): glides in while the page
-            or the engine still moves work for the site and glides away
-            once everything settles; the class toggle drives the CSS
-            transition so both directions animate. st.loading flips off
-            only after the settle probe holds, and engineBusy tracks
-            engine in-flight work, so the bar stays up while small
-            resources are still loading after first paint. */}
+        {/* Top loading indicator (always mounted): the shape-morphing
+            m3e-loading-indicator glides in near the top of the page
+            area while the page or the engine still moves work for
+            the site and glides back away once everything settles;
+            the class toggle drives the CSS transition so both
+            directions animate. st.loading flips off only after the
+            settle probe holds, and engineBusy tracks engine
+            in-flight work, so the indicator stays up while small
+            resources are still loading after first paint. No
+            backdrop: the view never goes dark and the site stays
+            visible and interactive while it loads. */}
         <div
-          className={"lb-loadbar" + (st.loading || engineBusy ? " lb-loadbar-on" : "")}
+          className={"lb-loadchip" + (st.loading || engineBusy ? " lb-loadchip-on" : "")}
           role="progressbar"
           aria-label="Loading page"
           aria-hidden={!(st.loading || engineBusy)}
         >
-          <span className="lb-loadbar-fill" />
+          <m3e-loading-indicator variant="contained" aria-label="Loading page" />
         </div>
 
         {/* Compaction 4: the in-page new-tab hero is gone. An empty
