@@ -56,21 +56,15 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 81b3474 (pin 96: the 2026-10-20 scout wave -
-#368 comment-aware frame-buster folding, #369 non-executable
-script bodies pass through, #370 chained cross-frame sinks
-(rewriter-side), #364 the ws:// shim throws SyntaxError, #371
-srcdoc script bodies, #372 window.open noopener mint, #373
-backslash-form URLs stay cross-origin, #374 EventSource
-stringifies relayed URLs, #375 postMessage transfer list, #376
-cache refresh redirect hop gates, #377 page-cache clear on
-fingerprint/UA change (Zeolite b2c21c3, CI run 39392562420
-all 5 jobs green, suite 1377)), zlswSha 6975a139819b198b ->
-5a88a06a57303672, bootstrapSha eb91c2a989aa89f0 ->
-9d1cb1fba82b9ba8 (30349 bytes). This matches the Dockerfile
-ZEOLITE_COMMIT; the zeolite-server git rev stays a385fa9
-because the wave does not touch zeolite-server, and
-server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist 397bce56 (pin 104: the 2026-10-21 #154 wave - gapi-native
+policy rule (host apis.google.com, types script, route native) so the gapi
+loader's origin sanity-check sees the native literal, plus transportMatch
+compose so behavior rules and transport rules no longer shadow each other
+(Zeolite main fb845658, CI run 39656714434 all 5 jobs green, suite 1415/1415)),
+zlswSha ce02ad5c6c73bd90 -> 96b27c209b7f596e, bootstrapSha unchanged
+37460e146d217cb7 (31406 bytes). This matches the Dockerfile ZEOLITE_COMMIT;
+the zeolite-server git rev stays a385fa9 because the wave does not touch
+zeolite-server, and server/Cargo.lock is consistent with the pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
