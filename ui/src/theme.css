@@ -374,12 +374,15 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-page.active { visibility: visible; opacity: 1; transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease); }
 .lb-page iframe { width: 100%; height: 100%; border: none; background: var(--md-sys-color-surface, #fff); }
 
-/* Top loading bar: always mounted above the page area, the glide
-   transition (opacity + translateY) plays in both directions. */
-.lb-loadbar { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 6; overflow: hidden; pointer-events: none; opacity: 0; transform: translateY(-100%); transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1), transform 240ms cubic-bezier(0.2, 0, 0, 1); }
-.lb-loadbar-on { opacity: 1; transform: translateY(0); }
-.lb-loadbar-fill { position: absolute; top: 0; bottom: 0; left: -34%; width: 34%; border-radius: 0 3px 3px 0; background: var(--md-sys-color-primary); animation: lb-loadbar-sweep 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-@keyframes lb-loadbar-sweep { 0% { left: -34%; } 100% { left: 100%; } }
+/* Top loading indicator: the shape-morphing m3e-loading-indicator
+   floats near the top of the page area and glides down in when
+   the page or the engine still moves work for the site, gliding
+   back up away once everything settles; the transition (opacity +
+   translateY) plays in both directions. No full-view backdrop: the
+   site stays visible and interactive while it loads. */
+.lb-loadchip { position: absolute; top: 0; left: 50%; z-index: 6; pointer-events: none; display: flex; justify-content: center; padding: var(--md-sys-measurement-space150, 12px) 0; opacity: 0; transform: translate(-50%, -100%); transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1), transform 240ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-loadchip-on { opacity: 1; transform: translate(-50%, 0); }
+.lb-loadchip m3e-loading-indicator { width: 56px; height: 56px; }
 .lb-skel { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150); width: 100%; }
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
