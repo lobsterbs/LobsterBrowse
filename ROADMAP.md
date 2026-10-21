@@ -363,6 +363,15 @@ regained the #99 history-undo snackbar it had silently missed. Open
 in this phase: the cookies/storage integration checklist against
 current Zeolite capabilities.
 
+Origin isolation record (2026-10-21, #107 phase 1): proxied
+frames now navigate a distinct content origin (free Render
+service lobsterbrowse-content.onrender.com) behind ZL_CONTENT_ORIGIN
+(enabled on main, inert on beta pending the seam port); the
+boot page self-heals the relay channel, and the navigation seam
+skips the per-origin navHandle mint in favor of the b64u route.
+Honest gaps and the provisioned origins are recorded in AGENTS.md.
+#107 stays open.
+
 ### Downloads
 
 Provide a proper download flow rather than treating downloads as ordinary navigation.

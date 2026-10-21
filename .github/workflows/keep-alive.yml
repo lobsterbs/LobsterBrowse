@@ -18,6 +18,7 @@ jobs:
             https://lobsterbeta-scramjet-wisp-90su.onrender.com/ \
             https://lobsterbrowse-plud.onrender.com/healthz \
             https://lobsterbrowse-beta-gq13.onrender.com/healthz \
+            https://lobsterbrowse-content.onrender.com/healthz \
             https://lobsterbrowse-fixture-oy53.onrender.com/ ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::warning::keep-alive ping failed: $url"
