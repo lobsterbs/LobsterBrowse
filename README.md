@@ -62,15 +62,15 @@ This is a design direction, not a claim that NativeTransit has already replaced 
 When implemented, DevTools should show transport path, NativeTransit vs RewriteFallback, fallback reason, and whether a failure is upstream, transport, browser/runtime, policy or rewriting related.
 ## Current rewriting behavior
 The Zeolite service worker owns every proxied navigation and subresource: in-worker rewriting handles URL-bearing HTML attributes and CSS, runtime fetch/XHR and element properties, history and window.open, with transport over Wisp. Redirects are followed and relative URLs resolved against the final URL.
-Known limitations include client-side cookie differences, challenge-protected sites (Anubis), limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps.
+Known limitations include client-side cookie differences, challenge-protected sites (Anubis), limited service-worker behavior, WebSocket-heavy application gaps and complex SPA compatibility gaps. Sites that bot-wall datacenter IPs (GitHub, Mastodon, YouTube, DuckDuckGo, Google) can load their HTML through the engine but stall the data-driven rendering from this deployment's egress: that is upstream bot management, not an engine defect (the LB #75 class). WebSockets have no proxied path on the relay-only production deployment.
 ## Proxy options
 Settings reach the engine through the zl:rules control-plane push (adblock, per-site adblock and User-Agent overrides), not through route query parameters; the route path carries only the base64url target.
 ## DevTools
-DevTools is a real diagnostic surface. Events should identify trace/request ID, redacted URL, subsystem, severity, lifecycle stage and concrete cause where known. A normal WebSocket close is not an error. NativeTransit diagnostics should expose native-vs-fallback behavior.
+DevTools is a real diagnostic surface. Events should identify trace/request ID, redacted URL, subsystem, severity, lifecycle stage and concrete cause where known. A normal WebSocket close is not an error. NativeTransit diagnostics should expose native-vs-fallback behavior. The Diagnostics page has a privacy-safe export that serializes exactly the panel's sanitized rows (last 200 events) to a local file.
 ## UI rules
 No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
 ## Privacy
-LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
+LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets. Cloaking is user-side: Auto Cloak swaps the tab title and stages a harmless site when the tab is hidden, and the Settings cloaking panel can open LobsterBrowse inside a fresh about:blank window with no opener link back to the original.
 ## Building
 
 ### Server
