@@ -315,6 +315,24 @@ export default function App() {
     });
   }, []);
 
+  /* 0.7 Zirconium session import: history merges into the persisted
+     store, imported tabs append with fresh ids (importSessionData
+     minted fresh sess tokens). Refused entirely in incognito: the
+     import persists, and nothing may be written while private mode
+     is on. Returns an honest result code for the Settings page. */
+  const importSession = useCallback(
+    (data: unknown): "ok" | "invalid" | "incognito" => {
+      if (incognito) return "incognito";
+      const parsed = store.importSessionData(data);
+      if (!parsed) return "invalid";
+      setHistory(parsed.history);
+      const restored = parsed.tabs.map((t) => ({ ...t, id: tabSeq++ }));
+      if (restored.length > 0) setTabs((prev) => [...prev, ...restored]);
+      return "ok";
+    },
+    [incognito],
+  );
+
   /* Navigate the active proxy tab (used by Home search). */
   const navigateTo = useCallback(
     (target: string) => {
@@ -926,6 +944,7 @@ export default function App() {
                     onRulesChange={updateRules}
                     onOpenLogs={() => setView("logs")}
                     onDeleteAll={deleteAll}
+                    onImportSession={importSession}
                   />
                 </Suspense>
               )}
