@@ -76,10 +76,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    The starfield component owns its own dark radial background and
    fills this layer at 100%. */
 .lb-stars-bg { position: fixed; inset: 0; z-index: -1; }
-/* Frosted glass under Enhanced UI: the Home search bar and the nav
-   rail get a translucent surface tint plus backdrop blur, so their
-   contents stay readable over the animated background. Scoped to the
-   body class App toggles with the setting; off = untouched chrome. */
+/* Frosted glass under Enhanced UI: the Home search bar gets a
+   translucent surface tint plus backdrop blur so its contents stay
+   readable over the animated background. Scoped to the body class
+   App toggles with the setting; off = untouched chrome. */
 body.lb-fancy .lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host: backdrop-filter blurs the whole host
@@ -98,10 +98,14 @@ body.lb-fancy .lb-ac {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-body.lb-fancy m3e-nav-rail {
-  background: color-mix(in srgb, var(--md-sys-color-surface) 35%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+/* Frosted nav rail: always on, matching the frosted tab strip and
+   toolbar pill (42% surface tint, blur 18px saturate 1.3, hairline
+   edge). The component still owns width/overflow; only the surface
+   changes. */
+m3e-nav-rail {
+  background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 /* ASCII wordmark: the same frosted glass as the rail and search bar,
