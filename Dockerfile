@@ -1017,6 +1017,24 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 101: Zeolite dist 15a049461aca31f1862e3f791990cfc5f18d72eb
+# (from CI build 39574090321, Zeolite main 45ed5449, all 5 jobs
+# green, app suite 1404 tests). Pin 101 carries the 2026-10-21
+# Zeolite fix wave: #385 expired navigation handles re-mint on
+# GET navigations (Zeolite 22c0755); #383 prel parents always
+# reach the handle form (a non-NAVH parent now mints a fresh
+# NAVH handle for the decoded destination too, instead of
+# parking the document on the opaque prel pathname); #382 the
+# 60s relay header deadline breach resolves null and emits a
+# TRANSPORT DIAG row so the caller falls back instead of
+# wedging (undeclared long-polls beyond 60s stay an honest
+# residual); #381 Ghostery list fetches ride the full
+# upstreamFetch transport decision (relay routing works on
+# relay-only deployments) and load failures emit TRANSPORT
+# DIAG rows (no longer silent). sw.js 4326069120ccb9dc ->
+# c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
+# unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
+# Cargo-side pin stays a385fa9.
 # Pin 100 (re-pointed to carry ALL fixes): Zeolite dist 12d9f83c
 # (from CI build 39487725296, Zeolite main fb6f8fa0, all 5 jobs
 # green; bootstrap budget 30381/30400). Pin 100 first shipped
@@ -1191,7 +1209,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=12d9f83cb6115ab8bcdb787ff9a4f332d5569865
+ARG ZEOLITE_COMMIT=15a049461aca31f1862e3f791990cfc5f18d72eb
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1250,7 +1268,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4326069120ccb9dc ZEOLITE_BOOTSTRAP_SHA=e15f38fb1b1557e2 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c7cb3102e12f9e57 ZEOLITE_BOOTSTRAP_SHA=e15f38fb1b1557e2 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
