@@ -524,9 +524,17 @@ const RELAY_TOTAL_DEADLINE: std::time::Duration = std::time::Duration::from_secs
 /// semaphore-bounded (the permit lives until the response headers are
 /// in; bodies then stream under the client read timeout), and each
 /// client IP may start at most this many relay connects per window.
-const RELAY_MAX_CONCURRENT_CONNECTS: usize = 16;
+/// #157 (2026-10-21 live repro, probe w38-burst): every subresource of
+/// a proxied page rides the relay as one POST and every open stream
+/// holds a permit for its whole body, so a browser-real page load
+/// bursts far past 30 per 10s and 16 concurrent. The relay answered
+/// 429/503, the engine fell back to the password-authed wisp
+/// transport and each such fetch died as a "tls handshake eof" 502
+/// (the user's AI-mode report). Bounds sized for one browser page
+/// load; the endpoint is authorized, same-origin, single-user.
+const RELAY_MAX_CONCURRENT_CONNECTS: usize = 48;
 const RELAY_RATE_WINDOW_SECS: u64 = 10;
-const RELAY_RATE_MAX_PER_WINDOW: usize = 30;
+const RELAY_RATE_MAX_PER_WINDOW: usize = 150;
 
 async fn relay_send_wait(
     req: reqwest::RequestBuilder,
@@ -2101,18 +2109,35 @@ async fn zlsw_register() -> Response {
           (async () => {
             const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
             try {
-              const resp = await fetch("/zlrelay", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                signal: ac.signal,
-                body: JSON.stringify({
-                  dest: m.dest, method: m.method, headers: m.headers,
-                  ...(typeof m.body === "string" ? { body: m.body } : {}),
-                  ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
-                }),
+              const bodyJson = JSON.stringify({
+                dest: m.dest, method: m.method, headers: m.headers,
+                ...(typeof m.body === "string" ? { body: m.body } : {}),
+                ...(m.body instanceof ArrayBuffer ? { body_b64: u8ToB64(new Uint8Array(m.body)) } : {}),
               });
+              /* #157: a rate-window (429) or concurrency (503) rejection is
+                 transient; retry with backoff instead of failing the rid,
+                 which would drop the engine fetch onto the doomed wisp
+                 fallback. Bounded well inside the engine's 60s header
+                 deadline; other statuses stay honest failures. */
+              let resp = null;
+              for (let attempt = 0; ; attempt++) {
+                const r = await fetch("/zlrelay", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  signal: ac.signal,
+                  body: bodyJson,
+                });
+                const st = Number(r.headers.get("x-zl-relay-status"));
+                if (Number.isFinite(st) && st > 0) { resp = r; break; }
+                if ((r.status === 429 || r.status === 503) && attempt < 5) {
+                  try { if (r.body) await r.body.cancel(); } catch (e2) {}
+                  await new Promise((res) => setTimeout(res, 300 * (attempt + 1)));
+                  if (ac.signal.aborted) throw new Error("relay aborted during retry");
+                  continue;
+                }
+                throw new Error("relay endpoint unavailable (" + r.status + ")");
+              }
               const status = Number(resp.headers.get("x-zl-relay-status"));
-              if (!Number.isFinite(status) || status <= 0) throw new Error("relay endpoint unavailable (" + resp.status + ")");
               const headers = JSON.parse(resp.headers.get("x-zl-relay-headers") || "[]");
               const setCookies = JSON.parse(resp.headers.get("x-zl-relay-set-cookie") || "[]");
               ch.port1.postMessage({ type: "zl:relayHead", rid: m.rid, status, statusText: "", headers, setCookies });
