@@ -2266,7 +2266,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         .ok()
         .and_then(|v| content_origin_from(&v))
         .unwrap_or_default();
-    let lb_version = format!("{} Cobalt", env!("CARGO_PKG_VERSION"));
+    let lb_version = format!("{} Zirconium", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
