@@ -2173,6 +2173,21 @@ async fn zlsw_register() -> Response {
         openRelay();
         const swc2 = navigator.serviceWorker.controller || reg.active;
         if (swc2 && wispUrl) swc2.postMessage({ type: "zl:wispRegister", url: wispUrl });
+        /* #107 phase 2: the embedder origin registration is as
+           memory-only as the relay port; re-register it with the heal. */
+        if (swc2 && appOrigin) swc2.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
+      }
+    });
+    /* #107 phase 2: the app introduces itself after the ack (zlRegAsk);
+       the worker stores the embedder origin so proxied frames can sync
+       their URL/title up to the app (zl:getEmbedder). appOrigin is kept
+       here so the relayLost heal re-registers it after a worker restart. */
+    let appOrigin = "";
+    window.addEventListener("message", (ev) => {
+      if (ev.data && ev.data.zlRegAsk === true && /^https:/.test(ev.origin)) {
+        appOrigin = ev.origin;
+        const swc3 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+        if (swc3) swc3.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
       }
     });
     try {

@@ -1986,6 +1986,11 @@ export default function BrowserView(props: Props) {
           L.updateTab(tabId, patch);
           pushLog("info", "url sync " + sanitizeUrl(real));
         }
+        /* #107 phase 2: split-origin frames ride this schema for URL
+           and title sync (the engine's embedder channel); a same-origin
+           producer may omit the title. */
+        const title = cap(d.title, 300);
+        if (title && title !== tab.title) L.updateTab(tabId, { title });
         setStatus((prev) => {
           const cur = prev[tabId as number];
           return cur && cur.loading ? { ...prev, [tabId as number]: { loading: false } } : prev;
