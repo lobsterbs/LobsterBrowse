@@ -4,6 +4,7 @@
    selection stay in pages/Browser.tsx. */
 import { useEffect, useState } from "react";
 import { routeUrl } from "../settings";
+import { zlContentHref } from "../zeolite";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
 
@@ -65,8 +66,11 @@ export default function TabSwitcherCard(props: {
           >
             <div className="lb-tab-preview">
               {t.url && everOpened ? (
+                /* #107: preview tiles load the content origin in split
+                   mode; a proxied document must never render same-origin
+                   on the app origin. */
                 <iframe
-                  src={routeUrl(t.url)}
+                  src={zlContentHref(routeUrl(t.url))}
                   title={"Preview of " + tabLabel(t)}
                   loading="lazy"
                   tabIndex={-1}
