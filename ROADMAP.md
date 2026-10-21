@@ -258,6 +258,20 @@ Maintain a real-site regression suite covering representative classes such as:
 
 Tests should verify actual behavior rather than merely status codes.
 
+Status: complete (2026-10-21). The maintained regression suite is
+CI-gated: the Zeolite-side suite (397-site interaction crawl corpus,
+extension-runtime e2e, games-play, compat scoreboard) plus the LB
+transit-live job against the live deployment pair. Live spot checks
+at pin 101 verified the classes through the relay-only production
+pair: search and wiki (Wikipedia), documentation (MDN), complex SPA
+(Excalidraw), and a video platform shell (YouTube). Honest walls,
+verified live: GitHub, Mastodon and YouTube answer the datacenter
+egress with 429/503/403 rate limits, so the page HTML loads through
+the engine while the data-driven rendering stalls (the LB #75 class:
+upstream bot management, not an engine defect). WebSockets have no
+proxied path on the relay-only deployment; challenge and captcha
+handling stays detection-only.
+
 ---
 
 # 0.6 - Nickel
@@ -292,6 +306,14 @@ Keep diagnostics privacy-safe. Never
  expose or persist passwords, bearer tokens, API keys, authorization headers, raw cookies or equivalent secrets.
 
 Add privacy-safe diagnostic export when appropriate.
+
+Status: complete (2026-10-21). Diagnostics are always on (the toggle
+was removed on purpose). A failure row identifies what happened
+(message), the subsystem (category), where (stage plus redacted URL),
+why (technicalReason) and, when the engine provides one, the trace
+identifier; the DevTools diagnostics page renders every part and the
+privacy-safe export serializes exactly the panel's sanitized rows
+(last 200 events) to a local file. Nothing leaves the browser.
 
 ---
 
@@ -330,6 +352,25 @@ Support reliable:
 - crash recovery
 - restore
 - import/export where appropriate
+
+Session state record (2026-10-21): tabs (lifecycle, isolation,
+incognito, restoration with the full per-tab history stack and
+position persisted on every change) and the streaming download
+registry shipped in earlier waves; Settings now offers session
+export/import (local JSON file: redacted at export, sanitized and
+size-capped at import, refused in incognito). The beta branch also
+regained the #99 history-undo snackbar it had silently missed. Open
+in this phase: the cookies/storage integration checklist against
+current Zeolite capabilities.
+
+Origin isolation record (2026-10-21, #107 phase 1): proxied
+frames now navigate a distinct content origin (free Render
+service lobsterbrowse-content.onrender.com) behind ZL_CONTENT_ORIGIN
+(enabled on main, inert on beta pending the seam port); the
+boot page self-heals the relay channel, and the navigation seam
+skips the per-origin navHandle mint in favor of the b64u route.
+Honest gaps and the provisioned origins are recorded in AGENTS.md.
+#107 stays open.
 
 ### Downloads
 
@@ -594,15 +635,12 @@ Where applicable, completion requires implementation, tests, and real browser/de
 
 ## Immediate priority
 
-The immediate roadmap milestone is **0.5 - Cobalt** (0.4 - Vanadium
-is complete; the difficult-modern-websites push begins).
-
-Before expanding into more browser features:
-
-1. audit the old RewriteFallback architecture;
-2. reconcile LobsterBrowse and Zeolite responsibilities;
-3. verify `/zl/`, Wisp and NativeTransit behavior;
-4. verify reproducible engine builds/deployments;
-5. establish the first real-site compatibility regression suite;
-6. update documentation to describe the actual architecture;
-7. then proceed into deeper compatibility work.
+The immediate roadmap milestone is **0.7 - Zirconium** (0.4 -
+Vanadium, 0.5 - Cobalt and 0.6 - Nickel are complete). The Cobalt
+groundwork stands: the RewriteFallback architecture was audited and
+reconciled into the engine's expected routing decisions,
+LobsterBrowse and Zeolite responsibilities are documented in
+AGENTS.md, /zl/ with Wisp and NativeTransit behavior is verified
+live on every deploy, engine builds are reproducible (dist pin plus
+sha256 checks in CI and in the Docker build), and the real-site
+regression suite runs in CI.
