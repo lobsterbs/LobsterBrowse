@@ -197,7 +197,9 @@ function exportDiag(stats: ZlStats, events: ZlDiagEvent[]) {
   a.href = href;
   a.download = "lobsterbrowse-diagnostics.json";
   a.click();
-  URL.revokeObjectURL(href);
+  /* Revoking synchronously can cancel the fetch the browser has
+     only queued, not started; give the download time to attach. */
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
 function ZeoliteDiagnostics() {
