@@ -197,6 +197,7 @@ type ZlDiagEvent = {
   stage?: string;
   url?: string;
   technicalReason?: string;
+  traceId?: string;
 };
 
 const zlNotable = (e: ZlDiagEvent) =>
@@ -212,6 +213,35 @@ const zlDiagSnapshot: {
   fallbacks: ZlFallback[];
   notable: ZlDiagEvent[];
 } = { native: null, fallbackCount: 0, fallbacks: [], notable: [] };
+
+/* Export serializes exactly what the panel shows: the same
+   engine-redacted rows, sanitized at the merge, capped to the last
+   200 events. Local file download only; nothing leaves the browser. */
+function exportDiag(stats: ZlStats, events: ZlDiagEvent[]) {
+  const data = JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      stats,
+      events: events
+        .map((e) => ({
+          ...e,
+          message: sanitizeText(e.message),
+          url: e.url ? sanitizeUrl(e.url) : e.url,
+          technicalReason: e.technicalReason ? sanitizeText(e.technicalReason) : e.technicalReason,
+          traceId: e.traceId ? sanitizeText(e.traceId) : e.traceId,
+        }))
+        .slice(-200),
+    },
+    null,
+    2,
+  );
+  const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = "lobsterbrowse-diagnostics.json";
+  a.click();
+  URL.revokeObjectURL(href);
+}
 
 function ZeoliteDiagnostics() {
   const [stats, setStats] = useState<ZlStats | null>(null);
@@ -273,6 +303,9 @@ function ZeoliteDiagnostics() {
         {stats.fallbacks.length > 0 && (
           <span className="lb-diag-chip lb-diag-bad">Rewrite fallbacks: {stats.fallbacks.length}</span>
         )}
+        <m3e-button onClick={() => exportDiag(stats, events)}>
+          <m3e-icon name="download" aria-hidden={true} /> Export
+        </m3e-button>
       </div>
       {stats.fallbacks
         .slice(-10)
@@ -303,6 +336,7 @@ function ZeoliteDiagnostics() {
             {e.stage && <div>Stage: {e.stage}</div>}
             {e.url && <div>URL: {e.url}</div>}
             {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
+            {e.traceId && <div>Trace: {e.traceId}</div>}
           </div>
         </details>
       ))}
