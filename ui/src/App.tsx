@@ -249,12 +249,50 @@ export default function App() {
 
   /* #93 recent sites: removal and clearing keep Home row and the
      persisted history store in lockstep. */
+  /* #99: both removals are reversible, so they happen at once and the
+     snackbar offers Undo (entries go back to their old positions). */
   const removeHistory = useCallback((url: string) => {
+    const index = store.loadHistory().indexOf(url);
     setHistory(store.removeHistory(url));
+    if (index < 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      /* keep the raw entry as the label */
+    }
+    M3eSnackbar.open("Removed " + host + " from recent sites", "Undo", {
+      duration: 6000,
+      actionCallback: () => setHistory(store.insertHistory(url, index)),
+    });
   }, []);
   const clearHistoryAll = useCallback(() => {
+    const before = store.loadHistory();
     setHistory(store.clearHistory());
+    if (before.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+    M3eSnackbar.open("Cleared recent sites", "Undo", {
+      duration: 6000,
+      actionCallback: () => setHistory(store.restoreHistory(before)),
+    });
   }, []);
+
+  /* 0.7 Zirconium session import: history merges into the persisted
+     store, imported tabs append with fresh ids (importSessionData
+     minted fresh sess tokens). Refused entirely in incognito: the
+     import persists, and nothing may be written while private mode
+     is on. Returns an honest result code for the Settings page. */
+  const importSession = useCallback(
+    (data: unknown): "ok" | "invalid" | "incognito" => {
+      if (incognito) return "incognito";
+      const parsed = store.importSessionData(data);
+      if (!parsed) return "invalid";
+      setHistory(parsed.history);
+      const restored = parsed.tabs.map((t) => ({ ...t, id: tabSeq++ }));
+      if (restored.length > 0) setTabs((prev) => [...prev, ...restored]);
+      return "ok";
+    },
+    [incognito],
+  );
 
   /* Navigate the active proxy tab (used by Home search). */
   const navigateTo = useCallback(
@@ -798,6 +836,7 @@ export default function App() {
                   onRulesChange={updateRules}
                   onOpenLogs={() => setView("logs")}
                   onDeleteAll={deleteAll}
+                  onImportSession={importSession}
                 />
               )}
               {view === "logs" && (

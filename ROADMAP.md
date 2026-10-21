@@ -353,6 +353,16 @@ Support reliable:
 - restore
 - import/export where appropriate
 
+Session state record (2026-10-21): tabs (lifecycle, isolation,
+incognito, restoration with the full per-tab history stack and
+position persisted on every change) and the streaming download
+registry shipped in earlier waves; Settings now offers session
+export/import (local JSON file: redacted at export, sanitized and
+size-capped at import, refused in incognito). The beta branch also
+regained the #99 history-undo snackbar it had silently missed. Open
+in this phase: the cookies/storage integration checklist against
+current Zeolite capabilities.
+
 ### Downloads
 
 Provide a proper download flow rather than treating downloads as ordinary navigation.
