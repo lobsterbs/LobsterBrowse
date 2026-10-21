@@ -79,6 +79,22 @@ export default function App() {
       );
     }
   }, [incognito]);
+  /* Welcome Back: one snackbar on boot for returning profiles; the
+     very first visit only sets the marker. Local-only, never sent
+     server-side; storage failures behave like a first visit. */
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("lb_visited")) {
+        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+          M3eSnackbar.open("Welcome Back!", { duration: 4000 });
+        }
+      } else {
+        localStorage.setItem("lb_visited", "1");
+      }
+    } catch {
+      /* localStorage unavailable: behave like a first visit. */
+    }
+  }, []);
   /* #80: the engine worker broadcasts zl:engineUpdate (updates.ts)
      to every window client once it activates; the UI itself is a
      client of the same worker, so the update surfaces as a snackbar
