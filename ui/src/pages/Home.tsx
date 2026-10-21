@@ -112,11 +112,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
       return;
     }
     const ac = new AbortController();
-    /* #113: the previous query's suggestions never stay visible under
-       the new query - the list clears when this query's fetch starts,
-       and the cleanup abort below kills any out-of-order reply before
-       it lands, so a failed or stale fetch cannot show wrong rows. */
-    setRemote([]);
     const t = setTimeout(() => {
       fetchSuggestions(settings.engine, q, ac.signal).then((res) => {
         setRemote(res.items.map((text) => ({ text, src: res.source })));
@@ -145,7 +140,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   /* The card springs in and out; while it animates out, clicks pass
      through (pointerEvents gated on progress below). */
   const spring = useSpringCard(open && suggestions.length > 0);
-  const listShown = spring.visible && suggestions.length > 0;
 
   const commit = (target: string) => {
     onNavigate(target);
@@ -241,58 +235,37 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
             onKeyDown={onKey}
             placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
             autoComplete="off"
-            /* #100: the input is a combobox that owns the suggestion
-               listbox; focus stays here, so the highlighted option is
-               exposed through aria-activedescendant. */
-            role="combobox"
-            aria-expanded={listShown}
-            aria-controls={listShown ? "lb-home-suggest" : undefined}
-            aria-autocomplete="list"
-            aria-activedescendant={listShown && suggestions[idx] ? "lb-home-opt-" + idx : undefined}
           />
         </m3e-search-bar>
-        {/* #120: polite count announcement; the listbox itself stays
-            quiet so rapid typing does not read every option. */}
-        <div className="lb-sr-only" role="status" aria-live="polite">
-          {listShown
-            ? suggestions.length +
-              (suggestions.length === 1 ? " suggestion available" : " suggestions available")
-            : ""}
-        </div>
-        {listShown && (
+        {spring.visible && suggestions.length > 0 && (
           <div
             className="lb-ac"
+            role="listbox"
+            aria-label="Suggestions"
             style={{
               opacity: spring.progress,
               transform: "translateY(" + (1 - spring.progress) * -10 + "px)",
               pointerEvents: spring.progress > 0.5 ? "auto" : "none",
             }}
           >
-            {/* #100: the listbox holds only options; the hint sits
-                outside it so every child is a valid option. */}
-            <div id="lb-home-suggest" role="listbox" aria-label="Suggestions">
-              {suggestions.map((s, i) => (
-                <button
-                  key={s.url + i}
-                  id={"lb-home-opt-" + i}
-                  type="button"
-                  role="option"
-                  aria-selected={i === idx}
-                  className={"lb-ac-item" + (i === idx ? " active" : "")}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pick(s);
-                  }}
-                  onMouseEnter={() => setIdx(i)}
-                >
-                  <m3e-icon name={s.icon} aria-hidden={true} />
-                  <span className="lb-ac-text">{s.text}</span>
-                  {s.src && (
-                    <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {s.src}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            {suggestions.map((s, i) => (
+              <button
+                key={s.url + i}
+                type="button"
+                className={"lb-ac-item" + (i === idx ? " active" : "")}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(s);
+                }}
+                onMouseEnter={() => setIdx(i)}
+              >
+                <m3e-icon name={s.icon} aria-hidden={true} />
+                <span className="lb-ac-text">{s.text}</span>
+                {s.src && (
+                  <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {s.src}</span>
+                )}
+              </button>
+            ))}
             <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
           </div>
         )}
@@ -300,32 +273,28 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
       {/* #93 recent sites: local history only (never recorded while
           incognito: the whole section hides there), hostname labels,
           one-tap reopen, per-entry remove and clear-all. */}
-      {/* #101: M3E chip set. An assist chip opens the site; the
-          trailing icon button removes that one entry. Assist chips
-          have no trailing slot, so the remove control sits beside the
-          chip inside the pair span. Clear-all is an M3E text button. */}
       {!incognito && recent.length > 0 && (
-        <div className="lb-recent">
-          <m3e-chip-set aria-label="Recent sites">
-            {recent.map((r) => (
-              <span key={r.url} className="lb-recent-chip">
-                <m3e-assist-chip onClick={() => commit(r.url)}>
-                  <m3e-icon slot="icon" name="history" aria-hidden={true} />
-                  {r.host}
-                </m3e-assist-chip>
-                <m3e-icon-button
-                  size="extra-small"
-                  aria-label={"Remove " + r.host + " from recent sites"}
-                  onClick={() => onRemoveHistory(r.url)}
-                >
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </span>
-            ))}
-          </m3e-chip-set>
-          <m3e-button variant="text" onClick={() => onClearHistory()}>
-            <m3e-icon name="mop" aria-hidden={true} /> Clear
-          </m3e-button>
+        <div className="lb-recent" aria-label="Recent sites">
+          {recent.map((r) => (
+            <span key={r.url} className="lb-recent-chip">
+              <button type="button" className="lb-recent-open" onClick={() => commit(r.url)} title={r.host}>
+                <m3e-icon name="history" aria-hidden={true} />
+                {r.host}
+              </button>
+              <button
+                type="button"
+                className="lb-recent-x"
+                aria-label={"Remove " + r.host + " from recent sites"}
+                onClick={() => onRemoveHistory(r.url)}
+              >
+                <m3e-icon name="close" aria-hidden={true} />
+              </button>
+            </span>
+          ))}
+          <button type="button" className="lb-recent-clear" onClick={() => onClearHistory()}>
+            <m3e-icon name="mop" aria-hidden={true} />
+            Clear
+          </button>
         </div>
       )}
 

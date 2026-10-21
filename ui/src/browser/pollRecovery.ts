@@ -29,18 +29,7 @@ const ENGINE_PREFIXES = ["/zl/", "/__zl_nav__/", "/__zl_navh__", "/sj/r/"];
 
 export function pollAction(protocol: string, path: string, tabUrl: string): PollAction {
   if (protocol.startsWith("about:")) return "wait";
-  if (!path) return "wait";
-  if (path === "/") {
-    /* #112: a tab frame sitting on the app root is never a healthy
-       upstream document — real navigations ride engine routes
-       (/zl/, /__zl_nav*__), so "/" inside a proxy tab means a
-       navigation escaped to the SPA fallback and the app shell is
-       rendering inside the tab. Hand it to the recover branch, which
-       only acts once it actually finds the shell (.lb-shell) in the
-       frame, so in-flight and healthy frames are never touched. A
-       tab with no URL yet has nothing to recover to: keep waiting. */
-    return tabUrl ? "recover" : "wait";
-  }
+  if (!path || path === "/") return "wait";
   if (ENGINE_PREFIXES.some((p) => path.startsWith(p))) return "sync";
   if (!tabUrl) return "wait";
   if (APP_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))) return "wait";

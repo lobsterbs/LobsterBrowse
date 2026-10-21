@@ -56,11 +56,11 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 
 /* The proxy browser wants every pixel it can get. */
 /* Browser view fills the viewport: no scrolling, no chrome. */
-.lb-shell:has(.lb-browser-host:not([hidden])) { height: 100vh; overflow: hidden; }
+.lb-shell:has(.lb-browser) { height: 100vh; overflow: hidden; }
 /* Home view: the hero fits one viewport, no page scroll. */
 .lb-shell:has(.lb-home) { height: 100vh; overflow: hidden; }
-.app-content:has(.lb-browser-host:not([hidden])) { padding: 0; max-width: none; height: 100%; }
-.app-content:has(.lb-browser-host:not([hidden])) .lb-browser-host { max-width: none; height: 100%; }
+.app-content:has(.lb-browser) { padding: 0; max-width: none; height: 100%; }
+.app-content:has(.lb-browser) .lb-view { max-width: none; height: 100%; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
@@ -97,15 +97,6 @@ body.lb-fancy .lb-ac {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
-}
-/* The frosted rail needs something behind it to blur: the fancy
-   setting paints a soft colour field on the shell that the rail,
-   search bar and suggestion list blur through. */
-body.lb-fancy .lb-shell {
-  background:
-    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent), transparent 55%),
-    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--md-sys-color-tertiary, var(--md-sys-color-primary)) 30%, transparent), transparent 60%),
-    var(--md-sys-color-surface);
 }
 body.lb-fancy m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 35%, transparent);
@@ -282,7 +273,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
   border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
-  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* Same retract logic as the bottom dock: after the shared idle timer
    the strip slides up leaving a 16px sliver. The tabs themselves are
@@ -312,9 +303,9 @@ body.lb-fancy .lb-home pre.lb-ascii {
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease),
-    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring),
-    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring),
-    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tab:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
@@ -413,10 +404,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
 }
 .lb-dock-pill {
   transform: translateY(0);
-  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-dock.tucked { pointer-events: none; }
-.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); display: none; }
+.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); }
 .lb-dock:focus-within .lb-dock-pill { transform: translateY(0); }
 .lb-toolbar {
   display: block;
@@ -456,7 +447,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tb-pill.expanded { width: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
@@ -526,7 +517,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border-radius: 0;
 }
 .lb-tb-ac {
-  animation: lb-card-in 180ms var(--m3e-spring);
+  animation: lb-card-in 180ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
   position: absolute;
   bottom: calc(100% + 10px);
   left: 0;
@@ -574,7 +565,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   display: flex;
   flex-direction: column;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
-  animation: lb-dt-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-dt-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 @keyframes lb-dt-in {
   from { opacity: 0; transform: translateX(16px); }
@@ -667,13 +658,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
    Additive layer: bigger shapes, springy motion, expressive type.
    Baseline tokens above stay untouched. */
 :root {
-  /* Single source for the spring easing. @m3e/web does not define
-     --m3e-spring. This curve matches the spatial-spring fallback that
-     @m3e/web's own DesignToken uses; the theme's
-     --md-sys-motion-spring-*-spatial tokens bundle a duration, so only
-     the curve is taken from them. Uses read var(--m3e-spring) with no
-     fallback, so a missing definition is visible, not hidden. */
-  --m3e-spring: cubic-bezier(0.27, 1.06, 0.18, 1.0);
+  --m3e-spring: cubic-bezier(0.27, 1.06, 0.18, 1.0); /* M3E spring-spatial control points (the --md-sys-motion-spring-*-spatial tokens bundle a duration, so the alias carries the curve only; the old homemade bounce is retired) */
   /* Shape hierarchy, aligned 1:1 with the M3E corner tokens:
      xl = extra-large 28 (hero floating surfaces), lg = large-increased
      20 (prominent cards/docks), md = large 16 (panels and pages),
@@ -820,7 +805,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   z-index: 45;
   border-radius: var(--m3e-shape-lg);
   overflow: hidden;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* The card's slotted rows need their own padding: the m3e-card
    surface has none, and unpadded rows (especially the two long
@@ -973,14 +958,14 @@ m3e-icon-button:active { transform: scale(0.88); }
   pointer-events: none;
   opacity: 0;
   transform: translateX(-50%) translateY(14px) scale(0.98);
-  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring);
+  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-card.open {
   visibility: visible;
   pointer-events: auto;
   opacity: 1;
   transform: translateX(-50%);
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-row {
   display: flex;
@@ -1002,9 +987,9 @@ m3e-icon-button:active { transform: scale(0.88); }
   border-radius: var(--m3e-shape-sm);
   cursor: pointer;
   transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
-    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring),
-    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring),
-    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring);
+    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-tile:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
@@ -1104,7 +1089,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   width: 360px;
   max-width: calc(100vw - 32px);
   z-index: 45;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-dl-list {
   display: flex;
@@ -1144,6 +1129,28 @@ m3e-snackbar {
   transform-origin: top !important;
 }
 
+/* XPI install prompt: fixed centered overlay. m3e-dialog is not wired
+   anywhere else in the app; a plain overlay card avoids guessing the
+   component's open/close API, reusing the site-card row paddings. */
+.lb-xpi-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+.lb-xpi-card {
+  width: min(400px, calc(100vw - 32px));
+  border-radius: var(--m3e-shape-lg);
+  overflow: hidden;
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-xpi-card { animation: none; }
+}
+
 /* Engine extension notifications (#50): bottom-right stack of note
    cards; clicked / buttonClicked / closed report back over
    zl:notifyEvent. Plain overlay surfaces, same rationale as the XPI
@@ -1164,7 +1171,7 @@ m3e-snackbar {
   border-radius: var(--m3e-shape-lg, 16px);
   padding: var(--md-sys-measurement-space200, 16px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-ext-note-title { font-weight: 600; font-size: 0.95rem; }
 .lb-ext-note-msg { opacity: 0.85; margin-top: var(--md-sys-measurement-space25, 2px); }
@@ -1263,7 +1270,7 @@ m3e-snackbar {
   .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
-  .app-content:has(.lb-browser-host:not([hidden])) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
+  .app-content:has(.lb-browser) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
   .app-content {
     padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
   }
@@ -1303,6 +1310,18 @@ m3e-snackbar {
 @keyframes lb-cmdk-in {
   from { opacity: 0; transform: translateY(var(--md-sys-measurement-space100, 8px)); }
 }
+.lb-cmdk-input {
+  margin: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  font-family: inherit;
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  background: var(--md-sys-color-surface-container-highest, #37393e);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border: none;
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  outline: none;
+}
+.lb-cmdk-input:focus { box-shadow: 0 0 0 1px var(--md-sys-color-primary, #a8c7fa); }
 .lb-cmdk-list {
   overflow-y: auto;
   padding: 0 var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px);
@@ -1404,13 +1423,63 @@ body.lb-incognito .lb-toolbar {
   gap: var(--md-sys-measurement-space75);
   margin-top: var(--md-sys-measurement-space200);
 }
-/* #101: each recent site is an M3E assist chip plus its own remove
-   icon button, grouped by one m3e-chip-set (the set is inline-flex and
-   wraps). The pair span keeps the two controls together. */
 .lb-recent-chip {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
 }
+body.lb-fancy .lb-recent-chip {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border-color: color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
+}
+.lb-recent-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space50);
+  max-width: 180px;
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--md-sys-color-on-surface, inherit);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-recent-open:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.lb-recent-open m3e-icon { font-size: 16px; flex-shrink: 0; }
+.lb-recent-x {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75);
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent);
+  background: none;
+  color: var(--md-sys-color-on-surface-variant, inherit);
+  cursor: pointer;
+  font-size: 14px;
+}
+.lb-recent-x:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent); }
+.lb-recent-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space50);
+  padding: var(--md-sys-measurement-space50);
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--md-sys-typescale-label-medium-font-size, 12px);
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  opacity: 0.75;
+}
+.lb-recent-clear:hover { opacity: 1; }
 
 /* #94: console empty state. */
 .lb-console-empty { padding: var(--md-sys-measurement-space200); }
@@ -1459,17 +1528,4 @@ body .lb-ext-panel {
   .lb-tabs-tile { width: 132px; }
   .lb-tab-preview { width: 116px; }
   .lb-tab-preview iframe { width: 464px; }
-}
-
-/* #120: visually hidden, announced to assistive technology. */
-.lb-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
 }

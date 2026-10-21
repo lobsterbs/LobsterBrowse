@@ -2,8 +2,6 @@
    technical log ring buffer. All persisted in localStorage under
    lobsterbrowse-* keys so "Delete all data" can wipe them. */
 
-import { sanitizeText, sanitizeUrl } from "./sanitize.ts";
-
 export type Tab = {
   id: number;
   url: string;
@@ -74,22 +72,6 @@ export function clearHistory(): string[] {
   return [];
 }
 
-/* #99 undo: put one removed entry back at its old position. */
-export function insertHistory(url: string, index: number): string[] {
-  const list = loadHistory().filter((u) => u !== url);
-  list.splice(Math.min(Math.max(index, 0), list.length), 0, url);
-  const trimmed = list.slice(0, 200);
-  writeJson(HISTORY_KEY, trimmed);
-  return trimmed;
-}
-
-/* #99 undo: restore a cleared list, keeping anything visited since. */
-export function restoreHistory(urls: string[]): string[] {
-  const merged = Array.from(new Set([...loadHistory(), ...urls])).slice(0, 200);
-  writeJson(HISTORY_KEY, merged);
-  return merged;
-}
-
 /* ---- Session tabs (persisted so the browser view can restore on reload) ----
    The full per-tab history stack and index are preserved (P0 session
    restoration): flattening to the current URL used to destroy back/
@@ -119,31 +101,19 @@ export function saveSessionTabs(tabs: Tab[]) {
 /* ---- Client-side technical log ring ---- */
 
 const LOGS_KEY = "lobsterbrowse-logs";
-/* Incognito mode (#108): page diagnostics (console lines, resfail
-   entries) reach pushLog while an incognito session is active. They
-   go to a SEPARATE throwaway ring that is discarded the moment
-   incognito ends — they can NEVER reach localStorage, not even after
-   exit via a later normal-mode flush or a pagehide flush (those only
-   ever write the normal ring). The old single shared ring leaked
-   private entries into the persistent log exactly that way. */
+/* Incognito mode (P0 data-flow): page diagnostics (console lines,
+   resfail entries) reach pushLog while an incognito session is
+   active. They stay in the in-memory ring so DevTools/Logs work, but
+   they are NEVER written to localStorage — the persisted log used to
+   leak incognito browsing activity into the normal profile. */
 let incognitoMode = false;
-let incognitoRing: LogEntry[] = [];
 export function setIncognitoLogging(on: boolean) {
   incognitoMode = on;
-  /* Enter: the private ring starts empty. Exit: it is discarded —
-     the entries die with the session, and nothing schedules a flush
-     that could persist them (persistLogs writes logRing only). */
-  incognitoRing = [];
   if (on && persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
 }
-
-/* The active ring: what DevTools shows and what clear/clearAll touch.
-   Private entries live in the throwaway ring, normal entries in the
-   persisted one; neither ever crosses into the other. */
-const activeRing = () => (incognitoMode ? incognitoRing : logRing);
 /* Restored from localStorage at startup: the old in-memory ring was
    wiped on every reload, which is why the Logs page showed "No client
    log entries yet" right after a hard refresh. */
@@ -153,9 +123,7 @@ let logRing: LogEntry[] = readJson<LogEntry[]>(LOGS_KEY, []).filter(
 const LOG_LIMIT = 300;
 
 function persistLogs() {
-  /* #108: only the normal ring is ever written. incognitoRing is
-     unreachable here by construction: private entries go to it only
-     while incognitoMode is on, and this never reads activeRing(). */
+  if (incognitoMode) return;
   writeJson(LOGS_KEY, logRing);
 }
 
@@ -179,28 +147,19 @@ try {
   /* no window; persist immediately instead */
 }
 export function pushLog(level: LogEntry["level"], msg: string) {
-  /* #111: redaction is centralized at this boundary, so no call site
-     can persist a raw destination URL: secret query values, URL
-     user-info credentials and JWT-shaped values are stripped here
-     (mirror of main.rs redact_secrets; see ui/src/sanitize.ts). */
-  const safe = sanitizeText(sanitizeUrl(msg));
-  const ring = activeRing();
-  ring.push({ ts: Date.now(), level, msg: safe });
-  if (ring.length > LOG_LIMIT) ring.shift();
+  logRing.push({ ts: Date.now(), level, msg });
+  if (logRing.length > LOG_LIMIT) logRing.shift();
   if (persistTimer === null && !incognitoMode) {
     persistTimer = window.setTimeout(flushLogs, 500);
   }
 }
 
 export function getLogs(): LogEntry[] {
-  return [...activeRing()];
+  return [...logRing];
 }
 
 export function clearLogs() {
-  activeRing().length = 0;
-  /* In incognito this flushes the NORMAL ring, which the private
-     session never touched — the discarded private entries can never
-     be written by it. */
+  logRing.length = 0;
   flushLogs();
 }
 
@@ -223,5 +182,4 @@ export function clearAllData() {
     /* ignore */
   }
   logRing.length = 0;
-  incognitoRing = [];
 }

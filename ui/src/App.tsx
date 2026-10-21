@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import HomePage from "./pages/Home";
-const SettingsPanel = lazy(() => import("./pages/Settings"));
-const LogsPage = lazy(() => import("./pages/Logs"));
+import SettingsPanel from "./pages/Settings";
+import LogsPage from "./pages/Logs";
+import BrowserView from "./pages/Browser";
 import {
   engineRoutePrefix,
   loadSettings,
@@ -16,13 +17,11 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
+import { zlRelayInit, zlSend, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
 import "./extensions.css";
-
-const BrowserView = lazy(() => import("./pages/Browser"));
 
 type View = "home" | "browser" | "settings" | "logs";
 
@@ -43,7 +42,6 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
   const [view, setView] = useState<View>("home");
-  const [browserMounted, setBrowserMounted] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
@@ -87,8 +85,6 @@ export default function App() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const onMsg = (ev: MessageEvent) => {
-      /* #142: engine broadcasts only from the engine worker itself. */
-      if (!engineSwSource(ev)) return;
       const d = ev.data as { type?: string; sha?: string | null; version?: unknown } | null;
       if (!d || d.type !== "zl:engineUpdate") return;
       const key = typeof d.sha === "string" && d.sha ? d.sha : "v:" + String(d.version ?? "");
@@ -139,37 +135,23 @@ export default function App() {
      mount fell back to the wisp transport and died on this
      deployment password-authed wisp ("tls handshake eof" 502s).
      A worker restart drops the engine stored port, so re-register
-     on controller change. Registration is idempotent.
-     #151: the announced endpoint is the selected WISP server, a
-     custom wss:// entry from Settings or the deployment endpoint
-     from /build (the LobsterBrowse default). The selection can
-     change at any time, so the announce callback lives behind a
-     ref that both this boot effect and the selection effect below
-     keep current. */
-  const sjWispRef = useRef("");
-  const wispAnnounceRef = useRef<() => void>(() => {});
+     on controller change. Registration is idempotent. */
   useEffect(() => {
     zlRelayInit();
+    let wispUrl = "";
     void fetch("/build", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         const u = b && typeof b.sjWisp === "string" ? b.sjWisp : "";
-        sjWispRef.current = u;
-        wispAnnounceRef.current();
-        /* #107: a provisioned content origin (ZL_CONTENT_ORIGIN on
-           the server) is inert configuration until the operator
-           provisions it; when present, remember it and register the
-           engine worker on that origin. */
-        const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
-        if (co) {
-          zlSetContentOrigin(co);
-          zlContentRegister(co);
+        if (u) {
+          wispUrl = u;
+          zlWispInit(u);
         }
       })
       .catch(() => {});
     const re = () => {
       zlRelayInit();
-      wispAnnounceRef.current();
+      if (wispUrl) zlWispInit(wispUrl);
     };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
     /* The relay channel lives in service-worker memory. An idle worker
@@ -182,8 +164,6 @@ export default function App() {
        channel, and we re-register at once so the wait resolves
        without falling back to wisp. */
     const onRelayLost = (ev: MessageEvent) => {
-      /* #142: relay-loss broadcasts only from the engine worker. */
-      if (!engineSwSource(ev)) return;
       if ((ev.data as { type?: string } | null)?.type === "zl:relayLost") re();
     };
     navigator.serviceWorker?.addEventListener("message", onRelayLost);
@@ -194,19 +174,6 @@ export default function App() {
     };
   }, []);
 
-  /* #151: (re-)announce the selected WISP endpoint whenever the
-     Settings selection changes. A custom pick overrides the
-     deployment endpoint; with neither present the empty
-     announcement withdraws the endpoint and per-host wisp policy
-     falls back to relay. */
-  useEffect(() => {
-    wispAnnounceRef.current = () => {
-      const custom = settings.wispServers.find((s) => s.id === settings.wispServerId);
-      zlWispInit(custom ? custom.url : sjWispRef.current);
-    };
-    wispAnnounceRef.current();
-  }, [settings.wispServerId, settings.wispServers]);
-
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
     if (!incognito) store.saveSessionTabs(tabs);
@@ -216,13 +183,6 @@ export default function App() {
   useEffect(() => {
     if (view === "browser" && tabs.length === 0) setView("home");
   }, [view, tabs.length]);
-
-  /* Keep the browser workspace alive after its first use so tabs and
-     frames retain their lifecycle, but don't load it on the initial
-     Home visit. */
-  useEffect(() => {
-    if (view === "browser") setBrowserMounted(true);
-  }, [view]);
 
   const newTab = useCallback((url?: string) => {
     const tab = freshTab(url ?? "");
@@ -235,15 +195,13 @@ export default function App() {
   const closeTab = useCallback(
     (id: number) => {
       const tab = tabs.find((t) => t.id === id);
-      /* #123: an incognito tab never enters the reopen list; a
-         reopened incognito URL would land in the normal profile. */
-      if (tab && !incognito) closedTabs.current = [...closedTabs.current, tab].slice(-10);
+      if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
       const next = tabs.filter((t) => t.id !== id);
       setTabs(next);
       if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
       if (next.length === 0) setView("home");
     },
-    [tabs, activeId, incognito]
+    [tabs, activeId]
   );
 
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
@@ -262,9 +220,6 @@ export default function App() {
         /* Fresh cookie jar per incognito window (#1): the server-side
            session client is keyed by sid, so a new sid = an empty jar. */
         resetIncognitoSid();
-        /* #123: normal-session closed tabs must not be reopenable
-           into the incognito profile either. */
-        closedTabs.current = [];
         suspendedTabs.current = tabs;
         const t = freshTab();
         setTabs([t]);
@@ -290,31 +245,11 @@ export default function App() {
 
   /* #93 recent sites: removal and clearing keep Home row and the
      persisted history store in lockstep. */
-  /* #99: both removals are reversible, so they happen at once and the
-     snackbar offers Undo (entries go back to their old positions). */
   const removeHistory = useCallback((url: string) => {
-    const index = store.loadHistory().indexOf(url);
     setHistory(store.removeHistory(url));
-    if (index < 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-    let host = url;
-    try {
-      host = new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      /* keep the raw entry as the label */
-    }
-    M3eSnackbar.open("Removed " + host + " from recent sites", "Undo", {
-      duration: 6000,
-      actionCallback: () => setHistory(store.insertHistory(url, index)),
-    });
   }, []);
   const clearHistoryAll = useCallback(() => {
-    const before = store.loadHistory();
     setHistory(store.clearHistory());
-    if (before.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-    M3eSnackbar.open("Cleared recent sites", "Undo", {
-      duration: 6000,
-      actionCallback: () => setHistory(store.restoreHistory(before)),
-    });
   }, []);
 
   /* Navigate the active proxy tab (used by Home search). */
@@ -437,15 +372,7 @@ export default function App() {
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const p = r.active || r.installing || r.waiting;
-          /* #133: the ScramJet controller worker at /sj/sw.js is a
-             legitimate engine worker too; unregistering it on every
-             boot silently broke the ScramJet engine until the next
-             reinstall. */
-          if (
-            p &&
-            new URL(p.scriptURL).pathname !== "/zlsw/sw.js" &&
-            new URL(p.scriptURL).pathname !== "/sj/sw.js"
-          ) {
+          if (p && new URL(p.scriptURL).pathname !== "/zlsw/sw.js") {
             await r.unregister();
           }
         }
@@ -526,20 +453,7 @@ export default function App() {
     };
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
-    /* #109 (bounded LB-side fix): the worker profile is global, so
-       with two LobsterBrowse windows open a background window's
-       jarProfile push switches the jar for every window. Re-assert
-       this window's profile whenever it becomes the foreground one,
-       so the window the user is actually using always browses with
-       the right jar. True per-window isolation needs engine-side
-       per-client jar state (tracked as Zeolite #267). */
-    window.addEventListener("focus", post);
-    window.addEventListener("pageshow", post);
-    return () => {
-      navigator.serviceWorker?.removeEventListener("controllerchange", post);
-      window.removeEventListener("focus", post);
-      window.removeEventListener("pageshow", post);
-    };
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [incognito]);
 
   /* ---- Zeolite engine page options: HTTPS upgrade (Zeolite #53) and
@@ -661,31 +575,9 @@ export default function App() {
     uncloakFavicon();
   };
 
-  const deleteAll = async () => {
+  const deleteAll = () => {
     store.clearAllData();
     store.pushLog("warn", "all local data deleted");
-    /* #134: clearAllData covers localStorage only; Service Worker
-       caches and IndexedDB survive it. Best-effort wipe before the
-       reload so a deleted session cannot rehydrate from storage. */
-    try {
-      if (typeof caches !== "undefined") {
-        for (const k of await caches.keys()) await caches.delete(k);
-      }
-    } catch {
-      /* best effort: the reload still lands on a clean shell */
-    }
-    try {
-      const idb = indexedDB as unknown as {
-        databases?: () => Promise<Array<{ name?: string }>>;
-      };
-      if (typeof idb.databases === "function") {
-        for (const db of await idb.databases()) {
-          if (db.name) indexedDB.deleteDatabase(db.name);
-        }
-      }
-    } catch {
-      /* best effort */
-    }
     window.location.replace("/");
   };
 
@@ -695,56 +587,6 @@ export default function App() {
      collapse) made the rail width unpredictable; both effects
      are gone. ---- */
   const railRef = useRef<HTMLElement | null>(null);
-
-  /* #99: clearing a site's cookies is irreversible, so it asks first.
-     The palette command only sets the target; this m3e-dialog (the
-     Settings pattern) confirms. Hooks stay above the cloak return. */
-  const [clearSiteUrl, setClearSiteUrl] = useState<string | null>(null);
-  const clearSiteRef = useRef<(HTMLElement & { show: () => Promise<void>; returnValue: string }) | null>(null);
-  const clearSiteTarget = useRef<string | null>(null);
-  clearSiteTarget.current = clearSiteUrl;
-  useEffect(() => {
-    const el = clearSiteRef.current;
-    if (!el) return;
-    const onClosed = () => {
-      const target = clearSiteTarget.current;
-      const confirmed = el.returnValue === "clear";
-      el.returnValue = "";
-      setClearSiteUrl(null);
-      if (!confirmed || !target) return;
-      /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
-         jar profile, one origin - cookies only, honest counts. */
-      void zlSend({ type: "zl:clearJar", origin: target }).then((reply) => {
-        if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-        if (reply && reply.ok) {
-          M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
-            duration: 4000,
-          });
-        } else {
-          M3eSnackbar.open(
-            "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
-            { duration: 5000 },
-          );
-        }
-      });
-    };
-    el.addEventListener("closed", onClosed);
-    return () => el.removeEventListener("closed", onClosed);
-  }, [cloaked]);
-  useEffect(() => {
-    const el = clearSiteRef.current;
-    if (!clearSiteUrl || !el) return;
-    el.returnValue = "";
-    void el.show();
-  }, [clearSiteUrl]);
-  let clearSiteHost = "this site";
-  if (clearSiteUrl) {
-    try {
-      clearSiteHost = new URL(clearSiteUrl).hostname;
-    } catch {
-      /* keep the generic label */
-    }
-  }
 
   if (cloaked) {
     return (
@@ -800,12 +642,7 @@ export default function App() {
       label: "Open extensions",
       run: () => {
         setView("browser");
-        /* The Browser chunk may not be downloaded on the first use.
-           Dispatch after it is loaded and mounted, preserving the
-           command-palette bridge used before code splitting. */
-        void import("./pages/Browser").then(() => {
-          window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
-        });
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
       },
     },
     {
@@ -814,9 +651,7 @@ export default function App() {
       label: "Focus omnibox",
       run: () => {
         if (view === "browser") {
-          void import("./pages/Browser").then(() => {
-            window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-focus-omnibox")), 60);
-          });
+          window.dispatchEvent(new CustomEvent("lb-focus-omnibox"));
           return;
         }
         const el = document.getElementById("lb-search-input") as HTMLInputElement | null;
@@ -827,9 +662,24 @@ export default function App() {
       id: "clear-site",
       group: "Privacy",
       label: "Clear cookies for this site",
+      confirm: "Press Enter again to clear this site's cookies",
       run: () => {
         if (!activeTab?.url) return;
-        setClearSiteUrl(activeTab.url);
+        /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
+           jar profile, one origin - cookies only, honest counts. */
+        void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
+          if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+          if (reply && reply.ok) {
+            M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
+              duration: 4000,
+            });
+          } else {
+            M3eSnackbar.open(
+              "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
+              { duration: 5000 },
+            );
+          }
+        });
       },
     },
   ];
@@ -919,27 +769,7 @@ export default function App() {
                   onClearHistory={clearHistoryAll}
                 />
               )}
-              {view === "settings" && (
-                <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading settings" />}>
-                  <SettingsPanel
-                    settings={settings}
-                    onChange={update}
-                    rules={rules}
-                    onRulesChange={updateRules}
-                    onOpenLogs={() => setView("logs")}
-                    onDeleteAll={deleteAll}
-                  />
-                </Suspense>
-              )}
-              {view === "logs" && (
-                <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading logs" />}>
-                  <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
-                </Suspense>
-              )}
-            </div>
-          <div className="lb-browser-host" hidden={view !== "browser"}>
-            {(browserMounted || view === "browser") && (
-              <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading browser" />}>
+              {view === "browser" && (
                 <BrowserView
                   settings={settings}
                   rules={rules}
@@ -955,30 +785,26 @@ export default function App() {
                   onOpenLogs={() => setView("logs")}
                   onRulesChange={updateRules}
                 />
-              </Suspense>
-            )}
-          </div>
+              )}
+              {view === "settings" && (
+                <SettingsPanel
+                  settings={settings}
+                  onChange={update}
+                  rules={rules}
+                  onRulesChange={updateRules}
+                  onOpenLogs={() => setView("logs")}
+                  onDeleteAll={deleteAll}
+                />
+              )}
+              {view === "logs" && (
+                <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
+              )}
+            </div>
           </div>
         </div>
       </div>
       {/* #81: rendered at the root so Ctrl+K works in every view. */}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
-      {/* #99: confirm before deleting cookies (irreversible). Cancel,
-          Escape and the scrim all close with no action. */}
-      <m3e-dialog {...{ ref: clearSiteRef }} alert="">
-        <span slot="header">Clear cookies?</span>
-        <p>
-          Cookies stored for {clearSiteHost} in the active profile will be deleted. This cannot be undone.
-        </p>
-        <div slot="actions">
-          <m3e-button autofocus>
-            <m3e-dialog-action return-value="cancel">Cancel</m3e-dialog-action>
-          </m3e-button>
-          <m3e-button variant="filled">
-            <m3e-dialog-action return-value="clear">Clear cookies</m3e-dialog-action>
-          </m3e-button>
-        </div>
-      </m3e-dialog>
     </m3e-theme>
   );
 }

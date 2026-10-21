@@ -21,7 +21,6 @@ type AmoHit = {
   users: number;
   rating: number | null;
   size: number;
-  hash: string;
   xpiUrl: string;
 };
 
@@ -37,24 +36,10 @@ function loc(v: unknown): string {
   return "";
 }
 
-/* #147: an AMO record's file URL must point at the Mozilla family
-   (addons.mozilla.org plus its mozilla.org / allizom.org CDNs); a
-   record whose XPI lives anywhere else is untrusted and dropped
-   here, before any install or fetch uses it. */
-const amoFileUrlAllowed = (u: string): boolean => {
-  let h: string;
-  try {
-    h = new URL(u).hostname.toLowerCase();
-  } catch {
-    return false;
-  }
-  return h === "addons.mozilla.org" || h.endsWith(".mozilla.org") || h.endsWith(".allizom.org");
-};
-
 function toHit(r: Record<string, unknown>): AmoHit | null {
-  const cv = r.current_version as { version?: unknown; file?: { url?: unknown; size?: unknown; hash?: unknown } } | undefined;
+  const cv = r.current_version as { version?: unknown; file?: { url?: unknown; size?: unknown } } | undefined;
   const xpiUrl = cv && cv.file && typeof cv.file.url === "string" ? cv.file.url : "";
-  if (typeof r.slug !== "string" || !xpiUrl || !amoFileUrlAllowed(xpiUrl)) return null;
+  if (typeof r.slug !== "string" || !xpiUrl) return null;
   const ratings = r.ratings as { average?: unknown } | undefined;
   return {
     slug: r.slug,
@@ -65,7 +50,6 @@ function toHit(r: Record<string, unknown>): AmoHit | null {
     users: Number(r.average_daily_users) || 0,
     rating: ratings && typeof ratings.average === "number" ? ratings.average : null,
     size: cv && cv.file && Number(cv.file.size) ? Number(cv.file.size) : 0,
-    hash: cv && cv.file && typeof cv.file.hash === "string" ? cv.file.hash : "",
     xpiUrl,
   };
 }
@@ -121,8 +105,8 @@ export default function AmoSearch() {
     setSerr("");
     setSok("");
     try {
-      let bytes: Uint8Array<ArrayBuffer> | null = null;
-      const isXpi = (b: Uint8Array<ArrayBuffer> | null): b is Uint8Array<ArrayBuffer> =>
+      let bytes: Uint8Array | null = null;
+      const isXpi = (b: Uint8Array | null): b is Uint8Array =>
         !!b && b.length > 3 && b[0] === 0x50 && b[1] === 0x4b;
       try {
         const r = await fetch(h.xpiUrl);
@@ -136,18 +120,6 @@ export default function AmoSearch() {
       }
       if (!isXpi(bytes)) {
         throw new Error("the add-on CDN refused the download (tried direct and engine routes)");
-      }
-      /* #126: PK magic bytes alone prove nothing; the download must
-         match the size and sha256 the AMO API reported. */
-      if (h.size > 0 && bytes.length !== h.size) {
-        throw new Error(`add-on size mismatch (expected ${h.size} B, got ${bytes.length} B)`);
-      }
-      if (h.hash) {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-        const hex = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
-        if (hex !== h.hash.toLowerCase()) {
-          throw new Error("add-on sha256 mismatch (download was tampered or truncated)");
-        }
       }
       const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
       if (!rep || !rep.ok) {
@@ -171,19 +143,17 @@ export default function AmoSearch() {
   return (
     <div>
       <div className="lb-ext-search">
-        <m3e-search-bar style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <input
-            slot="input"
-            type="text"
-            placeholder="Search Firefox add-ons..."
-            aria-label="Search Firefox add-ons"
-            value={sq}
-            onChange={(e) => setSq(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void runSearch();
-            }}
-          />
-        </m3e-search-bar>
+        <input
+          className="lb-ext-search-input"
+          type="text"
+          placeholder="Search Firefox add-ons..."
+          aria-label="Search Firefox add-ons"
+          value={sq}
+          onChange={(e) => setSq(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void runSearch();
+          }}
+        />
         <m3e-icon-button aria-label="Search add-ons" disabled={sbusy ? true : undefined} onClick={() => void runSearch()}>
           <m3e-icon name="search" aria-hidden={true} />
         </m3e-icon-button>

@@ -127,6 +127,17 @@
   gap: var(--md-sys-measurement-space50, 4px);
   padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
 }
+.lb-ext-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--m3e-shape-xs, 8px);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-on-surface) 25%, transparent);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+}
 .lb-ext-hits {
   max-height: 180px;
   overflow-y: auto;

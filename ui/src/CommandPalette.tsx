@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 export type Command = {
   id: string;
   label: string;
   group: string;
-  /* Destructive commands must not run from here directly: they open
-     a confirmation dialog in the owner instead (App.tsx). */
+  /* Optional second-Enter confirmation prompt for destructive
+     commands (#81: no destructive action runs on a single Enter). */
+  confirm?: string;
   run: () => void;
 };
 
@@ -23,15 +24,7 @@ type Props = {
 export default function CommandPalette({ open, commands, onClose }: Props) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  /* #117: closing the palette returns focus to the element that
-     had it before the overlay opened. */
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => prev?.focus?.();
-  }, [open]);
+  const [pending, setPending] = useState<string | null>(null);
 
   /* Reset on every open. Escape is handled on window, not only on the
      input: a focus steal (engine-update snackbar etc.) must not leave
@@ -41,6 +34,7 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
     if (!open) return;
     setQ("");
     setIdx(0);
+    setPending(null);
     const onWin = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -61,10 +55,15 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
       )
     : commands;
   const sel = Math.min(idx, Math.max(hits.length - 1, 0));
+  const pendingCmd = hits.find((c) => c.id === pending);
 
   const run = (i: number) => {
     const c = hits[i];
     if (!c) return;
+    if (c.confirm && pending !== c.id) {
+      setPending(c.id);
+      return;
+    }
     onClose();
     c.run();
   };
@@ -80,6 +79,7 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
       if (hits.length === 0) return;
       const d = e.key === "ArrowDown" ? 1 : -1;
       setIdx((sel + d + hits.length) % hits.length);
+      setPending(null);
       return;
     }
     if (e.key === "Enter") {
@@ -95,55 +95,30 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className="lb-cmdk"
-        role="dialog"
-        aria-modal={true}
-        aria-label="Command palette"
-        onKeyDown={(e) => {
-          /* #117: the input is the only focusable control, so Tab
-             stays inside the overlay instead of reaching the page. */
-          if (e.key === "Tab") {
-            e.preventDefault();
-            inputRef.current?.focus();
-          }
-        }}
-      >
-        {/* #102: M3E search bar; the input is its slotted control. */}
-        <m3e-search-bar>
-          <input
-            slot="input"
-            ref={inputRef}
-            autoFocus={true}
-            aria-label="Type a command"
-            placeholder="Type a command..."
-            value={q}
-            spellCheck={false}
-            role="combobox"
-            aria-expanded={true}
-            aria-controls="lb-cmdk-list"
-            aria-autocomplete="list"
-            aria-activedescendant={hits.length ? "lb-cmdk-opt-" + hits[sel].id : undefined}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setIdx(0);
-            }}
-            onKeyDown={onKey}
-          />
-        </m3e-search-bar>
-        <div id="lb-cmdk-list" className="lb-cmdk-list" role="listbox">
+      <div className="lb-cmdk" role="dialog" aria-label="Command palette">
+        <input
+          autoFocus={true}
+          className="lb-cmdk-input"
+          placeholder="Type a command..."
+          value={q}
+          spellCheck={false}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setIdx(0);
+            setPending(null);
+          }}
+          onKeyDown={onKey}
+        />
+        <div className="lb-cmdk-list" role="listbox">
           {hits.length === 0 && (
             <div className="lb-cmdk-empty">No matching command</div>
           )}
           {hits.map((c, i) => {
             const head = i === 0 || hits[i - 1].group !== c.group;
-            /* #117: presentation wrappers keep the listbox children
-               valid options/groups for assistive technology. */
             return (
-              <div key={c.id} role="presentation">
-                {head && <div className="lb-cmdk-group" role="presentation">{c.group}</div>}
+              <div key={c.id}>
+                {head && <div className="lb-cmdk-group">{c.group}</div>}
                 <div
-                  id={"lb-cmdk-opt-" + c.id}
                   className={"lb-cmdk-item" + (i === sel ? " selected" : "")}
                   role="option"
                   aria-selected={i === sel}
@@ -159,7 +134,9 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
             );
           })}
         </div>
-        <div className="lb-cmdk-hint">Up/Down move, Enter runs, Esc closes</div>
+        <div className="lb-cmdk-hint">
+          {pendingCmd ? pendingCmd.confirm : "Up/Down move, Enter runs, Esc closes"}
+        </div>
       </div>
     </div>
   );
