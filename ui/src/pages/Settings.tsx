@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { exportSessionData } from "../store";
 import {
   ENGINES,
   UA_PRESETS,
@@ -12,6 +13,28 @@ import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 
+/* Cloaking popout: a fresh window whose address bar reads about:blank.
+   The window inherits this origin, so the app and its service worker run
+   normally inside the iframe; severing opener removes the window.opener
+   link. Settings changes sync only after the new window reloads. */
+function openInAboutBlank() {
+  const w = window.open("about:blank", "_blank");
+  if (!w) {
+    pushLog("warn", "settings: the browser blocked the about:blank popout (popup blocker)");
+    return;
+  }
+  w.opener = null;
+  const d = w.document;
+  d.title = "about:blank";
+  const style = d.createElement("style");
+  style.textContent = "html,body{margin:0;height:100%;overflow:hidden;background:#fff}iframe{border:0;width:100%;height:100%}";
+  d.head.appendChild(style);
+  const frame = d.createElement("iframe");
+  frame.src = window.location.origin + "/";
+  d.body.appendChild(frame);
+  pushLog("info", "settings: opened LobsterBrowse in an about:blank window");
+}
+
 type Props = {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -19,6 +42,7 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
+  onImportSession: (data: unknown) => "ok" | "invalid" | "incognito";
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -101,7 +125,41 @@ function TextInput(props: {
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onImportSession }: Props) {
+  /* 0.7 Zirconium: session data backup, local file only. Export
+     serializes the persisted history and open tabs (the store
+     redacts secret-bearing URL values at that boundary); import
+     never trusts the file and reports through a snackbar. */
+  const importRef = useRef<HTMLInputElement>(null);
+  const exportData = () => {
+    const href = URL.createObjectURL(new Blob([JSON.stringify(exportSessionData(), null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "lobsterbrowse-session.json";
+    a.click();
+    /* Revoking synchronously can cancel the fetch the browser has
+       only queued, not started (the DevTools export discipline). */
+    setTimeout(() => URL.revokeObjectURL(href), 10000);
+  };
+  const importData = async (file: File) => {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      /* not JSON: reported as an invalid file below */
+    }
+    const r = onImportSession(parsed);
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(
+        r === "ok"
+          ? "Session imported: history merged and tabs restored"
+          : r === "incognito"
+            ? "Exit incognito mode before importing a session"
+            : "That file is not a LobsterBrowse session export",
+        { duration: 4000 },
+      );
+    }
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({
     /* #90: only Search & browse starts expanded; the accordion
        keeps its multi-open behavior. */
@@ -400,6 +458,16 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
         </div>
+        <div className="lb-setting-group">
+          <div className="lb-setting-label">Open in about:blank</div>
+          <m3e-button onClick={openInAboutBlank}>
+            <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
+          </m3e-button>
+          <p className="lb-muted">
+            Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
+            it. The new window has no connection back to this one and starts from a fresh view of
+            the app (settings sync there only after a reload).          </p>
+        </div>
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
@@ -440,12 +508,32 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
-            One place for destructive actions: clear the proxied page cache on
-            this device, or delete every stored history, session and setting.
+            Export the persisted session (history and open tabs) to a local file,
+            import one back, clear the proxied page cache on this device, or
+            delete every stored history, session and setting.
           </p>
-          <m3e-button onClick={() => setConfirmDelete(true)}>
-            <m3e-icon name="delete" aria-hidden={true} /> Manage data
-          </m3e-button>
+          <div className="lb-seed-row">
+            <m3e-button onClick={exportData}>
+              <m3e-icon name="download" aria-hidden={true} /> Export session
+            </m3e-button>
+            <m3e-button onClick={() => importRef.current?.click()}>
+              <m3e-icon name="upload" aria-hidden={true} /> Import session
+            </m3e-button>
+            <m3e-button onClick={() => setConfirmDelete(true)}>
+              <m3e-icon name="delete" aria-hidden={true} /> Manage data
+            </m3e-button>
+          </div>
+          <input
+            hidden
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importData(f);
+            }}
+          />
           {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
               handling and alertdialog semantics (alert attribute). */}
           <m3e-dialog
