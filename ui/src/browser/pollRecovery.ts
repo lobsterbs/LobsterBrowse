@@ -32,7 +32,7 @@ export function pollAction(protocol: string, path: string, tabUrl: string): Poll
   if (!path) return "wait";
   if (path === "/") {
     /* #112: a tab frame sitting on the app root is never a healthy
-       upstream document — real navigations ride engine routes
+       upstream document - real navigations ride engine routes
        (/zl/, /__zl_nav*__), so "/" inside a proxy tab means a
        navigation escaped to the SPA fallback and the app shell is
        rendering inside the tab. Hand it to the recover branch, which

@@ -55,13 +55,13 @@ s |
 | 0.9 | **Iridium** | Stabilization and compatibility freeze |
 | 1.0 | **Osmium** | Stable LobsterBrowse |
 
-These are codenames, not replacements for semantic versioning. A release should be written as, for example, **LobsterBrowse 0.4 — Vanadium**.
+These are codenames, not replacements for semantic versioning. A release should be written as, for example, **LobsterBrowse 0.4 - Vanadium**.
 
 The exact milestone boundaries may be changed when justified by the actual repository, but the chemical-element naming system should remain.
 
 ---
 
-# 0.3 — Titanium
+# 0.3 - Titanium
 
 ## Foundation and architecture cleanup
 
@@ -136,7 +136,7 @@ denials (startpage Access Denied, DDG TLS reset) during the pass.
 
 ---
 
-# 0.4 — Vanadium
+# 0.4 - Vanadium
 
 ## Navigation and compatibility foundation
 
@@ -222,7 +222,7 @@ cookie-jar pass against real providers).
 
 ---
 
-# 0.5 — Cobalt
+# 0.5 - Cobalt
 
 ## Difficult modern websites
 
@@ -260,7 +260,7 @@ Tests should verify actual behavior rather than merely status codes.
 
 ---
 
-# 0.6 — Nickel
+# 0.6 - Nickel
 
 ## Diagnostics and DevTools
 
@@ -295,7 +295,7 @@ Add privacy-safe diagnostic export when appropriate.
 
 ---
 
-# 0.7 — Zirconium
+# 0.7 - Zirconium
 
 ## Browser state and persistence
 
@@ -341,7 +341,7 @@ Expose useful site information without exposing sensitive data.
 
 ---
 
-# 0.8 — Tungsten
+# 0.8 - Tungsten
 
 ## Extensions
 
@@ -369,7 +369,7 @@ Provide useful errors for manifest, permission, content-script, background, mess
 
 ---
 
-# 0.9 — Iridium
+# 0.9 - Iridium
 
 ## Stabilization and compatibility freeze
 
@@ -440,7 +440,7 @@ Documentation must describe actual behavior. Do not present planned features as 
 
 ---
 
-# 1.0 — Osmium
+# 1.0 - Osmium
 
 ## Stable LobsterBrowse
 
@@ -491,7 +491,7 @@ README, AGENTS.md, architecture documentation and DevTools documentation must ag
 
 ---
 
-# Phase: Zeolite Integration — Deferred
+# Phase: Zeolite Integration - Deferred
 
 Status: **started on the beta line, 2026-09-30.** Zeolite's engine
 API has stabilized (3.0 Diamond). Deep integration now lands on
@@ -594,7 +594,7 @@ Where applicable, completion requires implementation, tests, and real browser/de
 
 ## Immediate priority
 
-The immediate roadmap milestone is **0.5 — Cobalt** (0.4 — Vanadium
+The immediate roadmap milestone is **0.5 - Cobalt** (0.4 - Vanadium
 is complete; the difficult-modern-websites push begins).
 
 Before expanding into more browser features:

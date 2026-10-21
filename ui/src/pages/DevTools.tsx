@@ -522,7 +522,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
     >
       <div className="lb-devtools-head">
         <span className="lb-devtools-title">
-          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools — {tab.title || "tab"}
+          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools - {tab.title || "tab"}
         </span>
         <span className="lb-devtools-head-actions">
           <m3e-icon-button aria-label="View app logs" onClick={onOpenLogs}>
