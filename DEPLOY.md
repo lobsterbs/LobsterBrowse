@@ -57,18 +57,19 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 35f36ab1 (pin 110: Injector phase 2,
-query-shape committed routes behind the queryRoutes opt-in,
-default OFF with no live traffic change - the committed
-pathname becomes the real destination path for opted-in hosts;
-live, expired-re-minted (#385 mirror) and garbage query tokens
-resolve at the shared client seam, query-shape senders classify
-as proxied in the sender gate, and vloc re-commits real paths
-natively keeping the token; engine-internal path collisions
-refuse the mint and fall back to the NAVH form; Zeolite main
-f9881a4f, CI run 39788565776 all 5 jobs green, suite 1454/1454),
-zlswSha 32303e296200b7db -> 8390cea8526d542a (629360 bytes),
-bootstrapSha 7dfd6645656bab22 -> c7300fa9981e71b4 (35113 bytes).
+Current pin: Zeolite dist 98e24bc4 (pin 111: split-origin
+URL-bar strand - decodeLegacyRoute validates the whole legacy
+/zl/<b64u> shape (two segments, the configured prefix or the
+reserved zl segment, a strict-UTF-8 http(s) b64u payload, never
+a keyed tail) and wins at the escape seam ahead of the
+settled-context recovery, so a URL-bar navigation to a legacy
+route minted under the other origin decodes to its real
+destination instead of a guaranteed upstream 404 resolved
+against the previous page's virtual origin; genuine escaped
+relative paths keep the ordinary recovery order; Zeolite main
+e293ecc5, CI run 39812893153 all 5 jobs green, suite 1456/1456),
+zlswSha 8390cea8526d542a -> 3b94ab518397c471 (629614 bytes),
+bootstrapSha c7300fa9981e71b4 unchanged (35113 bytes).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays a385fa9 because the wave does not touch
 zeolite-server, and server/Cargo.lock is consistent with the
