@@ -1340,7 +1340,7 @@ export default function BrowserView(props: Props) {
             return h;
           });
   };
-  const load = (tab: Tab, url: string, opts?: { push?: boolean }) => {
+  const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
     recovering.current.delete(tab.id);
@@ -1350,7 +1350,9 @@ export default function BrowserView(props: Props) {
     const nid = "NAV-" + gen.toString(16).toUpperCase().padStart(4, "0").slice(-4);
     navId.current.set(tab.id, nid);
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
-    const idx = push ? stack.length - 1 : tab.idx;
+    /* #122/#181: an explicit idx wins - back/forward must move it
+       before the render-time snapshot in `tab` goes stale. */
+    const idx = opts?.idx ?? (push ? stack.length - 1 : tab.idx);
     props.updateTab(tab.id, { url, stack, idx, title: "" });
     /* Navigating away collapses the pill back to name mode (an empty
      * tab keeps it expanded via the empty-tab effect). */
@@ -2121,18 +2123,18 @@ export default function BrowserView(props: Props) {
     load(active, looksLikeUrl(q) ? normalizeUrl(q) : searchUrl(settings, q), { push: true });
   };
 
+  /* #122: the idx travels inside load(). The old separate
+     updateTab wrote the new idx and then load() overwrote it with
+     the stale snapshot idx, so Back reloaded the same entry forever
+     and Forward never moved. */
   const back = () => {
     if (active.idx > 0) {
-      const url = active.stack[active.idx - 1];
-      props.updateTab(active.id, { idx: active.idx - 1, url });
-      load(active, url, { push: false });
+      load(active, active.stack[active.idx - 1], { push: false, idx: active.idx - 1 });
     }
   };
   const forward = () => {
     if (active.idx < active.stack.length - 1) {
-      const url = active.stack[active.idx + 1];
-      props.updateTab(active.id, { idx: active.idx + 1, url });
-      load(active, url, { push: false });
+      load(active, active.stack[active.idx + 1], { push: false, idx: active.idx + 1 });
     }
   };
   /* Smooth close: the tab collapses first (.closing), the real close
