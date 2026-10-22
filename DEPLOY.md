@@ -56,19 +56,18 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist a7e663ae (pin 108: the idle-restart
-family, Zeolite #389/#390/#391 - undecodable legacy-shaped routes
-answer an engine 404 instead of the origin 503, the transport
-engine choice persists in the Cache API across idle worker
-restarts, and the worker broadcasts zl:relayLost at every cold
-start so the relay re-arms in seconds instead of the 30s backoff
-cycle; Zeolite main 88cbc94a, CI run 39753906400 all 5 jobs green,
-suite 1436/1436), zlswSha 71d0bd6f016437e7 -> af5fd80829884d7b
-(627231 bytes), bootstrapSha 7dfd6645656bab22 unchanged (34628
-bytes). This matches the Dockerfile ZEOLITE_COMMIT; the
-zeolite-server git rev stays a385fa9 because the wave does not
-touch zeolite-server, and server/Cargo.lock is consistent with
-the pin.
+Current pin: Zeolite dist 429b1851 (pin 109: the 2026-10-22 scout
+wave, Zeolite #392-#400 - antiframe sink-call gate, member-chain
+fold guard, regex-literal quote scan, case-insensitive script
+close, expired-NAVH parent recovery, origin-base expired-token
+tails, route-history null-on-error, relay-stall storm accounting,
+jar profile persistence; Zeolite main d778ba0e, CI run
+39770557101 all 5 jobs green, suite 1441/1441), zlswSha
+af5fd80829884d7b -> 32303e296200b7db (628200 bytes), bootstrapSha
+7dfd6645656bab22 unchanged (34628 bytes). This matches the
+Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
+a385fa9 because the wave does not touch zeolite-server, and
+server/Cargo.lock is consistent with the pin.
 Beta additionally ships LB #181 (the #122 back/forward port: the
 idx travels inside load(); Back/Forward now move the history index).
 
