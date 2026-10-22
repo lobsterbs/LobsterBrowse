@@ -26,6 +26,7 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
   - `WISP_PASSWORD` / `WISP_USERNAME` - optional password auth (extension 0x02).
   - `DATABASE_URL` - Neon Postgres connection string (used by the upcoming sessions crate).
   - `LB_TRUSTED_PROXY_CIDRS` - optional comma-separated trusted-proxy CIDR list. When the TCP peer sits inside one of these ranges, the relay rate limit keys on the rightmost `x-forwarded-for` hop outside the trusted set instead of the shared peer address (#163). Unset by default: the peer IP stays the key and a client-controlled `x-forwarded-for` is never honored. A malformed entry is a startup error.
+  - `ZL_QUERY_ROUTES` - optional Injector phase 2 opt-in (query-shape committed routes, the LegacyUnforgeable pathname fix). When `1`/`true`, /build reports `zlQueryRoutes: true` and the UI pushes `queryRoutes` in `zl:config` to both origin workers (the app origin and the provisioned content origin). Unset by default: the opaque NAVH handle shape stays committed.
 - Health check: `GET /healthz`.
 
 ## Zeolite engine pin
