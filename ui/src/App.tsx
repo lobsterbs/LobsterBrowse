@@ -16,7 +16,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -163,6 +163,10 @@ export default function App() {
      listener keep current. */
   const sjWispRef = useRef("");
   const wispAnnounceRef = useRef<() => void>(() => {});
+  /* Injector phase 2: the query-shape opt-in from /build (server env
+     ZL_QUERY_ROUTES); read per config-push attempt so a slow /build
+     fetch cannot pin a stale value into a long retry loop. */
+  const queryRoutesRef = useRef(false);
   useEffect(() => {
     zlRelayInit();
     void fetch("/build", { cache: "no-store" })
@@ -175,6 +179,7 @@ export default function App() {
            the server) is inert configuration until the operator
            provisions it; when present, remember it and register the
            engine worker on that origin. */
+        queryRoutesRef.current = b && b.zlQueryRoutes === true;
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         if (co) {
           zlSetContentOrigin(co);
@@ -440,8 +445,8 @@ export default function App() {
        since Zeolite#17 the worker persists the route shape and
        restores it before the first fetch. */
     const push = async () => {
-      const msg = {
-        type: "zl:config",
+      const mkMsg = () => ({
+        type: "zl:config" as const,
         prefix: engineRoutePrefix(),
         scheme: "b64u",
         /* LB#53 (Zeolite#63): refuse the plaintext ?url= embed shape
@@ -450,11 +455,30 @@ export default function App() {
            predating #63 ignores the field, so the push stays
            compatible. */
         navHandles: true,
-      };
+        /* Injector phase 2 (query-shape committed routes): the
+           opt-in rides server configuration (/build relays
+           ZL_QUERY_ROUTES) and is read per attempt so a slow /build
+           fetch cannot pin a stale value into this retry loop. */
+        queryRoutes: queryRoutesRef.current,
+      });
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
-        const r = await zlSend(msg, 8000);
-        if (r && r.ok) return true;
+        const r = await zlSend(mkMsg(), 8000);
+        if (r && r.ok) {
+          /* Per-origin config parity: the content origin's worker gets
+             the same push through its boot page, so both origins
+             commit the same route shape (/zl/) instead of the content
+             worker keeping its default prefix. Warn on no ack
+             (the LB#15 lesson). */
+          void zlContentConfig(mkMsg()).then((ok) => {
+            if (!ok)
+              store.pushLog(
+                "warn",
+                "content-origin zl:config did not ack; proxied routes on the content origin may keep the default prefix until the app is reloaded",
+              );
+          });
+          return true;
+        }
       }
       store.pushLog(
         "warn",
@@ -580,16 +604,22 @@ export default function App() {
      jarProfile pattern above). ---- */
   useEffect(() => {
     const post = () => {
-      void zlSend(
-        {
-          type: "zl:config",
-          prefix: engineRoutePrefix(),
-          httpsUpgrade: settings.httpsUpgrade,
-          /* #76: lazy images are always on (the toggle is gone). */
-          imageLazy: true,
-        },
-        8000,
-      );
+      const msg = {
+        type: "zl:config",
+        prefix: engineRoutePrefix(),
+        httpsUpgrade: settings.httpsUpgrade,
+        /* #76: lazy images are always on (the toggle is gone). */
+        imageLazy: true,
+        /* Injector phase 2: the query-shape opt-in is ephemeral worker
+           state, same class as httpsUpgrade; keep it in the parity
+           push. */
+        queryRoutes: queryRoutesRef.current,
+      };
+      void zlSend(msg, 8000);
+      /* Per-origin parity: the content worker rewrites and serves the
+         proxied documents, so the engine page options must reach it
+         too (the per-origin config gap). */
+      void zlContentConfig(msg);
     };
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);

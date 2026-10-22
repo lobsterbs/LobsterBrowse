@@ -2170,6 +2170,7 @@ async fn zlsw_register() -> Response {
     navigator.serviceWorker.addEventListener("message", (ev) => {
       if (ev.data && ev.data.type === "zl:relayLost") {
         openRelay();
+        pushCfg();
         const swc2 = navigator.serviceWorker.controller || reg.active;
         if (swc2 && wispUrl) swc2.postMessage({ type: "zl:wispRegister", url: wispUrl });
         /* #107 phase 2: the embedder origin registration is as
@@ -2187,6 +2188,37 @@ async fn zlsw_register() -> Response {
         appOrigin = ev.origin;
         const swc3 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
         if (swc3) swc3.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
+      }
+    });
+    /* Injector phase 2 (LB per-origin config): the app forwards the
+       same zl:config it pushes to the app-origin worker; this page is
+       the only same-origin client the content worker has, so the push
+       happens here over a fresh control port. The ack goes up to the
+       app so a silent drop stays detectable (the LB#15 lesson), and
+       the stored config re-pushes on the relayLost heal because every
+       zl:config field except the prefix is worker memory. */
+    let lastCfg = null;
+    const pushCfg = () => {
+      if (!lastCfg) return;
+      const swc4 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+      if (!swc4) return;
+      const cfgPort = new MessageChannel();
+      let cfgSettled = false;
+      cfgPort.port1.onmessage = (ev) => {
+        const m = ev.data || {};
+        if (m.ok !== true && m.ok !== false) return;
+        if (cfgSettled) return;
+        cfgSettled = true;
+        try { parent.postMessage({ zlCfgAck: true, ok: m.ok === true, prefix: m.prefix, queryRoutes: m.queryRoutes }, "*"); } catch (e) {}
+        cfgPort.port1.close();
+      };
+      window.setTimeout(() => { try { cfgPort.port1.close(); } catch (e) {} }, 10000);
+      swc4.postMessage(lastCfg, [cfgPort.port2]);
+    };
+    window.addEventListener("message", (ev) => {
+      if (ev.data && ev.data.zlCfg && typeof ev.data.zlCfg === "object" && ev.data.zlCfg.type === "zl:config" && /^https:/.test(ev.origin)) {
+        lastCfg = ev.data.zlCfg;
+        pushCfg();
       }
     });
     try {
@@ -2265,9 +2297,17 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         .ok()
         .and_then(|v| content_origin_from(&v))
         .unwrap_or_default();
+    // Injector phase 2 (query-shape committed routes): the opt-in is
+    // server configuration (ZL_QUERY_ROUTES), surfaced to the UI via
+    // /build so both origin workers receive the same zl:config push.
+    // Default off; unset the env and redeploy to revert.
+    let zl_query_routes = matches!(
+        std::env::var("ZL_QUERY_ROUTES").as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes")
+    );
     let lb_version = format!("{} Zirconium", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
@@ -2275,6 +2315,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         json_escape(&sj_sha),
         json_escape(&sj_wisp),
         json_escape(&content_origin),
+        zl_query_routes,
         json_escape(&build),
         json_escape(&build_short),
     );
