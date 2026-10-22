@@ -1370,7 +1370,21 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=b7c924e5a6bb658d92922a541fbcb03a3870d534
+# Pin 113: Zeolite dist 07bb4ce0a48650b7e72c8043557efc1fd5af48fd
+# (from CI build 39856666415, Zeolite main f8ea0553, all 5 jobs
+# green, app suite 1464 tests). Pin 113 ships COEP embedder
+# parity: the engine worker rebuilds every default/cors Response
+# with cross-origin-resource-policy: cross-origin at the
+# respondWith seam (app/src/corp.ts withCorp; status, headers
+# and body preserved, opaque and error responses pass through
+# untouched), so a COEP require-corp embedder (Quartz and any
+# crossOriginIsolation shell) can embed the /zlsw-register boot
+# page and /zl/ content instead of ERR_BLOCKED_BY_RESPONSE. The
+# server half ships in the same wave (main.rs with_corp layer).
+# sw.js c6debef338723924 -> 0a62d321a5b09828 (630095 bytes);
+# bootstrap.js unchanged c7300fa9981e71b4 (35113 bytes); wasm
+# unchanged. Cargo-side pin stays a385fa9.
+ARG ZEOLITE_COMMIT=07bb4ce0a48650b7e72c8043557efc1fd5af48fd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1429,7 +1443,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c6debef338723924 ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0a62d321a5b09828 ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
