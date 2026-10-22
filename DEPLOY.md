@@ -56,19 +56,19 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 3263e6e4 (pin 107: the location member-write
-fix, LB #182 - the rewriter renames the object of member writes
-(location.hash = x becomes __zl.hash = x) but the vloc view exposed
-getters with no setters, so hash-routed SPA writes were silently lost
-or threw in strict mode; the view now carries setters: hash mirrors
-natively plus a synchronous cur update, search/pathname rebuild the
-virtual URL preserving the other components and navigate (Zeolite main
-d58131c3, CI run 39738165242 all 5 jobs green, suite 1427/1427)),
-zlswSha 71d0bd6f016437e7 unchanged, bootstrapSha 20589f579aa89383 ->
-7dfd6645656bab22 (34628 bytes; the bootstrap size budget rose 34304 ->
-34816). This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
-git rev stays a385fa9 because the wave does not touch zeolite-server,
-and server/Cargo.lock is consistent with the pin.
+Current pin: Zeolite dist a7e663ae (pin 108: the idle-restart
+family, Zeolite #389/#390/#391 - undecodable legacy-shaped routes
+answer an engine 404 instead of the origin 503, the transport
+engine choice persists in the Cache API across idle worker
+restarts, and the worker broadcasts zl:relayLost at every cold
+start so the relay re-arms in seconds instead of the 30s backoff
+cycle; Zeolite main 88cbc94a, CI run 39753906400 all 5 jobs green,
+suite 1436/1436), zlswSha 71d0bd6f016437e7 -> af5fd80829884d7b
+(627231 bytes), bootstrapSha 7dfd6645656bab22 unchanged (34628
+bytes). This matches the Dockerfile ZEOLITE_COMMIT; the
+zeolite-server git rev stays a385fa9 because the wave does not
+touch zeolite-server, and server/Cargo.lock is consistent with
+the pin.
 Beta additionally ships LB #181 (the #122 back/forward port: the
 idx travels inside load(); Back/Forward now move the history index).
 
