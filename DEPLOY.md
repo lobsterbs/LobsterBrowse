@@ -57,24 +57,20 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 98e24bc4 (pin 111: split-origin
-URL-bar strand - decodeLegacyRoute validates the whole legacy
-/zl/<b64u> shape (two segments, the configured prefix or the
-reserved zl segment, a strict-UTF-8 http(s) b64u payload, never
-a keyed tail) and wins at the escape seam ahead of the
-settled-context recovery, so a URL-bar navigation to a legacy
-route minted under the other origin decodes to its real
-destination instead of a guaranteed upstream 404 resolved
-against the previous page's virtual origin; genuine escaped
-relative paths keep the ordinary recovery order; Zeolite main
-e293ecc5, CI run 39812893153 all 5 jobs green, suite 1456/1456),
-zlswSha 8390cea8526d542a -> 3b94ab518397c471 (629614 bytes),
-bootstrapSha c7300fa9981e71b4 unchanged (35113 bytes).
+Current pin: Zeolite dist b7c924e5 (pin 112: the in-page NAVH
+mint honors queryRoutes - navhCleanFromPrel, the prel-navigation
+clean 302, now mints the query-shape handle (<real path>?<real
+query>&zlNavh=<token>) when the host opts in, so a reloaded
+document owns a natively readable location.pathname; engine-
+internal path collisions and missing route keys fall back to
+the NAVH path form; Zeolite main c981e19a, CI run 39847696942
+all 5 jobs green, suite 1459/1459), zlswSha 3b94ab518397c471 ->
+c6debef338723924 (629684 bytes), bootstrapSha c7300fa9981e71b4
+unchanged (35113 bytes).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays a385fa9 because the wave does not touch
 zeolite-server, and server/Cargo.lock is consistent with the
 pin.
-
 ## Build/deploy reliability checklist (0.3 Titanium)
 
 - A pin move is ONE commit: the Dockerfile ARG, the zeolite-server
