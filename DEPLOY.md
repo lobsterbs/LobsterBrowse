@@ -56,20 +56,22 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 429b1851 (pin 109: the 2026-10-22 scout
-wave, Zeolite #392-#400 - antiframe sink-call gate, member-chain
-fold guard, regex-literal quote scan, case-insensitive script
-close, expired-NAVH parent recovery, origin-base expired-token
-tails, route-history null-on-error, relay-stall storm accounting,
-jar profile persistence; Zeolite main d778ba0e, CI run
-39770557101 all 5 jobs green, suite 1441/1441), zlswSha
-af5fd80829884d7b -> 32303e296200b7db (628200 bytes), bootstrapSha
-7dfd6645656bab22 unchanged (34628 bytes). This matches the
-Dockerfile ZEOLITE_COMMIT; the zeolite-server git rev stays
-a385fa9 because the wave does not touch zeolite-server, and
-server/Cargo.lock is consistent with the pin.
-Beta additionally ships LB #181 (the #122 back/forward port: the
-idx travels inside load(); Back/Forward now move the history index).
+Current pin: Zeolite dist 35f36ab1 (pin 110: Injector phase 2,
+query-shape committed routes behind the queryRoutes opt-in,
+default OFF with no live traffic change - the committed
+pathname becomes the real destination path for opted-in hosts;
+live, expired-re-minted (#385 mirror) and garbage query tokens
+resolve at the shared client seam, query-shape senders classify
+as proxied in the sender gate, and vloc re-commits real paths
+natively keeping the token; engine-internal path collisions
+refuse the mint and fall back to the NAVH form; Zeolite main
+f9881a4f, CI run 39788565776 all 5 jobs green, suite 1454/1454),
+zlswSha 32303e296200b7db -> 8390cea8526d542a (629360 bytes),
+bootstrapSha 7dfd6645656bab22 -> c7300fa9981e71b4 (35113 bytes).
+This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
+git rev stays a385fa9 because the wave does not touch
+zeolite-server, and server/Cargo.lock is consistent with the
+pin.
 
 ## Build/deploy reliability checklist (0.3 Titanium)
 
