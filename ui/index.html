@@ -21,7 +21,27 @@
     (function () {
       var KEY = "lb-boot-reload";
       try {
-        if (sessionStorage.getItem(KEY)) return;
+        if (sessionStorage.getItem(KEY)) {
+          /* #185: this guard was armed by the previous incident's
+             reload. Returning without watching kept the key in place
+             forever - a successful boot never cleared it, so no later
+             incident could self-heal. Watch for the mount and clear
+             the guard, bounded so a wedged boot keeps it. */
+          var clearChecks = 0;
+          var clearTimer = setInterval(function () {
+            clearChecks++;
+            var root = document.getElementById("root");
+            if (root && root.childElementCount > 0) {
+              clearInterval(clearTimer);
+              try {
+                sessionStorage.removeItem(KEY);
+              } catch (e) {}
+              return;
+            }
+            if (clearChecks >= 6) clearInterval(clearTimer);
+          }, 2000);
+          return;
+        }
       } catch (e) {
         return;
       }
