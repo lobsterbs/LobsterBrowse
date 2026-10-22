@@ -1017,6 +1017,25 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 110: Zeolite dist 35f36ab14aeeef3dc8720bdeb6a30748e9ee1ff8
+# (from CI build 39788565776, Zeolite main f9881a4f, all 5 jobs
+# green, app suite 1454 tests). Pin 110 ships Injector phase 2:
+# query-shape committed routes behind the queryRoutes opt-in
+# (default OFF, no live traffic change). zl:navHandle mints
+# <real path>?<real query>&zlNavh=<token> when the host opts in
+# via zl:config, so the committed pathname IS the real
+# destination path and native location.pathname reads work
+# without a shim; decodeClientUrl decodes the shape at the
+# shared client seam, handleFetch serves live tokens, re-mints
+# expired GET navigations (#385 mirror) and fails garbage
+# closed; the sender gate classifies query-shape senders as
+# proxied (never host, even at "/" or "/index.html"); vloc
+# parses the native form and re-commits real paths natively
+# keeping the token (history virtualization). Engine-internal
+# path collisions refuse the mint and fall back to the NAVH
+# form. sw.js 32303e296200b7db -> 8390cea8526d542a (629360
+# bytes); bootstrap.js 7dfd6645656bab22 -> c7300fa9981e71b4
+# (35113 bytes). Cargo-side pin stays a385fa9.
 # Pin 109: Zeolite dist 429b185188404f5373c500be906a2fe5d8fd3f5e
 # (from CI build 39770557101, Zeolite main d778ba0e, all 5 jobs
 # green, app suite 1441 tests). Pin 109 ships the 2026-10-22 scout
@@ -1325,7 +1344,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=429b185188404f5373c500be906a2fe5d8fd3f5e
+ARG ZEOLITE_COMMIT=35f36ab14aeeef3dc8720bdeb6a30748e9ee1ff8
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1384,7 +1403,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=32303e296200b7db ZEOLITE_BOOTSTRAP_SHA=7dfd6645656bab22 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8390cea8526d542a ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
