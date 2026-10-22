@@ -285,6 +285,10 @@ export default function BrowserView(props: Props) {
   const recovering = useRef<Set<number>>(new Set());
   /* #139: per-tab escape-recovery timestamps for the 3-per-60 s cap. */
   const escapeTimes = useRef<Map<number, number[]>>(new Map());
+  /* #186: in-flight route mints per tab. The poll sync branch holds
+     off while the frame still shows the pre-navigation page, so the
+     stale frame URL cannot revert a Back/Go move mid-mint. */
+  const pendingNav = useRef<Map<number, { url: string; t0: number }>>(new Map());
   /* Consecutive poll ticks a frame has spent stuck on about:blank
      (Zeolite #31: engine bootstrap never attached). */
   const blankPolls = useRef<Map<number, number>>(new Map());
@@ -1317,6 +1321,9 @@ export default function BrowserView(props: Props) {
   const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
+    /* #186: the mint is in flight from here until the frame reaches
+       this destination; the poll sync branch holds off against it. */
+    pendingNav.current.set(tab.id, { url, t0: Date.now() });
     recovering.current.delete(tab.id);
     /* New navigation generation: older generations' results are stale. */
     const gen = (navGen.current.get(tab.id) ?? 0) + 1;
@@ -1641,6 +1648,22 @@ export default function BrowserView(props: Props) {
          title/status/favicon syncing; the URL-sync block no-ops. */
       const real = decodeRoute(path) || t.url;
       if (!real) return;
+      /* #186: while a route mint is pending the frame still shows the
+         previous page, and this poll fires because updateTab already
+         moved the tab - syncing the stale frame URL back reverted a
+         Back/Go mid-mint. Hold the poll until the frame reaches the
+         pending destination; a mint that never completes (worker gone)
+         expires the hold after 45 s. */
+      const pend = pendingNav.current.get(t.id);
+      if (pend) {
+        if (real === pend.url) {
+          pendingNav.current.delete(t.id);
+        } else if (Date.now() - pend.t0 < 45_000) {
+          return;
+        } else {
+          pendingNav.current.delete(t.id);
+        }
+      }
       if (real !== t.url) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
@@ -1673,8 +1696,16 @@ export default function BrowserView(props: Props) {
         pushLog("info", "url sync " + sanitizeUrl(real));
         /* The frame reached this URL for real: the per-path escape
            guard has done its job and can admit a later genuine escape
-           to the same path again (#170); the recovery is complete. */
-        lastEscape.current.delete(t.id + "|" + real);
+           to the same path again (#170); the recovery is complete.
+           #184: the guard key is the PATH (#139), not the full URL -
+           deleting id|real never matched the id|pathname key, so a
+           recovered escape permanently poisoned that path against
+           every later genuine escape on the same tab. */
+        try {
+          lastEscape.current.delete(t.id + "|" + new URL(real).pathname);
+        } catch {
+          /* unparseable real: nothing to un-poison */
+        }
         recovering.current.delete(t.id);
       }
       const title = (doc.title || "").trim();
@@ -2133,6 +2164,7 @@ export default function BrowserView(props: Props) {
       lastNav.current.delete(id);
       navGen.current.delete(id);
       escapeTimes.current.delete(id);
+      pendingNav.current.delete(id);
       navId.current.delete(id);
       blankPolls.current.delete(id);
       blankLogged.current.delete(id);
