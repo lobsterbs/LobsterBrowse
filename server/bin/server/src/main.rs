@@ -803,7 +803,7 @@ mod relay_guard_tests {
         let out = redact_userinfo("engine GET https://user:secret@example.com/reset");
         assert!(out.contains("[redacted-userinfo]@"), "{out}");
         assert!(out.contains("example.com/reset"), "{out}");
-        assert!(!out.contains("secret"), "{out}");
+        assert!(!out.contains("secret"), "{out}");
         assert_eq!(redact_userinfo("no url here"), "no url here");
         assert_eq!(
             redact_userinfo("https://example.com/x"),
@@ -1501,8 +1501,7 @@ mod redact_tests {
 /// treats it like any engine failure, and it never prints the
 /// destination (#32: plaintext destinations never land on
 /// engine-origin documents).
-async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>) -> Response {
-    let _ = target;
+async fn zl_sw_required() -> Response {
     embedder_notice(
         "Engine offline",
         "The Zeolite engine service worker is not controlling this origin yet.",
@@ -1653,7 +1652,7 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
     // this deployment's datacenter egress (DuckDuckGo does), and an
     // empty suggestion box is worse than a second opinion. Brave and
     // Bing both answer from this network with the same osjson shape,
-    // so they are tried (in order) before answering empty.
+    // so they are tried (in order) before answering empty.
     let mut providers: Vec<String> = Vec::new();
     if let Some(p) = native {
         providers.push(p);
@@ -2484,7 +2483,7 @@ use std::sync::mpsc::{self, SyncSender, TrySendError};
  * container log driver, a full disk, a stalled log shipper) fills the
  * OS pipe and wedges the whole proxy: the standalone zeolite-server
  * reproduced a full serving freeze this way after ~64 KiB of undrained
- * log output. Each event now goes through a bounded channel to one
+ * log output. Each event now goes through a bounded channel to one
  * drain thread. A full buffer DROPS the event: a lost log line is
  * honest, a blocked runtime worker is not. */
 struct NonBlockingWriter {
@@ -2632,7 +2631,17 @@ async fn main() {
         // settings.ts): its worker owns those routes, so a /zl/ request
         // that reaches the server means no worker controls the page and
         // gets the honest load-error card.
-        .route("/zl/:target", any(zl_sw_required))
+        .route("/zl/*path", any(zl_sw_required))
+        // #183: multi-segment engine tails and the opaque NAVH/NAV
+        // handle prefixes are worker-owned routes too; without the
+        // worker controlling the origin they fell through to the SPA
+        // fallback (index.html with 200) - a silent lie about an
+        // engine route. Same honest engine-offline notice as /zl/
+        // itself (the wildcard also covers the single-segment case).
+        .route("/__zl_navh__", any(zl_sw_required))
+        .route("/__zl_navh__/*path", any(zl_sw_required))
+        .route("/__zl_nav__", any(zl_sw_required))
+        .route("/__zl_nav__/*path", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/zlrelay", post(zl_relay_endpoint))
         .route("/logs", get(logs_endpoint))
