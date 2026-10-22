@@ -354,6 +354,51 @@ export function zlContentHref(href: string): string {
   return co && href.startsWith("/") ? co + href : href;
 }
 
+/* Injector phase 2 (per-origin config): the boot-page window once it
+   acks registration. The app forwards the same zl:config it pushes
+   to the app-origin worker through this frame; the boot page relays
+   it over its own control port and acks (zlCfgAck), so a silent
+   drop stays detectable. Resolves false when no content origin is
+   provisioned or the ack never lands; never throws. */
+let contentFrameWin: Window | null = null;
+
+export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boolean> {
+  await zlContentReady();
+  const co = contentOrigin;
+  const w = contentFrameWin;
+  if (!co || !w) return false;
+  /* The LB#15 installing-worker drop class applies to the content
+     worker too (a cold free-tier boot can outlast one shot), so
+     retry until an explicit ok ack or the bound is spent. */
+  for (const d of [0, 3000, 8000]) {
+    if (d) await new Promise((res) => setTimeout(res, d));
+    const ok = await new Promise<boolean>((resolve) => {
+      const onAck = (ev: MessageEvent) => {
+        if (ev.origin !== co) return;
+        const dd = ev.data as { zlCfgAck?: boolean; ok?: boolean } | null;
+        if (!dd || dd.zlCfgAck !== true) return;
+        window.removeEventListener("message", onAck);
+        window.clearTimeout(t);
+        resolve(dd.ok === true);
+      };
+      window.addEventListener("message", onAck);
+      const t = window.setTimeout(() => {
+        window.removeEventListener("message", onAck);
+        resolve(false);
+      }, 10000);
+      try {
+        w.postMessage({ zlCfg: cfg }, co);
+      } catch {
+        window.removeEventListener("message", onAck);
+        window.clearTimeout(t);
+        resolve(false);
+      }
+    });
+    if (ok) return true;
+  }
+  return false;
+}
+
 export function zlContentRegister(co: string): void {
   if (document.querySelector("iframe[data-lb-zlreg]")) return;
   const f = document.createElement("iframe");
@@ -369,6 +414,7 @@ export function zlContentRegister(co: string): void {
          stores the embedder origin so proxied frames can sync URL and
          title (the boot page re-registers it on its relayLost heal). */
       try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
+      contentFrameWin = f.contentWindow;
       resolve();
     };
     window.addEventListener("message", onMsg);
