@@ -703,7 +703,7 @@ export default function BrowserView(props: Props) {
   const saveXpi = (p: { name: string; bytes: Uint8Array }) => {
     setXpiPrompt(null);
     const blob = new Blob([p.bytes.slice().buffer as ArrayBuffer]);
-    const objUrl = URL.createObjectURL(blob);
+    const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objUrl;
     a.download = p.name;
@@ -1474,7 +1474,7 @@ export default function BrowserView(props: Props) {
               const base = prev[t.id] ?? emptyDt();
               return {
                 ...prev,
-                [t.id]: {
+                [t.id]: {
                   ...base,
                   console: [
                     ...base.console,
@@ -2179,7 +2179,7 @@ export default function BrowserView(props: Props) {
     setClosingIds((prev) => [...prev, id]);
     window.setTimeout(() => {
       setClosingIds((prev) => prev.filter((x) => x !== id));
-      /* Full per-tab state cleanup: status, DevTools, drafts, icons,
+      /* Full per-tab state cleanup: status, DevTools, drafts, icons,
          mute set, navigation bookkeeping and the frame handle.
          (The favicon blob URL itself is shared through iconCache, so
          it is only revoked when no tab uses it anymore.) */
