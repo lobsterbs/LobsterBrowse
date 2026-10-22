@@ -1501,8 +1501,7 @@ mod redact_tests {
 /// treats it like any engine failure, and it never prints the
 /// destination (#32: plaintext destinations never land on
 /// engine-origin documents).
-async fn zl_sw_required(axum::extract::Path(target): axum::extract::Path<String>) -> Response {
-    let _ = target;
+async fn zl_sw_required() -> Response {
     embedder_notice(
         "Engine offline",
         "The Zeolite engine service worker is not controlling this origin yet.",
@@ -2632,7 +2631,17 @@ async fn main() {
         // settings.ts): its worker owns those routes, so a /zl/ request
         // that reaches the server means no worker controls the page and
         // gets the honest load-error card.
-        .route("/zl/:target", any(zl_sw_required))
+        .route("/zl/*path", any(zl_sw_required))
+        // #183: multi-segment engine tails and the opaque NAVH/NAV
+        // handle prefixes are worker-owned routes too; without the
+        // worker controlling the origin they fell through to the SPA
+        // fallback (index.html with 200) - a silent lie about an
+        // engine route. Same honest engine-offline notice as /zl/
+        // itself (the wildcard also covers the single-segment case).
+        .route("/__zl_navh__", any(zl_sw_required))
+        .route("/__zl_navh__/*path", any(zl_sw_required))
+        .route("/__zl_nav__", any(zl_sw_required))
+        .route("/__zl_nav__/*path", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
         .route("/zlrelay", post(zl_relay_endpoint))
         .route("/logs", get(logs_endpoint))
