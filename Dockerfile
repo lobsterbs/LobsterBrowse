@@ -1035,6 +1035,19 @@ FROM debian:bookworm-slim AS zl-builder
 # c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
 # unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
 # Cargo-side pin stays a385fa9.
+# Pin 112: Zeolite dist b7c924e5a6bb658d92922a541fbcb03a3870d534
+# (from CI build 39847696942, Zeolite main c981e19a, all 5 jobs
+# green, app suite 1459 tests). Pin 112 ships the Injector
+# phase 2 follow-up: the in-page NAVH mint (navhCleanFromPrel,
+# the prel-navigation clean 302) honors queryRoutes - with the
+# toggle on, the redirected handle rides the query shape
+# (<real path>?<real query>&zlNavh=<token>), so a reloaded
+# document owns a natively readable location.pathname; engine-
+# internal path collisions and missing route keys fall back to
+# the NAVH path form (#383 fail-closed intact). sw.js
+# 3b94ab518397c471 -> c6debef338723924 (629684 bytes);
+# bootstrap.js unchanged c7300fa9981e71b4. Cargo-side pin
+# stays a385fa9 (SW-only change).
 # Pin 111: Zeolite dist 98e24bc4ec1e13562b876ab7f852507f130686a7
 # (from CI build 39812893153, Zeolite main e293ecc5, all 5 jobs
 # green, app suite 1456 tests). Pin 111 ships the split-origin
@@ -1368,7 +1381,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
 # 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
 # fixes).
-ARG ZEOLITE_COMMIT=98e24bc4ec1e13562b876ab7f852507f130686a7
+ARG ZEOLITE_COMMIT=b7c924e5a6bb658d92922a541fbcb03a3870d534
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1427,7 +1440,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3b94ab518397c471 ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c6debef338723924 ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
