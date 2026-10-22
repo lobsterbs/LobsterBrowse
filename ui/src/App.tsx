@@ -20,6 +20,7 @@ import * as store from "./store";
 import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
+import { loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -428,8 +429,10 @@ export default function App() {
         /* Injector phase 2 (query-shape committed routes): the
            opt-in rides server configuration (/build relays
            ZL_QUERY_ROUTES) and is read per attempt so a slow /build
-           fetch cannot pin a stale value into this retry loop. */
-        queryRoutes: queryRoutesRef.current,
+           fetch cannot pin a stale value into this retry loop.
+           The hidden debug menu (beta) can override the choice at
+           runtime; the override wins when set. */
+        queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
       });
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
@@ -556,13 +559,15 @@ export default function App() {
       const msg = {
         type: "zl:config",
         prefix: engineRoutePrefix(),
-        httpsUpgrade: settings.httpsUpgrade,
-        /* #76: lazy images are always on (the toggle is gone). */
-        imageLazy: true,
+        httpsUpgrade: loadDebugOverrides().httpsUpgrade ?? settings.httpsUpgrade,
+        /* #76: lazy images are always on (the toggle is gone);
+           the hidden debug menu (beta) can override this. */
+        imageLazy: loadDebugOverrides().imageLazy ?? true,
         /* Injector phase 2: the query-shape opt-in is ephemeral worker
            state, same class as httpsUpgrade; keep it in the parity
-           push. */
-        queryRoutes: queryRoutesRef.current,
+           push. The hidden debug menu (beta) can override the
+           choice at runtime; the override wins when set. */
+        queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
       };
       void zlSend(msg, 8000);
       /* Per-origin parity: the content worker rewrites and serves the

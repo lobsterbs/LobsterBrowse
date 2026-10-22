@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { StarsBackground } from "../components/ui/stars";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
+import DebugMenu from "./DebugMenu";
 
 /* One suggest warning per engine: empty providers do not spam the log. */
 const suggestWarned = new Set<string>();
@@ -105,6 +106,19 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   /* Engine-queried completions, fetched through the server's /suggest
      endpoint and merged below the local matches. */
   const [remote, setRemote] = useState<{ text: string; src: string }[]>([]);
+  /* Hidden debug menu (beta): five quick wordmark clicks open it. */
+  const wordmarkClicks = useRef<number[]>([]);
+  const [dbgOpen, setDbgOpen] = useState(false);
+  const markWordmark = () => {
+    const now = Date.now();
+    const recent = wordmarkClicks.current.filter((t) => now - t < 2000);
+    recent.push(now);
+    wordmarkClicks.current = recent;
+    if (recent.length >= 5) {
+      wordmarkClicks.current = [];
+      setDbgOpen(true);
+    }
+  };
   useEffect(() => {
     const q = url.trim();
     if (!q || q.length < 2 || looksLikeUrl(q) || !settings.suggestQueries) {
@@ -205,6 +219,7 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"
+        onClick={markWordmark}
         /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
             style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
@@ -213,6 +228,7 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
                                                                            `}</pre>
+      <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
