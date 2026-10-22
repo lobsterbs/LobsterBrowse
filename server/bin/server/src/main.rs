@@ -803,7 +803,7 @@ mod relay_guard_tests {
         let out = redact_userinfo("engine GET https://user:secret@example.com/reset");
         assert!(out.contains("[redacted-userinfo]@"), "{out}");
         assert!(out.contains("example.com/reset"), "{out}");
-        assert!(!out.contains("secret"), "{out}");
+        assert!(!out.contains("secret"), "{out}");
         assert_eq!(redact_userinfo("no url here"), "no url here");
         assert_eq!(
             redact_userinfo("https://example.com/x"),
@@ -1652,7 +1652,7 @@ async fn suggest_endpoint(State(state): State<Arc<AppState>>, RawQuery(raw): Raw
     // this deployment's datacenter egress (DuckDuckGo does), and an
     // empty suggestion box is worse than a second opinion. Brave and
     // Bing both answer from this network with the same osjson shape,
-    // so they are tried (in order) before answering empty.
+    // so they are tried (in order) before answering empty.
     let mut providers: Vec<String> = Vec::new();
     if let Some(p) = native {
         providers.push(p);
@@ -2483,7 +2483,7 @@ use std::sync::mpsc::{self, SyncSender, TrySendError};
  * container log driver, a full disk, a stalled log shipper) fills the
  * OS pipe and wedges the whole proxy: the standalone zeolite-server
  * reproduced a full serving freeze this way after ~64 KiB of undrained
- * log output. Each event now goes through a bounded channel to one
+ * log output. Each event now goes through a bounded channel to one
  * drain thread. A full buffer DROPS the event: a lost log line is
  * honest, a blocked runtime worker is not. */
 struct NonBlockingWriter {
