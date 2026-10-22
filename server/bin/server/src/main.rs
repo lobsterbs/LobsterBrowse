@@ -12,7 +12,7 @@
 
 use axum::body::Body;
 use axum::extract::{RawQuery, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::Router;
@@ -2575,6 +2575,60 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for NonBlockingWriter {
     }
 }
 
+/* COEP embedder parity: a host that runs COOP/COEP on its top
+document (crossOriginIsolation) only embeds cross-origin frame
+documents that opt into embedding; without CORP the browser
+blocks the frame with ERR_BLOCKED_BY_RESPONSE and the embedder
+sees an empty chrome-error frame. Split-origin hosts (Quartz,
+any COEP-protected shell embedding this origin) must be able to
+embed the /zlsw-register boot page and the honest engine-offline
+notice before the worker exists, so the whole origin opts in.
+Worker-served responses get the same header in the engine
+bundle (Zeolite app/src/corp.ts, at the respondWith seam). */
+fn with_corp(mut res: Response) -> Response {
+    res.headers_mut().insert(
+        "cross-origin-resource-policy",
+        HeaderValue::from_static("cross-origin"),
+    );
+    res
+}
+
+#[cfg(test)]
+mod corp {
+    use super::*;
+    /* The header is load-bearing for COEP embedders: an absent or
+    wrong-spelled CORP header reproduces the blocked-frame bug
+    the layer exists to fix, so the gate checks the exact
+    header value and that the response is otherwise intact. */
+    #[test]
+    fn with_corp_sets_the_embedder_header_and_keeps_the_response() {
+        let res = Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("offline notice"))
+            .unwrap();
+        let out = with_corp(res);
+        assert_eq!(
+            out.headers().get("cross-origin-resource-policy").unwrap(),
+            "cross-origin"
+        );
+        assert_eq!(out.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test]
+    fn with_corp_overwrites_an_existing_corp_value() {
+        let res = Response::builder()
+            .status(StatusCode::OK)
+            .header("cross-origin-resource-policy", "same-origin")
+            .body(Body::empty())
+            .unwrap();
+        let out = with_corp(res);
+        assert_eq!(
+            out.headers().get("cross-origin-resource-policy").unwrap(),
+            "cross-origin"
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let (log_writer, _log_drain) = NonBlockingWriter::new();
@@ -2763,6 +2817,14 @@ async fn main() {
         are same-origin, so cross-origin ACAO headers serve nobody - the
         permissive layer that used to sit here turned the deployment
         into a CORS-stripping relay any web page could read. */
+        /* COEP embedder parity (see with_corp): applies to every
+           route above, the SPA fallback and the wisp upgrade alike -
+           the content origin is embeddable as a whole. */
+        .layer(axum::middleware::from_fn(
+            |req: axum::extract::Request, next: axum::middleware::Next| async move {
+                with_corp(next.run(req).await)
+            },
+        ))
         .with_state(state);
 
     info!(
