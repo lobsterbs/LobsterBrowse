@@ -57,15 +57,17 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist b7c924e5 (pin 112: the in-page NAVH
-mint honors queryRoutes - navhCleanFromPrel, the prel-navigation
-clean 302, now mints the query-shape handle (<real path>?<real
-query>&zlNavh=<token>) when the host opts in, so a reloaded
-document owns a natively readable location.pathname; engine-
-internal path collisions and missing route keys fall back to
-the NAVH path form; Zeolite main c981e19a, CI run 39847696942
-all 5 jobs green, suite 1459/1459), zlswSha 3b94ab518397c471 ->
-c6debef338723924 (629684 bytes), bootstrapSha c7300fa9981e71b4
+Current pin: Zeolite dist 07bb4ce0 (pin 113: COEP embedder
+parity - the engine worker rebuilds every default/cors Response
+with cross-origin-resource-policy: cross-origin at the
+respondWith seam (app/src/corp.ts withCorp), preserving status,
+headers and body and passing opaque and error responses through
+untouched, so a COEP require-corp embedder (Quartz) can embed
+the content origin instead of ERR_BLOCKED_BY_RESPONSE; the
+server half (main.rs with_corp middleware) ships in the same
+wave; Zeolite main f8ea0553, CI run 39856666415 all 5 jobs
+green, suite 1464/1464), zlswSha c6debef338723924 ->
+0a62d321a5b09828 (630095 bytes), bootstrapSha c7300fa9981e71b4
 unchanged (35113 bytes).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays a385fa9 because the wave does not touch
