@@ -16,7 +16,9 @@
      while the tab has a real URL; the poll reconstructs the intended
      target and reloads it through the engine.
    - "sync": the frame is on an engine route (or an engine-owned
-     marker path); the poll decodes the real URL and syncs the tab. */
+     marker path, or a query-shape committed route whose search
+     carries the zlNavh token); the poll decodes the real URL and
+     syncs the tab. */
 
 export type PollAction = "wait" | "recover" | "sync";
 
@@ -27,10 +29,16 @@ const APP_PREFIXES = [
 
 const ENGINE_PREFIXES = ["/zl/", "/__zl_nav__/", "/__zl_navh__", "/sj/r/"];
 
-export function pollAction(protocol: string, path: string, tabUrl: string): PollAction {
+export function pollAction(protocol: string, path: string, tabUrl: string, search = ""): PollAction {
   if (protocol.startsWith("about:")) return "wait";
   if (!path || path === "/") return "wait";
   if (ENGINE_PREFIXES.some((p) => path.startsWith(p))) return "sync";
+  /* queryRoutes: the query-shape committed route is the real
+     destination path plus the keyed zlNavh token in the search -
+     an engine-owned route that must sync, never a bare-app-path
+     escape (a healthy query-shape frame would otherwise never
+     reach the URL/title sync and churn the recover branch). */
+  if (search.includes("zlNavh=")) return "sync";
   if (!tabUrl) return "wait";
   if (APP_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))) return "wait";
   return "recover";

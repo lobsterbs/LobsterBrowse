@@ -248,7 +248,11 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
             </m3e-breadcrumb>{" "}
             <span className="lb-muted">({engine === "fflate" ? "fflate fast path" : "zip.js ZIP64 path"})</span>
           </p>
-          <m3e-tree className="lb-fv-tree" aria-label="Archive contents">
+          {/* React never maps className to class on m3e-* custom
+             elements (it emits a literal classname attribute nothing
+             matches): the class rides the spread like the FileViewer
+             card. */}
+          <m3e-tree {...{ class: "lb-fv-tree" }} aria-label="Archive contents">
             {root.children.map(renderNode)}
           </m3e-tree>
         </div>
