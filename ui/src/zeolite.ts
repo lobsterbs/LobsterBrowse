@@ -9,6 +9,8 @@
    scope. With no controller on the page (Home, Settings,
    plain tabs) this module is the control plane client. */
 
+import { loadDebugOverrides } from "./debug";
+
 async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
@@ -350,6 +352,10 @@ export function zlContentReady(): Promise<void> {
    content origin for frame sources, so proxied documents never
    render on the app origin. Non-relative hrefs pass through. */
 export function zlContentHref(href: string): string {
+  /* Debug override: split === false keeps frames on the app origin
+     (the pre-split architecture; the app worker then owns them).
+     Existing tabs keep their origin until their next navigation. */
+  if (loadDebugOverrides().split === false) return href;
   const co = contentOrigin;
   return co && href.startsWith("/") ? co + href : href;
 }

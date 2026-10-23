@@ -1,11 +1,13 @@
 /* Hidden debug menu overrides (beta): runtime engine toggles that
-   live in localStorage and are consulted by every zl:config push
-   (boot, the settings effect, controllerchange), so a debug toggle
-   survives reloads and worker restarts until cleared. */
+   live in localStorage: the config toggles are consulted by every
+   zl:config push (boot, the settings effect, controllerchange), the
+   split toggle by zlContentHref; a debug toggle survives reloads
+   and worker restarts until cleared. */
 export type DebugOverrides = {
   queryRoutes?: boolean;
   httpsUpgrade?: boolean;
   imageLazy?: boolean;
+  split?: boolean;
 };
 
 const KEY = "lb_debug_overrides";

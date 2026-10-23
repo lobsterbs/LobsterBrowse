@@ -26,7 +26,7 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
   - `WISP_PASSWORD` / `WISP_USERNAME` - optional password auth (extension 0x02).
   - `DATABASE_URL` - Neon Postgres connection string (used by the upcoming sessions crate).
   - `LB_TRUSTED_PROXY_CIDRS` - optional comma-separated trusted-proxy CIDR list. When the TCP peer sits inside one of these ranges, the relay rate limit keys on the rightmost `x-forwarded-for` hop outside the trusted set instead of the shared peer address (#163). Unset by default: the peer IP stays the key and a client-controlled `x-forwarded-for` is never honored. A malformed entry is a startup error.
-  - `ZL_QUERY_ROUTES` - optional Injector phase 2 opt-in (query-shape committed routes, the LegacyUnforgeable pathname fix). When `1`/`true`, /build reports `zlQueryRoutes: true` and the UI pushes `queryRoutes` in `zl:config` to both origin workers (the app origin and the provisioned content origin). Unset by default: the opaque NAVH handle shape stays committed.
+  - `ZL_QUERY_ROUTES` - Injector phase 2 opt-OUT (query-shape committed routes, the LegacyUnforgeable pathname fix). On by default: /build reports `zlQueryRoutes: true` and the UI pushes `queryRoutes` in `zl:config` to both origin workers (the app origin and the provisioned content origin). Set `0`/`false`/`no` to opt out: the opaque NAVH handle shape stays committed.
 - Health check: `GET /healthz`.
 
 ## Zeolite engine pin
@@ -57,18 +57,17 @@ the lock.
 A Neon Postgres project is provisioned; its connection string is injected into the
 server as `DATABASE_URL`. Free tier, autosuspended when idle.
 
-Current pin: Zeolite dist 07bb4ce0 (pin 113: COEP embedder
-parity - the engine worker rebuilds every default/cors Response
-with cross-origin-resource-policy: cross-origin at the
-respondWith seam (app/src/corp.ts withCorp), preserving status,
-headers and body and passing opaque and error responses through
-untouched, so a COEP require-corp embedder (Quartz) can embed
-the content origin instead of ERR_BLOCKED_BY_RESPONSE; the
-server half (main.rs with_corp middleware) ships in the same
-wave; Zeolite main f8ea0553, CI run 39856666415 all 5 jobs
-green, suite 1464/1464), zlswSha c6debef338723924 ->
-0a62d321a5b09828 (630095 bytes), bootstrapSha c7300fa9981e71b4
-unchanged (35113 bytes).
+Current pin: Zeolite dist bdbce2d7 (pin 115: always-on Injector -
+queryRoutes defaults to true at module eval (Zeolite
+swstate.ts), so query-shape committed routes are the default
+route shape and a host zl:config remains the runtime opt-out;
+the prel nav 302 clean form and the vloc query arm ride the
+same always-on default, and this server reports zlQueryRoutes
+true unless ZL_QUERY_ROUTES opts out; Zeolite main 8882da6,
+CI run 39947197172 all 5 jobs green, suite 1470/1470),
+zlswSha 559dd986814b1a53 -> 378e4396918d9393 (630107
+bytes), bootstrapSha 66d387dbf16ee2c3 unchanged (35288
+bytes).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays a385fa9 because the wave does not touch
 zeolite-server, and server/Cargo.lock is consistent with the

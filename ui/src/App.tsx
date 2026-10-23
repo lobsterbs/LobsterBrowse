@@ -155,10 +155,12 @@ export default function App() {
      deployment password-authed wisp ("tls handshake eof" 502s).
      A worker restart drops the engine stored port, so re-register
      on controller change. Registration is idempotent. */
-  /* Injector phase 2: the query-shape opt-in from /build (server env
-     ZL_QUERY_ROUTES); read per config-push attempt so a slow /build
-     fetch cannot pin a stale value into a long retry loop. */
-  const queryRoutesRef = useRef(false);
+  /* Injector phase 2: the query-shape state from /build (the server
+     env ZL_QUERY_ROUTES is the opt-out; on by default); read per
+     config-push attempt so a slow /build fetch cannot pin a stale
+     value into a long retry loop. The ref starts true so a push
+     before /build resolves never disables the always-on injector. */
+  const queryRoutesRef = useRef(true);
   useEffect(() => {
     zlRelayInit();
     let wispUrl = "";
