@@ -29,7 +29,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentQuery, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -344,7 +344,16 @@ export default function BrowserView(props: Props) {
       void zlSend({ type: "zl:loadState", host }, 4000).then((rep) => {
         const r = rep as { ok?: boolean; inflight?: number; streams?: number } | null;
         if (stop) return;
-        setEngineBusy(!!(r && r.ok && ((r.inflight ?? 0) > 0 || (r.streams ?? 0) > 0)));
+        const appBusy = !!(r && r.ok && ((r.inflight ?? 0) > 0 || (r.streams ?? 0) > 0));
+        /* #195: the split-origin worker owns the proxied page's
+           traffic; without this poll the indicator hid while the
+           content origin was still loading. */
+        void zlContentQuery({ type: "zl:loadState", host }, 4000).then((crep) => {
+          if (stop) return;
+          const c = crep as { ok?: boolean; inflight?: number; streams?: number } | null;
+          const contentBusy = !!(c && c.ok && ((c.inflight ?? 0) > 0 || (c.streams ?? 0) > 0));
+          setEngineBusy(appBusy || contentBusy);
+        });
       });
     }, 700);
     return () => {

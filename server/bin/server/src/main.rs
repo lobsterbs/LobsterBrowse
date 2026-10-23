@@ -1501,7 +1501,15 @@ mod redact_tests {
 /// treats it like any engine failure, and it never prints the
 /// destination (#32: plaintext destinations never land on
 /// engine-origin documents).
-async fn zl_sw_required() -> Response {
+async fn zl_sw_required(RawQuery(raw): RawQuery) -> Response {
+    /* #193: one bounded self-heal attempt per context. A popup or a
+    fresh partition can land here with no controlling worker; the
+    notice page registers the engine worker and reloads once
+    (zlswheal=1 guard, decode-safe for the engine route decoders:
+    the NAV/NAVH tails split at [?#] and the path decoders read
+    pathname only). The guarded reload serves the static notice
+    with no script, so a genuinely unavailable worker never
+    loops. */
     embedder_notice(
         "Engine offline",
         "The Zeolite engine service worker is not controlling this origin yet.",
@@ -1509,8 +1517,14 @@ async fn zl_sw_required() -> Response {
         "offline",
         "no controlling service worker",
         true,
+        !zlswheal_guarded(raw.as_deref()),
         StatusCode::SERVICE_UNAVAILABLE,
     )
+}
+
+/// #193: true when the query already carries the self-heal guard.
+fn zlswheal_guarded(raw: Option<&str>) -> bool {
+    raw.unwrap_or("").split('&').any(|p| p == "zlswheal=1")
 }
 
 /// Legacy engine route prefixes are unowned (#67): stale /r/ and
@@ -1530,6 +1544,7 @@ async fn legacy_engine_route_gone(
         "route",
         "legacy engine route prefix is gone",
         false,
+        false,
         StatusCode::BAD_GATEWAY,
     )
 }
@@ -1537,11 +1552,14 @@ async fn legacy_engine_route_gone(
 /// The two notices the engine cannot answer by design
 /// (docs/error-pages.md): no controlling worker on an engine
 /// route, and LB-only legacy prefixes. Minimal, deterministic,
-/// scriptless, color-scheme aware, meta[zl-error] for the
-/// embedder's DevTools mirror, no destination URLs (#32). The
-/// retry flag adds a GET-form retry button back to the same
-/// route (the offline case can recover once the worker installs;
-/// a gone prefix cannot).
+/// color-scheme aware, meta[zl-error] for the embedder's DevTools
+/// mirror, no destination URLs (#32). The retry flag adds a
+/// GET-form retry button back to the same route (the offline case
+/// can recover once the worker installs; a gone prefix cannot).
+/// The heal flag (#193) appends the one-shot worker self-heal
+/// script to the offline notice when the request is unguarded.
+/// ponytail: 8 flat notice fields, not worth a struct for two call sites
+#[allow(clippy::too_many_arguments)]
 fn embedder_notice(
     title: &str,
     line: &str,
@@ -1549,8 +1567,54 @@ fn embedder_notice(
     category: &str,
     reason: &str,
     retry: bool,
+    heal: bool,
     code: StatusCode,
 ) -> Response {
+    let body = embedder_notice_body(title, line, action, category, reason, retry, heal, code);
+    (
+        code,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
+        .into_response()
+}
+
+/// #193: the self-heal script the offline notice carries when the
+/// request is unguarded. Registers the engine worker, waits for
+/// an active instance, then reloads the same URL with the
+/// zlswheal=1 guard appended (query-only: every engine route
+/// decoder reads the path or splits at [?#], so the guard is
+/// decode-safe). A registration or activation failure leaves the
+/// static notice as the honest answer; the guarded reload serves
+/// no script, so a genuinely unavailable worker never loops.
+const ZL_SW_HEAL_SCRIPT: &str = r#"<script>
+(function () {
+  try {
+    var reg = navigator.serviceWorker;
+    if (!reg || !reg.register) return;
+    reg.register("/zlsw/sw.js", { scope: "/", type: "module" })
+      .then(function () { return reg.ready; })
+      .then(function () {
+        var sep = location.search ? "&" : "?";
+        location.replace(location.href + sep + "zlswheal=1");
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>"#;
+
+/// ponytail: 8 flat notice fields, not worth a struct for two call sites
+#[allow(clippy::too_many_arguments)]
+fn embedder_notice_body(
+    title: &str,
+    line: &str,
+    action: &str,
+    category: &str,
+    reason: &str,
+    retry: bool,
+    heal: bool,
+    code: StatusCode,
+) -> String {
     let meta = json_escape(&format!(
         "{{\"category\":\"{}\",\"reason\":\"{}\"}}",
         category, reason
@@ -1577,6 +1641,7 @@ button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
 <p>{action}</p>
 <p class="dt">{category} · HTTP {status}</p>
 {retry_form}
+{heal_script}
 </main></body></html>"#,
         meta = meta,
         title = json_escape(title),
@@ -1589,13 +1654,72 @@ button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
         } else {
             ""
         },
+        heal_script = if heal { ZL_SW_HEAL_SCRIPT } else { "" },
     );
-    (
-        code,
-        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        body,
-    )
-        .into_response()
+    body
+}
+
+#[cfg(test)]
+mod sw_heal_tests {
+    use super::{embedder_notice_body, zlswheal_guarded, ZL_BOOT_PAGE};
+    use axum::http::StatusCode;
+
+    #[test]
+    fn heal_script_rides_the_unguarded_offline_notice() {
+        let b = embedder_notice_body(
+            "Engine offline",
+            "l",
+            "a",
+            "offline",
+            "r",
+            true,
+            true,
+            StatusCode::SERVICE_UNAVAILABLE,
+        );
+        assert!(b.contains("/zlsw/sw.js"), "{b}");
+        assert!(b.contains("zlswheal=1"), "{b}");
+    }
+
+    #[test]
+    fn guarded_and_gone_notices_stay_script_free() {
+        let g = embedder_notice_body(
+            "Engine offline",
+            "l",
+            "a",
+            "offline",
+            "r",
+            true,
+            false,
+            StatusCode::SERVICE_UNAVAILABLE,
+        );
+        assert!(!g.contains("<script"), "{g}");
+        let gone = embedder_notice_body(
+            "Gone",
+            "l",
+            "a",
+            "route",
+            "r",
+            false,
+            false,
+            StatusCode::BAD_GATEWAY,
+        );
+        assert!(!gone.contains("<script"), "{gone}");
+    }
+
+    #[test]
+    fn heal_guard_reads_the_query_pair() {
+        assert!(!zlswheal_guarded(None));
+        assert!(!zlswheal_guarded(Some("a=1")));
+        assert!(!zlswheal_guarded(Some("zlswheal=0")));
+        assert!(zlswheal_guarded(Some("zlswheal=1")));
+        assert!(zlswheal_guarded(Some("a=1&zlswheal=1")));
+    }
+
+    #[test]
+    fn boot_page_carries_the_query_relay() {
+        assert!(ZL_BOOT_PAGE.contains("zlQuery"), "relay listener missing");
+        assert!(ZL_BOOT_PAGE.contains("zlQueryReply"), "reply shape missing");
+    }
 }
 /// Search-engine suggestions, proxied server-side to dodge CORS.
 /// Every provider returns the same osjson shape: ["query", ["s1", ...]].
@@ -2078,8 +2202,7 @@ fn same_origin_fetch(headers: &axum::http::HeaderMap) -> bool {
 /// page's perspective, so
 /// the relay authorization (#110) accepts it exactly like the app
 /// origin's channel. Inert unless a parent embeds the page.
-async fn zlsw_register() -> Response {
-    let body = r#"<!doctype html>
+const ZL_BOOT_PAGE: &str = r#"<!doctype html>
 <html><head><meta charset="utf-8"><title>Zeolite SW registration</title></head>
 <body><script type="module">
 (async () => {
@@ -2221,6 +2344,28 @@ async fn zlsw_register() -> Response {
         pushCfg();
       }
     });
+    /* #194/#195: control-plane query relay. The app polls the
+       content worker (netLog, diagnostics, load state) through
+       this page - its only same-origin client - over a fresh
+       port per query, bounded by the app-side timeout; the reply
+       rides zlQueryReply with the caller's zlId so overlapping
+       queries stay sorted. */
+    window.addEventListener("message", (ev) => {
+      if (!ev.data || typeof ev.data.zlQuery !== "object" || !(ev.data.zlId >= 0) || !/^https:/.test(ev.origin) || !ev.source) return;
+      const swc6 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+      const up = (m) => { try { ev.source.postMessage(Object.assign({ zlQueryReply: true, zlId: ev.data.zlId }, m), ev.origin); } catch (e) {} };
+      if (!swc6) { up({ zlError: "no worker instance" }); return; }
+      const qp = new MessageChannel();
+      let qDone = false;
+      qp.port1.onmessage = (rev) => {
+        if (qDone) return;
+        qDone = true;
+        up({ zlRes: rev.data });
+        qp.port1.close();
+      };
+      window.setTimeout(() => { if (!qDone) { qDone = true; up({ zlError: "timeout" }); try { qp.port1.close(); } catch (e2) {} } }, 10000);
+      swc6.postMessage(ev.data.zlQuery, [qp.port2]);
+    });
     try {
       const b = await (await fetch("/build", { cache: "no-store" })).json();
       if (typeof b.sjWisp === "string" && b.sjWisp) {
@@ -2234,11 +2379,13 @@ async fn zlsw_register() -> Response {
   }
 })();
 </script></body></html>"#;
+
+async fn zlsw_register() -> Response {
     Response::builder()
         .status(200)
         .header("content-type", "text/html; charset=utf-8")
         .header("cache-control", "no-store")
-        .body(body.into())
+        .body(ZL_BOOT_PAGE.into())
         .unwrap()
 }
 

@@ -427,6 +427,46 @@ export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boo
   return false;
 }
 
+/* #194/#195: control-plane query to the CONTENT worker, relayed by
+   the boot page (its only same-origin client). Returns the
+   worker's reply, or null when no content origin is provisioned,
+   the boot page is not ready, or the bound expires. Never
+   throws. */
+let contentQuerySeq = 0;
+
+export async function zlContentQuery(
+  msg: Record<string, unknown>,
+  boundMs = 8000,
+): Promise<Record<string, unknown> | null> {
+  await zlContentReady();
+  const co = contentOrigin;
+  const w = contentFrameWin;
+  if (!co || !w) return null;
+  const zlId = ++contentQuerySeq;
+  return new Promise((resolve) => {
+    const onReply = (ev: MessageEvent) => {
+      if (ev.origin !== co) return;
+      const d = ev.data as { zlQueryReply?: boolean; zlId?: number; zlRes?: Record<string, unknown> } | null;
+      if (!d || d.zlQueryReply !== true || d.zlId !== zlId) return;
+      window.removeEventListener("message", onReply);
+      window.clearTimeout(t);
+      resolve(d.zlRes ?? null);
+    };
+    window.addEventListener("message", onReply);
+    const t = window.setTimeout(() => {
+      window.removeEventListener("message", onReply);
+      resolve(null);
+    }, boundMs);
+    try {
+      w.postMessage({ zlQuery: msg, zlId }, co);
+    } catch {
+      window.removeEventListener("message", onReply);
+      window.clearTimeout(t);
+      resolve(null);
+    }
+  });
+}
+
 export function zlContentRegister(co: string): void {
   if (document.querySelector("iframe[data-lb-zlreg]")) return;
   const f = document.createElement("iframe");
