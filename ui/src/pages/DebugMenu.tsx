@@ -19,6 +19,9 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
   const dialogRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
   const [ov, setOv] = useState<DebugOverrides>(() => loadDebugOverrides());
   const [build, setBuild] = useState<string>("(fetching /build...)");
+  /* #192: the no-override default mirrors the deployment /build
+     value (ZL_QUERY_ROUTES opt-out), matching App parity. */
+  const [qr, setQr] = useState<boolean>(true);
   const [ping, setPing] = useState<string>("(pinging the worker...)");
 
   /* m3e-dialog opens/closes imperatively (the Settings.tsx pattern):
@@ -49,6 +52,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
           " | server queryRoutes " + String(b?.zlQueryRoutes === true) +
             " | content " + (b?.contentOrigin || "(same-origin)"),
         );
+        setQr(b?.zlQueryRoutes === true);
       } catch {
         setBuild("(/build fetch failed)");
       }
@@ -71,7 +75,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
   /* The effective values: a debug override wins over the stored
      setting, which wins over the built-in default. */
   const cur = {
-    queryRoutes: ov.queryRoutes ?? true,
+    queryRoutes: ov.queryRoutes ?? qr,
     httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
     imageLazy: ov.imageLazy ?? true,
     split: ov.split ?? true,
@@ -85,7 +89,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       prefix: engineRoutePrefix(),
       httpsUpgrade: next.httpsUpgrade ?? settings.httpsUpgrade,
       imageLazy: next.imageLazy ?? true,
-      queryRoutes: next.queryRoutes ?? true,
+      queryRoutes: next.queryRoutes ?? qr,
     };
     void zlSend(msg, 8000);
     void zlContentConfig(msg);

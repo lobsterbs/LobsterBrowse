@@ -17,7 +17,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlSetContentOrigin, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { loadDebugOverrides } from "./debug";
@@ -178,12 +178,10 @@ export default function App() {
            engine worker on that origin. */
         queryRoutesRef.current = b && b.zlQueryRoutes === true;
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
-        if (co) {
-          zlSetContentOrigin(co);
-          zlContentRegister(co);
-        }
+        zlAnnounceContentOrigin(co);
+        if (co) zlContentRegister(co);
       })
-      .catch(() => {});
+      .catch(() => zlAnnounceContentOrigin(""));
     const re = () => {
       zlRelayInit();
       if (wispUrl) zlWispInit(wispUrl);
