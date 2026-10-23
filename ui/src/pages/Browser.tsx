@@ -320,7 +320,7 @@ export default function BrowserView(props: Props) {
     }
     if (!host) return;
     let stop = false;
-    const iv = setInterval(() => {
+    const probeBusy = () => {
       void zlSend({ type: "zl:loadState", host }, 4000).then((rep) => {
         const r = rep as { ok?: boolean; inflight?: number; streams?: number } | null;
         if (stop) return;
@@ -335,7 +335,12 @@ export default function BrowserView(props: Props) {
           setEngineBusy(appBusy || contentBusy);
         });
       });
-    }, 700);
+    };
+    /* First sample immediately: a load shorter than one interval
+       never flipped the chip on, so the indicator missed short
+       loads. */
+    probeBusy();
+    const iv = setInterval(probeBusy, 700);
     return () => {
       stop = true;
       clearInterval(iv);
@@ -938,6 +943,10 @@ export default function BrowserView(props: Props) {
     const onOpenExt = () => setExtPanelOpen(true);
     const onFocusOmnibox = () => {
       setTbExpanded(true);
+      /* The tucked dock is unmounted: reveal it so the field exists
+         to focus (the grip instant reveal, no 3s hold). No hideSoon
+         here - the user is heading for the keyboard. */
+      setDockTucked(false);
       window.setTimeout(() => urlInputRef.current?.focus(), 80);
     };
     window.addEventListener("lb-open-extensions", onOpenExt);
@@ -1118,7 +1127,9 @@ export default function BrowserView(props: Props) {
      grip summons it. The transform lives on a plain wrapper div
      (.lb-dock-pill): applying it to the m3e-toolbar host did
      nothing (custom element host display), which left the bar
-     frozen in place covering page content. */
+     frozen in place covering page content. The tucked pill now
+     UNMOUNTS entirely (user request): hidden means not rendered,
+     the grip line alone stays as the reveal handle. */
   const [dockTucked, setDockTucked] = useState(false);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
@@ -1127,8 +1138,19 @@ export default function BrowserView(props: Props) {
     if (!settings.autoHideChrome) return;
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
-      if (!dockHoverRef.current) setDockTucked(true);
-      else hideSoon();
+      if (dockHoverRef.current) {
+        hideSoon();
+        return;
+      }
+      /* The tucked pill is unmounted: never tuck while the user is
+         inside it (typing in the URL field, a downloads card) or
+         the field would vanish mid-edit. */
+      const ae = document.activeElement;
+      if (ae && ae.closest && ae.closest(".lb-dock-pill")) {
+        hideSoon();
+        return;
+      }
+      setDockTucked(true);
     }, compact ? 2200 : 3500);
   };
   /* Grip hold: 3s of continuous pointer presence on the grip line
@@ -1732,6 +1754,11 @@ export default function BrowserView(props: Props) {
         lastNav.current.set(t.id, real);
         props.updateTab(t.id, patch);
         pushLog("info", "url sync " + sanitizeUrl(real));
+        /* The polled change is a navigation the frame performed on
+           its own (in-page link, pushState, engine challenge hop):
+           no load() drove it, so the chip never appeared. Flip the
+           tab loading now; the settle probe below clears it. */
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));
         /* The frame reached this URL for real: the per-path escape
            guard has done its job and can admit a later genuine escape
            to the same path again (#170); the recovery is complete.
@@ -2144,6 +2171,9 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     if (active?.url) return;
     setTbExpanded(true);
+    /* The empty tab IS the search surface: if the dock is tucked
+       (the pill unmounted) reveal it so the field exists to focus. */
+    setDockTucked(false);
     const t = window.setTimeout(() => urlInputRef.current?.focus(), 80);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2384,6 +2414,10 @@ export default function BrowserView(props: Props) {
             revealDock();
           }}
         />
+        {/* Tucked = fully unmounted, not translated: hidden means
+            not rendered (user request); the grip line alone stays
+            mounted as the reveal handle. */}
+        {!dockTucked && (
         <div className="lb-dock-pill">
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
@@ -2665,6 +2699,7 @@ export default function BrowserView(props: Props) {
             />
           )}
         </div>
+        )}
       </div>
 
       {extPanelMounted && (
