@@ -327,6 +327,28 @@ export function zlContentOrigin(): string {
   return contentOrigin;
 }
 
+/* #191 boot race: the app learns the content origin from the /build
+   boot fetch; a navigation that fires before it resolves must not
+   commit proxied content on the app origin while the deployment
+   provisions one. The boot effect announces the outcome (the origin,
+   empty string when none or the fetch failed) exactly once;
+   initialRoute waits for it with a bound. */
+let contentAnnounced: ((o: string) => void) | null = null;
+const contentAnnounce = new Promise<string>((res) => {
+  contentAnnounced = res;
+});
+export function zlAnnounceContentOrigin(o: string): void {
+  zlSetContentOrigin(o);
+  if (contentAnnounced) {
+    const r = contentAnnounced;
+    contentAnnounced = null;
+    r(o);
+  }
+}
+export function zlContentAnnounced(): Promise<string> {
+  return contentAnnounce;
+}
+
 /* Register the engine service worker on the content origin by
    embedding its /zlsw-register page in a hidden iframe (a page can
    only register workers for its own origin). The register page also
