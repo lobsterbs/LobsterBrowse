@@ -1384,7 +1384,24 @@ FROM debian:bookworm-slim AS zl-builder
 # sw.js c6debef338723924 -> 0a62d321a5b09828 (630095 bytes);
 # bootstrap.js unchanged c7300fa9981e71b4 (35113 bytes); wasm
 # unchanged. Cargo-side pin stays a385fa9.
-ARG ZEOLITE_COMMIT=07bb4ce0a48650b7e72c8043557efc1fd5af48fd
+# Pin 114: Zeolite dist 0497c201beadb7ccbb0dc5bc984eecc6b2eb165c
+# (from CI build 39919675076, Zeolite main 0b72b3f8, all 5 jobs
+# green, app suite 1469 tests). Pin 114 ships the query-handle
+# slash contract + vloc query-arm route-shape gate, Zeolite
+# #410/#411: buildQueryHandleUrl percent-escapes a surplus
+# leading-slash run in the committed query-shape path (a
+# handle opening // resolves protocol-relative on host
+# assignment) with decodeQueryHandle and the expired-handle
+# re-mint restoring it (#202 parity with the NAVH form); the
+# vloc presence-only query arm never wins on a route-shaped
+# pathname, so a NAVH page whose real destination query
+# carries a zlNavh impostor reads the real path instead of
+# the opaque handle (#180 leak class), and the query-mode
+# re-commit keeps the escaped form. sw.js 0a62d321a5b09828 ->
+# 559dd986814b1a53 (630107 bytes); bootstrap.js c7300fa9981e71b4
+# -> 66d387dbf16ee2c3 (35288 bytes, CI ceiling 35328). Cargo-side
+# pin stays a385fa9 (SW-only change).
+ARG ZEOLITE_COMMIT=0497c201beadb7ccbb0dc5bc984eecc6b2eb165c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1443,7 +1460,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0a62d321a5b09828 ZEOLITE_BOOTSTRAP_SHA=c7300fa9981e71b4 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=559dd986814b1a53 ZEOLITE_BOOTSTRAP_SHA=66d387dbf16ee2c3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
