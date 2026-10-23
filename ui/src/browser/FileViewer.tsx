@@ -53,8 +53,15 @@ export default function FileViewer(props: { name: string; blob: Blob; kind: File
           return;
         }
         if (props.kind === "image" || props.kind === "audio" || props.kind === "video") {
-          made = URL.createObjectURL(props.blob);
-          if (!dead) setObjUrl(made);
+          const u = URL.createObjectURL(props.blob);
+          /* unmounted mid-create: the effect cleanup already ran and
+             will not run again, so revoke here or the URL leaks. */
+          if (dead) {
+            URL.revokeObjectURL(u);
+            return;
+          }
+          made = u;
+          setObjUrl(u);
         }
       } catch {
         /* viewer stays empty; Download still works */

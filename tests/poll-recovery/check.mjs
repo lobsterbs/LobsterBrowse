@@ -46,10 +46,17 @@ const cases = [
   ["http:", "/anything", "", "wait"],
   /* Genuine escaped navigation to a bare app path still recovers. */
   ["http:", "/some-bare-app-path", "https://example.com/", "recover"],
+  /* Query-shape committed routes (queryRoutes on): the real path plus
+     the zlNavh token in the search is engine-owned - sync, never a
+     fabricated escape; the sync branch resolves the real URL by
+     stripping the token. Without the token the same path recovers. */
+  ["http:", "/wiki/Main_Page", "https://wikipedia.org/wiki/Main_Page", "sync", "?zlNavh=token123"],
+  ["http:", "/wiki/Main_Page", "https://wikipedia.org/wiki/Main_Page", "sync", "?use=x&zlNavh=token123&lang=en"],
+  ["http:", "/wiki/Main_Page", "https://wikipedia.org/wiki/Main_Page", "recover", "?use=x"],
 ];
 
-for (const [protocol, path, tabUrl, want] of cases) {
-  const got = pollAction(protocol, path, tabUrl);
+for (const [protocol, path, tabUrl, want, search] of cases) {
+  const got = pollAction(protocol, path, tabUrl, search);
   assert.equal(
     got,
     want,
