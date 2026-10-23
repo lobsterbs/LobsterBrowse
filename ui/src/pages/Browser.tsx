@@ -1578,7 +1578,7 @@ export default function BrowserView(props: Props) {
          guard), so a site that genuinely 404s into the fallback does
          not loop. The routing decision lives in pollAction()
          (ui/src/browser/pollRecovery.ts). */
-      const act = pollAction(f.contentWindow!.location.protocol, path, t.url);
+      const act = pollAction(f.contentWindow!.location.protocol, path, t.url, f.contentWindow!.location.search);
       if (act === "recover") {
         try {
           /* Only the app shell is an escaped navigation. A frame
@@ -1646,7 +1646,22 @@ export default function BrowserView(props: Props) {
          garbage url sync -> undecodable-route loop). The tab already
          holds the real destination, so fall back to it and keep
          title/status/favicon syncing; the URL-sync block no-ops. */
-      const real = decodeRoute(path) || t.url;
+      let real = decodeRoute(path);
+      /* queryRoutes: a query-shape frame carries the real path plus
+         the keyed zlNavh token in the search. decodeRoute cannot read
+         keyed tokens, but the destination is the path plus search
+         minus the token, resolved against the tab known origin. */
+      if (!real && f.contentWindow!.location.search.includes("zlNavh=")) {
+        const params = new URLSearchParams(f.contentWindow!.location.search);
+        params.delete("zlNavh");
+        const qs = params.toString();
+        try {
+          real = new URL(path + (qs ? "?" + qs : ""), t.url).href;
+        } catch {
+          real = "";
+        }
+      }
+      real = real || t.url;
       if (!real) return;
       /* #186: while a route mint is pending the frame still shows the
          previous page, and this poll fires because updateTab already
