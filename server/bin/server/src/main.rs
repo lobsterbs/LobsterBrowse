@@ -2297,13 +2297,13 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         .ok()
         .and_then(|v| content_origin_from(&v))
         .unwrap_or_default();
-    // Injector phase 2 (query-shape committed routes): the opt-in is
-    // server configuration (ZL_QUERY_ROUTES), surfaced to the UI via
-    // /build so both origin workers receive the same zl:config push.
-    // Default off; unset the env and redeploy to revert.
-    let zl_query_routes = matches!(
+    // Injector phase 2 (query-shape committed routes): always on
+    // by default; ZL_QUERY_ROUTES is the OPT-OUT (0/false/no),
+    // surfaced to the UI via /build so both origin workers receive
+    // the same zl:config push.
+    let zl_query_routes = !matches!(
         std::env::var("ZL_QUERY_ROUTES").as_deref(),
-        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes")
+        Ok("0") | Ok("false") | Ok("FALSE") | Ok("no")
     );
     let lb_version = format!("{} Zirconium", env!("CARGO_PKG_VERSION"));
     let body = format!(

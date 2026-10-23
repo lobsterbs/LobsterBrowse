@@ -6,11 +6,13 @@ import { clearDebugOverrides, loadDebugOverrides, saveDebugOverrides, type Debug
 /* Hidden debug menu (beta): opened with five quick clicks on the Home
    wordmark. Shows a live engine readout (/build + zl:ping) and runtime
    engine toggles that would otherwise need a redeploy - the Injector
-   query-shape opt-in, the https-upgrade and lazy-image page options.
-   Toggles write debug overrides (localStorage) and push zl:config to
-   BOTH workers immediately; App-side pushes consult the same
-   overrides, so the choice survives reloads and worker restarts
-   until cleared. */
+   query-shape toggle, the https-upgrade and lazy-image page options,
+   and the split content-origin mode. Config toggles write debug
+   overrides (localStorage) and push zl:config to BOTH workers
+   immediately; the split toggle is override-only (zlContentHref
+   reads it: off = frames stay on the app origin). App-side pushes
+   consult the same overrides, so the choice survives reloads and
+   worker restarts until cleared. */
 type Props = { open: boolean; onClose: () => void; settings: Settings };
 
 export default function DebugMenu({ open, onClose, settings }: Props) {
@@ -44,7 +46,8 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
           "lb " + (b?.lb ?? "?") +
           " | build " + (b?.buildShort ?? "?") +
           " | zlsw " + (b?.zlswSha ?? "?") +
-          " | server queryRoutes " + String(b?.zlQueryRoutes === true),
+          " | server queryRoutes " + String(b?.zlQueryRoutes === true) +
+            " | content " + (b?.contentOrigin || "(same-origin)"),
         );
       } catch {
         setBuild("(/build fetch failed)");
@@ -68,9 +71,10 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
   /* The effective values: a debug override wins over the stored
      setting, which wins over the built-in default. */
   const cur = {
-    queryRoutes: ov.queryRoutes ?? false,
+    queryRoutes: ov.queryRoutes ?? true,
     httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
     imageLazy: ov.imageLazy ?? true,
+    split: ov.split ?? true,
   };
 
   /* Same shape the App settings effect sends (the parity push): the
@@ -81,17 +85,18 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       prefix: engineRoutePrefix(),
       httpsUpgrade: next.httpsUpgrade ?? settings.httpsUpgrade,
       imageLazy: next.imageLazy ?? true,
-      queryRoutes: next.queryRoutes ?? false,
+      queryRoutes: next.queryRoutes ?? true,
     };
     void zlSend(msg, 8000);
     void zlContentConfig(msg);
   };
 
-  const flip = (k: "queryRoutes" | "httpsUpgrade" | "imageLazy") => () => {
+  const flip = (k: "queryRoutes" | "httpsUpgrade" | "imageLazy" | "split") => () => {
     const next: DebugOverrides = { ...ov, [k]: !cur[k] };
     setOv(next);
     saveDebugOverrides(next);
-    push(next);
+    /* split is override-only: zlContentHref reads it, no push */
+    if (k !== "split") push(next);
   };
 
   const reset = () => {
@@ -110,6 +115,12 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         <div className="lb-setting-row">
           <span className="lb-setting-label">Query-shape routes (Injector)</span>
           <m3e-switch checked={cur.queryRoutes ? "" : undefined} icons="selected" onClick={flip("queryRoutes")} />
+        </div>
+      </m3e-list-item>
+      <m3e-list-item>
+        <div className="lb-setting-row">
+          <span className="lb-setting-label">Split content origin</span>
+          <m3e-switch checked={cur.split ? "" : undefined} icons="selected" onClick={flip("split")} />
         </div>
       </m3e-list-item>
       <m3e-list-item>
