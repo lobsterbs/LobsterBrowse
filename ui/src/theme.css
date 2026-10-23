@@ -404,9 +404,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
    The tuck transform is applied to a plain div (.lb-dock-pill):
    transforms on the m3e-toolbar host silently did nothing (Lit host
    display), which left the bar frozen in place and covering content.
-   Tucked state hides the pill fully below the fold; the grip line
+   Tucked state UNMOUNTS the pill (hidden = not rendered); the
    is the only hint. Holding the pointer on it for 3s reveals the
-   dock (grip click/Enter and URL-field focus reveal it too). While
+   dock (grip click/Enter and the omnibox focus command reveal it
+   too). While
    tucked the dock box ignores pointer events so the hidden bar
    never blocks page interaction. */
 .lb-dock {
@@ -420,9 +421,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
   transform: translateY(0);
   transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
 }
+/* The tucked pill is unmounted at render time (Browser.tsx), so
+   no tuck/focus transforms remain here; only the tabs-open slide
+   still animates the mounted pill. */
 .lb-dock.tucked { pointer-events: none; }
-.lb-dock.tucked .lb-dock-pill { transform: translateY(calc(100% + 12px)); display: none; }
-.lb-dock:focus-within .lb-dock-pill { transform: translateY(0); }
 .lb-toolbar {
   display: block;
   pointer-events: auto;
