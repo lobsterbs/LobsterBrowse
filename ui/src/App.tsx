@@ -163,10 +163,12 @@ export default function App() {
      listener keep current. */
   const sjWispRef = useRef("");
   const wispAnnounceRef = useRef<() => void>(() => {});
-  /* Injector phase 2: the query-shape opt-in from /build (server env
-     ZL_QUERY_ROUTES); read per config-push attempt so a slow /build
-     fetch cannot pin a stale value into a long retry loop. */
-  const queryRoutesRef = useRef(false);
+  /* Injector phase 2: the query-shape state from /build (the server
+     env ZL_QUERY_ROUTES is the opt-out; on by default); read per
+     config-push attempt so a slow /build fetch cannot pin a stale
+     value into a long retry loop. The ref starts true so a push
+     before /build resolves never disables the always-on injector. */
+  const queryRoutesRef = useRef(true);
   useEffect(() => {
     zlRelayInit();
     void fetch("/build", { cache: "no-store" })
