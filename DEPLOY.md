@@ -1,21 +1,25 @@
 # Deploying LobsterBrowse
 
-## Render services (workspace migrated 2026-10-20)
+## Render services (workspace migrated 2026-10-23)
 
-The previous workspace and its onrender.com domains are gone (suspended
+The 2026-10-20 workspace and its onrender.com domains are gone (suspended
 account). Current free-tier services, region frankfurt, autoDeploy off:
 
-- lobsterbrowse (main branch): https://lobsterbrowse-plud.onrender.com
+- lobsterbrowse (main branch): https://lobsterbrowse-yiy9.onrender.com
 - lobsterbrowse-beta (beta/zeolite-nativetransit):
-  https://lobsterbrowse-beta-gq13.onrender.com
-- lobsterbeta-scramjet-wisp (Dockerfile.wisp, the wisp-js backend):
-  https://lobsterbeta-scramjet-wisp-90su.onrender.com - set
-  SCRAMJET_WISP_URL=wss://lobsterbeta-scramjet-wisp-90su.onrender.com/
-  on the app services (surfaced by /build as sjWisp).
+  https://lobsterbrowse-beta-cts6.onrender.com
+- lobsterbrowse-content (the #107 split content origin: same Docker
+  image, branch main; both app services announce it through
+  ZL_CONTENT_ORIGIN):
+  https://lobsterbrowse-content-ocbg.onrender.com
 - lobsterbrowse-fixture (node, "node tests/transit/fixture.mjs",
   PORT=10000, FIXTURE_HOST=0.0.0.0):
-  https://lobsterbrowse-fixture-oy53.onrender.com - the FIXTURE_ORIGIN
+  https://lobsterbrowse-fixture-rtus.onrender.com - the FIXTURE_ORIGIN
   of the transit-live CI job.
+
+The standalone ScramJet wisp backend (Dockerfile.wisp) was retired with
+the suspended workspace and is not recreated: Zeolite is the only engine
+and /build reported sjWisp empty on both services already.
 
 ## Server (Render web service, Docker)
 
@@ -54,8 +58,10 @@ the lock.
 
 ## Database (Neon)
 
-A Neon Postgres project is provisioned; its connection string is injected into the
-server as `DATABASE_URL`. Free tier, autosuspended when idle.
+The 2026-10-23 workspace recreation did not carry a DATABASE_URL over;
+re-provision the Neon project (or reuse it) and set `DATABASE_URL` on
+the app services when the sessions crate lands. Free tier,
+autosuspended when idle.
 
 Current pin: Zeolite dist bdbce2d7 (pin 115: always-on Injector -
 queryRoutes defaults to true at module eval (Zeolite
