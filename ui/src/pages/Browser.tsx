@@ -48,7 +48,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { engineSwSource, zlContentHref, zlContentOrigin, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -1301,22 +1301,36 @@ export default function BrowserView(props: Props) {
     if (co) {
       return zlContentReady().then(() => zlContentHref(routeUrl(url)));
     }
-    return settings.proxyEngine === "scramjet"
-      ? sjFrame(frames.current.get(tabId) ?? null)
-          .then((fr) => fr.prefix + encodeURIComponent(url))
-          .catch(() => routeUrl(url))
-      : zlWaitActive()
-          .then(() => zlNavHandle(url, 3000).catch(() => null))
-          /* One retry: a cold or just-restarted worker can miss the
-             first 3s mint claim (#168). */
-          .then((h) => h ?? zlNavHandle(url, 3000).catch(() => null))
-          .then((h) => {
-            if (!h) {
-              pushLog("warn", "route mint failed, using legacy route for " + sanitizeUrl(url));
-              return routeUrl(url);
-            }
-            return h;
-          });
+    /* #191 boot race: /build may not have announced the content
+       origin yet; wait for the announcement (bounded, a stalled
+       boot degrades to the honest app-origin load) before choosing
+       the branch, so a deployment with a provisioned content origin
+       never commits the first proxied page on the app origin just
+       because the search outran the boot fetch. */
+    return Promise.race([
+      zlContentAnnounced(),
+      new Promise<string>((res) => window.setTimeout(() => res(""), 2000)),
+    ]).then((announced) => {
+      if (announced) {
+        return zlContentReady().then(() => zlContentHref(routeUrl(url)));
+      }
+      return settings.proxyEngine === "scramjet"
+        ? sjFrame(frames.current.get(tabId) ?? null)
+            .then((fr) => fr.prefix + encodeURIComponent(url))
+            .catch(() => routeUrl(url))
+        : zlWaitActive()
+            .then(() => zlNavHandle(url, 3000).catch(() => null))
+            /* One retry: a cold or just-restarted worker can miss the
+               first 3s mint claim (#168). */
+            .then((h) => h ?? zlNavHandle(url, 3000).catch(() => null))
+            .then((h) => {
+              if (!h) {
+                pushLog("warn", "route mint failed, using legacy route for " + sanitizeUrl(url));
+                return routeUrl(url);
+              }
+              return h;
+            });
+    });
   };
   const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
