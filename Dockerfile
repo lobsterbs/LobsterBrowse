@@ -1412,7 +1412,16 @@ FROM debian:bookworm-slim AS zl-builder
 # 559dd986814b1a53 (630107 bytes); bootstrap.js c7300fa9981e71b4
 # -> 66d387dbf16ee2c3 (35288 bytes, CI ceiling 35328). Cargo-side
 # pin stays a385fa9 (SW-only change).
-ARG ZEOLITE_COMMIT=0497c201beadb7ccbb0dc5bc984eecc6b2eb165c
+# Pin 115: Zeolite dist bdbce2d77c15651424ef64648ce6664e6af4125c (from CI build
+# 39947197172, Zeolite main 8882da6, all 5 jobs green, app
+# suite 1470 tests). Pin 115 ships the always-on Injector:
+# queryRoutes defaults to true at module eval (swstate.ts), so
+# query-shape committed routes are the default route shape; a
+# host zl:config remains the runtime opt-out. sw.js
+# 559dd986814b1a53 -> 378e4396918d9393 (630107 bytes);
+# bootstrap.js unchanged 66d387dbf16ee2c3. Cargo-side pin
+# stays a385fa9 (SW-only change).
+ARG ZEOLITE_COMMIT=bdbce2d77c15651424ef64648ce6664e6af4125c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1471,7 +1480,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=559dd986814b1a53 ZEOLITE_BOOTSTRAP_SHA=66d387dbf16ee2c3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=378e4396918d9393 ZEOLITE_BOOTSTRAP_SHA=66d387dbf16ee2c3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
