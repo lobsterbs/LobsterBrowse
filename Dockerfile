@@ -1424,7 +1424,18 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js 66d387dbf16ee2c3 -> 9a2224f65bff6141 (35111
 # bytes, CI ceiling 35328). Cargo-side pin stays a385fa9
 # (SW-only change).
-ARG ZEOLITE_COMMIT=75b2196efbcbd37c7284971fdd8be5380afb23a9
+# Pin 117: Zeolite dist 7b1a4eed52b4d31cdc054486acb8207826a54c3a (from CI
+# build 40007080132, Zeolite main 5e6b87d8, all 5 jobs green, app suite
+# 1473 tests). Pin 117 ships the Google /zl/ 404 fix: a query-shape
+# route whose pathname is engine-route-shaped (a keyed zlNavh token
+# copied by page JS) is no longer decoded as a control-plane
+# destination (queryHandlePathShaped gates decodeQueryHandle and the
+# expired re-mint arm), and the zl:ping reply echoes imageLazy so the
+# debug menu readout matches the worker state. sw.js
+# 9d7a233a5f2a00c6 -> c3e4e7f4c1e41e0c (630146 bytes); bootstrap.js
+# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
+# a385fa9 (SW-only change).
+ARG ZEOLITE_COMMIT=7b1a4eed52b4d31cdc054486acb8207826a54c3a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1483,7 +1494,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9d7a233a5f2a00c6 ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c3e4e7f4c1e41e0c ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
