@@ -1435,7 +1435,19 @@ FROM debian:bookworm-slim AS zl-builder
 # 9d7a233a5f2a00c6 -> c3e4e7f4c1e41e0c (630146 bytes); bootstrap.js
 # unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
 # a385fa9 (SW-only change).
-ARG ZEOLITE_COMMIT=7b1a4eed52b4d31cdc054486acb8207826a54c3a
+# Pin 118: Zeolite dist 535d045d612f1d46f82c738caac45c5382ea91c6 (from CI
+# build 40027192164, Zeolite main 6b2f7ac, all 5 jobs green; the app
+# suite gained the ogs-origin regression file). Pin 118 ships Zeolite
+# #420: the Google apps widget (ogs.google.com /widget/) embeds the
+# engine origin in its percent-encoded origin= query param, so the
+# widget frame never matched the page and the 9-dot products menu
+# stayed empty; the fetch seam now virtualizes that origin= to the
+# page origin at the same seam as the #112 reCAPTCHA co= fix
+# (fail-closed without a usable referrer). sw.js
+# c3e4e7f4c1e41e0c -> 13b00d3970710c96 (630808 bytes); bootstrap.js
+# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
+# a385fa9 (SW-only change).
+ARG ZEOLITE_COMMIT=535d045d612f1d46f82c738caac45c5382ea91c6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1494,7 +1506,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c3e4e7f4c1e41e0c ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=13b00d3970710c96 ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
