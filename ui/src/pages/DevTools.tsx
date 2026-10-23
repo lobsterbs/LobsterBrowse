@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { type Tab } from "../store";
-import { zlSend } from "../zeolite";
+import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 
 export type ConsoleEntry = {
@@ -151,6 +151,8 @@ type ZlDiagEvent = {
   url?: string;
   technicalReason?: string;
   traceId?: string;
+  /* #194: set on events relayed from the split content worker. */
+  source?: string;
 };
 
 /* Failures and abnormal events only. Every TRANSPORT_FALLBACK stage
@@ -214,11 +216,22 @@ function ZeoliteDiagnostics() {
      the new ring's rows collide with buffered seqs and the dedup
      silently eats them. The first sighting just records it. */
   const netGen = useRef<number | null>(null);
+  /* #194: the content worker has its own generation and seq space
+     (split mode); a restart resets only its cursor. */
+  const cNetGen = useRef<number | null>(null);
+  const cDiagSeq = useRef(0);
 
   useEffect(() => {
     let dead = false;
     const tick = async () => {
       const nl = await zlSend({ type: "zl:getNetLog", since: 0 });
+      /* #194: in split mode the proxied page's traffic rides the
+         CONTENT worker; poll it through the boot-page relay and
+         merge, so diagnostics see the tab that is actually
+         loading instead of an idle app-origin worker. */
+      const cnl = (await zlContentQuery({ type: "zl:getNetLog", since: 0 })) as
+        | { generation?: unknown; stats?: ZlStats }
+        | null;
       if (!dead && nl) {
         if (typeof nl.generation === "number" && nl.generation !== netGen.current) {
           const restarted = netGen.current !== null;
@@ -228,7 +241,21 @@ function ZeoliteDiagnostics() {
             setEvents([]);
           }
         }
-        if (nl.stats) setStats(nl.stats as ZlStats);
+      }
+      if (!dead && cnl) {
+        if (typeof cnl.generation === "number" && cnl.generation !== cNetGen.current) {
+          if (cNetGen.current !== null) cDiagSeq.current = 0;
+          cNetGen.current = cnl.generation;
+        }
+      }
+      const a = (nl?.stats ?? null) as ZlStats | null;
+      const c = cnl?.stats ?? null;
+      if (!dead && (a || c)) {
+        setStats({
+          native: (a?.native ?? 0) + (c?.native ?? 0),
+          fallback: (a?.fallback ?? 0) + (c?.fallback ?? 0),
+          fallbacks: [...(a?.fallbacks ?? []), ...(c?.fallbacks ?? [])].slice(-30),
+        });
       }
       const dg = await zlSend({ type: "zl:getDiag", since: diagSeq.current });
       if (!dead && dg && dg.ok && Array.isArray(dg.events)) {
@@ -244,6 +271,30 @@ function ZeoliteDiagnostics() {
               url: ev.url ? sanitizeUrl(ev.url) : ev.url,
               technicalReason: ev.technicalReason ? sanitizeText(ev.technicalReason) : ev.technicalReason,
             }))].slice(-60),
+        );
+      }
+      const cdg = (await zlContentQuery({ type: "zl:getDiag", since: cDiagSeq.current })) as
+        | { ok?: boolean; events?: ZlDiagEvent[]; lastSeq?: number }
+        | null;
+      if (!dead && cdg && cdg.ok && Array.isArray(cdg.events)) {
+        if (typeof cdg.lastSeq === "number" && cdg.lastSeq > cDiagSeq.current) cDiagSeq.current = cdg.lastSeq;
+        setEvents((prev) =>
+          [
+            ...prev,
+            ...(cdg.events as ZlDiagEvent[])
+              /* #194: the seq offset namespaces the content ring so the
+                 dedup filter cannot collide with app-worker seqs; the
+                 #148 sanitize map covers relayed rows too. */
+              .map((ev) => ({
+                ...ev,
+                seq: ev.seq + 1000000,
+                source: "content",
+                message: sanitizeText(ev.message),
+                url: ev.url ? sanitizeUrl(ev.url) : ev.url,
+                technicalReason: ev.technicalReason ? sanitizeText(ev.technicalReason) : ev.technicalReason,
+              }))
+              .filter((ev) => !prev.some((p) => p.seq === ev.seq)),
+          ].slice(-60),
         );
       }
     };
@@ -279,7 +330,7 @@ function ZeoliteDiagnostics() {
         <details key={e.seq} className="lb-net-row">
           <summary className="lb-net-summary">
             <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
-            <span className="lb-net-method">{e.category}</span>
+            <span className="lb-net-method">{e.category}{e.source === "content" ? " [content]" : ""}</span>
             <span className="lb-net-url">{e.message}</span>
             <span className="lb-net-dur">{ts(e.ts)}</span>
           </summary>
