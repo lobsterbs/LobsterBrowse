@@ -944,10 +944,13 @@ export default function BrowserView(props: Props) {
     const onFocusOmnibox = () => {
       setTbExpanded(true);
       /* The tucked dock is unmounted: reveal it so the field exists
-         to focus (the grip instant reveal, no 3s hold). No hideSoon
-         here - the user is heading for the keyboard. */
+         to focus (the grip instant reveal, no 3s hold). hideSoon is
+         armed too: its focus guard defers (and re-arms) while the
+         URL field holds focus, so the dock tucks again once the
+         user leaves the pill instead of staying up forever. */
       setDockTucked(false);
       window.setTimeout(() => urlInputRef.current?.focus(), 80);
+      hideSoon();
     };
     window.addEventListener("lb-open-extensions", onOpenExt);
     window.addEventListener("lb-focus-omnibox", onFocusOmnibox);
