@@ -80,8 +80,8 @@ Deployed-pair mode: FIXTURE_ORIGIN=<public fixture> with
 LB_ORIGIN=<deployed beta> checks a live deployment end to end
 (no local spawn; the raw-socket WS probe is skipped there):
 
-    FIXTURE_ORIGIN=https://lobsterbrowse-fixture-oy53.onrender.com \
-    LB_ORIGIN=https://lobsterbrowse-beta-gq13.onrender.com \
+    FIXTURE_ORIGIN=https://lobsterbrowse-fixture-rtus.onrender.com \
+    LB_ORIGIN=https://lobsterbrowse-beta-cts6.onrender.com \
     node tests/transit/check.mjs
 
 CI runs this deployed-pair mode automatically: the transit-live job
