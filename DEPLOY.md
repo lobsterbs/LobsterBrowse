@@ -63,17 +63,18 @@ re-provision the Neon project (or reuse it) and set `DATABASE_URL` on
 the app services when the sessions crate lands. Free tier,
 autosuspended when idle.
 
-Current pin: Zeolite dist bdbce2d7 (pin 115: always-on Injector -
-queryRoutes defaults to true at module eval (Zeolite
-swstate.ts), so query-shape committed routes are the default
-route shape and a host zl:config remains the runtime opt-out;
-the prel nav 302 clean form and the vloc query arm ride the
-same always-on default, and this server reports zlQueryRoutes
-true unless ZL_QUERY_ROUTES opts out; Zeolite main 8882da6,
-CI run 39947197172 all 5 jobs green, suite 1470/1470),
-zlswSha 559dd986814b1a53 -> 378e4396918d9393 (630107
-bytes), bootstrapSha 66d387dbf16ee2c3 unchanged (35288
-bytes).
+Current pin: Zeolite dist 75b2196 (pin 116: popups and lazy
+images - window.open popups open the key-free marker route
+/__zl_nav__/<b64u> directly instead of a minted keyed token,
+so a fresh tab with no installed worker still decodes the
+destination instead of the engine-offline notice (Zeolite
+#412); lazy images default true at module eval, so the
+loading="lazy" rewrite pass survives worker restarts (Zeolite
+#413); Zeolite main 7b957af3, CI run 39988823338 all 5 jobs
+green, suite 1471/1471), zlswSha 378e4396918d9393 ->
+9d7a233a5f2a00c6 (630107 bytes), bootstrapSha
+66d387dbf16ee2c3 -> 9a2224f65bff6141 (35111 bytes, CI
+ceiling 35328).
 This matches the Dockerfile ZEOLITE_COMMIT; the zeolite-server
 git rev stays a385fa9 because the wave does not touch
 zeolite-server, and server/Cargo.lock is consistent with the
