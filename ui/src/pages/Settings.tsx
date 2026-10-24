@@ -64,12 +64,6 @@ const SEEDS: Array<[string, string]> = [
 
 /* Display name for a per-site rule UA. The "Server default" wording was
    removed from Settings; the id stays functional in stored rules. */
-const ruleUaName = (id: UaPresetId | undefined): string =>
-  !id || id === "server-default"
-    ? "default UA"
-    : id === "custom"
-      ? "Custom"
-      : UA_PRESETS[id as Exclude<UaPresetId, "custom" | "server-default">].name;
 
 /* #198: settings search index. One entry per findable setting; the
    targets are the id attributes set on the rows and groups below. */
@@ -77,8 +71,6 @@ type SetEntry = { section: string; label: string; terms?: string; target: string
 const SETTING_INDEX: SetEntry[] = [
   { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", target: "set-search-engine" },
   { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
-  { section: "ua", label: "User-Agent preset", terms: "user agent spoof ua", target: "set-ua-preset" },
-  { section: "ua", label: "Custom User-Agent", terms: "user agent string manual", target: "set-ua-custom" },
   { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
   { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
   { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
@@ -206,7 +198,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     /* #90: only Search & browse starts expanded; the accordion
        keeps its multi-open behavior. */
     search: true,
-    ua: false,
     privacy: false,
     appearance: false,
     extensions: false,
@@ -219,7 +210,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   const [q, setQ] = useState("");
   const SECTION_TITLES: Record<string, string> = {
     search: "Search & browse",
-    ua: "User-Agent",
     privacy: "Privacy",
     extensions: "Extensions",
     appearance: "Appearance",
@@ -272,21 +262,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   const [ruleUa, setRuleUa] = useState<UaPresetId>("server-default");
   const [ruleAdblock, setRuleAdblock] = useState(true);
 
-  /* Custom User-Agent draft + a light validator. Real sites only need
-     a syntactically sane string with at least one product/version
-     token; the Mozilla/5.0 prefix is a warning, not a failure. */
-  const [uaDraft, setUaDraft] = useState(settings.uaCustom);
-  const parseUa = (v: string): { ok: boolean; message: string } => {
-    const s = v.trim();
-    if (!s) return { ok: false, message: "Enter a User-Agent string." };
-    if (/[\x00-\x1f]/.test(s)) return { ok: false, message: "Control characters are not allowed." };
-    if (s.length > 512) return { ok: false, message: "Too long (max 512 characters)." };
-    if (!/[A-Za-z0-9-]+\/[0-9A-Za-z.+*-]+/.test(s))
-      return { ok: false, message: "No product/version token found (e.g. Chrome/124.0.0.0)." };
-    if (!s.startsWith("Mozilla/5.0"))
-      return { ok: true, message: "Valid, but it does not start with Mozilla/5.0; some sites may misbehave." };
-    return { ok: true, message: "Valid User-Agent string." };
-  };
 
   /* Extension import: one action, Import package (.xpi/.zip). The file
      bytes are handed to the engine worker, which owns the package
@@ -414,47 +389,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         </m3e-list>
       </Panel>
 
-      <Panel id="panel-ua" icon="devices" title="User-Agent" open={open.ua} toggle={() => toggle("ua")}>
-        <div className="lb-setting-group" id="set-ua-preset" tabIndex={-1}>
-          <div className="lb-setting-label">Preset</div>
-          {/* Dropdown: the preset list outgrew segmented buttons (seven
-              entries wrap badly and never fit the panel). */}
-          <M3eSelect
-            label="User-Agent preset"
-            value={settings.uaPreset}
-            options={[
-              ...(Object.keys(UA_PRESETS) as UaPresetId[])
-                .filter((id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default")
-                .map((id) => [id, UA_PRESETS[id].name] as [string, string]),
-              ["custom", "Custom"],
-            ]}
-            onChange={(v) => onChange({ uaPreset: v as UaPresetId })}
-          />
-          {settings.uaPreset === "custom" && settings.uaCustom.trim() && (
-            <span className="lb-ua-active">Custom User-Agent active</span>
-          )}
-        </div>
-        <div className="lb-setting-group" id="set-ua-custom" tabIndex={-1}>
-          <div className="lb-setting-label">Custom User-Agent</div>
-          <TextInput
-            label="Manual User-Agent string"
-            value={uaDraft}
-            placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64) ..."
-            onChange={setUaDraft}
-          />
-          {uaDraft.trim() && (
-            <p className={"lb-muted" + (parseUa(uaDraft).ok ? "" : " lb-ua-bad")}>{parseUa(uaDraft).message}</p>
-          )}
-          <m3e-button
-            disabled={parseUa(uaDraft).ok === false ? true : undefined}
-            onClick={() => {
-              onChange({ uaCustom: uaDraft.trim(), uaPreset: "custom" });
-            }}
-          >
-            <m3e-icon name="check" aria-hidden={true} /> Save and use
-          </m3e-button>
-        </div>
-      </Panel>
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
