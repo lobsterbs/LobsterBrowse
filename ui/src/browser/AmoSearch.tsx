@@ -153,11 +153,24 @@ export default function AmoSearch() {
       if (h.size > 0 && bytes.length !== h.size) {
         throw new Error(`add-on size mismatch (expected ${h.size} B, got ${bytes.length} B)`);
       }
+      /* #201: AMO reports file.hash algorithm-prefixed ("sha256:<hex>",
+         never a bare hex string), so the raw compare rejected every
+         valid package as a mismatch. Parse the prefix and verify
+         against the matching digest; an unknown algorithm is an
+         honest error, never a silently skipped check. */
       if (h.hash) {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const hm = /^([a-z0-9]+):([0-9a-f]+)$/i.exec(h.hash.trim());
+        const algo = hm ? hm[1].toLowerCase() : "sha256";
+        const expectHex = (hm ? hm[2] : h.hash.trim()).toLowerCase();
+        const subtleAlgo =
+          algo === "sha256" ? "SHA-256" : algo === "sha512" ? "SHA-512" : algo === "sha1" ? "SHA-1" : null;
+        if (!subtleAlgo) {
+          throw new Error("add-on hash algorithm unsupported: " + algo);
+        }
+        const digest = new Uint8Array(await crypto.subtle.digest(subtleAlgo, bytes));
         const hex = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
-        if (hex !== h.hash.toLowerCase()) {
-          throw new Error("add-on sha256 mismatch (download was tampered or truncated)");
+        if (hex !== expectHex) {
+          throw new Error("add-on " + algo + " mismatch (download was tampered or truncated)");
         }
       }
       const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
