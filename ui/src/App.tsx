@@ -509,23 +509,11 @@ export default function App() {
         /* best effort: the Zeolite push below still runs */
       }
       await push();
-      /* #66: pre-dial the wisp transport at app boot instead of
-         billing the first entry navigation. The worker's wisp client
-         initializes lazily on the first upstream fetch, so mint a
-         route to a tiny well-known destination and fetch it HEAD
-         through the engine while the user is still on Home. Best
-         effort: any failure logs once and is ignored. */
-      try {
-        const mint = await zlSend({ type: "zl:mint", dest: "https://example.com/robots.txt" }, 8000);
-        if (mint && mint.ok && typeof mint.route === "string") {
-          const resp = await fetch(mint.route, { method: "HEAD", cache: "no-store" });
-          store.pushLog("info", "wisp warm: HEAD example.com/robots.txt -> HTTP " + resp.status);
-        } else {
-          store.pushLog("warn", "wisp warm skipped: engine did not mint a route");
-        }
-      } catch (err) {
-        store.pushLog("warn", "wisp warm failed: " + String(err));
-      }
+      /* #204: the #66 example.com/robots.txt boot warm is gone:
+         transit is relay-only on this deployment, so the pre-dial
+         warmed nothing - it raced SW control on cold profiles and
+         stamped example.com/robots.txt rows into every session's
+         diagnostics (and the user-visible logs) on each boot. */
     })();
   }, []);
 
