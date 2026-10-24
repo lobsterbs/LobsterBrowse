@@ -1453,7 +1453,19 @@ FROM debian:bookworm-slim AS zl-builder
 # sw.js 13b00d3970710c96 -> 5343f47d3a5d80c8 (631236 bytes);
 # bootstrap.js unchanged 9a2224f65bff6141 (35111 bytes);
 # Cargo-side zeolite-server pin stays a385fa9 (SW-only change).
-ARG ZEOLITE_COMMIT=6df4b758ffa569f3761e1fd238bb354fa34c4999
+# Pin 120 rides Zeolite main ca4e944b (wave 56: #415 #418 #419 #421
+# #422 #423 #424 #430; dist 63bb15be from CI build 40092642353, all
+# 5 jobs green). Chatgpt singleton-reset stall fan (#415), Startpage
+# engine-content links (#418), blooket Colyseus "Game not found"
+# (#419, ws subprotocol allow-list), wisp close_reason no-op (#421),
+# wisp handshake accepts major<2 (#422), b64u non-canonical input
+# (#423), zero-length UDP datagrams dropped (#424), content-origin
+# error pages state plainly they are a bug (#430). sw.js
+# 5343f47d3a5d80c8 -> 7997fd3e068d0c45 (631750 bytes); bootstrap.js
+# 9a2224f65bff6141 -> 665b64d76f4113a5 (35662 bytes; Zeolite CI
+# bootstrap size gate raised 35328 -> 36352). Cargo-side pin stays
+# a385fa9 (SW-only wave).
+ARG ZEOLITE_COMMIT=63bb15beb80e149aa39e6c7ed5a070538adb0ba0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1512,7 +1524,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5343f47d3a5d80c8 ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7997fd3e068d0c45 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
