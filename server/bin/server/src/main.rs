@@ -2210,17 +2210,37 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
   try {
     const reg = await navigator.serviceWorker.register("/zlsw/sw.js", { scope: "/", type: "module" });
     await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 8000))]);
-    const sw = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
-    if (!sw) { post({ ok: false, error: "no worker instance" }); return; }
+    /* #196: controller and a captured registration can belong to an
+       orphaned worker after another client unregisters/re-registers the
+       root scope. Every handoff resolves the live active registration. */
+    const liveWorker = async () => {
+      const until = Date.now() + 2000;
+      do {
+        const current = await navigator.serviceWorker.getRegistration("/");
+        if (current && current.active && current.active.state !== "redundant") return current.active;
+        await new Promise((r) => setTimeout(r, 50));
+      } while (Date.now() < until);
+      return null;
+    };
     const u8ToB64 = (u) => {
       let s = "";
       for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
       return btoa(s);
     };
     let wispUrl = "";
+    let appOrigin = "";
+    let lastCfg = null;
+    let relayOpening = null;
+    let relayHost = null;
     const openRelay = () => {
-      const swc = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
-      if (!swc) return;
+      if (relayOpening) return relayOpening;
+      relayOpening = (async () => {
+      const swc = await liveWorker();
+      if (!swc) throw new Error("no active worker instance");
+      if (relayHost) {
+        for (const ac of relayHost.controllers.values()) ac.abort();
+        relayHost.port.close();
+      }
       const ch = new MessageChannel();
       const controllers = new Map();
       ch.port1.onmessage = (ev) => {
@@ -2282,8 +2302,13 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
         }
       };
       swc.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+      relayHost = { port: ch.port1, controllers };
+      pushCfg(swc);
+      if (wispUrl) swc.postMessage({ type: "zl:wispRegister", url: wispUrl });
+      if (appOrigin) swc.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
+      })().finally(() => { relayOpening = null; });
+      return relayOpening;
     };
-    openRelay();
     /* #107 self-heal: the relay channel lives in the worker's memory
        and is dropped on a worker restart. The engine broadcasts
        zl:relayLost to its clients when a relay fetch finds no
@@ -2292,24 +2317,20 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
        heal. */
     navigator.serviceWorker.addEventListener("message", (ev) => {
       if (ev.data && ev.data.type === "zl:relayLost") {
-        openRelay();
-        pushCfg();
-        const swc2 = navigator.serviceWorker.controller || reg.active;
-        if (swc2 && wispUrl) swc2.postMessage({ type: "zl:wispRegister", url: wispUrl });
-        /* #107 phase 2: the embedder origin registration is as
-           memory-only as the relay port; re-register it with the heal. */
-        if (swc2 && appOrigin) swc2.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
+        void openRelay().catch((e) => post({ ok: false, error: String(e) }));
       }
     });
     /* #107 phase 2: the app introduces itself after the ack (zlRegAsk);
        the worker stores the embedder origin so proxied frames can sync
        their URL/title up to the app (zl:getEmbedder). appOrigin is kept
        here so the relayLost heal re-registers it after a worker restart. */
-    let appOrigin = "";
-    window.addEventListener("message", (ev) => {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      void openRelay().catch((e) => post({ ok: false, error: String(e) }));
+    });
+    window.addEventListener("message", async (ev) => {
       if (ev.data && ev.data.zlRegAsk === true && /^https:/.test(ev.origin)) {
         appOrigin = ev.origin;
-        const swc3 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+        const swc3 = await liveWorker();
         if (swc3) swc3.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
       }
     });
@@ -2320,10 +2341,9 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
        app so a silent drop stays detectable (the LB#15 lesson), and
        the stored config re-pushes on the relayLost heal because every
        zl:config field except the prefix is worker memory. */
-    let lastCfg = null;
-    const pushCfg = () => {
+    const pushCfg = async (worker) => {
       if (!lastCfg) return;
-      const swc4 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+      const swc4 = worker || await liveWorker();
       if (!swc4) return;
       const cfgPort = new MessageChannel();
       let cfgSettled = false;
@@ -2350,9 +2370,9 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
        port per query, bounded by the app-side timeout; the reply
        rides zlQueryReply with the caller's zlId so overlapping
        queries stay sorted. */
-    window.addEventListener("message", (ev) => {
+    window.addEventListener("message", async (ev) => {
       if (!ev.data || typeof ev.data.zlQuery !== "object" || !(ev.data.zlId >= 0) || !/^https:/.test(ev.origin) || !ev.source) return;
-      const swc6 = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+      const swc6 = await liveWorker();
       const up = (m) => { try { ev.source.postMessage(Object.assign({ zlQueryReply: true, zlId: ev.data.zlId }, m), ev.origin); } catch (e) {} };
       if (!swc6) { up({ zlError: "no worker instance" }); return; }
       const qp = new MessageChannel();
@@ -2366,11 +2386,13 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
       window.setTimeout(() => { if (!qDone) { qDone = true; up({ zlError: "timeout" }); try { qp.port1.close(); } catch (e2) {} } }, 10000);
       swc6.postMessage(ev.data.zlQuery, [qp.port2]);
     });
+    await openRelay();
     try {
       const b = await (await fetch("/build", { cache: "no-store" })).json();
       if (typeof b.sjWisp === "string" && b.sjWisp) {
         wispUrl = b.sjWisp;
-        sw.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
+        const swc = await liveWorker();
+        if (swc) swc.postMessage({ type: "zl:wispRegister", url: b.sjWisp });
       }
     } catch (e) { /* honest: relay-only, same as the app origin when unset */ }
     post({ ok: true });

@@ -23,6 +23,8 @@ import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
+import { searchSettings, type SettingsSearchEntry } from "../settingsSearch";
+import "../settings-search.css";
 
 /* Cloaking popout: a fresh window whose address bar reads about:blank.
    The window inherits this origin, so the app and its service worker run
@@ -84,11 +86,11 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
   );
 }
 
-function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
+function Row(props: { id?: string; label: string; icon: string; on: boolean; toggle: () => void }) {
   /* #116: the visible label names the switch and toggles it too. */
   const labelId = useId();
   return (
-    <m3e-list-item>
+    <m3e-list-item id={props.id}>
       <div className="lb-setting-row">
         <span className="lb-setting-label" id={labelId} onClick={props.toggle}>
           <m3e-icon name={props.icon} aria-hidden={true} />
@@ -190,6 +192,50 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     advanced: false,
   });
   const toggle = (key: string) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLOListElement>(null);
+  const results = searchSettings(query);
+  const searching = query.trim().length > 0;
+  const [jump, setJump] = useState<{ id: string; sequence: number } | null>(null);
+  const reveal = (entry: SettingsSearchEntry) => {
+    setOpen((previous) => ({ ...previous, [entry.section]: true }));
+    setJump((previous) => ({ id: entry.id, sequence: (previous?.sequence ?? 0) + 1 }));
+  };
+  useEffect(() => {
+    if (!jump) return;
+    let cancelled = false;
+    const land = async () => {
+      const target = document.getElementById(jump.id);
+      if (!target) return;
+      const panel = target.closest("m3e-expansion-panel") as (HTMLElement & { open: boolean; updateComplete?: Promise<boolean> }) | null;
+      /* The panel owns keyboard toggling too; reassert its property even
+         when React remembered this section as open. */
+      if (panel) panel.open = true;
+      /* Wait for Lit and the finite expansion transition so scrolling
+         uses the expanded control position, including nested shadow DOM. */
+      if (panel?.updateComplete) await panel.updateComplete;
+      const content = panel?.shadowRoot?.querySelector("m3e-collapsible") as (HTMLElement & { updateComplete?: Promise<boolean> }) | null;
+      if (content?.updateComplete) await content.updateComplete;
+      await new Promise<void>((done) => requestAnimationFrame(() => done()));
+      const animations = content?.getAnimations({ subtree: true }).filter((animation) =>
+        animation.effect?.getComputedTiming().iterations !== Infinity) ?? [];
+      await Promise.allSettled(animations.map((animation) => animation.finished));
+      if (cancelled || !target.isConnected) return;
+      const control = target.matches("input, button, m3e-button, m3e-switch, m3e-select")
+        ? target
+        : target.querySelector<HTMLElement>("input:not([type=file]):not([disabled]), button:not([disabled]), m3e-select:not([disabled]), m3e-switch:not([disabled]), m3e-button-segment[checked], m3e-button:not([disabled])");
+      control?.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "center", behavior: "instant" });
+    };
+    void land();
+    return () => { cancelled = true; };
+  }, [jump]);
+  const clearSearch = () => {
+    setQuery("");
+    searchRef.current?.focus();
+  };
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   /* m3e-dialog opens/closes imperatively (show/hide methods, per the
      M3E dialog docs). React state mirrors it: opening sets the flag,
@@ -318,13 +364,62 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   return (
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
+      <div className="lb-settings-search" role="search" aria-label="Settings">
+        <m3e-form-field {...{ class: "lb-settings-search-field" }}>
+          <label slot="label" htmlFor="lb-settings-query">Search settings</label>
+          <m3e-icon slot="prefix" name="search" aria-hidden={true} />
+          <input ref={searchRef} id="lb-settings-query" type="search" autoComplete="off" value={query}
+            aria-describedby="lb-settings-search-status"
+            aria-controls={searching ? "lb-settings-search-results" : undefined}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" && results.length) {
+                event.preventDefault();
+                resultsRef.current?.querySelector("button")?.focus();
+              } else if (event.key === "Enter" && results.length) {
+                event.preventDefault();
+                reveal(results[0]);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                clearSearch();
+              }
+            }}
+          />
+          {searching && <m3e-icon-button slot="suffix" aria-label="Clear settings search" onClick={clearSearch}><m3e-icon name="close" aria-hidden={true} /></m3e-icon-button>}
+        </m3e-form-field>
+        <p id="lb-settings-search-status" className="lb-settings-search-status" role="status">
+          {searching ? results.length ? `${results.length} ${results.length === 1 ? "setting" : "settings"} found. Select a result to jump to its control.` : "No settings found. Try another name or description." : "Find settings by name, section or description."}
+        </p>
+        {searching && <ol ref={resultsRef} id="lb-settings-search-results" className="lb-settings-search-results" aria-label="Matching settings"
+          onKeyDown={(event) => {
+            const buttons = Array.from(resultsRef.current?.querySelectorAll("button") ?? []);
+            const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            if (event.key === "Escape") {
+              event.preventDefault();
+              clearSearch();
+            } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) && current >= 0) {
+              event.preventDefault();
+              const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+              if (next < 0) searchRef.current?.focus();
+              else buttons[Math.min(next, buttons.length - 1)]?.focus();
+            }
+          }}
+        >
+          {results.map((entry) => <li key={entry.id}>
+            <button type="button" className="lb-settings-search-result" onClick={() => reveal(entry)}>
+              <small>{entry.sectionTitle}</small><strong>{entry.label}</strong><span>{entry.description}</span>
+            </button>
+          </li>)}
+        </ol>}
+      </div>
+
 
       {/* Real M3E accordion coordinating the panels. multi keeps the
           current behavior (several panels open at once); without it
           the accordion would collapse all but one. */}
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-engine">
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
@@ -337,12 +432,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-list>
-          <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
+          <Row id="setting-suggestions" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
       </Panel>
 
       <Panel id="panel-ua" icon="devices" title="User-Agent" open={open.ua} toggle={() => toggle("ua")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-ua-preset">
           <div className="lb-setting-label">Preset</div>
           {/* Dropdown: the preset list outgrew segmented buttons (seven
               entries wrap badly and never fit the panel). */}
@@ -361,7 +456,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <span className="lb-ua-active">Custom User-Agent active</span>
           )}
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-ua-custom">
           <div className="lb-setting-label">Custom User-Agent</div>
           <TextInput
             label="Manual User-Agent string"
@@ -385,8 +480,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
+          <Row id="setting-adblock" label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row id="setting-https" label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
         </m3e-list>
         <p className="lb-muted" style={{ fontSize: 12 }}>
           HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
@@ -394,14 +489,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-extension-find">
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
              the public API is not, so search and install run over the
              API instead of the store site. */}
           <AmoSearch />
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-extension-import">
           <div className="lb-setting-label">Import locally</div>
           {/* Exactly one import action: our button triggers the picker;
              the input itself stays hidden. */}
@@ -431,7 +526,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-theme">
           {/* #102: a visible, associated label for the colour input. */}
           <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
             Theme color
@@ -454,7 +549,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-background">
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
@@ -468,7 +563,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
         <m3e-list>
-          <Row label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
+          <Row id="setting-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
         </m3e-list>
         <div className="lb-setting-group">
           <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
@@ -479,7 +574,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-about-blank">
           <div className="lb-setting-label">Open in about:blank</div>
           <m3e-button onClick={openInAboutBlank}>
             <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
@@ -493,7 +588,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-proxy-engine">
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
@@ -510,7 +605,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </p>
         </div>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="setting-transport">
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Transport engine">
@@ -535,13 +630,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             delete every stored history, session and setting.
           </p>
           <div className="lb-seed-row">
-            <m3e-button onClick={exportData}>
+            <m3e-button id="setting-export" onClick={exportData}>
               <m3e-icon name="download" aria-hidden={true} /> Export session
             </m3e-button>
-            <m3e-button onClick={() => importRef.current?.click()}>
+            <m3e-button id="setting-import" onClick={() => importRef.current?.click()}>
               <m3e-icon name="upload" aria-hidden={true} /> Import session
             </m3e-button>
-            <m3e-button onClick={() => setConfirmDelete(true)}>
+            <m3e-button id="setting-data" onClick={() => setConfirmDelete(true)}>
               <m3e-icon name="delete" aria-hidden={true} /> Manage data
             </m3e-button>
           </div>
@@ -606,7 +701,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             the app log and DevTools. */}
         <div className="lb-setting-group">
           <div className="lb-setting-label">Logs</div>
-          <m3e-button onClick={onOpenLogs}>
+          <m3e-button id="setting-logs" onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
           </m3e-button>
         </div>
