@@ -13,7 +13,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { exportSessionData } from "../store";
 import {
   ENGINES,
-  UA_PRESETS,
   type EngineId,
   type Settings,
   type SiteRule,
