@@ -2445,52 +2445,10 @@ export default function BrowserView(props: Props) {
             mounted as the reveal handle. */}
         {!dockTucked && (
         <div className="lb-dock-pill">
-          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
-          {/* Compaction 1: tabs live in the toolbar too. The count
-              button opens the tab list card (same anchoring pattern
-              as the site info card). Real m3e-icon-button with toggle
-              semantics: geometry, hover/pressed/focus/selected states
-              come from the component like every other toolbar control. */}
-          <m3e-icon-button
-            id="lb-tabs-pill"
-            toggle
-            aria-label={"Open tab list (" + tabs.length + " tabs)"}
-            onClick={() => {
-              setTabsOpen((v) => !v);
-              setDlOpen(false);
-            }}
-            {...{ ref: tabsBtnRef }}
-          >
-            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
-            <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          {/* Back / Forward / Reload are one navigation cluster: a real
-              M3E button group (standard variant) ties the three
-              icon buttons together. Tooltips anchor by for= id and stay
-              outside the group so the group only arranges buttons. */}
-          <m3e-button-group aria-label="Page navigation">
-            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
-              <m3e-icon name="arrow_back" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
-              <m3e-icon name="arrow_forward" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button
-              id="lb-reload-btn"
-              aria-label="Reload"
-              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
-            >
-              <m3e-icon name="refresh" aria-hidden={true} />
-            </m3e-icon-button>
-          </m3e-button-group>
-          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
-          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
-          <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
-          {/* The pill centers itself with auto margins; no spacers. */}
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar lb-dock-address" }}>
+          {/* #197: split dock - the omnibox owns this full-width row;
+              every action control moved to the toolbar below, so
+              the address field is never crushed by the controls. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
@@ -2586,6 +2544,104 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
+          </m3e-toolbar>
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar lb-dock-actions" }}>
+          {/* #199: adaptive tab chips - only with two or more tabs.
+              Container queries shrink the chips in tiers; the row
+              never scrolls (overflow hidden, the old strip rule). */}
+          {tabs.length > 1 && (
+            <div
+              className="lb-tabbar"
+              role="tablist"
+              aria-label="Open tabs"
+              onKeyDown={(ev) => {
+                if (ev.key !== "ArrowRight" && ev.key !== "ArrowLeft") return;
+                const chips = Array.from(ev.currentTarget.querySelectorAll<HTMLElement>(".lb-tabchip"));
+                const idx = chips.indexOf(ev.target as HTMLElement);
+                if (idx < 0) return;
+                ev.preventDefault();
+                chips[(idx + (ev.key === "ArrowRight" ? 1 : chips.length - 1)) % chips.length].focus();
+              }}
+            >
+              {tabs.map((t) => (
+                <div
+                  key={t.id}
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={t.id === active.id}
+                  className={"lb-tabchip" + (t.id === active.id ? " active" : "") + (closingIds.includes(t.id) ? " closing" : "")}
+                  onClick={() => props.setActiveId(t.id)}
+                  onKeyDown={(ev) => {
+                    if (ev.key !== "Enter" && ev.key !== " ") return;
+                    ev.preventDefault();
+                    props.setActiveId(t.id);
+                  }}
+                >
+                  {icons[t.id] ? (
+                    <img className="lb-tabchip-ic" src={icons[t.id]} alt="" />
+                  ) : (
+                    <m3e-icon name="public" aria-hidden={true} />
+                  )}
+                  <span className="lb-tabchip-title">{tabLabel(t)}</span>
+                  <button
+                    type="button"
+                    className="lb-tabchip-close"
+                    aria-label={"Close " + tabLabel(t)}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      closeTabSmooth(t.id);
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Compaction 1: tabs live in the toolbar too. The count
+              button opens the tab list card (same anchoring pattern
+              as the site info card). Real m3e-icon-button with toggle
+              semantics: geometry, hover/pressed/focus/selected states
+              come from the component like every other toolbar control. */}
+          <m3e-icon-button
+            id="lb-tabs-pill"
+            toggle
+            aria-label={"Open tab list (" + tabs.length + " tabs)"}
+            onClick={() => {
+              setTabsOpen((v) => !v);
+              setDlOpen(false);
+            }}
+            {...{ ref: tabsBtnRef }}
+          >
+            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
+            <m3e-icon name="add" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
+          {/* Back / Forward / Reload are one navigation cluster: a real
+              M3E button group (standard variant) ties the three
+              icon buttons together. Tooltips anchor by for= id and stay
+              outside the group so the group only arranges buttons. */}
+          <m3e-button-group aria-label="Page navigation">
+            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
+              <m3e-icon name="arrow_back" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
+              <m3e-icon name="arrow_forward" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button
+              id="lb-reload-btn"
+              aria-label="Reload"
+              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+            >
+              <m3e-icon name="refresh" aria-hidden={true} />
+            </m3e-icon-button>
+          </m3e-button-group>
+          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
+          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
+          <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
           <m3e-icon-button
             id="lb-devtools-btn"
             aria-label="Developer tools"
