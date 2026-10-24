@@ -71,6 +71,30 @@ const ruleUaName = (id: UaPresetId | undefined): string =>
       ? "Custom"
       : UA_PRESETS[id as Exclude<UaPresetId, "custom" | "server-default">].name;
 
+/* #198: settings search index. One entry per findable setting; the
+   targets are the id attributes set on the rows and groups below. */
+type SetEntry = { section: string; label: string; terms?: string; target: string };
+const SETTING_INDEX: SetEntry[] = [
+  { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", target: "set-search-engine" },
+  { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
+  { section: "ua", label: "User-Agent preset", terms: "user agent spoof ua", target: "set-ua-preset" },
+  { section: "ua", label: "Custom User-Agent", terms: "user agent string manual", target: "set-ua-custom" },
+  { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
+  { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
+  { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
+  { section: "extensions", label: "Import locally", terms: "xpi zip package", target: "set-import" },
+  { section: "appearance", label: "Theme color", terms: "seed palette color colour", target: "set-theme-color" },
+  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy starfield background animated", target: "set-fancy" },
+  { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
+  { section: "cloak", label: "Cloak destination", terms: "cloak url site", target: "set-cloak-url" },
+  { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", target: "set-cloak-url" },
+  { section: "cloak", label: "Open in about:blank", terms: "popout window blank", target: "set-aboutblank" },
+  { section: "advanced", label: "Proxy engine", terms: "zeolite scramjet engine", target: "set-proxy" },
+  { section: "advanced", label: "Transport engine", terms: "libcurl epoxy tls transport", target: "set-transport" },
+  { section: "advanced", label: "Data", terms: "export import session delete cache", target: "set-data" },
+  { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
+];
+
 /* Expansion panels: only the header toggles open state, so selecting an
    option inside a panel never collapses it. */
 function Panel(props: { id: string; icon: string; title: string; open: boolean; toggle: () => void; children: ReactNode }) {
@@ -84,12 +108,12 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
   );
 }
 
-function Row(props: { label: string; icon: string; on: boolean; toggle: () => void }) {
+function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; id?: string }) {
   /* #116: the visible label names the switch and toggles it too. */
   const labelId = useId();
   return (
     <m3e-list-item>
-      <div className="lb-setting-row">
+      <div className="lb-setting-row" id={props.id} tabIndex={props.id ? -1 : undefined}>
         <span className="lb-setting-label" id={labelId} onClick={props.toggle}>
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
@@ -190,6 +214,35 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     advanced: false,
   });
   const toggle = (key: string) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  /* #198: searchable Settings - all local, no persistence change. */
+  const [q, setQ] = useState("");
+  const SECTION_TITLES: Record<string, string> = {
+    search: "Search & browse",
+    ua: "User-Agent",
+    privacy: "Privacy",
+    extensions: "Extensions",
+    appearance: "Appearance",
+    cloak: "Auto Cloak",
+    advanced: "Advanced",
+  };
+  const needle = q.trim().toLowerCase();
+  const hits = needle
+    ? SETTING_INDEX.filter((e) =>
+        (e.label + " " + (e.terms ?? "") + " " + SECTION_TITLES[e.section]).toLowerCase().includes(needle),
+      )
+    : [];
+  const jumpTo = (entry: SetEntry) => {
+    setOpen((prev) => ({ ...prev, [entry.section]: true }));
+    setQ("");
+    /* Let the accordion remount with the panel open before scrolling. */
+    setTimeout(() => {
+      const el = document.getElementById(entry.target);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+    }, 120);
+  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   /* m3e-dialog opens/closes imperatively (show/hide methods, per the
      M3E dialog docs). React state mirrors it: opening sets the flag,
@@ -322,9 +375,29 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       {/* Real M3E accordion coordinating the panels. multi keeps the
           current behavior (several panels open at once); without it
           the accordion would collapse all but one. */}
+      {/* #198: search-first Settings. A query swaps the accordion for
+          a flat result list; picking a result expands the owning
+          panel, clears the query and scrolls the row into view. */}
+      <div className="lb-set-search">
+        <TextInput label="Search settings" value={q} onChange={setQ} />
+      </div>
+      {q.trim() ? (
+        <div className="lb-set-results">
+          {hits.length === 0 ? (
+            <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
+          ) : (
+            hits.map((h) => (
+              <button key={h.label} type="button" className="lb-set-result" onClick={() => jumpTo(h)}>
+                <span>{h.label}</span>
+                <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
@@ -337,12 +410,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </div>
         <m3e-list>
-          <Row label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
+          <Row id="set-search-suggest" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
       </Panel>
 
       <Panel id="panel-ua" icon="devices" title="User-Agent" open={open.ua} toggle={() => toggle("ua")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-ua-preset" tabIndex={-1}>
           <div className="lb-setting-label">Preset</div>
           {/* Dropdown: the preset list outgrew segmented buttons (seven
               entries wrap badly and never fit the panel). */}
@@ -361,7 +434,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <span className="lb-ua-active">Custom User-Agent active</span>
           )}
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-ua-custom" tabIndex={-1}>
           <div className="lb-setting-label">Custom User-Agent</div>
           <TextInput
             label="Manual User-Agent string"
@@ -385,8 +458,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
         <m3e-list>
-          <Row label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
+          <Row id="set-adblock" label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+          <Row id="set-https" label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
         </m3e-list>
         <p className="lb-muted" style={{ fontSize: 12 }}>
           HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
@@ -394,14 +467,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
              the public API is not, so search and install run over the
              API instead of the store site. */}
           <AmoSearch />
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-import" tabIndex={-1}>
           <div className="lb-setting-label">Import locally</div>
           {/* Exactly one import action: our button triggers the picker;
              the input itself stays hidden. */}
@@ -431,7 +504,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
           {/* #102: a visible, associated label for the colour input. */}
           <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
             Theme color
@@ -457,7 +530,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <div className="lb-setting-group">
           <div className="lb-setting-label">Background</div>
           <m3e-list>
-            <Row label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+            <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
             Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
@@ -468,9 +541,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
         <m3e-list>
-          <Row label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
+          <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
         </m3e-list>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
           <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
@@ -479,7 +552,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
         </div>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
           <div className="lb-setting-label">Open in about:blank</div>
           <m3e-button onClick={openInAboutBlank}>
             <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
@@ -493,7 +566,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-proxy" tabIndex={-1}>
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
@@ -510,7 +583,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </p>
         </div>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-transport" tabIndex={-1}>
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Transport engine">
@@ -527,7 +600,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </p>
         </div>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-data" tabIndex={-1}>
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
             Export the persisted session (history and open tabs) to a local file,
@@ -604,7 +677,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             purpose): every failed resource, page console message and
             proxy intervention (CSP/SRI stripping) is logged in full to
             the app log and DevTools. */}
-        <div className="lb-setting-group">
+        <div className="lb-setting-group" id="set-logs" tabIndex={-1}>
           <div className="lb-setting-label">Logs</div>
           <m3e-button onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
@@ -613,6 +686,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       </Panel>
       </m3e-accordion>
+      )}
 
       <div className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>
