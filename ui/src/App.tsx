@@ -509,7 +509,11 @@ export default function App() {
         /* best effort: the Zeolite push below still runs */
       }
       await push();
-      /* Relay registration warms the engine without third-party probe traffic (#204). */
+      /* #204: the #66 example.com/robots.txt boot warm is gone:
+         transit is relay-only on this deployment, so the pre-dial
+         warmed nothing - it raced SW control on cold profiles and
+         stamped example.com/robots.txt rows into every session's
+         diagnostics (and the user-visible logs) on each boot. */
     })();
   }, []);
 

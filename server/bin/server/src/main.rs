@@ -1166,8 +1166,8 @@ async fn zl_relay_endpoint(
 ) -> Response {
     let bad = |code: StatusCode, msg: &str| -> Response { (code, msg.to_string()).into_response() };
     /* #110: authorize BEFORE any JSON parsing or outbound work. The
-    request body stays bounded by axum's default 2 MiB extractor
-    limit, so a relay envelope can never balloon memory. */
+    request body stays bounded by the route-level 32 MiB DefaultBodyLimit
+    on /zlrelay (#200), so a relay envelope can never balloon memory. */
     if let Err(msg) = relay_client_authorized(
         headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
         headers.get(header::HOST).and_then(|v| v.to_str().ok()),
@@ -2907,7 +2907,10 @@ async fn main() {
         .route("/__zl_nav__", any(zl_sw_required))
         .route("/__zl_nav__/*path", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
-        .route("/zlrelay", post(zl_relay_endpoint))
+        // #200: a fixed 32 MiB route-level body cap (not streaming),
+        // above axum's 2 MiB default so relay upload envelopes fit.
+        // ponytail: one layer call, no new extractor machinery.
+        .route("/zlrelay", post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
