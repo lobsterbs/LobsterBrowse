@@ -1476,7 +1476,21 @@ FROM debian:bookworm-slim AS zl-builder
 # 9a2224f65bff6141 -> 665b64d76f4113a5 (35662 bytes; Zeolite CI
 # bootstrap size gate raised 35328 -> 36352). Cargo-side pin stays
 # a385fa9 (SW-only wave).
-ARG ZEOLITE_COMMIT=63bb15beb80e149aa39e6c7ed5a070538adb0ba0
+# Pin 121 rides Zeolite main 20f13bf4 + 725c64eb (wave 57: #414
+# reopened fix + #433; dist 552e3d7f from CI build 40097710930, all
+# 5 jobs green). #414: HTML rewriting and injection are gated on
+# document destinations, so an HTML-typed fetch/XHR response (dest
+# "") keeps its body verbatim (the catbox /user/api.php class), and
+# the initiator fallbacks decode through decodeClientUrl so
+# query-shape routes yield a real initiator and the upstream Referer
+# is restored (the claude.ai challenge warning class). #433: the
+# hCaptcha host= (widget frame + checksiteconfig/getcaptcha) is
+# virtualized to the page hostname at the fetch seam (#112 co=
+# class), so hCaptcha's sitekey hostname validation sees the real
+# page host. sw.js 7997fd3e068d0c45 -> 8ee8dfcc1fa6a015 (632813
+# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
+# stays a385fa9 (SW-only wave).
+ARG ZEOLITE_COMMIT=552e3d7f31d89d2254f4892d1f11d37855c11bb2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1535,7 +1549,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7997fd3e068d0c45 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8ee8dfcc1fa6a015 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
