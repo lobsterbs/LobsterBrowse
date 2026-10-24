@@ -60,7 +60,6 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
    in this page; the components are presentational. */
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
-import AdaptiveTabStrip from "../browser/AdaptiveTabStrip";
 import DownloadsCard from "../browser/DownloadsCard";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
@@ -387,19 +386,6 @@ export default function BrowserView(props: Props) {
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
-  // Session-only comparison: the single dock remains the default.
-  const [splitDock, setSplitDock] = useState(() => {
-    try { return sessionStorage.getItem("lobsterbrowse-split-dock") === "1"; } catch { return false; }
-  });
-  const toggleSplitDock = () => {
-    setSplitDock((value) => {
-      try { sessionStorage.setItem("lobsterbrowse-split-dock", value ? "0" : "1"); } catch { /* unavailable storage */ }
-      return !value;
-    });
-    setTabsOpen(false);
-  };
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const [stripWidth, setStripWidth] = useState(0);
   /* Tab button and incognito toggle are real m3e-icon-buttons with
      toggle semantics; React 18 cannot set boolean custom-element
      attributes correctly, so the selected attribute is managed from a
@@ -408,10 +394,10 @@ export default function BrowserView(props: Props) {
   const incognitoBtnRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     tabsBtnRef.current?.toggleAttribute("selected", tabsOpen);
-  }, [tabsOpen, splitDock]);
+  }, [tabsOpen]);
   useEffect(() => {
     incognitoBtnRef.current?.toggleAttribute("selected", !!props.incognito);
-  }, [props.incognito, splitDock]);
+  }, [props.incognito]);
   /* The tab switcher card stays mounted all the time (its preview
      iframes must stay alive or tiles show blank frames, not pages);
      the .open class animates and gates interaction instead. */
@@ -1203,17 +1189,6 @@ export default function BrowserView(props: Props) {
       setDockTucked(false);
     }
   }, [settings.autoHideChrome]);
-
-  // Measure the actual dock surface, including rail/fullscreen changes.
-  useEffect(() => {
-    const node = stripRef.current;
-    if (!node) return;
-    const update = () => setStripWidth(node.getBoundingClientRect().width);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [dockTucked, tabs.length > 1, splitDock]);
 
   /* Fullscreen for the browser area. */
   const rootRef = useRef<HTMLElement | null>(null);
@@ -2297,259 +2272,6 @@ export default function BrowserView(props: Props) {
   } catch {
     /* not a URL yet */
   }
-  const navigationActions = (<>
-          {/* Compaction 1: tabs live in the toolbar too. The count
-              button opens the tab list card (same anchoring pattern
-              as the site info card). Real m3e-icon-button with toggle
-              semantics: geometry, hover/pressed/focus/selected states
-              come from the component like every other toolbar control. */}
-          <m3e-icon-button
-            id="lb-tabs-pill"
-            toggle
-            aria-label={"Open tab list (" + tabs.length + " tabs)"}
-            onClick={() => {
-              setTabsOpen((v) => !v);
-              setDlOpen(false);
-            }}
-            {...{ ref: tabsBtnRef }}
-          >
-            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
-            <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          {/* Back / Forward / Reload are one navigation cluster: a real
-              M3E button group (standard variant) ties the three
-              icon buttons together. Tooltips anchor by for= id and stay
-              outside the group so the group only arranges buttons. */}
-          <m3e-button-group aria-label="Page navigation">
-            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
-              <m3e-icon name="arrow_back" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
-              <m3e-icon name="arrow_forward" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button
-              id="lb-reload-btn"
-              aria-label="Reload"
-              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
-            >
-              <m3e-icon name="refresh" aria-hidden={true} />
-            </m3e-icon-button>
-          </m3e-button-group>
-          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
-          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
-          <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
-  </>);
-  const addressSurface = (<>
-          <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
-            {tbSuggOpen && (
-              <div id="lb-tb-suggest" className="lb-tb-ac" role="listbox" aria-label="Suggestions">
-                {tbSugg.map((it, i) => (
-                  <button
-                    key={it.url}
-                    id={"lb-tb-opt-" + i}
-                    type="button"
-                    role="option"
-                    aria-selected={i === tbSuggIdx}
-                    className={"lb-tb-ac-item" + (i === tbSuggIdx ? " active" : "")}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setTbSuggOpen(false);
-                      setTbExpanded(false);
-                      go(it.url);
-                    }}
-                  >
-                    <m3e-icon name="search" aria-hidden={true} />
-                    <span className="lb-tb-ac-text">{it.text}</span>
-                    {it.src && (
-                      <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {it.src}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            {active.url && (
-              <>
-                {icons[active.id] ? (
-                  <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
-                ) : (
-                  <m3e-icon name="public" aria-hidden={true} />
-                )}
-              </>
-            )}
-            {tbExpanded || !active.url ? (
-              /* #102: this URL field stays a raw input on purpose. It is
-                 the compact editor that expands in place inside the
-                 center pill (AGENTS.md: toolbar URL editing remains
-                 inside the pill); an m3e-search-bar or m3e-form-field
-                 frame would break that layout. It is labelled by
-                 aria-label. */
-              <input
-                ref={urlInputRef}
-                className="lb-url-input"
-                aria-label="URL or search"
-                role="combobox"
-                aria-expanded={tbSuggOpen}
-                aria-controls={tbSuggOpen ? "lb-tb-suggest" : undefined}
-                aria-autocomplete="list"
-                aria-activedescendant={tbSuggOpen && tbSugg[tbSuggIdx] ? "lb-tb-opt-" + tbSuggIdx : undefined}
-                placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
-                value={draft}
-                spellCheck={false}
-                onChange={(e) => {
-                  setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }));
-                  setTbSuggIdx(-1);
-                }}
-                onFocus={() => setTbSuggOpen(tbSugg.length > 0)}
-                onBlur={() => {
-                  setTbSuggOpen(false);
-                  setTbExpanded(false);
-                  setDrafts((prev) => {
-                    if (!(active.id in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[active.id];
-                    return next;
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const pick = tbSuggOpen && tbSuggIdx >= 0 ? tbSugg[tbSuggIdx]?.url : draft;
-                    setTbSuggOpen(false);
-                    setTbExpanded(false);
-                    if (pick) go(pick);
-                  } else if (e.key === "ArrowDown" && tbSuggOpen) {
-                    e.preventDefault();
-                    setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
-                  } else if (e.key === "ArrowUp" && tbSuggOpen) {
-                    e.preventDefault();
-                    setTbSuggIdx((p) => Math.max(p - 1, -1));
-                  } else if (e.key === "Escape") {
-                    setTbSuggOpen(false);
-                    setTbExpanded(false);
-                    setDrafts((prev) => {
-                      if (!(active.id in prev)) return prev;
-                      const next = { ...prev };
-                      delete next[active.id];
-                      return next;
-                    });
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="lb-tb-name"
-                aria-label={"Show URL of " + tabLabel(active)}
-                onClick={() => setTbExpanded(true)}
-              >
-                {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
-              </button>
-            )}
-          </span>
-  </>);
-  const utilityActions = (<>
-          <m3e-icon-button
-            id="lb-devtools-btn"
-            aria-label="Developer tools"
-            toggle
-            selected={activeDt.open ? "" : undefined}
-            onClick={() => setDt(active.id, { open: !activeDt.open })}
-          >
-            <m3e-icon name="bug_report" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-devtools-btn" position="above">Developer tools</m3e-tooltip>
-          {/* Compaction 3: the diagnostics summary lives on the
-              toolbar. The chip appears only when this tab captured
-              load failures; it opens DevTools on the diagnostics
-              page. */}
-          {activeDt.fails.length > 0 && (
-            <button
-              type="button"
-              className="lb-diag-tb-chip"
-              aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures - open diagnostics"}
-              onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
-            >
-              <m3e-icon name="warning" aria-hidden={true} />
-              {activeDt.fails.length}
-            </button>
-          )}
-          {/* Downloads: the button appears only while something is
-              downloading (or just finished); opens the download card. */}
-          {downloads.length > 0 && (
-            <>
-              <m3e-icon-button
-                id="lb-dl-btn"
-                aria-label={"Downloads (" + downloads.length + ")"}
-                toggle
-                selected={dlOpen ? "" : undefined}
-                onClick={() => {
-                  setDlOpen((v) => !v);
-                  setTabsOpen(false);
-                }}
-              >
-                <m3e-icon name="download" aria-hidden={true} />
-              </m3e-icon-button>
-              <m3e-badge for="lb-dl-btn">{String(downloads.length)}</m3e-badge>
-              <m3e-tooltip for="lb-dl-btn" position="above">Downloads</m3e-tooltip>
-            </>
-          )}
-          <m3e-icon-button
-            id="lb-fs-btn"
-            aria-label={fullscreen ? "Exit full screen" : "Full screen"}
-            toggle
-            selected={fullscreen ? "" : undefined}
-            onClick={toggleFullscreen}
-          >
-            <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
-          <m3e-icon-button
-            id="lb-ext-btn"
-            aria-label="Extensions"
-            toggle
-            selected={extPanelOpen ? "" : undefined}
-            onClick={() => {
-              const next = !extPanelOpen;
-              setExtPanelOpen(next);
-              if (next) loadExtensions();
-            }}
-          >
-            <m3e-icon name="extension" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-ext-btn" position="above">Extensions</m3e-tooltip>
-          {/* Incognito toggle: a regular 40x40 icon button inside the
-              toolbar, same slot as the other toggles. Toggling on
-              suspends the normal session and opens one empty
-              incognito tab (App.tsx); toggling off closes it and
-              restores the session. The domino mask is an inline SVG
-              (no font glyph exists), sized by CSS. */}
-          {/* Incognito: the same m3e-icon-button primitive as every
-              other toolbar control, with toggle semantics for the
-              on/off state (selected attribute via the ref effect -
-              React 18 mangles boolean custom-element attributes). The
-              domino mask is an inline SVG: the glyph is missing from
-              the self-hosted Material Symbols font. */}
-          <m3e-icon-button
-            id="lb-incognito-pill"
-            toggle
-            aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
-            onClick={() => props.onIncognitoChange(!props.incognito)}
-            {...{ ref: incognitoBtnRef }}
-          >
-            <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-incognito-pill" position="above">
-            {props.incognito
-              ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
-              : "Turn on incognito: stops history and session recording."}
-          </m3e-tooltip>
-          {/* #96: persistent incognito identity: the badge stays
-              visible in the chrome the whole time the mode is on. */}
-          {props.incognito && <span className="lb-incognito-badge">Incognito</span>}  </>);
   return (
     <section
       className={"lb-browser" + (props.incognito ? " incognito" : "")}
@@ -2557,8 +2279,9 @@ export default function BrowserView(props: Props) {
         rootRef.current = el as HTMLElement | null;
       }}
     >
-      {/* Tabs stay in the action dock. Its measured strip delegates
-          overflow to the full preview switcher. */}
+      {/* Compaction 1 (final): the floating tab strip is GONE. Tabs
+          live in the toolbar only: the tab-count button opens the tab
+          list card; the + button creates a tab. */}
 
       {/* Content area: one same-origin engine iframe per tab, inactive ones stay mounted */}
       <div className="lb-pages">
@@ -2667,8 +2390,6 @@ export default function BrowserView(props: Props) {
           onClose={() => setTabsOpen(false)}
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
           onCloseTab={closeTabSmooth}
-          splitDock={splitDock}
-          onToggleSplitDock={toggleSplitDock}
         />
         {/* #86: the tucked dock hides fully; the grip line is the
             only hint. Hold the pointer on it 3s to reveal, or
@@ -2696,29 +2417,259 @@ export default function BrowserView(props: Props) {
             mounted as the reveal handle. */}
         {!dockTucked && (
         <div className="lb-dock-pill">
-          <div className={"lb-dock-surfaces" + (splitDock ? " split" : "")}>
-            {splitDock && (
-              <m3e-toolbar variant="standard" shape="rounded" aria-label="Address dock" {...{ class: "lb-toolbar lb-address-surface" }}>
-                {addressSurface}
-              </m3e-toolbar>
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
+          {/* Compaction 1: tabs live in the toolbar too. The count
+              button opens the tab list card (same anchoring pattern
+              as the site info card). Real m3e-icon-button with toggle
+              semantics: geometry, hover/pressed/focus/selected states
+              come from the component like every other toolbar control. */}
+          <m3e-icon-button
+            id="lb-tabs-pill"
+            toggle
+            aria-label={"Open tab list (" + tabs.length + " tabs)"}
+            onClick={() => {
+              setTabsOpen((v) => !v);
+              setDlOpen(false);
+            }}
+            {...{ ref: tabsBtnRef }}
+          >
+            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
+            <m3e-icon name="add" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
+          {/* Back / Forward / Reload are one navigation cluster: a real
+              M3E button group (standard variant) ties the three
+              icon buttons together. Tooltips anchor by for= id and stay
+              outside the group so the group only arranges buttons. */}
+          <m3e-button-group aria-label="Page navigation">
+            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
+              <m3e-icon name="arrow_back" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
+              <m3e-icon name="arrow_forward" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button
+              id="lb-reload-btn"
+              aria-label="Reload"
+              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+            >
+              <m3e-icon name="refresh" aria-hidden={true} />
+            </m3e-icon-button>
+          </m3e-button-group>
+          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
+          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
+          <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
+          {/* The pill centers itself with auto margins; no spacers. */}
+          {/* Center pill: lock + favicon + tab name. Pressed, it expands
+              in place into the editable URL (the name hides). */}
+          <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
+            {tbSuggOpen && (
+              <div id="lb-tb-suggest" className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+                {tbSugg.map((it, i) => (
+                  <button
+                    key={it.url}
+                    id={"lb-tb-opt-" + i}
+                    type="button"
+                    role="option"
+                    aria-selected={i === tbSuggIdx}
+                    className={"lb-tb-ac-item" + (i === tbSuggIdx ? " active" : "")}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setTbSuggOpen(false);
+                      setTbExpanded(false);
+                      go(it.url);
+                    }}
+                  >
+                    <m3e-icon name="search" aria-hidden={true} />
+                    <span className="lb-tb-ac-text">{it.text}</span>
+                    {it.src && (
+                      <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {it.src}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             )}
-            <div className="lb-action-dock">
-              {tabs.length > 1 && (
-                <div className="lb-dock-ribbon" ref={stripRef}>
-                  <AdaptiveTabStrip tabs={tabs} activeId={active.id} closingIds={closingIds} icons={icons} width={stripWidth}
-                    onSelect={props.setActiveId} onCloseTab={closeTabSmooth}
-                    onShowAll={() => { setTabsOpen(true); setDlOpen(false); }} />
-                </div>
-              )}
-              <m3e-toolbar variant="standard" shape="rounded" aria-label={splitDock ? "Browser actions" : "Browser toolbar"} {...{ class: "lb-toolbar lb-action-surface" }}>
-                <div className="lb-toolbar-items">
-                  {navigationActions}
-                  {!splitDock && addressSurface}
-                  {utilityActions}
-                </div>
-              </m3e-toolbar>
-            </div>
-          </div>
+            {active.url && (
+              <>
+                {icons[active.id] ? (
+                  <img className="lb-tb-favicon" src={icons[active.id]} alt="" />
+                ) : (
+                  <m3e-icon name="public" aria-hidden={true} />
+                )}
+              </>
+            )}
+            {tbExpanded || !active.url ? (
+              /* #102: this URL field stays a raw input on purpose. It is
+                 the compact editor that expands in place inside the
+                 center pill (AGENTS.md: toolbar URL editing remains
+                 inside the pill); an m3e-search-bar or m3e-form-field
+                 frame would break that layout. It is labelled by
+                 aria-label. */
+              <input
+                ref={urlInputRef}
+                className="lb-url-input"
+                aria-label="URL or search"
+                role="combobox"
+                aria-expanded={tbSuggOpen}
+                aria-controls={tbSuggOpen ? "lb-tb-suggest" : undefined}
+                aria-autocomplete="list"
+                aria-activedescendant={tbSuggOpen && tbSugg[tbSuggIdx] ? "lb-tb-opt-" + tbSuggIdx : undefined}
+                placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
+                value={draft}
+                spellCheck={false}
+                onChange={(e) => {
+                  setDrafts((prev) => ({ ...prev, [active.id]: e.target.value }));
+                  setTbSuggIdx(-1);
+                }}
+                onFocus={() => setTbSuggOpen(tbSugg.length > 0)}
+                onBlur={() => {
+                  setTbSuggOpen(false);
+                  setTbExpanded(false);
+                  setDrafts((prev) => {
+                    if (!(active.id in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[active.id];
+                    return next;
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const pick = tbSuggOpen && tbSuggIdx >= 0 ? tbSugg[tbSuggIdx]?.url : draft;
+                    setTbSuggOpen(false);
+                    setTbExpanded(false);
+                    if (pick) go(pick);
+                  } else if (e.key === "ArrowDown" && tbSuggOpen) {
+                    e.preventDefault();
+                    setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
+                  } else if (e.key === "ArrowUp" && tbSuggOpen) {
+                    e.preventDefault();
+                    setTbSuggIdx((p) => Math.max(p - 1, -1));
+                  } else if (e.key === "Escape") {
+                    setTbSuggOpen(false);
+                    setTbExpanded(false);
+                    setDrafts((prev) => {
+                      if (!(active.id in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[active.id];
+                      return next;
+                    });
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="lb-tb-name"
+                aria-label={"Show URL of " + tabLabel(active)}
+                onClick={() => setTbExpanded(true)}
+              >
+                {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
+              </button>
+            )}
+          </span>
+          <m3e-icon-button
+            id="lb-devtools-btn"
+            aria-label="Developer tools"
+            toggle
+            selected={activeDt.open ? "" : undefined}
+            onClick={() => setDt(active.id, { open: !activeDt.open })}
+          >
+            <m3e-icon name="bug_report" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-devtools-btn" position="above">Developer tools</m3e-tooltip>
+          {/* Compaction 3: the diagnostics summary lives on the
+              toolbar. The chip appears only when this tab captured
+              load failures; it opens DevTools on the diagnostics
+              page. */}
+          {activeDt.fails.length > 0 && (
+            <button
+              type="button"
+              className="lb-diag-tb-chip"
+              aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
+              title={activeDt.fails.length + " load failures - open diagnostics"}
+              onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
+            >
+              <m3e-icon name="warning" aria-hidden={true} />
+              {activeDt.fails.length}
+            </button>
+          )}
+          {/* Downloads: the button appears only while something is
+              downloading (or just finished); opens the download card. */}
+          {downloads.length > 0 && (
+            <>
+              <m3e-icon-button
+                id="lb-dl-btn"
+                aria-label={"Downloads (" + downloads.length + ")"}
+                toggle
+                selected={dlOpen ? "" : undefined}
+                onClick={() => {
+                  setDlOpen((v) => !v);
+                  setTabsOpen(false);
+                }}
+              >
+                <m3e-icon name="download" aria-hidden={true} />
+              </m3e-icon-button>
+              <m3e-badge for="lb-dl-btn">{String(downloads.length)}</m3e-badge>
+              <m3e-tooltip for="lb-dl-btn" position="above">Downloads</m3e-tooltip>
+            </>
+          )}
+          <m3e-icon-button
+            id="lb-fs-btn"
+            aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+            toggle
+            selected={fullscreen ? "" : undefined}
+            onClick={toggleFullscreen}
+          >
+            <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
+          <m3e-icon-button
+            id="lb-ext-btn"
+            aria-label="Extensions"
+            toggle
+            selected={extPanelOpen ? "" : undefined}
+            onClick={() => {
+              const next = !extPanelOpen;
+              setExtPanelOpen(next);
+              if (next) loadExtensions();
+            }}
+          >
+            <m3e-icon name="extension" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-ext-btn" position="above">Extensions</m3e-tooltip>
+          {/* Incognito toggle: a regular 40x40 icon button inside the
+              toolbar, same slot as the other toggles. Toggling on
+              suspends the normal session and opens one empty
+              incognito tab (App.tsx); toggling off closes it and
+              restores the session. The domino mask is an inline SVG
+              (no font glyph exists), sized by CSS. */}
+          {/* Incognito: the same m3e-icon-button primitive as every
+              other toolbar control, with toggle semantics for the
+              on/off state (selected attribute via the ref effect -
+              React 18 mangles boolean custom-element attributes). The
+              domino mask is an inline SVG: the glyph is missing from
+              the self-hosted Material Symbols font. */}
+          <m3e-icon-button
+            id="lb-incognito-pill"
+            toggle
+            aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
+            onClick={() => props.onIncognitoChange(!props.incognito)}
+            {...{ ref: incognitoBtnRef }}
+          >
+            <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-incognito-pill" position="above">
+            {props.incognito
+              ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
+              : "Turn on incognito: stops history and session recording."}
+          </m3e-tooltip>
+          {/* #96: persistent incognito identity: the badge stays
+              visible in the chrome the whole time the mode is on. */}
+          {props.incognito && <span className="lb-incognito-badge">Incognito</span>}
+        </m3e-toolbar>
           {xpiPrompt && (
             <XpiPrompt
               name={xpiPrompt.name}
