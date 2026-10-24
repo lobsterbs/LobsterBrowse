@@ -1479,7 +1479,18 @@ FROM debian:bookworm-slim AS zl-builder
 # page host. sw.js 7997fd3e068d0c45 -> 8ee8dfcc1fa6a015 (632813
 # bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
 # stays a385fa9 (SW-only wave).
-ARG ZEOLITE_COMMIT=552e3d7f31d89d2254f4892d1f11d37855c11bb2
+# Pin 122 rides Zeolite main 8b9274dd (wave 58: cf-mitigated
+# challenge documents serve verbatim; dist d8c1759 from CI build
+# 40106176498, all 5 jobs green). Cloudflare flags the managed-
+# challenge interstitial with cf-mitigated: challenge; the engine
+# now serves those documents verbatim (isChallengeMitigated +
+# CF_CHALLENGE_VERBATIM, gated off every rewrite/injection seam),
+# because the widget rejects rewritten challenge documents (nonce
+# CSP + corrupted _cf_chl_opt: the claude.ai Unable to connect
+# class). sw.js 8ee8dfcc1fa6a015 -> 820f9c301b91a2c7 (634810
+# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
+# stays a385fa9 (SW-only wave).
+ARG ZEOLITE_COMMIT=d8c1759eef1b662208d058ccba57a315cadbfbc4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1538,7 +1549,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8ee8dfcc1fa6a015 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=820f9c301b91a2c7 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
