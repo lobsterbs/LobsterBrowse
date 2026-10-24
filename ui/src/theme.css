@@ -1481,3 +1481,43 @@ body .lb-ext-panel {
   white-space: nowrap;
   border: 0;
 }
+
+/* #197/#199: tabs compact inside the action dock. The address dock
+   is an optional session-only comparison, not a forced redesign. */
+.lb-dock { max-width: calc(100% - 16px); }
+.lb-dock-pill { max-width: min(1080px, calc(100vw - 112px)); }
+.lb-dock-surfaces { display: flex; justify-content: center; align-items: flex-end; gap: var(--md-sys-measurement-space100, 8px); max-width: 100%; }
+.lb-action-dock { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; gap: var(--md-sys-measurement-space50, 4px); }
+.lb-dock-ribbon { width: min(720px, calc(100vw - 112px)); max-width: 100%; }
+.lb-dock-tabstrip { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px; box-sizing: border-box; overflow: hidden; border-radius: var(--md-sys-shape-corner-extra-large, 28px); background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 85%, transparent); backdrop-filter: blur(20px); }
+.lb-dock-tab { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; height: 48px; padding: 0 4px; gap: 0; box-sizing: border-box; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-surface-variant) 35%, transparent); color: var(--md-sys-color-on-surface-variant); transition: width var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring); }
+.lb-dock-tab.active { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.lb-dock-tab.closing { opacity: 0; transform: scale(0.85); pointer-events: none; }
+.lb-dock-tab-select, .lb-dock-tab-close, .lb-dock-tab-overflow { display: flex; align-items: center; justify-content: center; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: var(--md-sys-shape-corner-full, 999px); }
+.lb-dock-tab-select { flex: 1 1 auto; min-width: 0; height: 48px; padding: 0 4px; gap: var(--md-sys-measurement-space50, 4px); }
+.lb-dock-tab-select m3e-icon { flex: 0 0 18px; font-size: 18px; }
+.lb-dock-tab-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: var(--md-sys-typescale-label-medium-font-size, 12px); }
+.lb-dock-tabstrip.icons .lb-dock-tab:not(.active) .lb-dock-tab-title { display: none; }
+.lb-dock-tab-close { flex: 0 0 40px; width: 40px; height: 40px; padding: 0; }
+.lb-dock-tab-close m3e-icon { font-size: 18px; }
+.lb-dock-tab-overflow { flex: 0 0 44px; width: 44px; height: 48px; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-large-font-size, 14px); }
+.lb-dock-tab-select:hover, .lb-dock-tab-close:hover, .lb-dock-tab-overflow:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+.lb-dock-tab-select:focus-visible, .lb-dock-tab-close:focus-visible, .lb-dock-tab-overflow:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+.lb-dock-surfaces.split { flex-wrap: wrap; }
+.lb-dock-surfaces.split .lb-address-surface { flex: 1 1 300px; width: min(440px, 100%); max-width: 100%; }
+.lb-address-surface .lb-tb-pill { width: 100%; max-width: 440px; box-sizing: border-box; }
+.lb-dock-surfaces.split .lb-action-dock { flex: 0 1 auto; }
+.lb-dock-surfaces.split .lb-dock-ribbon { width: min(540px, calc(100vw - 112px)); }
+.lb-action-surface { box-sizing: border-box; max-width: 100%; }
+.lb-toolbar-items { display: flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); min-width: 0; max-width: 100%; }
+@media (max-width: 760px) {
+  .lb-dock-pill { max-width: calc(100vw - 16px); overflow: visible; }
+  .lb-dock-ribbon, .lb-dock-surfaces.split .lb-dock-ribbon { width: calc(100vw - 16px); }
+  .lb-dock-surfaces { flex-direction: column; align-items: center; }
+  .lb-dock-surfaces.split .lb-address-surface { flex: 0 0 auto; }
+  .lb-action-surface { --m3e-toolbar-size: auto; max-width: 100%; }
+  .lb-toolbar-items { flex-wrap: wrap; justify-content: center; }
+  .lb-action-surface .lb-tb-pill { flex: 1 1 160px; min-width: 0; }
+  .lb-action-surface .lb-tb-pill.expanded { width: min(52vw, 440px); }
+}
+@media (prefers-reduced-motion: reduce) { .lb-dock-tab { transition: none; } }

@@ -18,6 +18,8 @@ export default function TabSwitcherCard(props: {
   onClose: () => void;
   onSelect: (id: number) => void;
   onCloseTab: (id: number) => void;
+  splitDock: boolean;
+  onToggleSplitDock: () => void;
 }) {
   /* Preview tiles load a SECOND full page instance per tab (the
      legacy b64u route), and the card stays mounted while closed,
@@ -38,6 +40,9 @@ export default function TabSwitcherCard(props: {
       <div slot="header" className="lb-site-head">
         <span className="lb-site-ctitle">Tabs ({props.tabs.length})</span>
         <span>
+          <m3e-icon-button aria-label={props.splitDock ? "Use single browser dock" : "Try split browser dock"} onClick={props.onToggleSplitDock}>
+            <m3e-icon name={props.splitDock ? "view_agenda" : "view_column"} aria-hidden={true} />
+          </m3e-icon-button>
           <m3e-icon-button aria-label="New tab" onClick={props.onNewTab}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
@@ -56,6 +61,7 @@ export default function TabSwitcherCard(props: {
             aria-label={"Switch to " + tabLabel(t)}
             onClick={() => props.onSelect(t.id)}
             onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return;
               /* #91: full button semantics: Space activates too,
                  without scrolling the row. */
               if (e.key === "Enter" || e.key === " ") {
