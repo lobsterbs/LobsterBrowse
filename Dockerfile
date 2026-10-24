@@ -1447,7 +1447,13 @@ FROM debian:bookworm-slim AS zl-builder
 # c3e4e7f4c1e41e0c -> 13b00d3970710c96 (630808 bytes); bootstrap.js
 # unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
 # a385fa9 (SW-only change).
-ARG ZEOLITE_COMMIT=535d045d612f1d46f82c738caac45c5382ea91c6
+# Pin 119 rides Zeolite main 2e1d1edf (#414 + cloudflare managed challenge):
+# /cdn-cgi/ challenge bytes now serve verbatim at every seam and fetch/XHR
+# HTML (dest "") no longer gets the __ZL init/bootstrap injection.
+# sw.js 13b00d3970710c96 -> 5343f47d3a5d80c8 (631236 bytes);
+# bootstrap.js unchanged 9a2224f65bff6141 (35111 bytes);
+# Cargo-side zeolite-server pin stays a385fa9 (SW-only change).
+ARG ZEOLITE_COMMIT=6df4b758ffa569f3761e1fd238bb354fa34c4999
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1506,7 +1512,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=13b00d3970710c96 ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5343f47d3a5d80c8 ZEOLITE_BOOTSTRAP_SHA=9a2224f65bff6141 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
