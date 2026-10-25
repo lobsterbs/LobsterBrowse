@@ -1561,7 +1561,9 @@ FROM debian:bookworm-slim AS zl-builder
 # decode keeps the plain concat. sw.js acdc15f7f76b4273 ->
 # d4423f428f4e1279 (642595 bytes); bootstrap.js unchanged
 # d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only wave).
-ARG ZEOLITE_COMMIT=0e528d1fd70aa1bc86544f3570030a33f9f6ff8a
+# Pin 127: script escape-state and exact MIME attribute parsing (#447/#448).
+# CI 40207272135; only rewriter_wasm_bg.wasm changes, JS hashes stay identical.
+ARG ZEOLITE_COMMIT=146c2a972d6f678a50d49601c929cf26b333fbb0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
