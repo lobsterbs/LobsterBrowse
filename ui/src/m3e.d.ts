@@ -108,9 +108,11 @@ declare module "react" {
       "m3e-dialog-trigger": M3eBase & { for?: string };
       "m3e-menu": M3eBase & { variant?: string };
       "m3e-menu-trigger": M3eBase & { for?: string };
-      "m3e-menu-item": M3eBase & { disabled?: boolean };
-      "m3e-menu-item-checkbox": M3eBase & { checked?: boolean | string; disabled?: boolean };
-      "m3e-menu-item-radio": M3eBase & { checked?: boolean | string; disabled?: boolean };
+      "m3e-menu-item": M3eBase & { disabled?: boolean | string };
+      "m3e-menu-item-checkbox": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
+      "m3e-menu-item-radio": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
+      "m3e-menu-item-group": M3eBase;
+      "m3e-split-button": M3eBase & { variant?: string; size?: string };
       "m3e-dialog-action": M3eBase & { "return-value"?: string };
       "m3e-fab": M3eBase & { size?: string; variant?: string };
       "m3e-button-group": M3eBase & { variant?: string; size?: string; multi?: boolean | string };

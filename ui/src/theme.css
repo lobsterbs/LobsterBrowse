@@ -699,6 +699,18 @@ body.lb-fancy .lb-home pre.lb-ascii {
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: var(--md-sys-measurement-space100); }
 }
+/* ---- #215: medium window band (601-839px) ----
+   Between the phone band (<=600px) and desktop (>=840px) only the two
+   surfaces that actually cramp are relaxed: the expanded pill borrows
+   less of the viewport than the desktop 92vw rule, and DevTools gets
+   more width than the desktop 480px cap. Content padding, tab titles
+   and the settings rows keep their desktop values at this width; the
+   phone band below stays the single compact layout. */
+@media (min-width: 601px) and (max-width: 839px) {
+  .lb-tb-pill.expanded { width: min(64vw, 440px); }
+  .lb-devtools { width: min(560px, calc(100% - var(--md-sys-measurement-space200))); }
+}
+
 
 /* ---- Material 3 Expressive pass ----
    Additive layer: bigger shapes, springy motion, expressive type.
@@ -1222,38 +1234,9 @@ m3e-snackbar {
 }
 .lb-ext-note-btn:hover { filter: brightness(1.15); }
 
-/* Engine context menu (#47): right-click menu inside proxied frames,
-   rendered over an invisible dismiss layer. */
-.lb-ctx-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2900;
-}
-.lb-ctx-menu {
-  position: fixed;
-  z-index: 2901;
-  min-width: 200px;
-  max-width: 320px;
-  background: var(--md-sys-color-surface-container-high, #2b2b2f);
-  color: var(--md-sys-color-on-surface, #e4e2e6);
-  border-radius: var(--m3e-shape-lg, 16px);
-  padding: var(--md-sys-measurement-space50, 4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-}
-.lb-ctx-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
-  border-radius: var(--m3e-shape-lg, 16px);
-  cursor: pointer;
-}
-.lb-ctx-item:hover { background: var(--md-sys-color-surface-container-highest, #37393e); }
-.lb-ctx-item.nested { padding-left: var(--md-sys-measurement-space300, 24px); }
+/* #210: the context menu is now a real m3e-menu (pages/Browser.tsx
+   CtxMenu); the hand-built overlay classes went with it. */
+
 @media (prefers-reduced-motion: reduce) {
   .lb-ext-note { animation: none; }
 }
@@ -1510,3 +1493,28 @@ body .lb-ext-panel {
   white-space: nowrap;
   border: 0;
 }
+
+/* ---- #213: favicon-hue toolbar tint (dark scheme only) ----
+   Browser.tsx sets --lb-site-hue (degrees) and the lb-site-tint class
+   on the toolbar host when the active tab's favicon carries a usable
+   hue and the setting is on. The mix stays at 12% over the pill's
+   existing translucent surface so text contrast is unchanged; the
+   pill's existing background transition carries the change and the
+   reduced-motion block near the top already disables it. */
+.lb-toolbar.lb-site-tint .lb-tb-pill {
+  background: color-mix(in srgb, hsl(var(--lb-site-hue) 62% 55%) 12%, rgba(255, 255, 255, 0.12));
+}
+
+/* ---- #214: shared empty state ---- */
+.lb-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space150, 12px);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+}
+.lb-empty-state m3e-icon { font-size: 40px; opacity: 0.65; }
+.lb-empty-headline { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); color: var(--md-sys-color-on-surface, #e4e2e6); }
+.lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }

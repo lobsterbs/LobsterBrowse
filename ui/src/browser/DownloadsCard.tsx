@@ -1,6 +1,7 @@
 /* Downloads panel card. Presentational: every download starts, updates
    and finishes in pages/Browser.tsx (the browser page lifecycle owns
    the transfer); this file only renders the list. */
+import { useReducedMotion } from "motion/react";
 import { dlIconFor, fmtBytes } from "./browserShared";
 
 export type DlItem = {
@@ -21,6 +22,9 @@ export default function DownloadsCard(props: {
   onRemove: (id: number) => void;
   onCancel: (id: number) => void;
 }) {
+  /* #212: the wavy download progress follows the reduced-motion
+     preference (the component itself does not gate its wave). */
+  const flatProgress = useReducedMotion() === true;
   return (
     <m3e-card
       variant="elevated"
@@ -41,8 +45,12 @@ export default function DownloadsCard(props: {
               <div className="lb-dl-name" title={d.name}>{d.name}</div>
               {d.status === "active" && (
                 <div className="lb-dl-progress">
+                  {/* #212: wavy progress for active downloads (the variant
+                      exists on both indicator shapes in @m3e/web 2.8.2);
+                      the flat variant renders under reduced motion. */}
                   <m3e-linear-progress-indicator
                     aria-label={"Downloading " + d.name}
+                    variant={flatProgress ? "flat" : "wavy"}
                     value={d.size > 0 ? String(Math.round((d.got / d.size) * 100)) : undefined}
                     max="100"
                     mode={d.size > 0 ? undefined : "indeterminate"}

@@ -19,11 +19,13 @@ import "@m3e/web/card";
 import "@m3e/web/checkbox";
 import "@m3e/web/form-field";
 import "@m3e/web/heading";
+import "@m3e/web/menu";
 import "@m3e/web/option";
 import "@m3e/web/paginator";
 import "@m3e/web/progress-indicator";
 import "@m3e/web/select";
 import "@m3e/web/skeleton";
+import "@m3e/web/split-button";
 import "@m3e/web/switch";
 import "@m3e/web/tabs";
 import "@m3e/web/textarea-autosize";
@@ -31,7 +33,7 @@ import "@m3e/web/toolbar";
 import "@m3e/web/tooltip";
 import "@m3e/web/tree";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
 import {
@@ -49,6 +51,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentQuery, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { dominantHue } from "../siteTint";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
 /* Central diagnostics sanitizer: every untrusted page string that
@@ -182,6 +185,93 @@ type ZlMenuItem = {
   checked: boolean;
 };
 
+/* #210: the extension context menu rides the real m3e-menu surface:
+   popover semantics, arrow-key navigation, focus on open, focus return
+   on close and viewport-edge flipping all come from the component.
+   The menu anchors to a zero-size fixed element at the pointer (the
+   component's anchoring math accepts any rect, including a zero-size
+   one; if that ever regressed, the fallback per the issue is to keep
+   pointer positioning with these same item components). Checkbox and
+   radio entries use the real menu-item shapes, no Unicode markers, and
+   parentId nesting renders as m3e submenus. */
+type CtxMenuEl = HTMLElement & { show: (anchor: HTMLElement) => Promise<void> };
+function CtxMenu(props: {
+  x: number;
+  y: number;
+  items: ZlMenuItem[];
+  onPick: (m: ZlMenuItem) => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<CtxMenuEl | null>(null);
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  /* Latest callbacks without re-running show() on every render. */
+  const live = useRef(props);
+  live.current = props;
+  useEffect(() => {
+    const menu = menuRef.current;
+    const anchor = anchorRef.current;
+    if (!menu || !anchor) return;
+    const onToggle = (ev: Event) => {
+      if ((ev as Event & { newState?: string }).newState === "closed") live.current.onClose();
+    };
+    menu.addEventListener("toggle", onToggle);
+    void menu.show(anchor);
+    return () => menu.removeEventListener("toggle", onToggle);
+  }, []);
+  const renderItems = (parent: string | null): ReactNode[] =>
+    props.items
+      .filter((m) => (m.parentId ?? null) === parent)
+      .map((m) => {
+        const key = m.extId + ":" + m.id;
+        const kids = props.items.filter((k) => k.parentId === m.id);
+        if (kids.length > 0) {
+          const subId = "lb-ctx-sub-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
+          return (
+            <Fragment key={key}>
+              <m3e-menu-item>
+                {m.title}
+                <m3e-menu-trigger for={subId}></m3e-menu-trigger>
+              </m3e-menu-item>
+              <m3e-menu id={subId}>{renderItems(m.id)}</m3e-menu>
+            </Fragment>
+          );
+        }
+        const click = () => live.current.onPick(m);
+        const state = m.enabled === false ? "" : undefined;
+        if (m.type === "checkbox") {
+          return (
+            <m3e-menu-item-checkbox key={key} checked={m.checked ? "" : undefined} disabled={state} onClick={click}>
+              {m.title}
+            </m3e-menu-item-checkbox>
+          );
+        }
+        if (m.type === "radio") {
+          return (
+            <m3e-menu-item-radio key={key} checked={m.checked ? "" : undefined} disabled={state} onClick={click}>
+              {m.title}
+            </m3e-menu-item-radio>
+          );
+        }
+        return (
+          <m3e-menu-item key={key} disabled={state} onClick={click}>
+            {m.title}
+          </m3e-menu-item>
+        );
+      });
+  return (
+    <>
+      <div
+        ref={anchorRef}
+        aria-hidden={true}
+        style={{ position: "fixed", left: props.x, top: props.y, width: 0, height: 0 }}
+      />
+      <m3e-menu {...{ ref: menuRef }} aria-label="Extension context menu">
+        {renderItems(null)}
+      </m3e-menu>
+    </>
+  );
+}
+
 type Props = {
   settings: Settings;
   rules: SiteRule[];
@@ -196,6 +286,9 @@ type Props = {
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
   onOpenLogs: () => void;
+  /* #210: the toolbar overflow menu opens Settings (where the AMO
+     add-on search lives). */
+  onOpenSettings: () => void;
   /* Per-site rule edits from the toolbar chip (#10): the same store
      the Settings editor writes. */
   onRulesChange: (rules: SiteRule[]) => void;
@@ -270,6 +363,48 @@ export default function BrowserView(props: Props) {
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
+  /* #213: toolbar pill tint from the active tab's favicon. The pure
+     hue vote lives in siteTint.ts; this is the DOM half. The toolbar
+     host carries --lb-site-hue and the lb-site-tint class, and
+     theme.css mixes the hue into the pill at a low percentage so text
+     contrast is unchanged. Dark scheme only (LB has no light scheme).
+     Any failure (decode, tainted canvas) leaves the toolbar untinted
+     and logs nothing user-visible. */
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const tb = toolbarRef.current;
+    if (!tb) return;
+    tb.classList.remove("lb-site-tint");
+    const src = settings.siteTint ? icons[active.id] : undefined;
+    if (!src || !active.url) return;
+    let dead = false;
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      if (dead) return;
+      const el = toolbarRef.current;
+      if (!el) return;
+      try {
+        const c = document.createElement("canvas");
+        c.width = 32;
+        c.height = 32;
+        const ctx = c.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 32, 32);
+        const hue = dominantHue(ctx.getImageData(0, 0, 32, 32).data);
+        if (!hue) return;
+        el.style.setProperty("--lb-site-hue", String(hue.hue));
+        el.classList.add("lb-site-tint");
+      } catch {
+        /* unreadable or tainted canvas: stay untinted */
+      }
+    };
+    img.src = src;
+    return () => {
+      dead = true;
+    };
+  }, [active.id, active.url, icons, settings.siteTint]);
+
   const iconCache = useRef<Map<string, string>>(new Map());
   const iconUrls = useRef<Set<string>>(new Set());
   const iconJobs = useRef<Map<number, { key: string; abort: AbortController }>>(new Map());
@@ -2482,7 +2617,7 @@ export default function BrowserView(props: Props) {
             mounted as the reveal handle. */}
         {!dockTucked && (
         <div className="lb-dock-pill">
-          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" }}>
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar", ref: toolbarRef }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
               as the site info card). Real m3e-icon-button with toggle
@@ -2505,10 +2640,10 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          {/* Back / Forward / Reload are one navigation cluster: a real
-              M3E button group (standard variant) ties the three
-              icon buttons together. Tooltips anchor by for= id and stay
-              outside the group so the group only arranges buttons. */}
+          {/* Back / Forward stay one navigation cluster: a real M3E
+              button group (standard variant) ties the two icon buttons
+              together. Tooltips anchor by for= id and stay outside the
+              group so the group only arranges buttons. */}
           <m3e-button-group aria-label="Page navigation">
             <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
               <m3e-icon name="arrow_back" aria-hidden={true} />
@@ -2516,17 +2651,45 @@ export default function BrowserView(props: Props) {
             <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
               <m3e-icon name="arrow_forward" aria-hidden={true} />
             </m3e-icon-button>
-            <m3e-icon-button
+          </m3e-button-group>
+          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
+          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
+          {/* #211: Reload is an m3e-split-button. The leading segment is
+              the same reload as before (same load call, same tooltip,
+              same keyboard behavior); the trailing segment opens the
+              reload menu. 2.8.2 ships no text variant, so the pair rides
+              tonal. The menu trigger must sit inside the trailing icon
+              button: ActionElementBase listens on its parent element. */}
+          <m3e-split-button variant="tonal" size="small">
+            <m3e-button
+              slot="leading-button"
               id="lb-reload-btn"
               aria-label="Reload"
               onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
             >
-              <m3e-icon name="refresh" aria-hidden={true} />
+              <m3e-icon slot="icon" name="refresh" aria-hidden={true} />
+            </m3e-button>
+            <m3e-icon-button slot="trailing-button" id="lb-reload-menu-btn" aria-label="Reload options">
+              <m3e-icon name="arrow_drop_down" aria-hidden={true} />
+              <m3e-menu-trigger for="lb-reload-menu"></m3e-menu-trigger>
             </m3e-icon-button>
-          </m3e-button-group>
-          <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
-          <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
+          </m3e-split-button>
           <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
+          <m3e-menu id="lb-reload-menu" aria-label="Reload options">
+            {/* Zeolite zl:reloadBypass (#211): arm the one-shot page
+                cache bypass on the app-origin engine, then run the same
+                reload; the engine consumes the flag on the next page
+                fetch. "Clear this site's data and reload" stays out
+                until an engine control exists for it. */}
+            <m3e-menu-item
+              onClick={() => {
+                void zlSend({ type: "zl:reloadBypass" }, 8000);
+                if (active.url) load(active, active.url, { push: false });
+              }}
+            >
+              Reload and bypass cache
+            </m3e-menu-item>
+          </m3e-menu>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
@@ -2734,6 +2897,42 @@ export default function BrowserView(props: Props) {
           {/* #96: persistent incognito identity: the badge stays
               visible in the chrome the whole time the mode is on. */}
           {props.incognito && <span className="lb-incognito-badge">Incognito</span>}
+          {/* #210: grouped overflow for the secondary toolbar actions.
+              The menu trigger sits inside the icon button
+              (ActionElementBase listens on its parent element). */}
+          <m3e-icon-button id="lb-overflow-btn" aria-label="More actions">
+            <m3e-icon name="more_vert" aria-hidden={true} />
+            <m3e-menu-trigger for="lb-overflow-menu"></m3e-menu-trigger>
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-overflow-btn" position="above">More actions</m3e-tooltip>
+          <m3e-menu id="lb-overflow-menu" aria-label="More actions">
+            <m3e-menu-item-checkbox
+              checked={activeDt.open ? "" : undefined}
+              onClick={() => setDt(active.id, { open: !activeDt.open })}
+            >
+              Developer tools
+            </m3e-menu-item-checkbox>
+            <m3e-menu-item-checkbox
+              checked={extPanelOpen ? "" : undefined}
+              onClick={() => {
+                const next = !extPanelOpen;
+                setExtPanelOpen(next);
+                if (next) loadExtensions();
+              }}
+            >
+              Extensions
+            </m3e-menu-item-checkbox>
+            <m3e-menu-item
+              disabled={downloads.length === 0 ? "" : undefined}
+              onClick={() => {
+                setDlOpen(true);
+                setTabsOpen(false);
+              }}
+            >
+              Downloads
+            </m3e-menu-item>
+            <m3e-menu-item onClick={() => props.onOpenSettings()}>Settings</m3e-menu-item>
+          </m3e-menu>
         </m3e-toolbar>
           {xpiPrompt && (
             <XpiPrompt
@@ -2782,34 +2981,14 @@ export default function BrowserView(props: Props) {
           onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
           onDelete={uninstallExt}
+          onFindAddons={() => props.onOpenSettings()}
         />
       )}
 
+      {/* #210: the hand-built overlay menu is gone; CtxMenu (above)
+          renders the real m3e-menu surface anchored at the pointer. */}
       {ctxMenu && (
-        <div className="lb-ctx-overlay" onPointerDown={() => setCtxMenu(null)}>
-          <div
-            className="lb-ctx-menu"
-            role="menu"
-            aria-label="Extension context menu"
-            style={{
-              left: Math.min(ctxMenu.x, window.innerWidth - 232),
-              top: Math.min(ctxMenu.y, window.innerHeight - 48 - ctxMenu.items.length * 40),
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {ctxMenu.items.map((m) => (
-              <button
-                key={m.extId + ":" + m.id}
-                className={"lb-ctx-item" + (m.parentId ? " nested" : "")}
-                role="menuitem"
-                onClick={() => clickCtxItem(m)}
-              >
-                {(m.type === "checkbox" || m.type === "radio") && m.checked ? "\u2713 " : ""}
-                {m.title}
-              </button>
-            ))}
-          </div>
-        </div>
+        <CtxMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onPick={clickCtxItem} onClose={() => setCtxMenu(null)} />
       )}
 
       {extNotes.length > 0 && (

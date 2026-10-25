@@ -7,6 +7,7 @@
    engine route again; the bytes go straight to the engine via
    zl:installExt. */
 import { useState } from "react";
+import EmptyState from "../components/ui/EmptyState";
 import { routeUrl } from "../settings";
 import { zlSend } from "../zeolite";
 import { fmtBytes } from "./browserShared";
@@ -217,7 +218,14 @@ export default function AmoSearch() {
       {serr && !sbusy && <p className="lb-ext-err">{serr}</p>}
       {sres && !sbusy && (
         <div className="lb-ext-hits">
-          {sres.length === 0 && <p className="lb-ext-note">No extensions found.</p>}
+          {sres.length === 0 && (
+            <EmptyState
+              icon="search"
+              headline="No extensions found"
+              help="Try a different search term."
+              action={{ label: "Clear search", onClick: () => { setSq(""); setSres(null); } }}
+            />
+          )}
           {sres.map((h) => {
             const sel = sdetail !== null && sdetail.slug === h.slug;
             return (

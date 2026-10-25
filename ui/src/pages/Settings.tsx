@@ -464,6 +464,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+            <Row id="set-site-tint" label="Tint toolbar with the site color" icon="palette" on={settings.siteTint} toggle={() => onChange({ siteTint: !settings.siteTint })} />
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
             Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).

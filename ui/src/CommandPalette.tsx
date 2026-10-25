@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import EmptyState from "./components/ui/EmptyState";
 
 export type Command = {
   id: string;
@@ -133,7 +134,12 @@ export default function CommandPalette({ open, commands, onClose }: Props) {
         </m3e-search-bar>
         <div id="lb-cmdk-list" className="lb-cmdk-list" role="listbox">
           {hits.length === 0 && (
-            <div className="lb-cmdk-empty">No matching command</div>
+            <EmptyState
+              icon="search"
+              headline="No matching command"
+              help="Try a different term."
+              action={{ label: "Clear search", onClick: () => setQ("") }}
+            />
           )}
           {hits.map((c, i) => {
             const head = i === 0 || hits[i - 1].group !== c.group;
