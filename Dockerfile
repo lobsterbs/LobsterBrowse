@@ -1574,7 +1574,23 @@ FROM debian:bookworm-slim AS zl-builder
 # rewriter_wasm_bg.wasm 9f59b59cdca87ca9 -> c1d626bde245279e;
 # bootstrap.js unchanged d4a04eb5947837ef. Cargo-side pin stays
 # a385fa9 (SW-side wave).
-ARG ZEOLITE_COMMIT=e08718cc0c135728dfc0e9157cad898eb2b80dd2
+# Pin 129: scout queue wave (#457, #458, #459, #463, #464, #468,
+# #469, #472, #473, #474, #475). Beacon POSTs are never replayed
+# natively on rejection (#457: uncertain delivery risks a double
+# write) and pageshow clears the pagehide unload latch (#458);
+# mint memo identity guard (#459); relay deadline waiter
+# self-removal (#463); zl:relayLost broadcast is host-clients-only
+# (#464); strong-comparison If-Range (#468); the empty 416 drops
+# content-length (#469); SW registration scope parity and
+# exact-origin compares with native TypeError contracts (#473,
+# #474); storage listener once/signal/capture parity (#475);
+# message wrapper capture-aware identity and reuse (#472).
+# CI 40229815052 all 5 jobs green; sw.js 048ee077dab2ace1 ->
+# 13def9cfde0b253c (643614 bytes), bootstrap.js d4a04eb5947837ef
+# -> d1ac5f255c2c56ed (38471 bytes, budget 39424); wasm
+# unchanged c1d626bde245279e. Cargo-side pin stays a385fa9
+# (SW-side wave).
+ARG ZEOLITE_COMMIT=6b9c73495f39f0678a8d077e5fb13e8b588a177d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1633,7 +1649,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=048ee077dab2ace1 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=13def9cfde0b253c ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
