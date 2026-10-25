@@ -2364,6 +2364,45 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
         pushCfg();
       }
     });
+    /* #203 icon fetch begin */
+    const fetchIcon = async (href) => {
+      if (typeof href !== "string" || href.length > 8192) return { ok: false, error: "invalid icon route" };
+      let u;
+      try { u = new URL(href, location.origin); } catch { return { ok: false, error: "invalid icon route" }; }
+      const queryHandle = u.searchParams.getAll("zlNavh");
+      const engineRoute = /^\/(?:zl\/|__zl_nav(?:h)?__\/)/.test(u.pathname) ||
+        (queryHandle.length === 1 && /^[A-Za-z0-9_-]{12,}$/.test(queryHandle[0]));
+      if (u.origin !== location.origin || u.username || u.password || !engineRoute) return { ok: false, error: "icon route refused" };
+      const abort = new AbortController();
+      const deadline = setTimeout(() => abort.abort(), 8000);
+      try {
+        const r = await fetch(u.href, { signal: abort.signal, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
+        const mime = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+        if (!r.ok || !mime.startsWith("image/") || Number(r.headers.get("content-length")) > 400000 || !r.body) {
+          if (r.body) await r.body.cancel().catch(() => {});
+          return { ok: false, error: "not a bounded image" };
+        }
+        const reader = r.body.getReader();
+        const chunks = [];
+        let size = 0;
+        try {
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            size += chunk.value.byteLength;
+            if (size > 400000) { await reader.cancel(); return { ok: false, error: "icon too large" }; }
+            chunks.push(chunk.value);
+          }
+        } finally { reader.releaseLock(); }
+        if (!size) return { ok: false, error: "empty icon" };
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        return { ok: true, mime, bytes: bytes.buffer };
+      } catch { return { ok: false, error: "icon fetch failed" }; }
+      finally { clearTimeout(deadline); }
+    };
+    /* #203 icon fetch end */
     /* #194/#195: control-plane query relay. The app polls the
        content worker (netLog, diagnostics, load state) through
        this page - its only same-origin client - over a fresh
@@ -2371,7 +2410,14 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
        rides zlQueryReply with the caller's zlId so overlapping
        queries stay sorted. */
     window.addEventListener("message", async (ev) => {
-      if (!ev.data || typeof ev.data.zlQuery !== "object" || !(ev.data.zlId >= 0) || !/^https:/.test(ev.origin) || !ev.source) return;
+      if (!ev.data || typeof ev.data.zlQuery !== "object" || !(ev.data.zlId >= 0) || !/^https:/.test(ev.origin) || ev.source !== parent || ev.origin !== appOrigin) return;
+      /* Fetch inside this controlled client. Fetching from the app
+         origin would bypass the content worker entirely. */
+      if (ev.data.zlQuery.type === "zl:fetchIcon") {
+        const result = await fetchIcon(ev.data.zlQuery.href);
+        try { ev.source.postMessage({ zlQueryReply: true, zlId: ev.data.zlId, zlRes: result }, ev.origin, result.bytes ? [result.bytes] : []); } catch (e) {}
+        return;
+      }
       const swc6 = await liveWorker();
       const up = (m) => { try { ev.source.postMessage(Object.assign({ zlQueryReply: true, zlId: ev.data.zlId }, m), ev.origin); } catch (e) {} };
       if (!swc6) { up({ zlError: "no worker instance" }); return; }
