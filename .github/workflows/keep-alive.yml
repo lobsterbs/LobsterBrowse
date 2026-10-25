@@ -1,7 +1,8 @@
 # Keep the free-tier Render services awake. They spin down after
-# 15 idle minutes; a cold app service kills the engine relay channel
-# (the Brave search route rides it), and a cold fixture/beta flakes
-# the transit-live CI job. Public repo: the
+# 15 idle minutes; a cold app or wisp service kills the engine
+# transport paths (the Brave search route rides the standalone wisp
+# backend, the rest rides the app-service relay channel), and a cold
+# fixture/beta flakes the transit-live CI job. Public repo: the
 # scheduled runner is free.
 name: Keep-alive
 on:
@@ -18,6 +19,7 @@ jobs:
             https://lobsterbrowse-yiy9.onrender.com/healthz \
             https://lobsterbrowse-beta-cts6.onrender.com/healthz \
             https://lobsterbrowse-content-ocbg.onrender.com/healthz \
+            https://lobsterbrowse-wisp.onrender.com/ \
             https://lobsterbrowse-fixture-rtus.onrender.com/ ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::warning::keep-alive ping failed: $url"
