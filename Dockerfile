@@ -1590,7 +1590,16 @@ FROM debian:bookworm-slim AS zl-builder
 # -> d1ac5f255c2c56ed (38471 bytes, budget 39424); wasm
 # unchanged c1d626bde245279e. Cargo-side pin stays a385fa9
 # (SW-side wave).
-ARG ZEOLITE_COMMIT=6b9c73495f39f0678a8d077e5fb13e8b588a177d
+# Pin 130: zl:reloadBypass one-shot page-cache bypass for embedder
+# reloads (#211 LB): the reload split button's bypass action asks
+# the SW (zl:reloadBypass) to refetch the top document once with
+# cache: reload semantics; the SW clears the one-shot latch when
+# the bypass reload completes.
+# CI 40231938609 green; sw.js 13def9cfde0b253c -> a697f1fd702f2c30
+# (643773 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
+# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+ARG ZEOLITE_COMMIT=2482665bbb1cdb70d2779ead3c930ad7c0923a64
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1649,7 +1658,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=13def9cfde0b253c ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a697f1fd702f2c30 ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
