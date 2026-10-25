@@ -50,6 +50,7 @@ import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
+import { faviconBlob, faviconCandidates, faviconRoute } from "../browser/favicon";
 
 /* ---- DevTools capture (#106): the engine exposes no page console
    or request surface to the embedder, so the Console and Network
@@ -292,6 +293,12 @@ export default function BrowserView(props: Props) {
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
   const iconCache = useRef<Map<string, string>>(new Map());
+  const iconUrls = useRef<Set<string>>(new Set());
+  const iconJobs = useRef<Map<number, { key: string; abort: AbortController }>>(new Map());
+  const documentIds = useRef<Map<number, { clientId: string; source: "app" | "content" }>>(new Map());
+  const seenDocs = useRef<Map<number, Document>>(new Map());
+  const retiredClients = useRef<Map<number, Set<string>>>(new Map());
+
   /* Frame documents that already have engine prefetch listeners. */
   const wiredDocs = useRef<WeakSet<Document>>(new WeakSet());
   /* Last lb-diag content seen per tab: the proxy rewriter reports how
@@ -1244,88 +1251,101 @@ export default function BrowserView(props: Props) {
     });
   };
 
-  /* ---- Favicon: read from the same-origin frame document, fetch the
-     icon through the engine, cache per icon URL. ---- */
-  const loadFavicon = (tabId: number, url: string, doc: Document) => {
-    let href = "";
-    const link = doc.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    const attr = link ? link.getAttribute("href") || "" : "";
-    if (attr) {
-      if (attr.startsWith("/zl/") || attr.startsWith("/sj/r/")) {
-        href = attr;
-      } else {
-        try {
-          const abs = new URL(attr, url).href;
-          /* Only http(s) icons can be fetched through the engine. A
-             data: icon is self-contained: use it directly (the proxy
-             cannot fetch a data: URL and answers 502); any other
-             scheme is not proxyable, so fall back to favicon.ico. */
-          if (abs.startsWith("data:")) {
-            href = abs;
-          } else if (abs.startsWith("http:") || abs.startsWith("https:")) {
-            href = routeUrl(abs);
-          } else {
-            href = "";
-          }
-        } catch {
-          href = "";
-        }
-      }
-    }
-    if (!href) {
-      try {
-        href = routeUrl(new URL(url).origin + "/favicon.ico");
-      } catch {
-        return;
-      }
-    }
-    const setIcon = (obj: string) =>
-      setIcons((prev) => (prev[tabId] === obj ? prev : { ...prev, [tabId]: obj }));
-    const cached = iconCache.current.get(href);
-    if (cached !== undefined) {
-      if (cached) setIcon(cached);
-      return;
-    }
-    fetch(href)
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (!blob || blob.size === 0 || blob.size > 400000) {
-          iconCache.current.set(href, "");
-          return;
-        }
-        const obj = URL.createObjectURL(blob);
-        iconCache.current.set(href, obj);
-        setIcon(obj);
-      })
-      .catch(() => {
-        iconCache.current.set(href, "");
-      });
-  };
-  /* Blob URL lifecycle: the cache dedupes per icon URL and stays
-     bounded; eviction revokes only URLs no tab is still using, and
-     everything left is revoked when the browser view unmounts. */
+  /* #203: split frames report icons through the validated bridge;
+     same-origin polling reuses the same route/decode/fetch path. */
   const iconsRef = useRef<Record<number, string>>({});
   iconsRef.current = icons;
-  useEffect(() => {
-    const cache = iconCache.current;
-    if (cache.size <= 64) return;
-    const inUse = new Set(Object.values(iconsRef.current));
-    const evict = cache.size - 64;
-    let i = 0;
-    for (const [k, v] of Array.from(cache.entries())) {
-      if (i >= evict) break;
-      cache.delete(k);
-      i++;
-      if (v && !inUse.has(v)) URL.revokeObjectURL(v);
+  const trimIcons = () => {
+    while (iconCache.current.size > 64) iconCache.current.delete(iconCache.current.keys().next().value!);
+    const used = new Set([...Object.values(iconsRef.current), ...iconCache.current.values()]);
+    for (const value of iconUrls.current) {
+      if (!used.has(value)) { URL.revokeObjectURL(value); iconUrls.current.delete(value); }
     }
-  }, [icons]);
-  useEffect(
-    () => () => {
-      for (const v of iconCache.current.values()) if (v) URL.revokeObjectURL(v);
-      iconCache.current.clear();
-    },
-    [],
-  );
+  };
+  const retireClient = (tabId: number, clientId: string) => {
+    const retired = retiredClients.current.get(tabId) ?? new Set<string>();
+    retired.add(clientId);
+    while (retired.size > 32) retired.delete(retired.values().next().value!);
+    retiredClients.current.set(tabId, retired);
+  };
+  const loadFavicon = (tabId: number, url: string, raw: string, source: "app" | "content") => {
+    const origin = source === "content" ? zlContentOrigin() : window.location.origin;
+    if (!origin) return;
+    const gen = navGen.current.get(tabId) ?? 0;
+    const identity = documentIds.current.get(tabId)?.clientId ?? "";
+    const key = origin + "|" + (props.incognito ? "private" : "normal") + "|" + url + "|" + raw;
+    if (iconJobs.current.get(tabId)?.key === key) return;
+    iconJobs.current.get(tabId)?.abort.abort();
+    const abort = new AbortController();
+    const job = { key, abort };
+    iconJobs.current.set(tabId, job);
+    const valid = () => !abort.signal.aborted && frames.current.has(tabId) &&
+      (navGen.current.get(tabId) ?? 0) === gen && (documentIds.current.get(tabId)?.clientId ?? "") === identity;
+    const query = source === "content" ? zlContentQuery : zlSend;
+    const setIcon = (value: string) => {
+      if (valid()) setIcons((previous) => previous[tabId] === value ? previous : { ...previous, [tabId]: value });
+    };
+    const deadline = window.setTimeout(() => abort.abort(), 10000);
+    void (async () => {
+      for (const dest of await faviconCandidates(url, raw, origin, query)) {
+        if (!valid()) return;
+        const cacheKey = origin + "|" + (props.incognito ? "private" : "normal") + "|" + dest;
+        const cached = iconCache.current.get(cacheKey);
+        if (cached !== undefined) { if (cached) { setIcon(cached); return; } continue; }
+        const href = await faviconRoute(dest, origin, query, routeUrl);
+        if (!href || !valid()) return;
+        let objectUrl = "";
+        try {
+          let blob: Blob | null = null;
+          if (source === "content" && !href.startsWith("data:")) {
+            /* Only a request from the controlled content boot client
+               reaches that origin's worker. App-origin fetch cannot. */
+            const reply = await zlContentQuery({ type: "zl:fetchIcon", href }, 8500);
+            if (reply?.ok === true && typeof reply.mime === "string" && reply.bytes instanceof ArrayBuffer && reply.bytes.byteLength <= 400000) {
+              blob = await faviconBlob(new Response(reply.bytes, { headers: { "content-type": reply.mime } }));
+            }
+          } else {
+            const response = await fetch(href, { signal: abort.signal, credentials: "omit", referrerPolicy: "no-referrer" });
+            blob = await faviconBlob(response);
+          }
+          if (!valid()) return;
+          if (!blob) { iconCache.current.set(cacheKey, ""); trimIcons(); continue; }
+          objectUrl = URL.createObjectURL(blob);
+          /* Reject mislabeled HTML/error payloads before updating UI. */
+          const image = new Image();
+          image.src = objectUrl;
+          await image.decode();
+          if (!valid()) { URL.revokeObjectURL(objectUrl); return; }
+          iconUrls.current.add(objectUrl);
+          iconCache.current.set(cacheKey, objectUrl);
+          setIcon(objectUrl);
+          trimIcons();
+          return;
+        } catch {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          if (abort.signal.aborted) return;
+          iconCache.current.set(cacheKey, "");
+          trimIcons();
+        }
+      }
+    })().catch(() => {}).finally(() => {
+      window.clearTimeout(deadline);
+      if (iconJobs.current.get(tabId) === job) iconJobs.current.delete(tabId);
+    });
+  };
+  const loadFaviconRef = useRef(loadFavicon);
+  loadFaviconRef.current = loadFavicon;
+  useEffect(() => { trimIcons(); }, [icons]);
+  useEffect(() => {
+    for (const job of iconJobs.current.values()) job.abort.abort();
+    iconJobs.current.clear(); iconCache.current.clear();
+    setIcons({});
+  }, [props.incognito]);
+  useEffect(() => () => {
+    for (const job of iconJobs.current.values()) job.abort.abort();
+    for (const value of iconUrls.current) URL.revokeObjectURL(value);
+    iconJobs.current.clear(); iconCache.current.clear(); iconUrls.current.clear();
+  }, []);
 
   /* ---- Navigation ---- */
   /* LB#53 (Zeolite#63): opaque initial route. Ask the worker for a
@@ -1390,6 +1410,14 @@ export default function BrowserView(props: Props) {
   const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
+    const priorClient = documentIds.current.get(tab.id)?.clientId;
+    if (priorClient) retireClient(tab.id, priorClient);
+    documentIds.current.delete(tab.id);
+    seenDocs.current.delete(tab.id);
+    iconJobs.current.get(tab.id)?.abort.abort();
+    iconJobs.current.delete(tab.id);
+    setDt(tab.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
+
     /* #186: the mint is in flight from here until the frame reaches
        this destination; the poll sync branch holds off against it. */
     pendingNav.current.set(tab.id, { url, t0: Date.now() });
@@ -1736,6 +1764,18 @@ export default function BrowserView(props: Props) {
           pendingNav.current.delete(t.id);
         }
       }
+      if (seenDocs.current.get(t.id) !== doc) {
+        const previous = seenDocs.current.get(t.id);
+        seenDocs.current.set(t.id, doc);
+        if (previous) {
+          const clientId = documentIds.current.get(t.id)?.clientId;
+          if (clientId) retireClient(t.id, clientId);
+          documentIds.current.delete(t.id);
+          iconJobs.current.get(t.id)?.abort.abort();
+          iconJobs.current.delete(t.id);
+          setDt(t.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
+        }
+      }
       if (real !== t.url) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
@@ -1792,7 +1832,7 @@ export default function BrowserView(props: Props) {
           const cur = prev[t.id];
           return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
         });
-      loadFavicon(t.id, real, doc);
+      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
@@ -2086,6 +2126,26 @@ export default function BrowserView(props: Props) {
            (back/forward), a genuinely new URL pushes. */
         const real = cap(d.url, 2000);
         if (!real || !/^https?:/i.test(real)) return;
+        const clientId = typeof d.clientId === "string" && /^[a-zA-Z0-9_-]{8,128}$/.test(d.clientId) ? d.clientId : "";
+        const source: "app" | "content" = zlco && e.origin === zlco ? "content" : "app";
+        if (clientId && retiredClients.current.get(tabId)?.has(clientId)) return;
+        const previous = documentIds.current.get(tabId);
+        const changedDocument = !!clientId && (!previous || previous.clientId !== clientId || previous.source !== source);
+        if (clientId) {
+          if (changedDocument && previous) retireClient(tabId, previous.clientId);
+          documentIds.current.set(tabId, { clientId, source });
+          if (changedDocument) {
+            iconJobs.current.get(tabId)?.abort.abort();
+            iconJobs.current.delete(tabId);
+            setDt(tabId, { console: [], net: [], fails: [], engineClientId: clientId, engineSource: source });
+          }
+          try {
+            const doc = frames.current.get(tabId)?.contentDocument;
+            if (doc) seenDocs.current.set(tabId, doc);
+          } catch { /* split-origin identity rides clientId */ }
+        }
+        pendingNav.current.delete(tabId);
+        loadFaviconRef.current(tabId, real, typeof d.favicon === "string" ? d.favicon.slice(0, 550000) : "", source);
         if (real !== tab.url) {
           const stack = tab.stack;
           const idx = tab.idx;
@@ -2250,6 +2310,11 @@ export default function BrowserView(props: Props) {
          (The favicon blob URL itself is shared through iconCache, so
          it is only revoked when no tab uses it anymore.) */
       frames.current.delete(id);
+      iconJobs.current.get(id)?.abort.abort();
+      iconJobs.current.delete(id);
+      documentIds.current.delete(id);
+      seenDocs.current.delete(id);
+      retiredClients.current.delete(id);
       delete settleRef.current[id];
       lastNav.current.delete(id);
       navGen.current.delete(id);

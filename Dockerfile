@@ -1572,7 +1572,7 @@ RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.t
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
- && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/epoxy-tls@2.1.18-1 \
+ && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/epoxy-tls@2.1.20-1 \
  && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
 # The epoxy transport (selectable second engine, Zeolite #64):
 # same pinned-version, never-committed vendoring rule as libcurl.
