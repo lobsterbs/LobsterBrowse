@@ -8,6 +8,7 @@ import * as Comlink from "comlink";
 import { fmtBytes } from "./browserShared";
 import type { ArchiveApi } from "./archiveWorker";
 import { DECOMP_CAP } from "./archiveWorker";
+import EmptyState from "../components/ui/EmptyState";
 
 /* fflate handles ordinary archives fully in a worker; past this
    ceiling the zip.js streaming path takes over (also ZIP64). */
@@ -214,7 +215,7 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
     <div>
       {error && <p className="lb-fv-error">{error}</p>}
       {!entries && !error && <p className="lb-muted">Reading archive ({engine ?? "picking engine"})...</p>}
-      {entries && entries.length === 0 && <p className="lb-muted">The archive is empty.</p>}
+      {entries && entries.length === 0 && <EmptyState icon="archive" headline="The archive is empty" />}
       {entries && entries.length > 0 && (
         <div>
           <p className="lb-fv-crumb">
