@@ -17,9 +17,26 @@ account). Current free-tier services, region frankfurt, autoDeploy off:
   https://lobsterbrowse-fixture-rtus.onrender.com - the FIXTURE_ORIGIN
   of the transit-live CI job.
 
-The standalone ScramJet wisp backend (Dockerfile.wisp) was retired with
-the suspended workspace and is not recreated: Zeolite is the only engine
-and /build reported sjWisp empty on both services already.
+The standalone Wisp backend was restored on 2026-10-25 for the Zeolite
+`brave-wisp` policy route (#209), using the existing `Dockerfile.wisp`:
+
+- lobsterbrowse-wisp: https://lobsterbrowse-wisp.onrender.com
+- Service `srv-dbf1qr8ae00c73efs9vg`, branch main, Frankfurt, free,
+  autoDeploy off; WebSocket endpoint `wss://lobsterbrowse-wisp.onrender.com/`.
+- Set `SCRAMJET_WISP_URL` to that WebSocket endpoint on main, beta **and
+  content**, then deploy each. The content worker owns split-origin page
+  traffic, so configuring only the app services does not restore Brave.
+- `/build` exposes `sjWisp` only to same-origin fetches. For an operator
+  check, send `Sec-Fetch-Site: same-origin`; an ordinary command-line
+  request deliberately reports an empty value (#128).
+
+The service uses unmodified upstream wisp-js with its private/loopback
+destination restrictions. It is a public transport endpoint; keeping the
+password on LobsterBrowse's separate `/wisp/` route is intentional.
+A live deployment and a nonempty `sjWisp` establish wiring only: verify a
+Brave homepage and search navigation through the content worker before
+claiming that site works. The policy falls back to the relay when the
+alternate endpoint is absent, which caused the original 20-second stalls.
 
 ## Server (Render web service, Docker)
 
