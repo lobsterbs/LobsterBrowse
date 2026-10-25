@@ -1345,21 +1345,16 @@ export default function BrowserView(props: Props) {
      minted from that frame. Any failure falls through to routeUrl's
      Zeolite route, so the tab stays functional instead of hanging. */
   const initialRoute = (tabId: number, url: string) => {
-    /* #107 split-origin mode: the frame navigates the provisioned
-       content origin's engine routes directly, so proxied documents
-       are cross-origin to the app and hostile page scripts cannot
-       reach the host document or its storage. The opaque zl:navHandle
-       mint is skipped: the route key lives in the engine worker's
-       per-origin storage, so a handle minted by the app-origin
-       worker does not decode on the content origin's worker, and
-       the app page cannot message that worker. The legacy b64u
-       route (LB#53's designed fallback) keeps the destination
-       base64url-encoded. Await the boot registration so the first
-       navigation is not left uncontrolled; the wait resolves (not
-       rejects) on failure, so the load degrades honestly. */
+    /* Mint with the content worker's own key via its boot-page bridge (#205). */
+    const contentRoute = async () => {
+      await zlContentReady();
+      const reply = await zlContentQuery({ type: "zl:navHandle", dest: url }, 3000).catch(() => null);
+      const href = reply?.ok === true && typeof reply.url === "string" ? reply.url : null;
+      return zlContentHref(href && href.startsWith("/") && !href.startsWith("//") ? href : routeUrl(url));
+    };
     const co = zlContentOrigin();
     if (co) {
-      return zlContentReady().then(() => zlContentHref(routeUrl(url)));
+      return contentRoute();
     }
     /* #191 boot race: /build may not have announced the content
        origin yet; wait for the announcement (bounded, a stalled
@@ -1372,7 +1367,7 @@ export default function BrowserView(props: Props) {
       new Promise<string>((res) => window.setTimeout(() => res(""), 2000)),
     ]).then((announced) => {
       if (announced) {
-        return zlContentReady().then(() => zlContentHref(routeUrl(url)));
+        return contentRoute();
       }
       return settings.proxyEngine === "scramjet"
         ? sjFrame(frames.current.get(tabId) ?? null)
