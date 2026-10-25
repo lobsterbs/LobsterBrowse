@@ -1490,7 +1490,29 @@ FROM debian:bookworm-slim AS zl-builder
 # class). sw.js 8ee8dfcc1fa6a015 -> 820f9c301b91a2c7 (634810
 # bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
 # stays a385fa9 (SW-only wave).
-ARG ZEOLITE_COMMIT=d8c1759eef1b662208d058ccba57a315cadbfbc4
+# Pin 123 rides Zeolite main 2751acb (wave 59: the seven-issue
+# scout patch, #435 #436 #438 #439 #442 #443 #444, plus the
+# #429/#437 UA seam; dist bd5ef545 from CI build 40183809857,
+# all 5 jobs green). #435 the engine-route Referer carries the
+# zlNavh token again so the referrer decodes on query-shape
+# navigations; #436 the widget origin seams (reCAPTCHA co=,
+# apps widget origin=, hCaptcha host=) take the initiator so
+# the referrer resolves on query-shape routes; #438 the shared
+# transport reset is a synchronous generation bump (no in-flight
+# promise left wedged); #439 lifecycle host events broadcast to
+# extension contexts; #442 relay delivery answers
+# RelayDeliveryUnknownError and only idempotent methods (GET
+# HEAD OPTIONS PUT DELETE TRACE) may fall back, with the relay
+# header deadline upload-gated (RELAY_UPLOAD_HEADER_DEADLINE_MS
+# 600000 for size and multipart requests); #443 netlog redacts
+# headers and clientId at push and diag redaction covers
+# userinfo; #444 canReplayAfterFailure gates policy wisp
+# retries; #429/#437 the UA derives from the real fingerprint
+# profile (app/src/useragent.ts), default on. sw.js
+# 820f9c301b91a2c7 -> af77ce39fc42e6c2 (641658 bytes);
+# bootstrap.js 665b64d76f4113a5 -> d4a04eb5947837ef (37311
+# bytes). Cargo-side pin stays a385fa9 (SW-only wave).
+ARG ZEOLITE_COMMIT=bd5ef545b7c91e0454a2e4d0a0172ffe160177e6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1549,7 +1571,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=820f9c301b91a2c7 ZEOLITE_BOOTSTRAP_SHA=665b64d76f4113a5 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=af77ce39fc42e6c2 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
