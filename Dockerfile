@@ -1563,7 +1563,18 @@ FROM debian:bookworm-slim AS zl-builder
 # d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only wave).
 # Pin 127: script escape-state and exact MIME attribute parsing (#447/#448).
 # CI 40207272135; only rewriter_wasm_bg.wasm changes, JS hashes stay identical.
-ARG ZEOLITE_COMMIT=146c2a972d6f678a50d49601c929cf26b333fbb0
+# Pin 128: origin-pinning script literal skip (#449). A script whose
+# body carries an anchored ^https?: origin-pinning regex keeps its
+# URL literals verbatim through the JS-literal pass (the gapi
+# client.js class: the pin regex rejects route tokens, so rewriting
+# the literals would make the loader throw before any fetch), while
+# the runtime seams (fetch, anchors, window.open) keep every
+# destination on the engine. CI 40221562394 all 5 jobs green;
+# sw.js d4423f428f4e1279 -> 048ee077dab2ace1 (643413 bytes),
+# rewriter_wasm_bg.wasm 9f59b59cdca87ca9 -> c1d626bde245279e;
+# bootstrap.js unchanged d4a04eb5947837ef. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+ARG ZEOLITE_COMMIT=e08718cc0c135728dfc0e9157cad898eb2b80dd2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1622,7 +1633,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d4423f428f4e1279 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=048ee077dab2ace1 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
