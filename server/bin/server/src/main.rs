@@ -2328,7 +2328,7 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
       void openRelay().catch((e) => post({ ok: false, error: String(e) }));
     });
     window.addEventListener("message", async (ev) => {
-      if (ev.data && ev.data.zlRegAsk === true && /^https:/.test(ev.origin)) {
+      if (ev.data && ev.data.zlRegAsk === true && ev.source === parent && /^https:/.test(ev.origin)) {
         appOrigin = ev.origin;
         const swc3 = await liveWorker();
         if (swc3) swc3.postMessage({ type: "zl:embedderOrigin", origin: appOrigin });
@@ -2359,7 +2359,7 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
       swc4.postMessage(lastCfg, [cfgPort.port2]);
     };
     window.addEventListener("message", (ev) => {
-      if (ev.data && ev.data.zlCfg && typeof ev.data.zlCfg === "object" && ev.data.zlCfg.type === "zl:config" && /^https:/.test(ev.origin)) {
+      if (ev.data && ev.data.zlCfg && typeof ev.data.zlCfg === "object" && ev.data.zlCfg.type === "zl:config" && ev.source === parent && /^https:/.test(ev.origin)) {
         lastCfg = ev.data.zlCfg;
         pushCfg();
       }
