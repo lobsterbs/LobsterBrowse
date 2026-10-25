@@ -37,6 +37,11 @@ A live deployment and a nonempty `sjWisp` establish wiring only: verify a
 Brave homepage and search navigation through the content worker before
 claiming that site works. The policy falls back to the relay when the
 alternate endpoint is absent, which caused the original 20-second stalls.
+Verification on 2026-10-25: a fresh Chromium 153 profile, using the real
+UI and content worker, received Brave's HTTP 429 challenge document and
+rendered its slider prompt without page JavaScript errors. The original
+no-first-byte hang was absent. This confirms transport recovery, not a
+completed challenge or a successful search-results page.
 
 ## Server (Render web service, Docker)
 
@@ -74,11 +79,13 @@ re-provision the Neon project (or reuse it) and set `DATABASE_URL` on
 the app services when the sessions crate lands. Free tier,
 autosuspended when idle.
 
-Current pin: Zeolite dist `0e528d1fd70aa1bc86544f3570030a33f9f6ff8a`
-(pin 126, CI build 40201261209), zlswSha `d4423f428f4e1279`,
+Current pin: Zeolite dist `146c2a972d6f678a50d49601c929cf26b333fbb0`
+(pin 127, CI build 40207272135), zlswSha `d4423f428f4e1279`,
 bootstrapSha `d4a04eb5947837ef`. This includes the service-worker,
 relay, popup, diagnostics, fingerprint, runtime-fragment and authorization
-route fixes. See `docs/pin-126.md` for the latest route-search change.
+route fixes. Pin 127 additionally fixes script escape boundaries and exact MIME attributes
+(Zeolite #447/#448); only the rewriter WASM changes. See `docs/pin-126.md`
+for the preceding route-search change.
 The independent Docker epoxy-tls vendor is pinned to `2.1.20-1`, matching
 the engine CI vendor. The Rust zeolite-server dependency is unchanged.
 
