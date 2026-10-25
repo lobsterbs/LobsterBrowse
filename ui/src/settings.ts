@@ -153,6 +153,9 @@ export type Settings = {
   prefetchLinks: boolean;
   /* Tuck the toolbar and tab strip when the app is idle. */
   autoHideChrome: boolean;
+  /* #213: tint the toolbar pill from the active tab's favicon hue
+     (dark scheme only; LB has no light scheme). */
+  siteTint: boolean;
   /* Enhanced UI: animated starfield background on the Home page
      instead of the flat surface. Transform-composited animation,
      opt-in. */
@@ -179,6 +182,7 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
+  siteTint: true,
   density: "normal",
   fancyBackground: false,
 };
@@ -208,6 +212,7 @@ export function loadSettings(): Settings {
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
+      siteTint: parsed.siteTint === undefined ? true : Boolean(parsed.siteTint),
       /* SameSite option removed from Settings: pinned on (approx). */
       sameSitePolicy: "approx",
       /* "Server default" UA option removed from Settings: stored picks

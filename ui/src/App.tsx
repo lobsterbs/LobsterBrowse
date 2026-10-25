@@ -873,6 +873,7 @@ export default function App() {
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
+                  onOpenSettings={() => setView("settings")}
                   onRulesChange={updateRules}
                 />
               )}
