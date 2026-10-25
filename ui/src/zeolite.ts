@@ -445,7 +445,7 @@ export async function zlContentQuery(
   const zlId = ++contentQuerySeq;
   return new Promise((resolve) => {
     const onReply = (ev: MessageEvent) => {
-      if (ev.origin !== co) return;
+      if (ev.origin !== co || ev.source !== w) return;
       const d = ev.data as { zlQueryReply?: boolean; zlId?: number; zlRes?: Record<string, unknown> } | null;
       if (!d || d.zlQueryReply !== true || d.zlId !== zlId) return;
       window.removeEventListener("message", onReply);
