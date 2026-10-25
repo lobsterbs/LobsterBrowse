@@ -1546,7 +1546,22 @@ FROM debian:bookworm-slim AS zl-builder
 # acdc15f7f76b4273 (642319 bytes); bootstrap.js unchanged
 # d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only
 # wave).
-ARG ZEOLITE_COMMIT=9a50a0a3bc3ca3850c63128a41dbc37302e53d45
+# Pin 126 rides Zeolite main 5016767 + 95cff205 (wave 62: the
+# route-search union merge, the Outlook MSAL AADSTS900144 strand
+# of #431; dist 0e528d1f from CI build 40201261209, all 5 jobs
+# green). A page appending an outer route search
+# (?iframe-request-id=...) onto an opaque keyed token made
+# mergeRouteSearch REPLACE the token-owned query (the wave-25
+# Brave Ask semantics), so the top-level MSAL escape fetched the
+# AAD authorize endpoint without client_id/redirect_uri and AAD
+# answered AADSTS900144. mergeRouteSearch in request.ts is now
+# a UNION: a pure append keeps the token query bytes exact when
+# no key conflicts, a key conflict resolves via a URLSearchParams
+# rebuild with the outer value winning per key, and a query-free
+# decode keeps the plain concat. sw.js acdc15f7f76b4273 ->
+# d4423f428f4e1279 (642595 bytes); bootstrap.js unchanged
+# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only wave).
+ARG ZEOLITE_COMMIT=0e528d1fd70aa1bc86544f3570030a33f9f6ff8a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1605,7 +1620,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=acdc15f7f76b4273 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d4423f428f4e1279 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
