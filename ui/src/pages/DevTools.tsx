@@ -13,10 +13,14 @@
    Built from real M3E components: m3e-card as the container,
    m3e-tabs for the section switch, m3e-form-field for the edit fields. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { type Tab } from "../store";
 import { zlContentQuery, zlSend } from "../zeolite";
-import { sanitizeText, sanitizeUrl } from "../sanitize";
+import { sanitizeText } from "../sanitize";
+import {
+  diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
+  type DiagnosticsSnapshot, type EngineSource, type ZlDiagEvent,
+} from "../browser/diagnosticsScope";
 
 export type ConsoleEntry = {
   id: number;
@@ -65,6 +69,8 @@ export type DtState = {
   page: "diagnostics";
   console: ConsoleEntry[];
   fails: ResFailEntry[];
+  engineClientId?: string;
+  engineSource?: EngineSource;
 };
 
 export function emptyDt(): DtState {
@@ -122,7 +128,7 @@ type Props = {
   frame: () => HTMLIFrameElement | null;
   onClose: () => void;
   onOpenLogs: () => void;
-  /* Session token for the /logs part of the copy-logs button. */
+  /* Compatibility prop; session-wide logs remain in App Logs. */
   sess?: string;
   /* #76: false while the close animation plays (mount-stay in
      Browser.tsx); the exit class mirrors the entry animation. */
@@ -134,203 +140,71 @@ const PAGES: Array<[DtState["page"], string, string]> = [
 ];
 
 /* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
-/* Live transport stats, fallback records and diag events from the
-   engine's control plane. Polled only while this section is mounted
-   (the diagnostics page is open): no cost during normal browsing.
-   Stats are engine-wide, not per-tab. */
-
-type ZlFallback = { ts: number; url: string; reason: string; traceId?: string };
-type ZlStats = { native: number; fallback: number; fallbacks: ZlFallback[] };
-type ZlDiagEvent = {
-  seq: number;
-  ts: number;
-  category: string;
-  severity: string;
-  message: string;
-  stage?: string;
-  url?: string;
-  technicalReason?: string;
-  traceId?: string;
-  /* #194: set on events relayed from the split content worker. */
-  source?: string;
-};
-
-/* Failures and abnormal events only. Every TRANSPORT_FALLBACK stage
-   record (document/CSS/JS-literal rewrite routing) is expected by
-   design, so those info rows are routine routing, not failures, and
-   no longer show. The redirect-surfaced marker stays: it names the
-   visible reload-cycle symptom, which is not a routine decision. */
+/* This document's retained request/diagnostic rings from its owning
+   worker. Unattributed engine lifecycle events remain in Engine DevTools. */
 const zlNotable = (e: ZlDiagEvent) =>
   e.severity === "error" || e.severity === "warning" || e.message.startsWith("redirect surfaced");
 
-/* The rows ZeoliteDiagnostics renders live in component state that
-   dies on unmount; Copy logs needs them after the section is gone or
-   before its first poll completes, so the component mirrors them
-   into this module-level snapshot on every state change. */
-const zlDiagSnapshot: {
-  native: number | null;
-  fallbackCount: number;
-  notable: ZlDiagEvent[];
-} = { native: null, fallbackCount: 0, notable: [] };
-
-/* Export serializes exactly what the panel shows: the same
-   engine-redacted rows, sanitized at the merge, capped to the last
-   200 events. Local file download only; nothing leaves the browser. */
-function exportDiag(stats: ZlStats, events: ZlDiagEvent[]) {
-  const data = JSON.stringify(
-    {
-      exportedAt: new Date().toISOString(),
-      stats,
-      events: events
-        .map((e) => ({
-          ...e,
-          message: sanitizeText(e.message),
-          url: e.url ? sanitizeUrl(e.url) : e.url,
-          technicalReason: e.technicalReason ? sanitizeText(e.technicalReason) : e.technicalReason,
-          traceId: e.traceId ? sanitizeText(e.traceId) : e.traceId,
-        }))
-        .slice(-200),
-    },
-    null,
-    2,
-  );
+/* Export and Copy logs read the same per-instance scoped snapshot.
+   Sanitization happens before that snapshot reaches state or the ref. */
+function exportDiag(snapshot: DiagnosticsSnapshot) {
+  const data = JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    scope: "this document", source: snapshot.scope.source,
+    generation: snapshot.generation,
+    counts: "retained page requests (bounded engine ring)",
+    stats: snapshot.stats, events: snapshot.events,
+  }, null, 2);
   const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = href;
   a.download = "lobsterbrowse-diagnostics.json";
   a.click();
-  /* Revoking synchronously can cancel the fetch the browser has
-     only queued, not started; give the download time to attach. */
   setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
-function ZeoliteDiagnostics() {
-  const [stats, setStats] = useState<ZlStats | null>(null);
-  const [events, setEvents] = useState<ZlDiagEvent[]>([]);
-  const diagSeq = useRef(0);
-  /* #65: the engine stamps a netLog generation per worker evaluation
-     and carries it on every zl:getNetLog reply. The diag seq ring
-     lives in worker memory and resets on every restart (idle kill,
-     update, crash), so on a generation change the buffered rows and
-     the cursor are dropped before the next delta merges - otherwise
-     the new ring's rows collide with buffered seqs and the dedup
-     silently eats them. The first sighting just records it. */
-  const netGen = useRef<number | null>(null);
-  /* #194: the content worker has its own generation and seq space
-     (split mode); a restart resets only its cursor. */
-  const cNetGen = useRef<number | null>(null);
-  const cDiagSeq = useRef(0);
+function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
+  clientId?: string;
+  source?: EngineSource;
+  snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
+}) {
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const scope = diagnosticsScope(clientId, source);
+  /* Hide the preceding document before effect cleanup, including Export. */
+  const current = snapshotForScope(snapshot, scope);
+  useEffect(() => pollDocumentDiagnostics(
+    diagnosticsScope(clientId, source), zlSend, zlContentQuery,
+    (next) => {
+      snapshotRef.current = next;
+      setSnapshot(next);
+    },
+  ), [clientId, source, snapshotRef]);
 
-  useEffect(() => {
-    let dead = false;
-    const tick = async () => {
-      const nl = await zlSend({ type: "zl:getNetLog", since: 0 });
-      /* #194: in split mode the proxied page's traffic rides the
-         CONTENT worker; poll it through the boot-page relay and
-         merge, so diagnostics see the tab that is actually
-         loading instead of an idle app-origin worker. */
-      const cnl = (await zlContentQuery({ type: "zl:getNetLog", since: 0 })) as
-        | { generation?: unknown; stats?: ZlStats }
-        | null;
-      if (!dead && nl) {
-        if (typeof nl.generation === "number" && nl.generation !== netGen.current) {
-          const restarted = netGen.current !== null;
-          netGen.current = nl.generation;
-          if (restarted) {
-            diagSeq.current = 0;
-            setEvents([]);
-          }
-        }
-      }
-      if (!dead && cnl) {
-        if (typeof cnl.generation === "number" && cnl.generation !== cNetGen.current) {
-          if (cNetGen.current !== null) cDiagSeq.current = 0;
-          cNetGen.current = cnl.generation;
-        }
-      }
-      const a = (nl?.stats ?? null) as ZlStats | null;
-      const c = cnl?.stats ?? null;
-      if (!dead && (a || c)) {
-        setStats({
-          native: (a?.native ?? 0) + (c?.native ?? 0),
-          fallback: (a?.fallback ?? 0) + (c?.fallback ?? 0),
-          fallbacks: [...(a?.fallbacks ?? []), ...(c?.fallbacks ?? [])].slice(-30),
-        });
-      }
-      const dg = await zlSend({ type: "zl:getDiag", since: diagSeq.current });
-      if (!dead && dg && dg.ok && Array.isArray(dg.events)) {
-        if (typeof dg.lastSeq === "number" && dg.lastSeq > diagSeq.current) diagSeq.current = dg.lastSeq;
-        setEvents((prev) =>
-          [...prev, ...(dg.events as ZlDiagEvent[])
-            .filter((ev) => !prev.some((p) => p.seq === ev.seq))
-            /* #148: event fields carry upstream-derived strings; sanitize
-               at the merge so nothing raw reaches React state or Copy logs. */
-            .map((ev) => ({
-              ...ev,
-              message: sanitizeText(ev.message),
-              url: ev.url ? sanitizeUrl(ev.url) : ev.url,
-              technicalReason: ev.technicalReason ? sanitizeText(ev.technicalReason) : ev.technicalReason,
-            }))].slice(-60),
-        );
-      }
-      const cdg = (await zlContentQuery({ type: "zl:getDiag", since: cDiagSeq.current })) as
-        | { ok?: boolean; events?: ZlDiagEvent[]; lastSeq?: number }
-        | null;
-      if (!dead && cdg && cdg.ok && Array.isArray(cdg.events)) {
-        if (typeof cdg.lastSeq === "number" && cdg.lastSeq > cDiagSeq.current) cDiagSeq.current = cdg.lastSeq;
-        setEvents((prev) =>
-          [
-            ...prev,
-            ...(cdg.events as ZlDiagEvent[])
-              /* #194: the seq offset namespaces the content ring so the
-                 dedup filter cannot collide with app-worker seqs; the
-                 #148 sanitize map covers relayed rows too. */
-              .map((ev) => ({
-                ...ev,
-                seq: ev.seq + 1000000,
-                source: "content",
-                message: sanitizeText(ev.message),
-                url: ev.url ? sanitizeUrl(ev.url) : ev.url,
-                technicalReason: ev.technicalReason ? sanitizeText(ev.technicalReason) : ev.technicalReason,
-              }))
-              .filter((ev) => !prev.some((p) => p.seq === ev.seq)),
-          ].slice(-60),
-        );
-      }
-    };
-    void tick();
-    const iv = setInterval(tick, 5000);
-    return () => {
-      dead = true;
-      clearInterval(iv);
-    };
-  }, []);
-
-  useEffect(() => {
-    zlDiagSnapshot.native = stats?.native ?? null;
-    zlDiagSnapshot.fallbackCount = stats?.fallback ?? 0;
-    zlDiagSnapshot.notable = events.filter(zlNotable).slice(-25).reverse();
-  }, [stats, events]);
-
-  if (!stats) return null;
+  if (!scope) return <p className="lb-muted">Awaiting this document&apos;s engine identity.</p>;
+  if (!current) return <p className="lb-muted">Awaiting diagnostics for this document.</p>;
+  const { stats, events } = current;
   const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
     <div className="lb-net" style={{ marginBottom: "12px" }}>
+      <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
+        Retained page requests for this document: {stats.native + stats.fallback}.
+        Child-frame requests and engine-wide lifecycle events are available in Engine DevTools.
+      </p>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
         <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
-        <m3e-button onClick={() => exportDiag(stats, events)}>
+        <m3e-button onClick={() => exportDiag(current)}>
           <m3e-icon name="download" aria-hidden={true} /> Export
         </m3e-button>
       </div>
       {notable.length === 0 && (
-        <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No transport or rewrite failures.</p>
+        <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No retained transport or rewrite failures for this document.</p>
       )}
       {notable.map((e) => (
-        <details key={e.seq} className="lb-net-row">
+        <details key={current.generation + ":" + e.seq} className="lb-net-row">
           <summary className="lb-net-summary">
             <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
-            <span className="lb-net-method">{e.category}{e.source === "content" ? " [content]" : ""}</span>
+            <span className="lb-net-method">{e.category}</span>
             <span className="lb-net-url">{e.message}</span>
             <span className="lb-net-dur">{ts(e.ts)}</span>
           </summary>
@@ -526,58 +400,36 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   );
 }
 
-export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, sess, open }: Props) {
+export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, open }: Props) {
   const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
 
-  /* ---- Copy logs: THIS TAB's errors only - console error/warn
-     entries, captured resource failures and the Zeolite diagnostics
-     rows shown on this page (mirrored in zlDiagSnapshot), then this
-     session's server ring (/logs needs the tab's lb_sess token). ---- */
+  const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
+  const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
+  /* A mounted instance may be reused across tabs or document navigation. */
+  snapshotRef.current = snapshotForScope(snapshotRef.current, scope);
+  useEffect(() => setCopyState(""), [tab.id, dt.engineClientId, dt.engineSource]);
+
+  /* Only this document's page reports and scoped worker snapshot.
+     The server session ring spans navigations and remains in App Logs. */
   const copyLogs = async () => {
     const line = (t: number, level: string, msg: string) => new Date(t).toISOString() + " " + level + " " + msg;
-    let text = [
+    const rows = [
       ...dt.console.filter((e) => e.kind === "error" || e.kind === "warn").map((e) => line(e.ts, e.kind, e.text)),
       ...dt.fails.map((f) => line(f.ts, "FAIL", (f.kind ? f.kind + " " : "") + (f.url || "unknown resource") + ": " + reasonText(f.reason) + (f.nav ? " (" + f.nav + ")" : ""))),
-    ].join("\n");
-    const zl: string[] = [];
-    if (zlDiagSnapshot.native !== null)
-      zl.push(
-        "Zeolite NativeTransit requests: " +
-          zlDiagSnapshot.native +
-          ", rewrite-routed loads (normal): " +
-          zlDiagSnapshot.fallbackCount +
-          ", failures: " +
-          zlDiagSnapshot.notable.length,
-      );
-    for (const e of zlDiagSnapshot.notable)
-      zl.push(
-        line(
-          e.ts,
-          e.severity,
-          e.category +
-            ": " +
-            e.message +
-            (e.stage ? " stage=" + e.stage : "") +
-            (e.url ? " " + e.url : "") +
-            (e.technicalReason ? " (" + e.technicalReason + ")" : ""),
-        ),
-      );
-    if (zl.length) text += (text ? "\n" : "") + zl.join("\n");
-    if (sess) {
-      try {
-        const r = await fetch("/logs?lb_sess=" + encodeURIComponent(sess));
-        if (r.ok) {
-          const arr: unknown = await r.json();
-          if (Array.isArray(arr)) {
-            const server = (arr as unknown[]).filter((e) => typeof e === "string").join("\n");
-            if (server) text += (text ? "\n" : "") + server;
-          }
-        }
-      } catch {
-        /* offline or session gone: the client ring is still copied */
-      }
+    ];
+    const snapshot = snapshotForScope(snapshotRef.current, scope);
+    if (snapshot) {
+      const notable = snapshot.events.filter(zlNotable).slice(-25).reverse();
+      rows.push("Zeolite retained page requests (this document): " + (snapshot.stats.native + snapshot.stats.fallback) +
+        ", NativeTransit: " + snapshot.stats.native + ", rewrite-routed loads (normal): " + snapshot.stats.fallback +
+        ", retained failures: " + notable.length);
+      for (const e of notable) rows.push(line(e.ts, e.severity,
+        e.category + ": " + e.message + (e.stage ? " stage=" + e.stage : "") +
+        (e.url ? " " + e.url : "") + (e.technicalReason ? " (" + e.technicalReason + ")" : "")));
+    } else {
+      rows.push(scope ? "Awaiting diagnostics for this document." : "Awaiting this document's engine identity.");
     }
-    const ok = await writeClipboard(text);
+    const ok = await writeClipboard(rows.map((row) => sanitizeText(row)).join("\n"));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
   };
@@ -682,7 +534,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, s
           {/* #150: the downloads registry moved here from the removed
               Network page; it is the only download Cancel surface. */}
           <ZeoliteDownloads />
-          <ZeoliteDiagnostics />
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
               <p className="lb-muted">No resource failures captured.</p>
