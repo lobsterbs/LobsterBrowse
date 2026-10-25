@@ -1530,7 +1530,23 @@ FROM debian:bookworm-slim AS zl-builder
 # -> ccd2defa6ca73ba4 (641434 bytes); bootstrap.js unchanged
 # d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only
 # wave).
-ARG ZEOLITE_COMMIT=8f19b6a45134f50a4725dbd4470fe38b32d60f9b
+# Pin 125 rides Zeolite main c76f77e (wave 61: the MSAL/AAD
+# authorize redirect_uri virtualization, #431; dist 9a50a0a3
+# from CI build 40196894817, all 5 jobs green). MSAL names the
+# content origin in redirect_uri (window.location.origin is
+# LegacyUnforgeable, the #112 co= class), so the AAD authorize
+# round-trip returned top-level to the content origin and the
+# chain stranded. virtualAuthorizeRedirect in request.ts now
+# virtualizes redirect_uri at the fetch seam: host-gated to
+# login.microsoftonline.com / login.microsoft.com /
+# login.live.com on /oauth2/ paths ending /authorize, the
+# percent-decoded redirect_uri that parses to the engine
+# origin is rewritten to the page origin (referrer-derived,
+# fail-closed, state untouched). sw.js ccd2defa6ca73ba4 ->
+# 679630f7f76b4273 (642319 bytes); bootstrap.js unchanged
+# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only
+# wave).
+ARG ZEOLITE_COMMIT=9a50a0a3bc3ca3850c63128a41dbc37302e53d45
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1589,7 +1605,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ccd2defa6ca73ba4 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=679630f7f76b4273 ZEOLITE_BOOTSTRAP_SHA=d4a04eb5947837ef SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
