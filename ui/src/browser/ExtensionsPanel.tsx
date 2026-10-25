@@ -9,6 +9,7 @@
    Delete in the detail view. Both ask first in a m3e-dialog (#99). */
 
 import { useEffect, useRef, useState } from "react";
+import EmptyState from "../components/ui/EmptyState";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
 
@@ -51,6 +52,9 @@ export default function ExtensionsPanel(props: {
   onToggleIncognito: (id: string, on: boolean) => void;
   onOpenOptions: (d: ExtDetail) => void;
   onDelete: (id: string) => void;
+  /* #214: the empty state's concrete next step. The AMO search lives
+     in Settings, so Browser wires this to opening Settings. */
+  onFindAddons?: () => void;
 }) {
   /* Removal is irreversible (the engine deletes the extension's stored
      data and caches), so both the row trash icon and the detail button
@@ -129,7 +133,12 @@ export default function ExtensionsPanel(props: {
             : "Engine extensions unavailable. No Zeolite service worker on this origin."}
         </p>
       ) : props.list.length === 0 ? (
-        <p className="lb-ext-note">No extensions installed.</p>
+        <EmptyState
+          icon="extension"
+          headline="No extensions installed"
+          help="Add-ons are installed from the Settings page."
+          action={props.onFindAddons ? { label: "Find add-ons", onClick: props.onFindAddons } : undefined}
+        />
       ) : (
         <div className="lb-ext-list">
           {props.list.map((e) => (
