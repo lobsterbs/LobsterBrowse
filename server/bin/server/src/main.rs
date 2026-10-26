@@ -1332,6 +1332,33 @@ async fn read_body_capped(resp: reqwest::Response, cap: usize) -> Result<String,
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
+/* MCP lb_fetch: unlike read_body_capped (LB #138), which refuses an
+oversized body, a debug fetch must return the HEAD of any body and
+say whether it was cut. A mid-body read failure keeps the head read
+so far and notes the failure in-band instead of losing the fetch. */
+async fn read_body_head(resp: reqwest::Response, cap: usize) -> (String, bool) {
+    use futures_util::StreamExt;
+    let mut stream = resp.bytes_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(e) => {
+                let mut head = String::from_utf8_lossy(&buf).into_owned();
+                head.push_str(&format!("\n[body read failed: {e}]"));
+                return (head, true);
+            }
+        };
+        if buf.len() + chunk.len() > cap {
+            let take = cap - buf.len();
+            buf.extend_from_slice(&chunk[..take]);
+            return (String::from_utf8_lossy(&buf).into_owned(), true);
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    (String::from_utf8_lossy(&buf).into_owned(), false)
+}
+
 /* LB #138: TTL cache get/put shared by the suggest and cert lookups. */
 fn cache_get(cache: &Mutex<HashMap<String, (u64, String)>>, key: &str, now: u64) -> Option<String> {
     let map = cache.lock().unwrap_or_else(|e| e.into_inner());
@@ -2519,7 +2546,7 @@ async fn mcp_endpoint(
             serde_json::json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.2.0" }
+                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.3.0" }
             }),
         ),
         "ping" => mcp_rpc_result(id, serde_json::json!({})),
@@ -2568,7 +2595,8 @@ fn mcp_tool_list() -> serde_json::Value {
         "tools": [
             tool("lb_build", "Deployment build info: LB and Zeolite versions, engine bundle hashes, wisp and content origins.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_health", "Liveness snapshot: healthz status and the current server time.", serde_json::json!({ "type": "object", "properties": {} })),
-            tool("lb_logs", "The last N sanitized server-level log lines (default 50, max 1000): the global request and diagnostic ring, not the per-session rings.", serde_json::json!({ "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 1000 } } })),
+            tool("lb_logs", "The last N sanitized server-level log lines (default 50, max 1000): the global request and diagnostic ring, not the per-session rings. Optional since (unix seconds) keeps only lines with ts >= since, so a caller can poll just what was logged after its previous call.", serde_json::json!({ "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }, "since": { "type": "integer" } } })),
+            tool("lb_fetch", "Debug fetch of one absolute http(s) URL from the deployment: status, latency, MIME, sanitized response headers (set-cookie and authorization redacted), the first bytes of the body and the server log lines the fetch generated. Redirects are never followed: a 30x plus its Location is reported as the next hop. The destination must pass the relay's own SSRF gate before any connect.", serde_json::json!({ "type": "object", "properties": { "url": { "type": "string" }, "max_body": { "type": "integer", "minimum": 64, "maximum": 16384 } }, "required": ["url"] })),
             tool("lb_egress_check", "HTTPS reachability and latency from the deployment to a fixed allowlist of upstream hosts (example.com, DuckDuckGo, Brave, claude.ai, Microsoft login, Outlook, apis.google.com). Diagnoses egress IP blocks and tarpits; the host list is not configurable.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_serve", "Served engine artifact hashes (sha256-16) and byte sizes: sw.js, bootstrap.js, rewriter_wasm_bg.wasm, scramjet.js. Unreadable honestly reported; distinguishes wasm-only Zeolite pins where /build zlswSha is byte-identical across pins.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_stats", "Summary of the global request/diagnostic ring: line and byte counts, counts by level, oldest/newest timestamps, top message kinds. Does not dump entries (lb_logs does that).", serde_json::json!({ "type": "object", "properties": {} }))
@@ -2607,16 +2635,136 @@ async fn mcp_tool_call(
                 .clamp(1, 1000) as usize;
             let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
             let skip = logs.ring.len().saturating_sub(limit);
-            let body = format!(
-                "[{}]",
+            let mut lines: Vec<String> = logs.ring.iter().skip(skip).cloned().collect();
+            if let Some(since) = args.get("since").and_then(|v| v.as_u64()) {
+                /* Inclusive cutoff: push_log stamps second-resolution
+                ts, so a caller re-polling with the newest ts it saw
+                keeps that line once and loses nothing between polls.
+                Ring lines are always push_log JSON; an unparseable
+                line (never produced today) is kept, not hidden. */
+                lines.retain(|l| {
+                    serde_json::from_str::<serde_json::Value>(l)
+                        .ok()
+                        .and_then(|v| v.get("ts").and_then(|x| x.as_u64()))
+                        .map(|ts| ts >= since)
+                        .unwrap_or(true)
+                });
+            }
+            (format!("[{}]", lines.join(",")), false)
+        }
+        "lb_fetch" => {
+            /* Debug fetch through the shared lookup client: the same
+            resolve-then-validate SSRF DNS and the same no-redirect
+            policy as /suggest, /cert and the relay, plus the relay's
+            destination gate up front. Redirects are never followed:
+            a 30x plus its Location hop is itself the diagnostic. */
+            let Some(url) = args.get("url").and_then(|v| v.as_str()) else {
+                return (
+                    serde_json::json!({
+                        "error": "url is required (absolute http(s) URL)"
+                    })
+                    .to_string(),
+                    true,
+                );
+            };
+            if let Some(reason) = relay_dest_rejected(url) {
+                push_log(state, "warn", &format!("mcp lb_fetch refused: {reason}"));
+                return (serde_json::json!({ "error": reason }).to_string(), true);
+            }
+            let max_body = args
+                .get("max_body")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(2048)
+                .clamp(64, 16384) as usize;
+            let start = state
+                .logs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .ring
+                .len();
+            let t0 = std::time::Instant::now();
+            let res = state
+                .client
+                .get(url)
+                .timeout(std::time::Duration::from_secs(15))
+                .send()
+                .await;
+            let ms = t0.elapsed().as_millis() as u64;
+            let (mut payload, is_error) = match res {
+                Err(e) => {
+                    push_log(state, "warn", &format!("mcp lb_fetch {url} failed: {e}"));
+                    (
+                        serde_json::json!({ "error": format!("{e}"), "ms": ms }),
+                        true,
+                    )
+                }
+                Ok(r) => {
+                    let status = r.status().as_u16();
+                    let mime = r
+                        .headers()
+                        .get(header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string());
+                    let location = r
+                        .headers()
+                        .get(header::LOCATION)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string());
+                    /* Sanitized headers: set-cookie and authorization
+                    values never leave the deployment; upstream
+                    response headers are otherwise the diagnostic. */
+                    let mut headers = serde_json::Map::new();
+                    for (k, v) in r.headers().iter() {
+                        let val = if k.as_str() == "set-cookie" || k.as_str() == "authorization" {
+                            "[redacted]"
+                        } else {
+                            v.to_str().unwrap_or("[unprintable]")
+                        };
+                        headers.insert(
+                            k.as_str().to_string(),
+                            serde_json::Value::String(val.to_string()),
+                        );
+                    }
+                    let (body, truncated) = read_body_head(r, max_body).await;
+                    push_log(
+                        state,
+                        "info",
+                        &format!("mcp lb_fetch {url} -> {status} in {ms}ms"),
+                    );
+                    (
+                        serde_json::json!({
+                            "ok": true,
+                            "status": status,
+                            "ms": ms,
+                            "mime": mime,
+                            "location": location,
+                            "headers": headers,
+                            "body": body,
+                            "bodyTruncated": truncated,
+                        }),
+                        false,
+                    )
+                }
+            };
+            /* The ring slice this fetch generated, including its own
+            outcome lines: the caller sees exactly what the server
+            logged while answering, without a full-ring dump. */
+            let delta: Vec<serde_json::Value> = {
+                let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
                 logs.ring
                     .iter()
-                    .skip(skip)
+                    .skip(start)
                     .cloned()
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-            (body, false)
+                    .map(|l| {
+                        serde_json::from_str::<serde_json::Value>(&l)
+                            .unwrap_or(serde_json::json!({ "raw": l }))
+                    })
+                    .collect()
+            };
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert("logLines".to_string(), serde_json::Value::Array(delta));
+            }
+            (payload.to_string(), is_error)
         }
         "lb_egress_check" => {
             // Fixed allowlist only: this tool must never turn into an
@@ -3869,7 +4017,7 @@ mod mcp_tests {
     }
 
     #[test]
-    fn mcp_tools_list_six_unique_read_only_tools() {
+    fn mcp_tools_list_seven_unique_read_only_tools() {
         let v = mcp_tool_list();
         let tools = v
             .get("tools")
@@ -3883,6 +4031,7 @@ mod mcp_tests {
             "lb_build",
             "lb_health",
             "lb_logs",
+            "lb_fetch",
             "lb_egress_check",
             "lb_serve",
             "lb_stats",
@@ -3925,6 +4074,60 @@ mod mcp_tests {
         assert_eq!(v.as_array().map(|a| a.len()), Some(50));
     }
 
+    #[tokio::test]
+    async fn lb_fetch_refuses_blocked_destinations_without_network() {
+        let state = mcp_state();
+        let headers = axum::http::HeaderMap::new();
+        // Missing url: an argument error, never a fetch.
+        let (text, is_err) =
+            mcp_tool_call(&state, &headers, "lb_fetch", &serde_json::json!({})).await;
+        assert!(is_err);
+        assert!(text.contains("url is required"));
+        // The relay's own destination gate wording, before any connect.
+        for url in [
+            "http://127.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "ftp://example.com/",
+        ] {
+            let (text, is_err) = mcp_tool_call(
+                &state,
+                &headers,
+                "lb_fetch",
+                &serde_json::json!({ "url": url }),
+            )
+            .await;
+            assert!(is_err, "must refuse {url}");
+            assert!(text.contains("relay:"), "gate wording for {url}: {text}");
+            assert!(!text.contains("\"ok\":true"), "no fetch payload for {url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn lb_logs_since_keeps_lines_at_or_after_the_cutoff() {
+        let state = mcp_state();
+        {
+            let mut logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
+            for (ts, msg) in [(100, "old line"), (150, "cutoff line"), (200, "new line")] {
+                logs.ring.push_back(format!(
+                    "{{\"ts\":{ts},\"level\":\"info\",\"msg\":\"{msg}\"}}"
+                ));
+            }
+        }
+        let headers = axum::http::HeaderMap::new();
+        let (text, is_err) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_logs",
+            &serde_json::json!({ "since": 150 }),
+        )
+        .await;
+        assert!(!is_err);
+        let v: serde_json::Value = serde_json::from_str(&text).expect("logs body is JSON");
+        assert_eq!(v.as_array().map(|a| a.len()), Some(2));
+        assert!(text.contains("cutoff line"));
+        assert!(text.contains("new line"));
+        assert!(!text.contains("old line"));
+    }
     #[tokio::test]
     async fn unknown_tool_reports_error() {
         let state = mcp_state();

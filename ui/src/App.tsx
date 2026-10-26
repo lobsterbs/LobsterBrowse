@@ -671,13 +671,39 @@ export default function App() {
     window.location.replace("/");
   };
 
-  /* ---- Rail (#87): expansion is deliberate and user-controlled:
-     the menu toggle collapses and expands it, nothing else. The
-     old auto-retract (collapse on entering Browse, 6s idle
-     collapse) made the rail width unpredictable; both effects
-     are gone. ---- */
+  /* ---- Rail: expansion is deliberate and user-controlled
+     (#87 removed the old enter-Browse auto-retract because the
+     rail width became unpredictable), with ONE user-requested
+     exception: an expanded rail left untouched for 5 seconds
+     collapses back to the compact state. The collapse rides a
+     dispatched click on the component's own m3e-nav-rail-toggle
+     (the exact expand/collapse code path, so the menu icon's
+     selected state stays in sync); every rail interaction
+     re-arms the timer. ---- */
   const railRef = useRef<HTMLElement | null>(null);
-
+  useEffect(() => {
+    const rail = railRef.current as (HTMLElement & { currentMode?: string }) | null;
+    if (!rail) return;
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        /* Fire-time check: a rail the user already collapsed (or
+           one that never expanded) must not be touched. */
+        if (rail.currentMode !== "expanded") return;
+        const toggle = rail.querySelector("m3e-nav-rail-toggle");
+        if (toggle) toggle.dispatchEvent(new MouseEvent("click"));
+        else rail.currentMode = "compact";
+      }, 5000);
+    };
+    arm();
+    const evts = ["pointerenter", "pointermove", "pointerdown", "click", "keydown", "focusin"] as const;
+    for (const t of evts) rail.addEventListener(t, arm, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      for (const t of evts) rail.removeEventListener(t, arm);
+    };
+  }, []);
   if (cloaked) {
     return (
       <div className="lb-cloak">

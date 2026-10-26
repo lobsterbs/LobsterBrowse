@@ -98,17 +98,18 @@ body.lb-fancy .lb-ac {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Frosted nav rail: always on, matching the frosted tab strip and
-   toolbar pill (42% surface tint, blur 18px saturate 1.3, hairline
-   edge). The component still owns width/overflow; only the surface
-   changes. */
+/* Frosted nav rail (user request): the rail painted solid black
+   because the M3E shadow .base carries an opaque surfaceContainer
+   background (inherited nav-bar styles). Neutralized through the
+   component's own container token so the frosted host surface is
+   what shows, and the outline hairline box shadow is removed. The
+   component still owns width/overflow; only the surface changes. */
 m3e-nav-rail {
-  background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
-}
-/* ASCII wordmark: the same frosted glass as the rail and search bar,
+  --m3e-nav-bar-container-color: transparent;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 36%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}/* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
    the fancy setting; the plain background keeps the bare pre. */
 body.lb-fancy .lb-home pre.lb-ascii {

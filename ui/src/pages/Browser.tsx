@@ -506,18 +506,29 @@ export default function BrowserView(props: Props) {
       clearInterval(iv);
     };
   }, [active?.id, active?.url]);
-  /* Loading-indicator settle probe: the old code flipped loading
-     off the moment readyState left "loading" while XHRs and
-     subresources were still fetching. Settled = document done
-     parsing AND the frame's resource-timing entry count held
-     steady for three consecutive poll ticks (late small resources
-     keep the loading bar up instead of flashing it away); a 45s
-     ceiling keeps the bar from ever sticking. Unreachable frames
-     settle at once. */
+  /* #216 activity tracker (the old settle probe): the indicator
+     must NOT go away while the site still loads components, and
+     it must REAPPEAR for new activity. "loading" = the document
+     parser is still running, or the frame's resource-timing
+     count moved this tick; "settled" = parsing done AND the
+     count held steady for three consecutive poll ticks
+     (bounded idle), with the #172 long-quiet escape and the
+     45s ceiling unchanged. Unobservable frames (no probe
+     record, cross-origin throw) read "settled": an armed tab
+     must never stick the bar, and a settled tab is never
+     re-armed by what cannot be seen. A settled tab re-arms
+     only on a BURST (2+ new resource entries in one tick) or
+     the parser back at "loading" (redirect / new document
+     activity): single-entry ticks are idle pings and
+     long-polls, which must not flicker the chip forever, and
+     persistent sockets never create resource entries at all. */
   const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
-  const pageSettled = (tabId: number, f?: HTMLIFrameElement | null) => {
+  const pageState = (
+    tabId: number,
+    f?: HTMLIFrameElement | null
+  ): "loading" | "settled" => {
     const s = settleRef.current[tabId];
-    if (!s) return true;
+    if (!s) return "settled";
     let count = 0;
     let done = true;
     let blank = false;
@@ -527,24 +538,31 @@ export default function BrowserView(props: Props) {
       done = w?.document?.readyState !== "loading";
       blank = w?.location?.protocol === "about:";
     } catch {
-      return true;
+      return "settled";
     }
     /* The document has not started yet: genuinely loading; a slow
        upstream can sit blank for many ticks (never settle early). */
-    if (blank) return false;
+    if (blank) return "loading";
+    const armed = !!statusRef.current[tabId]?.loading;
     if (count !== s.last) {
+      const burst = s.last >= 0 && count - s.last >= 2;
       s.last = count;
       s.streak = 0;
-      return false;
+      /* A re-arm gets a fresh 45s ceiling: without this, a tab
+         whose original navigation is older than 45s would clear
+         the re-armed chip on the very next quiet tick. */
+      if (!armed && (burst || !done)) s.t0 = Date.now();
+      return armed || burst || !done ? "loading" : "settled";
     }
     s.streak += 1;
     /* #172: a document whose parser never finishes (eternal
        "loading") but with no subresource activity settles after a
        long quiet streak instead of holding the bar the full 45s. */
-    return (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
-  };
-  /* Tabs animating closed; the real close lands after the collapse. */
-  const [closingIds, setClosingIds] = useState<number[]>([]);
+    const settled =
+      (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
+    /* Quiet ticks never re-arm a settled tab. */
+    return armed && !settled ? "loading" : "settled";
+  };  const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
@@ -1960,12 +1978,17 @@ export default function BrowserView(props: Props) {
       }
       const title = (doc.title || "").trim();
       if (title && title !== t.title) props.updateTab(t.id, { title });
-      if (pageSettled(t.id, f))
+      const ps = pageState(t.id, f);
+      if (ps === "settled")
         setStatus((prev) => {
           const cur = prev[t.id];
           return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
         });
-      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
+      else if (ps === "loading" && !statusRef.current[t.id]?.loading)
+        /* #216: new document activity on a settled tab re-arms the
+           indicator (a resource burst or the parser back at work);
+           the tracker's bounded idle above clears it again. */
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
@@ -2227,9 +2250,11 @@ export default function BrowserView(props: Props) {
         if (lastNav.current.get(tabId) !== tab.url) return;
         const title = cap(d.title, 300);
         if (title) L.updateTab(tabId, { title });
-        if (pageSettled(tabId as number, frames.current.get(tabId as number)))
-          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
-        if (tab.url && !L.incognito) L.onHistory(tab.url);
+        if (
+          pageState(tabId as number, frames.current.get(tabId as number)) ===
+          "settled"
+        )
+          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));        if (tab.url && !L.incognito) L.onHistory(tab.url);
       } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
         if (!href) return;
@@ -2537,14 +2562,7 @@ export default function BrowserView(props: Props) {
                  navguard instead. */
               /* Cross-origin frames can't be polled; the
                  load event is the only reliable "done" signal there. */
-              onLoad={() =>
-                setStatus((prev) => {
-                  const cur = prev[t.id];
-                  return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
-                })
-              }
-            />
-          </div>
+            />          </div>
         ))}
 
         {/* Top loading indicator (always mounted): the shape-morphing
@@ -2553,8 +2571,8 @@ export default function BrowserView(props: Props) {
             the site and glides back away once everything settles;
             the class toggle drives the CSS transition so both
             directions animate. st.loading flips off only after the
-            settle probe holds, and engineBusy tracks engine
-            in-flight work, so the indicator stays up while small
+            #216 activity tracker's bounded idle holds (and re-arms
+            on new resource bursts), and engineBusy tracks engine            in-flight work, so the indicator stays up while small
             resources are still loading after first paint. No
             backdrop: the view never goes dark and the site stays
             visible and interactive while it loads. */}
