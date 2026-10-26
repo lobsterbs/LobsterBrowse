@@ -20,7 +20,7 @@ import * as store from "./store";
 import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
-import { loadDebugOverrides } from "./debug";
+import { emptyExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -433,6 +433,7 @@ export default function App() {
            The hidden debug menu (beta) can override the choice at
            runtime; the override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
+        experimental: { ...emptyExperimental(), ...loadDebugOverrides().experimental },
       });
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
@@ -556,6 +557,7 @@ export default function App() {
            push. The hidden debug menu (beta) can override the
            choice at runtime; the override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
+        experimental: { ...emptyExperimental(), ...loadDebugOverrides().experimental },
       };
       void zlSend(msg, 8000);
       /* Per-origin parity: the content worker rewrites and serves the
