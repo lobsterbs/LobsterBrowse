@@ -2722,7 +2722,7 @@ async fn mcp_tool_call(
                 }
             }
             let mut top: Vec<(String, u64)> = kinds.into_iter().collect();
-            top.sort_by(|a, b| b.1.cmp(&a.1));
+            top.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
             top.truncate(10);
             let body = serde_json::json!({
                 "ok": true,
