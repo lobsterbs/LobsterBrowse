@@ -9,6 +9,7 @@ import {
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
+import { notifyFailure } from "../notifications";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 
@@ -19,7 +20,7 @@ import AmoSearch from "../browser/AmoSearch";
 function openInAboutBlank() {
   const w = window.open("about:blank", "_blank");
   if (!w) {
-    pushLog("warn", "settings: the browser blocked the about:blank popout (popup blocker)");
+    notifyFailure("The browser blocked the about:blank window.", openInAboutBlank);
     return;
   }
   w.opener = null;
@@ -164,15 +165,12 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       /* not JSON: reported as an invalid file below */
     }
     const r = onImportSession(parsed);
-    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-      M3eSnackbar.open(
-        r === "ok"
-          ? "Session imported: history merged and tabs restored"
-          : r === "incognito"
-            ? "Exit incognito mode before importing a session"
-            : "That file is not a LobsterBrowse session export",
-        { duration: 4000 },
-      );
+    if (r !== "ok") {
+      notifyFailure(r === "incognito"
+        ? "Exit incognito mode before importing a session"
+        : "That file is not a LobsterBrowse session export");
+    } else if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open("Session imported: history merged and tabs restored", { duration: 4000 });
     }
   };
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -250,17 +248,20 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   const [extImport, setExtImport] = useState<{ status: string; busy: boolean }>({ status: "", busy: false });
   const importZip = async (file: File) => {
     setExtImport({ status: "Importing " + file.name + "...", busy: true });
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
-    setExtImport({
-      status:
-        rep && rep.ok
-          ? "Installed " + String(rep.id) + (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
-          : rep && rep.error
-            ? "Import failed: " + String(rep.error)
-            : "Import failed: the Zeolite service worker could not be reached on this origin.",
-      busy: false,
-    });
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
+      if (!rep?.ok) throw new Error(String(rep?.error ?? "Zeolite service worker unavailable"));
+      setExtImport({
+        status: "Installed " + String(rep.id) +
+          (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : ""),
+        busy: false,
+      });
+    } catch (error) {
+      setExtImport({ status: "", busy: false });
+      notifyFailure("Extension import failed: " + String(error instanceof Error ? error.message : error),
+        () => { void importZip(file); });
+    }
   };
 
   /* About / Build: one authoritative source. The /build endpoint on
@@ -275,7 +276,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     buildShort: string;
   } | null>(null);
   const [buildError, setBuildError] = useState(false);
-  const [buildErrorDetail, setBuildErrorDetail] = useState<string | null>(null);
+  const [buildRetry, setBuildRetry] = useState(0);
   useEffect(() => {
     let cancelled = false;
     /* Cache-busted: some edge caches serve a stale /build despite
@@ -305,24 +306,37 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             build: String(d.build ?? "unknown"),
             buildShort: String(d.buildShort ?? "unknown"),
           });
-          setBuildErrorDetail(null);
+          setBuildError(false);
         } else {
           setBuildError(true);
-          setBuildErrorDetail("endpoint returned " + JSON.stringify(d).slice(0, 120));
-          pushLog("warn", "settings: /build returned an unexpected body");
+          notifyFailure("Build information unavailable: unexpected server response",
+            () => setBuildRetry(n => n + 1));
         }
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         setBuildError(true);
-        setBuildErrorDetail(msg);
-        pushLog("error", "settings: /build fetch failed: " + msg);
+        notifyFailure("Build information unavailable: " + msg,
+          () => setBuildRetry(n => n + 1));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [buildRetry]);
+
+  const clearCache = async () => {
+    try {
+      const keys = await caches.keys();
+      const result = await Promise.all(keys.map((k) => caches.delete(k)));
+      if (result.some(ok => !ok)) throw new Error("One or more caches could not be removed");
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar)
+        M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
+    } catch (error) {
+      notifyFailure("Clear cache failed: " + String(error instanceof Error ? error.message : error),
+        () => { void clearCache(); });
+    }
+  };
 
   return (
     <section className="lb-view-content" aria-label="Settings">
@@ -557,17 +571,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               <m3e-button
                 onClick={() => {
                   deleteDialogRef.current?.hide();
-                  (async () => {
-                    try {
-                      const keys = await caches.keys();
-                      await Promise.all(keys.map((k) => caches.delete(k)));
-                      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                        M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
-                      }
-                    } catch {
-                      /* caches unavailable */
-                    }
-                  })();
+                  void clearCache();
                 }}
               >
                 Clear cache
@@ -611,13 +615,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <span className="lb-build-chip"><span className="lb-build-name">ScramJet</span><span className="lb-build-val">{build ? build.scramjet : "unknown"}</span></span>
           <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
         </div>
-        {buildError && (
-          <p className="lb-muted" style={{ fontSize: 12 }}>
-            Build information unavailable on this deployment.
-            {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
-          </p>
-        )}
-        {!build && !buildError && (
+         {!build && !buildError && (
           <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
         )}
       </div>
