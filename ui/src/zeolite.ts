@@ -189,6 +189,8 @@ export async function zlNavHandle(dest: string, timeoutMs = 5000): Promise<strin
    handler answers head/chunk/end/error frames on the same port
    (Zeolite #145 adds the outbound zl:relayCancel frame: the engine
    aborting a fetch aborts this side's /zlrelay request)
+   (Zeolite #470 adds credit flow: the engine grants bytes and this
+   side pauses the stream when they run out)
    (the {ok:true} registration ack rides it too - ignored here).
    Re-registering is idempotent; a worker restart drops the port
    (the engine falls back to its own transport with a DIAG), so
@@ -203,6 +205,16 @@ function u8ToB64(u: Uint8Array): string {
 
 const relayControllers = new Map<number, AbortController>();
 
+/* Zeolite #470 producer half: the engine's relay transport grants
+   byte credits (upfront after zl:fetchRelay, then per drained chunk)
+   and this side must pause when they run out, or a page that stops
+   draining gets its port flooded. Chunk frames are sliced to 256 KiB
+   so grants map to bounded byte counts. Credit mode arms only after
+   the FIRST grant: a legacy engine never grants, and it must keep
+   streaming exactly as before (no stall). */
+const RELAY_CREDIT_FRAME = 256 * 1024;
+const relayCreditSinks = new Map<number, (bytes: number) => void>();
+
 async function zlRelayFetch(
   m: { rid: number; dest: string; method: string; headers: Array<[string, string]>; body?: unknown },
   port: MessagePort,
@@ -214,6 +226,33 @@ async function zlRelayFetch(
      mid-flight instead of streaming it to nobody. */
   const ac = new AbortController();
   relayControllers.set(rid, ac);
+  /* #470: the credit sink must be live BEFORE the first await: the
+     engine posts its upfront grant as soon as zl:fetchRelay lands,
+     which can precede the /zlrelay response. */
+  let credit = 0;
+  let creditArmed = false;
+  let wake: (() => void) | null = null;
+  const sink = (bytes: number) => {
+    if (bytes > 0) credit += bytes;
+    creditArmed = true;
+    const w = wake;
+    wake = null;
+    if (w) w();
+  };
+  relayCreditSinks.set(rid, sink);
+  const waitForCredit = () =>
+    new Promise<void>((res) => {
+      const onAbort = () => {
+        ac.signal.removeEventListener("abort", onAbort);
+        wake = null;
+        res();
+      };
+      ac.signal.addEventListener("abort", onAbort, { once: true });
+      wake = () => {
+        ac.signal.removeEventListener("abort", onAbort);
+        res();
+      };
+    });
   const fail = (error: string) => port.postMessage({ type: "zl:relayError", rid, error });
   try {
     const body =
@@ -271,14 +310,26 @@ async function zlRelayFetch(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value && value.length) port.postMessage({ type: "zl:relayChunk", rid, bytes: value });
+      if (!value || !value.length) continue;
+      for (let off = 0; off < value.length; ) {
+        if (creditArmed && credit <= 0) {
+          await waitForCredit();
+          if (ac.signal.aborted) throw new Error("relay aborted awaiting credit");
+          continue;
+        }
+        const n = Math.min(RELAY_CREDIT_FRAME, value.length - off);
+        port.postMessage({ type: "zl:relayChunk", rid, bytes: value.slice(off, off + n) });
+        if (creditArmed) credit -= n;
+        off += n;
+      }
     }
     port.postMessage({ type: "zl:relayEnd", rid });
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
   } finally {
-    /* Only drop our own controller: a reused rid must not remove the
-       entry of a newer fetch, or its cancel would become a no-op. */
+    /* Only drop our own controller/sink: a reused rid must not remove
+       the entry of a newer fetch, or its cancel would become a no-op. */
+    if (relayCreditSinks.get(rid) === sink) relayCreditSinks.delete(rid);
     if (relayControllers.get(rid) === ac) relayControllers.delete(rid);
   }
 }
@@ -293,9 +344,14 @@ export function zlRelayInit(): void {
         void zlRelayFetch(ev.data, ch.port1);
       } else if (m && m.type === "zl:relayCancel" && typeof m.rid === "number") {
         relayControllers.get(m.rid)?.abort();
+      } else if (m && m.type === "zl:relayCredit" && typeof m.rid === "number") {
+        /* #470: grant frames from the engine; bytes are advisory. */
+        relayCreditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
       }
     };
-    sw.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+    /* credits:1 advertises this producer honors the credit protocol;
+       a legacy engine ignores the field and registration is by port. */
+    sw.postMessage({ type: "zl:relayRegister", credits: 1 }, [ch.port2]);
   });
 }
 

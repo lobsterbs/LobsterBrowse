@@ -1610,7 +1610,18 @@ FROM debian:bookworm-slim AS zl-builder
 # (643773 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
 # bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
 # a385fa9 (SW-side wave).
-ARG ZEOLITE_COMMIT=2482665bbb1cdb70d2779ead3c930ad7c0923a64
+# Pin 131: cache-refresh cookie admission + jar profile restore
+# fail-closed + relay credit grants (Zeolite #466, #470, #471):
+# refresh responses admit Set-Cookie into the owner jar (and
+# refuse store on credentialed refreshes per #179); a corrupt
+# jar profile record fails closed to the unbound profile; the
+# relay port grants byte credits (2 MiB upfront, grant-back per
+# drained chunk) so a slow consumer cannot flood the port.
+# CI 40287664049 green; sw.js a697f1fd702f2c30 -> b09a2bedaa8f77f0
+# (644519 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
+# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+ARG ZEOLITE_COMMIT=e92bef406a42db1298f73e49198945918c25cc47
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1669,7 +1680,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a697f1fd702f2c30 ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b09a2bedaa8f77f0 ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
