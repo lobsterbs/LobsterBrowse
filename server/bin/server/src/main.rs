@@ -2519,7 +2519,7 @@ async fn mcp_endpoint(
             serde_json::json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.1.0" }
+                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.2.0" }
             }),
         ),
         "ping" => mcp_rpc_result(id, serde_json::json!({})),
@@ -2569,9 +2569,22 @@ fn mcp_tool_list() -> serde_json::Value {
             tool("lb_build", "Deployment build info: LB and Zeolite versions, engine bundle hashes, wisp and content origins.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_health", "Liveness snapshot: healthz status and the current server time.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_logs", "The last N sanitized server-level log lines (default 50, max 1000): the global request and diagnostic ring, not the per-session rings.", serde_json::json!({ "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 1000 } } })),
-            tool("lb_egress_check", "HTTPS reachability and latency from the deployment to a fixed allowlist of upstream hosts (example.com, DuckDuckGo, Brave, claude.ai, Microsoft login, Outlook, apis.google.com). Diagnoses egress IP blocks and tarpits; the host list is not configurable.", serde_json::json!({ "type": "object", "properties": {} }))
+            tool("lb_egress_check", "HTTPS reachability and latency from the deployment to a fixed allowlist of upstream hosts (example.com, DuckDuckGo, Brave, claude.ai, Microsoft login, Outlook, apis.google.com). Diagnoses egress IP blocks and tarpits; the host list is not configurable.", serde_json::json!({ "type": "object", "properties": {} })),
+            tool("lb_serve", "Served engine artifact hashes (sha256-16) and byte sizes: sw.js, bootstrap.js, rewriter_wasm_bg.wasm, scramjet.js. Unreadable honestly reported; distinguishes wasm-only Zeolite pins where /build zlswSha is byte-identical across pins.", serde_json::json!({ "type": "object", "properties": {} })),
+            tool("lb_stats", "Summary of the global request/diagnostic ring: line and byte counts, counts by level, oldest/newest timestamps, top message kinds. Does not dump entries (lb_logs does that).", serde_json::json!({ "type": "object", "properties": {} }))
         ]
     })
+}
+
+/// One sha256-16 (the /build zlswSha convention) plus the byte size
+/// of a served artifact; None when the file is missing or unreadable:
+/// the caller reports that honestly instead of inventing a hash.
+async fn file_sha256_16(path: &str) -> Option<(String, u64)> {
+    let bytes = tokio::fs::read(path).await.ok()?;
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(&bytes);
+    let hex: String = hash.iter().take(8).map(|b| format!("{b:02x}")).collect();
+    Some((hex, bytes.len() as u64))
 }
 
 async fn mcp_tool_call(
@@ -2648,6 +2661,82 @@ async fn mcp_tool_call(
                 .collect();
             let rows = futures_util::future::join_all(probes).await;
             (format!("[{}]", rows.join(",")), false)
+        }
+        "lb_serve" => {
+            // Served-artifact hashes: /build zlswSha cannot distinguish
+            // a wasm-only Zeolite pin (sw.js byte-identical across
+            // pins), so every served engine artifact is hashed here.
+            const ARTIFACTS: &[(&str, &str)] = &[
+                ("sw.js", "zlsw/sw.js"),
+                ("bootstrap.js", "zlsw/bootstrap.js"),
+                ("rewriter_wasm_bg.wasm", "zlsw/rewriter_wasm_bg.wasm"),
+                ("scramjet.js", "sj/scramjet.js"),
+            ];
+            let mut rows: Vec<String> = Vec::new();
+            for (name, path) in ARTIFACTS {
+                match file_sha256_16(path).await {
+                    Some((sha, size)) => rows.push(format!(
+                        "{{\"file\":\"{name}\",\"sha256_16\":\"{sha}\",\"bytes\":{size}}}"
+                    )),
+                    None => rows.push(format!("{{\"file\":\"{name}\",\"error\":\"unreadable\"}}")),
+                }
+            }
+            (
+                format!("{{\"ok\":true,\"artifacts\":[{}]}}", rows.join(",")),
+                false,
+            )
+        }
+        "lb_stats" => {
+            // Ring summary without the dump (lb_logs does that):
+            // counts by level, byte usage, time bounds, and the top
+            // message kinds so one noisy class stands out.
+            let logs = state.logs.lock().unwrap_or_else(|e| e.into_inner());
+            let mut by_level: std::collections::BTreeMap<String, u64> =
+                std::collections::BTreeMap::new();
+            let mut kinds: std::collections::BTreeMap<String, u64> =
+                std::collections::BTreeMap::new();
+            let mut oldest: Option<u64> = None;
+            let mut newest: Option<u64> = None;
+            for line in logs.ring.iter() {
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                    continue;
+                };
+                let level = v.get("level").and_then(|x| x.as_str()).unwrap_or("?");
+                *by_level.entry(level.to_string()).or_insert(0) += 1;
+                let msg = v.get("msg").and_then(|x| x.as_str()).unwrap_or("");
+                let kind = msg
+                    .split_whitespace()
+                    .take(2)
+                    .collect::<Vec<&str>>()
+                    .join(" ");
+                *kinds.entry(kind).or_insert(0) += 1;
+                if let Some(t) = v.get("ts").and_then(|x| x.as_u64()) {
+                    oldest = Some(match oldest {
+                        Some(o) if o < t => o,
+                        _ => t,
+                    });
+                    newest = Some(match newest {
+                        Some(n) if n > t => n,
+                        _ => t,
+                    });
+                }
+            }
+            let mut top: Vec<(String, u64)> = kinds.into_iter().collect();
+            top.sort_by(|a, b| b.1.cmp(&a.1));
+            top.truncate(10);
+            let body = serde_json::json!({
+                "ok": true,
+                "ringLines": logs.ring.len(),
+                "ringBytes": logs.bytes,
+                "byLevel": by_level,
+                "oldestTs": oldest,
+                "newestTs": newest,
+                "topMsgKinds": top
+                    .into_iter()
+                    .map(|(kind, count)| serde_json::json!({ "kind": kind, "count": count }))
+                    .collect::<Vec<_>>(),
+            });
+            (body.to_string(), false)
         }
         other => (format!("unknown tool: {other}"), true),
     }
@@ -3780,7 +3869,7 @@ mod mcp_tests {
     }
 
     #[test]
-    fn mcp_tools_list_four_unique_read_only_tools() {
+    fn mcp_tools_list_six_unique_read_only_tools() {
         let v = mcp_tool_list();
         let tools = v
             .get("tools")
@@ -3790,7 +3879,14 @@ mod mcp_tests {
             .iter()
             .map(|t| t.get("name").and_then(|n| n.as_str()).expect("name"))
             .collect();
-        let want = ["lb_build", "lb_health", "lb_logs", "lb_egress_check"];
+        let want = [
+            "lb_build",
+            "lb_health",
+            "lb_logs",
+            "lb_egress_check",
+            "lb_serve",
+            "lb_stats",
+        ];
         assert_eq!(names.len(), want.len());
         for w in want {
             assert!(names.contains(&w), "missing tool {w}");
@@ -3836,5 +3932,65 @@ mod mcp_tests {
         let (text, is_err) = mcp_tool_call(&state, &headers, "nope", &serde_json::json!({})).await;
         assert!(is_err);
         assert!(text.contains("unknown tool"));
+    }
+
+    #[tokio::test]
+    async fn lb_stats_summarizes_ring_by_level() {
+        let state = mcp_state();
+        for i in 0..10 {
+            push_log(&state, "info", &format!("probe line {i}"));
+        }
+        push_log(
+            &state,
+            "warn",
+            "cert lookup example.com: lookup capacity exceeded",
+        );
+        let headers = axum::http::HeaderMap::new();
+        let (text, is_err) =
+            mcp_tool_call(&state, &headers, "lb_stats", &serde_json::json!({})).await;
+        assert!(!is_err);
+        let v: serde_json::Value = serde_json::from_str(&text).expect("stats body is JSON");
+        assert_eq!(v.get("ringLines").and_then(|x| x.as_u64()), Some(11));
+        assert_eq!(
+            v.get("byLevel")
+                .and_then(|x| x.get("info"))
+                .and_then(|x| x.as_u64()),
+            Some(10)
+        );
+        assert_eq!(
+            v.get("byLevel")
+                .and_then(|x| x.get("warn"))
+                .and_then(|x| x.as_u64()),
+            Some(1)
+        );
+        let kinds = v
+            .get("topMsgKinds")
+            .and_then(|x| x.as_array())
+            .expect("kinds");
+        assert!(kinds.len() <= 10);
+        assert!(kinds
+            .iter()
+            .any(|k| k.get("kind").and_then(|x| x.as_str()) == Some("probe line")));
+    }
+
+    #[tokio::test]
+    async fn lb_serve_reports_artifacts_or_unreadable() {
+        let state = mcp_state();
+        let headers = axum::http::HeaderMap::new();
+        let (text, is_err) =
+            mcp_tool_call(&state, &headers, "lb_serve", &serde_json::json!({})).await;
+        assert!(!is_err);
+        let v: serde_json::Value = serde_json::from_str(&text).expect("serve body is JSON");
+        assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+        let arts = v
+            .get("artifacts")
+            .and_then(|x| x.as_array())
+            .expect("artifacts");
+        assert_eq!(arts.len(), 4);
+        for a in arts {
+            // In the bare test environment the bundles are absent:
+            // every row must say unreadable, never an invented hash.
+            assert_eq!(a.get("error").and_then(|x| x.as_str()), Some("unreadable"));
+        }
     }
 }
