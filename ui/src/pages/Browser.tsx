@@ -43,6 +43,7 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
 import DownloadsCard from "../browser/DownloadsCard";
+import { samplePageLoad, type PageLoadSample } from "../browser/pageLoad";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
 import XpiPrompt from "../browser/XpiPrompt";
@@ -512,7 +513,7 @@ export default function BrowserView(props: Props) {
      cannot be declared loaded merely because a timer elapsed.
      Cross-origin documents settle on their iframe load event, while
      the content-origin engine in-flight probe covers later work. */
-  const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
+  const settleRef = useRef<Record<number, PageLoadSample>>({});
   const pageState = (
     tabId: number,
     f?: HTMLIFrameElement | null
@@ -533,15 +534,7 @@ export default function BrowserView(props: Props) {
     /* The document has not started yet: genuinely loading; a slow
        upstream can sit blank for many ticks (never settle early). */
     if (blank) return "loading";
-    const armed = !!statusRef.current[tabId]?.loading;
-    if (count !== s.last) {
-      const newResource = s.last >= 0 && count > s.last;
-      s.last = count;
-      s.streak = 0;
-      return armed || newResource || !done ? "loading" : "settled";
-    }
-    s.streak += 1;
-    return !done || (armed && s.streak < 3) ? "loading" : "settled";
+    return samplePageLoad(s, count, done, !!statusRef.current[tabId]?.loading);
   };  const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
@@ -1600,7 +1593,7 @@ export default function BrowserView(props: Props) {
     });
 
     setStatus((prev) => ({ ...prev, [tab.id]: { loading: true, nav: nid } }));
-    settleRef.current[tab.id] = { last: -1, streak: 0, t0: Date.now() };
+    settleRef.current[tab.id] = { last: -1, streak: 0 };
     /* 74.9: incognito tabs ride the engine's throwaway jar profile
        (zl:jarProfile) so their cookies never mix into the default
        one.
