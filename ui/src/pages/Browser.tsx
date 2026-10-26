@@ -506,62 +506,42 @@ export default function BrowserView(props: Props) {
       clearInterval(iv);
     };
   }, [active?.id, active?.url]);
-  /* #216 activity tracker (the old settle probe): the indicator
-     must NOT go away while the site still loads components, and
-     it must REAPPEAR for new activity. "loading" = the document
-     parser is still running, or the frame's resource-timing
-     count moved this tick; "settled" = parsing done AND the
-     count held steady for three consecutive poll ticks
-     (bounded idle), with the #172 long-quiet escape and the
-     45s ceiling unchanged. Unobservable frames (no probe
-     record, cross-origin throw) read "settled": an armed tab
-     must never stick the bar, and a settled tab is never
-     re-armed by what cannot be seen. A settled tab re-arms
-     only on a BURST (2+ new resource entries in one tick) or
-     the parser back at "loading" (redirect / new document
-     activity): single-entry ticks are idle pings and
-     long-polls, which must not flicker the chip forever, and
-     persistent sockets never create resource entries at all. */
+  /* Keep loading until the browser finishes the document load AND
+     observed subresource activity has been idle for three polls.
+     Unlike the old 45s / quiet-time escape, a stalled component
+     cannot be declared loaded merely because a timer elapsed.
+     Cross-origin documents settle on their iframe load event, while
+     the content-origin engine in-flight probe covers later work. */
   const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
   const pageState = (
     tabId: number,
     f?: HTMLIFrameElement | null
   ): "loading" | "settled" => {
     const s = settleRef.current[tabId];
-    if (!s) return "settled";
+    if (!s) return statusRef.current[tabId]?.loading ? "loading" : "settled";
     let count = 0;
     let done = true;
     let blank = false;
     try {
       const w = f?.contentWindow;
       count = w?.performance?.getEntriesByType("resource")?.length ?? 0;
-      done = w?.document?.readyState !== "loading";
+      done = w?.document?.readyState === "complete";
       blank = w?.location?.protocol === "about:";
     } catch {
-      return "settled";
+      return statusRef.current[tabId]?.loading ? "loading" : "settled";
     }
     /* The document has not started yet: genuinely loading; a slow
        upstream can sit blank for many ticks (never settle early). */
     if (blank) return "loading";
     const armed = !!statusRef.current[tabId]?.loading;
     if (count !== s.last) {
-      const burst = s.last >= 0 && count - s.last >= 2;
+      const newResource = s.last >= 0 && count > s.last;
       s.last = count;
       s.streak = 0;
-      /* A re-arm gets a fresh 45s ceiling: without this, a tab
-         whose original navigation is older than 45s would clear
-         the re-armed chip on the very next quiet tick. */
-      if (!armed && (burst || !done)) s.t0 = Date.now();
-      return armed || burst || !done ? "loading" : "settled";
+      return armed || newResource || !done ? "loading" : "settled";
     }
     s.streak += 1;
-    /* #172: a document whose parser never finishes (eternal
-       "loading") but with no subresource activity settles after a
-       long quiet streak instead of holding the bar the full 45s. */
-    const settled =
-      (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
-    /* Quiet ticks never re-arm a settled tab. */
-    return armed && !settled ? "loading" : "settled";
+    return !done || (armed && s.streak < 3) ? "loading" : "settled";
   };  const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
@@ -2351,10 +2331,8 @@ export default function BrowserView(props: Props) {
            producer may omit the title. */
         const title = cap(d.title, 300);
         if (title && title !== tab.title) L.updateTab(tabId, { title });
-        setStatus((prev) => {
-          const cur = prev[tabId as number];
-          return cur && cur.loading ? { ...prev, [tabId as number]: { loading: false } } : prev;
-        });
+        // Navigation metadata is not a load-complete event. A late SPA
+        // component request must not lose the indicator here.
       }
       /* Unknown data.lb values are ignored by design. */
       };
@@ -2569,6 +2547,13 @@ export default function BrowserView(props: Props) {
                     el.addEventListener("load", () => {
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                       hookFrameDevTools(el);
+                      /* Cross-origin content cannot be polled for
+                         readyState. Its load event is the browser's
+                         completion signal; engineBusy tracks later work. */
+                      if (!el.contentDocument) setStatus(prev => {
+                        const cur = prev[t.id];
+                        return cur?.loading ? { ...prev, [t.id]: { ...cur, loading: false } } : prev;
+                      });
                     });
                     el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                     hookFrameDevTools(el);
