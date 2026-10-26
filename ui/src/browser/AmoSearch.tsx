@@ -8,6 +8,7 @@
    zl:installExt. */
 import { useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
+import { notifyFailure } from "../notifications";
 import { routeUrl } from "../settings";
 import { zlSend } from "../zeolite";
 import { fmtBytes } from "./browserShared";
@@ -95,7 +96,6 @@ export default function AmoSearch() {
   const [sq, setSq] = useState("");
   const [sres, setSres] = useState<AmoHit[] | null>(null);
   const [sbusy, setSbusy] = useState(false);
-  const [serr, setSerr] = useState("");
   const [sok, setSok] = useState("");
   const [sdetail, setSdetail] = useState<AmoHit | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -104,7 +104,6 @@ export default function AmoSearch() {
     const q = sq.trim();
     if (!q || sbusy) return;
     setSbusy(true);
-    setSerr("");
     setSok("");
     setSdetail(null);
     try {
@@ -118,7 +117,8 @@ export default function AmoSearch() {
       setSres(hits);
     } catch (e) {
       setSres(null);
-      setSerr("AMO search failed: " + ((e as Error)?.message ?? "unknown error"));
+      notifyFailure("AMO search failed: " + ((e as Error)?.message ?? "unknown error"),
+        () => { void runSearch(); });
     }
     setSbusy(false);
   };
@@ -130,7 +130,6 @@ export default function AmoSearch() {
   const install = async (h: AmoHit) => {
     if (installing) return;
     setInstalling(true);
-    setSerr("");
     setSok("");
     try {
       let bytes: Uint8Array<ArrayBuffer> | null = null;
@@ -188,7 +187,8 @@ export default function AmoSearch() {
       );
       setSdetail(null);
     } catch (e) {
-      setSerr("Install failed: " + ((e as Error)?.message ?? "unknown error"));
+      notifyFailure("Install failed: " + ((e as Error)?.message ?? "unknown error"),
+        () => { void install(h); });
     }
     setInstalling(false);
   };
@@ -215,7 +215,6 @@ export default function AmoSearch() {
       </div>
       {sbusy && <p className="lb-ext-note">Searching AMO...</p>}
       {sok && !sbusy && <p className="lb-ext-note">{sok}</p>}
-      {serr && !sbusy && <p className="lb-ext-err">{serr}</p>}
       {sres && !sbusy && (
         <div className="lb-ext-hits">
           {sres.length === 0 && (
