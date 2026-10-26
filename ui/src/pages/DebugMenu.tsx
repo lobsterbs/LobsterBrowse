@@ -95,14 +95,21 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       experimental: { ...emptyExperimental(), ...next.experimental },
     };
     void zlSend(msg, 8000).then((r) => {
-      const e = r?.experimental as { requested?: Record<string, boolean>; effective?: Record<string, boolean> } | undefined;
+      const e = r?.experimental as {
+        requested?: Record<string, boolean>;
+        effective?: Record<string, boolean>;
+        status?: Record<string, string>;
+      } | undefined;
       if (!r?.ok || !e?.effective) {
         setExperimentalAck("Worker did not confirm experimental flags; selections remain local only.");
       } else {
         const effective = EXPERIMENTAL_KEYS.filter(k => e.effective?.[k]);
+        const activeLabels = effective.map(k =>
+          k + " (" + (e.status?.[k] ?? "status unknown") + ")");
         setExperimentalAck(effective.length
-          ? "Active in worker: " + effective.join(", ")
-          : "Selections acknowledged. All four runtime features remain inactive in this build.");
+          ? "Worker reports active subset: " + activeLabels.join(", ") +
+            ". Other selected features may be observation-only or unavailable."
+          : "Selections acknowledged. No experimental request-serving feature is active.");
       }
     });
     void zlContentConfig(msg);
@@ -167,9 +174,9 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         engine features until Zeolite reports them as effective.
       </p>
       {([
-        ["adaptiveTransit", "Adaptive NativeTransit", "Planner experiment; existing conservative decisions are unchanged"],
+        ["adaptiveTransit", "Adaptive NativeTransit", "Shadow comparison diagnostics; routing stays conservative"],
         ["hybridLocation", "Hybrid location rewriting", "Requires verified per-site source rewriting"],
-        ["cspTranslation", "CSP translation", "Prototype only; no live CSP enforcement"],
+        ["cspTranslation", "CSP translation", "Deny-only HTML CSP subset; never translates arbitrary origins"],
         ["virtualSW", "Virtual Service Workers", "Prototype only; isolated guest runtime not shipped"],
       ] as const).map(([key, label, detail]) => (
         <m3e-list-item key={key}>
