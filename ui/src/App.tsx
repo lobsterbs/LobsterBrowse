@@ -21,6 +21,7 @@ import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { emptyExperimental, loadDebugOverrides } from "./debug";
+import { notifyFailure } from "./notifications";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -788,19 +789,17 @@ export default function App() {
         if (!activeTab?.url) return;
         /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
            jar profile, one origin - cookies only, honest counts. */
-        void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
-          if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-          if (reply && reply.ok) {
-            M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
-              duration: 4000,
-            });
-          } else {
-            M3eSnackbar.open(
-              "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
-              { duration: 5000 },
-            );
-          }
-        });
+        const clearSite = () => {
+          void zlSend({ type: "zl:clearJar", origin: activeTab.url }).then((reply) => {
+            if (reply && reply.ok) {
+              if (typeof M3eSnackbar !== "undefined" && M3eSnackbar)
+                M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", { duration: 4000 });
+            } else {
+              notifyFailure("Clear failed: " + ((reply && reply.error) || "engine did not answer"), clearSite);
+            }
+          }).catch(() => notifyFailure("Could not clear cookies for this site", clearSite));
+        };
+        clearSite();
       },
     },
   ];
