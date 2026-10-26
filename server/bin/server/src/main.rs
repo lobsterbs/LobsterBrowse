@@ -2754,10 +2754,9 @@ async fn mcp_tool_call(
                 logs.ring
                     .iter()
                     .skip(start)
-                    .cloned()
-                    .map(|l| {
-                        serde_json::from_str::<serde_json::Value>(&l)
-                            .unwrap_or(serde_json::json!({ "raw": l }))
+                    .map(|l: &String| {
+                        serde_json::from_str::<serde_json::Value>(l)
+                            .unwrap_or_else(|_| serde_json::json!({ "raw": l.as_str() }))
                     })
                     .collect()
             };
