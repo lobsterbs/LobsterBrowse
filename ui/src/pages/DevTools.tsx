@@ -17,7 +17,8 @@ import M3eSelect from "../M3eSelect";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
-  diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
+  diagnosticsScope, snapshotForScope, pollDocumentDiagnostics, diagnosticsStatusForScope, diagnosticsStatusText,
+  type DiagnosticsState,
   type DiagnosticsSnapshot, type EngineSource, type ZlDiagEvent,
 } from "../browser/diagnosticsScope";
 
@@ -210,12 +211,14 @@ function exportDiag(snapshot: DiagnosticsSnapshot) {
   setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
   clientId?: string;
   source?: EngineSource;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
+  statusRef: MutableRefObject<DiagnosticsState | null>;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [status, setStatus] = useState<DiagnosticsState | null>(null);
   const scope = diagnosticsScope(clientId, source);
   /* Hide the preceding document before effect cleanup, including Export. */
   const current = snapshotForScope(snapshot, scope);
@@ -225,10 +228,15 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
       snapshotRef.current = next;
       setSnapshot(next);
     },
-  ), [clientId, source, snapshotRef]);
+    undefined, undefined,
+    (next) => {
+      const state = { scope: diagnosticsScope(clientId, source), status: next };
+      statusRef.current = state;
+      setStatus(state);
+    },
+  ), [clientId, source, snapshotRef, statusRef]);
 
-  if (!scope) return <p className="lb-muted">Awaiting this document&apos;s engine identity.</p>;
-  if (!current) return <p className="lb-muted">Awaiting diagnostics for this document.</p>;
+  if (!current) return <p className="lb-muted" role="status">{diagnosticsStatusText(diagnosticsStatusForScope(status, scope))}</p>;
   const { stats, events } = current;
   const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
@@ -459,6 +467,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   }, [dt.console.length]);
 
   const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
+  const statusRef = useRef<DiagnosticsState | null>(null);
   const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
   /* A mounted instance may be reused across tabs or document navigation. */
   snapshotRef.current = snapshotForScope(snapshotRef.current, scope);
@@ -482,7 +491,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         e.category + ": " + e.message + (e.stage ? " stage=" + e.stage : "") +
         (e.url ? " " + e.url : "") + (e.technicalReason ? " (" + e.technicalReason + ")" : "")));
     } else {
-      rows.push(scope ? "Awaiting diagnostics for this document." : "Awaiting this document's engine identity.");
+      rows.push(diagnosticsStatusText(diagnosticsStatusForScope(statusRef.current, scope)));
     }
     const ok = await writeClipboard(rows.map((row) => sanitizeText(row)).join("\n"));
     setCopyState(ok ? "ok" : "fail");
@@ -928,10 +937,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             fallbacks (every HTML and CSS load uses one).
           </p>
           <ZeoliteEngineTools frame={frame} />
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} />
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={statusRef} />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
-              <p className="lb-muted">No resource failures captured.</p>
+              <p className="lb-muted">No page-reported resource failures received.</p>
             </div>
           ) : (
             <div className="lb-net">

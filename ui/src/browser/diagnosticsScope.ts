@@ -16,6 +16,23 @@ export type DiagnosticsSnapshot = {
   stats: ZlStats;
   events: ZlDiagEvent[];
 };
+export type DiagnosticsStatus = "identity-missing" | "loading" | "query-unavailable" | "incompatible-worker" | "worker-restarted" | "ready";
+export type DiagnosticsState = { scope: DiagnosticsScope | null; status: DiagnosticsStatus };
+export function diagnosticsStatusForScope(state: DiagnosticsState | null, scope: DiagnosticsScope | null): DiagnosticsStatus {
+  if (!scope) return "identity-missing";
+  return state?.scope?.clientId === scope.clientId && state.scope.source === scope.source ? state.status : "loading";
+}
+export function diagnosticsStatusText(status: DiagnosticsStatus): string {
+  return {
+    "identity-missing": "Diagnostics unavailable: this document has not reported a verified engine identity. Reload the page to retry. No other document's logs are shown.",
+    "loading": "Loading diagnostics for this document.",
+    "query-unavailable": "Diagnostics unavailable: the worker query failed or timed out. Retrying automatically.",
+    "incompatible-worker": "Diagnostics unavailable: the worker reply lacks a valid matching document scope or format. Reload after updating the engine.",
+    "worker-restarted": "Diagnostics unavailable: the worker restarted between replies. Retrying automatically.",
+    "ready": "Document diagnostics received.",
+  }[status];
+}
+
 export type DiagnosticsQuery = (message: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
 
 export function diagnosticsScope(clientId?: string, source?: EngineSource): DiagnosticsScope | null {
@@ -72,24 +89,33 @@ export function pollDocumentDiagnostics(
   receive: (snapshot: DiagnosticsSnapshot | null) => void,
   schedule: (fn: () => void, ms: number) => unknown = setTimeout,
   cancel: (timer: unknown) => void = (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  report: (status: DiagnosticsStatus) => void = () => {},
 ): () => void {
   let stopped = false;
   let timer: unknown;
   receive(null);
+  report(scope ? "loading" : "identity-missing");
   if (!scope) return () => { stopped = true; };
   const query = scope.source === "content" ? contentQuery : appQuery;
   const tick = async () => {
     let snapshot: DiagnosticsSnapshot | null = null;
+    let status: DiagnosticsStatus = "query-unavailable";
     try {
       const net = await query({ type: "zl:getNetLog", clientId: scope.clientId, since: 0 });
       if (stopped) return;
       const diag = await query({ type: "zl:getDiag", clientId: scope.clientId, since: 0 });
       snapshot = diagnosticsSnapshot(scope, net, diag);
+      status = snapshot ? "ready" : !net || !diag || net.ok === false || diag.ok === false ? "query-unavailable" :
+        net.clientId === scope.clientId && diag.clientId === scope.clientId &&
+        typeof net.generation === "number" && Number.isFinite(net.generation) &&
+        typeof diag.generation === "number" && Number.isFinite(diag.generation) && net.generation !== diag.generation ?
+          "worker-restarted" : "incompatible-worker";
     } catch {
       /* Unavailable workers clear the preceding snapshot. */
     }
     if (stopped) return;
     receive(snapshot);
+    report(status);
     timer = schedule(() => { void tick(); }, 5000);
   };
   void tick();

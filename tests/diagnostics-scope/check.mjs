@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { diagnosticsScope, snapshotForScope, diagnosticsSnapshot, pollDocumentDiagnostics } from "../../ui/src/browser/diagnosticsScope.ts";
+import { diagnosticsScope, snapshotForScope, diagnosticsSnapshot, pollDocumentDiagnostics, diagnosticsStatusForScope, diagnosticsStatusText } from "../../ui/src/browser/diagnosticsScope.ts";
 
 const scope = diagnosticsScope("page-a", "content");
 const event = (seq, message = "page-a request failed") => ({ seq, ts: seq, category: "TRANSPORT", severity: "error", message });
@@ -97,3 +97,34 @@ await flush();
 assert.equal(appCalls.length, 2);
 appStop();
 console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction and sequential cleanup passed");
+
+// #220: failed/old replies have an explicit terminal status, not endless Awaiting.
+for (const [netReply, diagReply, expected] of [
+  [null, null, "query-unavailable"],
+  [{ok:false}, {ok:false}, "query-unavailable"],
+  [{...net(), clientId:undefined}, diag(), "incompatible-worker"],
+  [net(1), diag(2), "worker-restarted"],
+  [net(1,"page-b"), diag(2,"page-b"), "incompatible-worker"],
+  [net(), diag(10,"page-a",[]), "ready"],
+]) {
+  const statuses = [];
+  const stop = pollDocumentDiagnostics(scope, async()=>{throw Error("wrong worker");},
+    async m=>m.type === "zl:getNetLog" ? netReply : diagReply, ()=>{}, schedule, cancel, status=>statuses.push(status));
+  await flush();
+  assert.deepEqual(statuses, ["loading", expected]);
+  stop();
+}
+const absentStatuses = [];
+const stopNoIdentity = pollDocumentDiagnostics(null, async()=>{throw Error("must not query");}, async()=>{throw Error("must not query");}, ()=>{}, schedule, cancel, s=>absentStatuses.push(s));
+assert.deepEqual(absentStatuses,["identity-missing"]);
+stopNoIdentity();
+assert.equal(diagnosticsStatusForScope({scope,status:"query-unavailable"},diagnosticsScope("page-b","content")),"loading");
+assert.equal(diagnosticsStatusForScope({scope,status:"query-unavailable"},diagnosticsScope("page-a","app")),"loading");
+assert.equal(diagnosticsStatusForScope({scope,status:"ready"},null),"identity-missing");
+const failedStatuses=[];
+const stopFailure=pollDocumentDiagnostics(scope,async()=>null,async()=>{throw Error("SECRET-canary");},()=>{},schedule,cancel,s=>failedStatuses.push(s));
+await flush();
+assert.equal(failedStatuses.at(-1),"query-unavailable");
+assert(!diagnosticsStatusText(failedStatuses.at(-1)).includes("SECRET-canary"));
+stopFailure();
+console.log("Diagnostics availability statuses, stale-scope isolation and failed-query redaction passed");
