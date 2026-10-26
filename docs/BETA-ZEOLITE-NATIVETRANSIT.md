@@ -838,3 +838,35 @@ engine-side fix since pin 70 (#169-#171, #179-#185, #189-#204,
 (#197, #209-#213). Main UI is unchanged: the beta-only
 app-level relay/wisp registration (c29ac93) is not on main,
 so main keeps the Browser.tsx-only relay registration.
+
+
+## Hidden Beta experimental flag picker (2026-10-26)
+
+On Beta Home, click the LobsterBrowse wordmark five times within two seconds
+to open the existing secret **Debug** picker. Four new experimental selections
+are available:
+
+- `adaptiveTransit` (#487)
+- `hybridLocation` (#456)
+- `cspTranslation` (#452)
+- `virtualSW` (#477)
+
+All four choices default to off. They persist as booleans in the existing
+`lb_debug_overrides` local preference object. The Debug picker immediately
+sends the selection via `zl:config.experimental` to both the app worker and,
+when present, the content-origin worker. App boot, controller replacement,
+ordinary settings pushes and content-origin reconfiguration also carry the
+saved flags. **An old vendored worker can ignore the new field**; the picker
+explicitly shows a warning if the direct-worker acknowledgment lacks the
+`experimental` result.
+
+**These are only selectable experimental preferences, not newly shipped
+runtime implementations.** Zeolite reports `experimental.requested` and
+`experimental.effective` separately; `effective` remains false for all
+four until their underlying compatibility/security work is completed.
+An `ok: true` acknowledgment is not proof of feature activation.
+Existing conservative NativeTransit planning and existing KDL-controlled
+hybrid location policy are not changed by these preferences. CSP source
+translation and virtual guest Service Worker execution remain disabled.
+
+The picker did not gain debugging flags or another MCP server.
