@@ -103,14 +103,27 @@ function zlSendTo(
   return new Promise<Record<string, any> | null>((resolve) => {
     const ch = new MessageChannel();
     let settled = false;
+    let timer = 0;
+    /* #221: one idempotent terminal path: clear the timer, drop the
+       port callback and close BOTH ports (close detaches onmessage),
+       then resolve. Safe to call twice. */
     const finish = (v: Record<string, any> | null) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(timer);
+      try { ch.port1.close(); } catch { /* already closed */ }
+      try { ch.port2.close(); } catch { /* detached by transfer */ }
       resolve(v);
     };
     ch.port1.onmessage = (ev) => finish(ev.data as Record<string, any>);
-    setTimeout(() => finish(null), timeoutMs);
-    swc.postMessage(msg, [ch.port2]);
+    /* Install the timer BEFORE dispatch: a synchronous reply or a
+       synchronous dispatch failure can no longer strand it. */
+    timer = window.setTimeout(() => finish(null), timeoutMs);
+    try {
+      swc.postMessage(msg, [ch.port2]);
+    } catch {
+      finish(null);
+    }
   });
 }
 
@@ -445,6 +458,13 @@ export function zlContentHref(href: string): string {
    drop stays detectable. Resolves false when no content origin is
    provisioned or the ack never lands; never throws. */
 let contentFrameWin: Window | null = null;
+let contentRegState: "none" | "ready" | "failed" = "none";
+/* #222: explicit handshake state for diagnostics. "failed" means
+   the boot page answered ok:false or the 30s bound expired: content
+   queries stay unavailable instead of faking a ready channel. */
+export function zlContentRegState(): "none" | "ready" | "failed" {
+  return contentRegState;
+}
 
 export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boolean> {
   await zlContentReady();
@@ -529,23 +549,32 @@ export function zlContentRegister(co: string): void {
   f.setAttribute("data-lb-zlreg", "1");
   f.style.display = "none";
   contentReady = new Promise<void>((resolve) => {
+    let deadline = 0;
+    /* #222: every terminal path funnels through done(), which clears
+       the deadline and listener exactly once. Failure (ok:false or
+       the 30s bound) leaves contentFrameWin null so queries stay
+       unavailable, and records an explicit state. */
+    const done = (ok: boolean) => {
+      window.clearTimeout(deadline);
+      window.removeEventListener("message", onMsg);
+      contentRegState = ok ? "ready" : "failed";
+      if (ok) contentFrameWin = f.contentWindow;
+      resolve();
+    };
     const onMsg = (ev: MessageEvent) => {
       if (ev.origin !== co) return;
+      if (ev.source !== f.contentWindow) return;
       const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
       if (!d || d.zlReg !== true) return;
-      window.removeEventListener("message", onMsg);
+      if (d.ok !== true) { done(false); return; }
       /* #107 phase 2: introduce the app to the boot page; its worker
          stores the embedder origin so proxied frames can sync URL and
          title (the boot page re-registers it on its relayLost heal). */
       try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
-      contentFrameWin = f.contentWindow;
-      resolve();
+      done(true);
     };
     window.addEventListener("message", onMsg);
-    window.setTimeout(() => {
-      window.removeEventListener("message", onMsg);
-      resolve();
-    }, 30000);
+    deadline = window.setTimeout(() => done(false), 30000);
   });
   f.src = co + "/zlsw-register";
   document.body.appendChild(f);
