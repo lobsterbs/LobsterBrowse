@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { zlSend, zlContentConfig } from "../zeolite";
 import { engineRoutePrefix, type Settings } from "../settings";
-import { clearDebugOverrides, loadDebugOverrides, saveDebugOverrides, type DebugOverrides } from "../debug";
+import { clearDebugOverrides, emptyExperimental, loadDebugOverrides, saveDebugOverrides, EXPERIMENTAL_KEYS, type ExperimentalKey, type DebugOverrides } from "../debug";
 
 /* Hidden debug menu (beta): opened with five quick clicks on the Home
    wordmark. Shows a live engine readout (/build + zl:ping) and runtime
@@ -23,6 +23,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
      value (ZL_QUERY_ROUTES opt-out), matching App parity. */
   const [qr, setQr] = useState<boolean>(true);
   const [ping, setPing] = useState<string>("(pinging the worker...)");
+  const [experimentalAck, setExperimentalAck] = useState<string>("Not verified by this worker yet.");
 
   /* m3e-dialog opens/closes imperatively (the Settings.tsx pattern):
      React state mirrors it, the `closed` event (button, Escape,
@@ -79,6 +80,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
     imageLazy: ov.imageLazy ?? true,
     split: ov.split ?? true,
+    experimental: { ...emptyExperimental(), ...ov.experimental },
   };
 
   /* Same shape the App settings effect sends (the parity push): the
@@ -90,8 +92,19 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       httpsUpgrade: next.httpsUpgrade ?? settings.httpsUpgrade,
       imageLazy: next.imageLazy ?? true,
       queryRoutes: next.queryRoutes ?? qr,
+      experimental: { ...emptyExperimental(), ...next.experimental },
     };
-    void zlSend(msg, 8000);
+    void zlSend(msg, 8000).then((r) => {
+      const e = r?.experimental as { requested?: Record<string, boolean>; effective?: Record<string, boolean> } | undefined;
+      if (!r?.ok || !e?.effective) {
+        setExperimentalAck("Worker did not confirm experimental flags; selections remain local only.");
+      } else {
+        const effective = EXPERIMENTAL_KEYS.filter(k => e.effective?.[k]);
+        setExperimentalAck(effective.length
+          ? "Active in worker: " + effective.join(", ")
+          : "Selections acknowledged. All four runtime features remain inactive in this build.");
+      }
+    });
     void zlContentConfig(msg);
   };
 
@@ -101,6 +114,15 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     saveDebugOverrides(next);
     /* split is override-only: zlContentHref reads it, no push */
     if (k !== "split") push(next);
+  };
+
+  const flipExperimental = (key: ExperimentalKey) => () => {
+    const next: DebugOverrides = {
+      ...ov, experimental: { ...cur.experimental, [key]: !cur.experimental[key] },
+    };
+    setOv(next);
+    saveDebugOverrides(next);
+    push(next);
   };
 
   const reset = () => {
@@ -139,6 +161,33 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
           <m3e-switch checked={cur.imageLazy ? "" : undefined} icons="selected" onClick={flip("imageLazy")} />
         </div>
       </m3e-list-item>
+      <m3e-divider />
+      <p className="lb-muted" style={{ margin: "10px 16px 4px" }}>
+        Experimental flags — choices are off by default. They do not enable unfinished
+        engine features until Zeolite reports them as effective.
+      </p>
+      {([
+        ["adaptiveTransit", "Adaptive NativeTransit", "Planner experiment; existing conservative decisions are unchanged"],
+        ["hybridLocation", "Hybrid location rewriting", "Requires verified per-site source rewriting"],
+        ["cspTranslation", "CSP translation", "Prototype only; no live CSP enforcement"],
+        ["virtualSW", "Virtual Service Workers", "Prototype only; isolated guest runtime not shipped"],
+      ] as const).map(([key, label, detail]) => (
+        <m3e-list-item key={key}>
+          <div className="lb-setting-row">
+            <span>
+              <span className="lb-setting-label">{label}</span>
+              <small style={{ display: "block", opacity: 0.75 }}>{detail}</small>
+            </span>
+            <m3e-switch
+              aria-label={label + " experimental flag"}
+              checked={cur.experimental[key] ? "" : undefined}
+              icons="selected"
+              onClick={flipExperimental(key)}
+            />
+          </div>
+        </m3e-list-item>
+      ))}
+      <p role="status" className="lb-muted" style={{ margin: "8px 16px" }}>{experimentalAck}</p>
       <div slot="actions">
         <m3e-button autofocus onClick={() => dialogRef.current?.hide()}>
           Close
