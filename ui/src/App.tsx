@@ -693,8 +693,11 @@ export default function App() {
         /* Fire-time check: a rail the user already collapsed (or
            one that never expanded) must not be touched. */
         if (rail.currentMode !== "expanded") return;
-        const toggle = rail.querySelector("m3e-nav-rail-toggle");
-        if (toggle) toggle.dispatchEvent(new MouseEvent("click"));
+        // Click the actual control so M3E updates both its mode and
+        // selected state. A non-bubbling synthetic toggle event did not
+        // reach the rail and left it expanded indefinitely.
+        const button = rail.querySelector<HTMLElement>("m3e-icon-button");
+        if (button) button.click();
         else rail.currentMode = "compact";
       }, 5000);
     };
