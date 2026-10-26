@@ -860,13 +860,17 @@ saved flags. **An old vendored worker can ignore the new field**; the picker
 explicitly shows a warning if the direct-worker acknowledgment lacks the
 `experimental` result.
 
-**These are only selectable experimental preferences, not newly shipped
-runtime implementations.** Zeolite reports `experimental.requested` and
-`experimental.effective` separately; `effective` remains false for all
-four until their underlying compatibility/security work is completed.
-An `ok: true` acknowledgment is not proof of feature activation.
-Existing conservative NativeTransit planning and existing KDL-controlled
-hybrid location policy are not changed by these preferences. CSP source
-translation and virtual guest Service Worker execution remain disabled.
+**These flags are narrowly scoped and must not imply full feature
+completion.** Zeolite reports `experimental.requested` and
+`experimental.effective` separately. The current engine PR wires
+`cspTranslation` to an **opt-in deny-only HTML header subset**
+(`object-src`, `base-uri`, `form-action 'none'` only). `adaptiveTransit`
+enables comparison traces on live and cached responses but does **not**
+change the conservative production routing decision. `hybridLocation`
+and `virtualSW` remain non-executing, while existing KDL hybrid location
+rules and virtual SW registration-shim behavior stay as before.
+An `ok: true` acknowledgment does not prove full feature implementation
+or browser compatibility. Older pinned Beta worker bundles may ignore
+the newly added config field until a verified Zeolite build is deployed.
 
 The picker did not gain debugging flags or another MCP server.
