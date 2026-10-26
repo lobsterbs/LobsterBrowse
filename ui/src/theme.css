@@ -415,12 +415,25 @@ body.lb-fancy .lb-home pre.lb-ascii {
 }
 .lb-dock-pill {
   transform: translateY(0);
-  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+  opacity: 1;
+  transition:
+    transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-/* The tucked pill is unmounted at render time (Browser.tsx), so
-   no tuck/focus transforms remain here; only the tabs-open slide
-   still animates the mounted pill. */
+/* #219: the tucked pill stays mounted and animates out of view
+   (inert/aria-hidden come from Browser.tsx). pointer-events none on
+   the dock keeps the hidden bar off the page; the grip re-enables
+   its own pointer events while tucked. */
 .lb-dock.tucked { pointer-events: none; }
+.lb-dock.tucked .lb-dock-pill {
+  transform: translateY(calc(100% + 24px));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    visibility 0s var(--md-sys-motion-duration-short-4, 200ms);
+}
 .lb-toolbar {
   display: block;
   pointer-events: auto;

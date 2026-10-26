@@ -1308,10 +1308,32 @@ export default function BrowserView(props: Props) {
      grip summons it. The transform lives on a plain wrapper div
      (.lb-dock-pill): applying it to the m3e-toolbar host did
      nothing (custom element host display), which left the bar
-     frozen in place covering page content. The tucked pill now
-     UNMOUNTS entirely (user request): hidden means not rendered,
-     the grip line alone stays as the reveal handle. */
+     frozen in place covering page content. #219: the tucked pill
+     now STAYS MOUNTED and transforms out of view, so tuck and
+     reveal both animate; inert/aria-hidden (effect below) keep the
+     hidden bar out of the tab order, and the grip line remains the
+     reveal handle. */
   const [dockTucked, setDockTucked] = useState(false);
+
+  const dockPillRef = useRef<HTMLDivElement | null>(null);
+  /* #219/#223: the dock pill stays mounted so its tuck/reveal
+     transform animates both directions. While it is visually
+     unavailable (tucked away, or slid out behind the open tab
+     switcher) it is inert and aria-hidden, and focus is bumped
+     out of it: no hidden control keeps a tab stop or hit target. */
+  useEffect(() => {
+    const el = dockPillRef.current;
+    if (!el) return;
+    if (dockTucked || tabsOpen) {
+      el.setAttribute("inert", "");
+      el.setAttribute("aria-hidden", "true");
+      const a = document.activeElement as HTMLElement | null;
+      if (a && el.contains(a)) a.blur();
+    } else {
+      el.removeAttribute("inert");
+      el.removeAttribute("aria-hidden");
+    }
+  }, [dockTucked, tabsOpen]);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
   const gripHoldRef = useRef<number | null>(null);
@@ -2651,11 +2673,11 @@ export default function BrowserView(props: Props) {
             revealDock();
           }}
         />
-        {/* Tucked = fully unmounted, not translated: hidden means
-            not rendered (user request); the grip line alone stays
-            mounted as the reveal handle. */}
-        {!dockTucked && (
-        <div className="lb-dock-pill">
+        {/* #219: the pill stays mounted so the tuck/reveal
+            transform animates both ways; tucked, it transforms out
+            of view and goes inert (effect above). The grip line
+            alone remains the reveal handle. */}
+        <div className="lb-dock-pill" ref={dockPillRef}>
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar", ref: toolbarRef }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
@@ -2988,7 +3010,6 @@ export default function BrowserView(props: Props) {
             />
           )}
         </div>
-        )}
       </div>
 
       {extPanelMounted && (
