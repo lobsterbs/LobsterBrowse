@@ -106,10 +106,15 @@ body.lb-fancy .lb-ac {
    component still owns width/overflow; only the surface changes. */
 m3e-nav-rail {
   --m3e-nav-bar-container-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 36%, transparent);
+  /* Tint with the *elevated* surface: mixing the base surface over
+     itself looks opaque black even when backdrop-filter is active. */
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 68%, transparent);
+  border: 0;
+  box-shadow: none;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
-}/* ASCII wordmark: the same frosted glass as the rail and search bar,
+}
+/* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
    the fancy setting; the plain background keeps the bare pre. */
 body.lb-fancy .lb-home pre.lb-ascii {
