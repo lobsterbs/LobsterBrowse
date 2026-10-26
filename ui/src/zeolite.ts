@@ -218,7 +218,14 @@ function u8ToB64(u: Uint8Array): string {
   return btoa(s);
 }
 
-const relayControllers = new Map<number, AbortController>();
+/* #218: relay state is scoped to the registration channel (the
+   MessagePort), never globally by rid: each worker instance starts
+   its own rid sequence, and a global rid map let one channel's
+   cancel abort another channel's same-numbered fetch. */
+type RelayChannel = {
+  controllers: Map<number, AbortController>;
+  creditSinks: Map<number, (bytes: number) => void>;
+};
 
 /* Zeolite #470 producer half: the engine's relay transport grants
    byte credits (upfront after zl:fetchRelay, then per drained chunk)
@@ -228,11 +235,11 @@ const relayControllers = new Map<number, AbortController>();
    the FIRST grant: a legacy engine never grants, and it must keep
    streaming exactly as before (no stall). */
 const RELAY_CREDIT_FRAME = 256 * 1024;
-const relayCreditSinks = new Map<number, (bytes: number) => void>();
 
 async function zlRelayFetch(
   m: { rid: number; dest: string; method: string; headers: Array<[string, string]>; body?: unknown },
   port: MessagePort,
+  chan: RelayChannel,
 ): Promise<void> {
   const rid = m.rid;
   /* Zeolite #145: the engine can abort a relayed fetch (page
@@ -240,7 +247,7 @@ async function zlRelayFetch(
      /zlrelay connection, which drops the server-side upstream request
      mid-flight instead of streaming it to nobody. */
   const ac = new AbortController();
-  relayControllers.set(rid, ac);
+  chan.controllers.set(rid, ac);
   /* #470: the credit sink must be live BEFORE the first await: the
      engine posts its upfront grant as soon as zl:fetchRelay lands,
      which can precede the /zlrelay response. */
@@ -254,7 +261,7 @@ async function zlRelayFetch(
     wake = null;
     if (w) w();
   };
-  relayCreditSinks.set(rid, sink);
+  chan.creditSinks.set(rid, sink);
   const waitForCredit = () =>
     new Promise<void>((res) => {
       const onAbort = () => {
@@ -344,8 +351,8 @@ async function zlRelayFetch(
   } finally {
     /* Only drop our own controller/sink: a reused rid must not remove
        the entry of a newer fetch, or its cancel would become a no-op. */
-    if (relayCreditSinks.get(rid) === sink) relayCreditSinks.delete(rid);
-    if (relayControllers.get(rid) === ac) relayControllers.delete(rid);
+    if (chan.creditSinks.get(rid) === sink) chan.creditSinks.delete(rid);
+    if (chan.controllers.get(rid) === ac) chan.controllers.delete(rid);
   }
 }
 
@@ -353,15 +360,20 @@ export function zlRelayInit(): void {
   void zlWorker().then((sw) => {
     if (!sw) return;
     const ch = new MessageChannel();
+    /* #218: the channel object is the relay state's whole scope:
+       cancel and credit frames route only inside the port they
+       arrived on, so two live registrations (a worker restart
+       overlap) can never collide on rid. */
+    const chan: RelayChannel = { controllers: new Map(), creditSinks: new Map() };
     ch.port1.onmessage = (ev) => {
       const m = ev.data as { type?: string; rid?: number };
       if (m && m.type === "zl:fetchRelay" && typeof m.rid === "number") {
-        void zlRelayFetch(ev.data, ch.port1);
+        void zlRelayFetch(ev.data, ch.port1, chan);
       } else if (m && m.type === "zl:relayCancel" && typeof m.rid === "number") {
-        relayControllers.get(m.rid)?.abort();
+        chan.controllers.get(m.rid)?.abort();
       } else if (m && m.type === "zl:relayCredit" && typeof m.rid === "number") {
         /* #470: grant frames from the engine; bytes are advisory. */
-        relayCreditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
+        chan.creditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
       }
     };
     /* credits:1 advertises this producer honors the credit protocol;
