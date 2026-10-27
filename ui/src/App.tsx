@@ -875,19 +875,14 @@ export default function App() {
 
         <div className="lb-main">
 
-          <div className="app-content">
-            <div key={view} className="lb-view">
-              {view === "home" && (
-                <HomePage
-                  settings={settings}
-                  history={history}
-                  incognito={incognito}
-                  onNavigate={navigateTo}
-                  onRemoveHistory={removeHistory}
-                  onClearHistory={clearHistoryAll}
-                />
-              )}
-              {view === "browser" && (
+          <div className="app-content" data-view={view}>
+            {/* Tab keep-alive: the Browse view stays mounted (hidden,
+                its iframe alive) whenever tabs exist, so a running or
+                downloading tab keeps running while the user visits
+                Settings, Home or Logs; returning shows the intact
+                frame. The other views remount per switch as before. */}
+            {tabs.length > 0 && (
+              <div className="lb-view" hidden={view === "browser" ? undefined : true}>
                 <BrowserView
                   settings={settings}
                   rules={rules}
@@ -904,6 +899,19 @@ export default function App() {
                   onOpenSettings={() => setView("settings")}
                   onRulesChange={updateRules}
                 />
+              </div>
+            )}
+            {view !== "browser" && (
+              <div key={view} className="lb-view">
+              {view === "home" && (
+                <HomePage
+                  settings={settings}
+                  history={history}
+                  incognito={incognito}
+                  onNavigate={navigateTo}
+                  onRemoveHistory={removeHistory}
+                  onClearHistory={clearHistoryAll}
+                />
               )}
               {view === "settings" && (
                 <SettingsPanel
@@ -919,7 +927,8 @@ export default function App() {
               {view === "logs" && (
                 <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
               )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
