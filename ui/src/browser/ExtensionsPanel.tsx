@@ -13,6 +13,12 @@ import EmptyState from "../components/ui/EmptyState";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
 
+/* Engine-reported errors that are known honest gaps, not failures this
+   panel should surface: background.page is an unsupported manifest
+   field (Zeolite tracks support for it). */
+const shownError = (e: string | null): string | null =>
+  e && /background\.page is not supported/.test(e) ? null : e;
+
 export type ExtInfo = {
   id: string;
   name: string;
@@ -43,13 +49,11 @@ export default function ExtensionsPanel(props: {
   error: string | null;
   detail: ExtDetail | null;
   detailError: string | null;
-  incognito: Record<string, boolean>;
   onRefresh: () => void;
   onClose: () => void;
   onOpenDetail: (id: string) => void;
   onCloseDetail: () => void;
   onToggleEnabled: (id: string, on: boolean) => void;
-  onToggleIncognito: (id: string, on: boolean) => void;
   onOpenOptions: (d: ExtDetail) => void;
   onDelete: (id: string) => void;
   /* #214: the empty state's concrete next step. The AMO search lives
@@ -145,7 +149,7 @@ export default function ExtensionsPanel(props: {
             <div
               key={e.id}
               className={"lb-ext-item" + (props.detail && props.detail.id === e.id ? " sel" : "")}
-              title={e.lastError ?? ""}
+              title={shownError(e.lastError) ?? ""}
               role="button"
               tabIndex={0}
               onClick={() => props.onOpenDetail(e.id)}
@@ -208,14 +212,10 @@ export default function ExtensionsPanel(props: {
               onClick={() => props.onToggleEnabled(props.detail!.id, !props.detail!.enabled)}
             />
           </div>
-          <div className="lb-ext-trow">
-            <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-            <m3e-checkbox
-              checked={props.incognito[props.detail.id] ? "" : undefined}
-              aria-label="Allow extension in incognito tabs"
-              onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
-            />
-          </div>
+          {/* Extensions are always allowed in incognito tabs: the
+              per-extension toggle was removed (it recorded UI-side
+              intent only; the engine has no incognito gating either
+              way). */}
           <div className="lb-ext-actions">
             {props.detail.optionsPath && (
               <m3e-button onClick={() => props.onOpenOptions(props.detail!)} {...{ class: "lb-ext-optbtn" }}>
@@ -230,7 +230,7 @@ export default function ExtensionsPanel(props: {
               Delete extension
             </m3e-button>
           </div>
-          {props.detail.lastError && <p className="lb-ext-err">{props.detail.lastError}</p>}
+          {shownError(props.detail.lastError) && <p className="lb-ext-err">{shownError(props.detail.lastError)}</p>}
         </div>
       )}
     </div>
