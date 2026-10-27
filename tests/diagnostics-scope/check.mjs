@@ -33,12 +33,14 @@ assert(!JSON.stringify(redacted).includes(secret), "panel/copy/export snapshot i
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 let calls = [];
 let received = [];
+let statuses = [];
 let scheduled = [];
 const schedule = (fn) => { const timer = { fn }; scheduled.push(timer); return timer; };
 const cancel = (timer) => { scheduled = scheduled.filter((item) => item !== timer); };
-const stopAbsent = pollDocumentDiagnostics(null, async () => { throw new Error("must not query app"); }, async () => { throw new Error("must not query content"); }, (value) => received.push(value), schedule, cancel);
+const stopAbsent = pollDocumentDiagnostics(null, async () => { throw new Error("must not query app"); }, async () => { throw new Error("must not query content"); }, (value, status) => { received.push(value); statuses.push(status); }, schedule, cancel);
 await flush();
 assert.deepEqual(received, [null]);
+assert.deepEqual(statuses, ["identity"], "absent identity reports identity, not an eternal wait");
 assert.equal(scheduled.length, 0);
 stopAbsent();
 
@@ -52,7 +54,8 @@ const content = (message) => {
   });
 };
 received = [];
-const stop = pollDocumentDiagnostics(scope, async () => { throw new Error("wrong worker"); }, content, (value) => received.push(value), schedule, cancel);
+statuses = [];
+const stop = pollDocumentDiagnostics(scope, async () => { throw new Error("wrong worker"); }, content, (value, status) => { received.push(value); statuses.push(status); }, schedule, cancel);
 assert.deepEqual(calls, [{ type: "zl:getNetLog", clientId: "page-a", since: 0 }]);
 assert.equal(scheduled.length, 0, "no overlapping tick while net query is pending");
 releaseNet(net());
@@ -62,6 +65,7 @@ assert.equal(scheduled.length, 0, "no overlapping tick while diag query is pendi
 releaseDiag(diag());
 await flush();
 assert.equal(received[1].events[0].message, "page-a request failed");
+assert.equal(statuses[1], "ok", "a collected pair reports ok");
 assert.equal(scheduled.length, 1, "next tick schedules only after full pair settles");
 scheduled.shift().fn();
 releaseNet(net(11));
@@ -69,6 +73,7 @@ await flush();
 releaseDiag(diag(12));
 await flush();
 assert.equal(received.at(-1), null, "generation mismatch clears previous document snapshot");
+assert.equal(statuses.at(-1), "restart", "generation mismatch reports restart");
 scheduled.shift().fn();
 releaseNet(net(12));
 await flush();
@@ -81,12 +86,58 @@ assert.equal(scheduled.length, 0, "cleanup cancels pending poll timer");
 
 calls = [];
 received = [];
-const stopPending = pollDocumentDiagnostics(scope, async () => { throw new Error("wrong worker"); }, content, (value) => received.push(value), schedule, cancel);
+const stopPending = pollDocumentDiagnostics(scope, async () => { throw new Error("wrong worker"); }, content, (value, status) => { received.push(value); statuses.push(status); }, schedule, cancel);
 stopPending();
 releaseNet(net());
 await flush();
 assert.equal(calls.length, 1, "stopped generation does not issue the second query");
 assert.deepEqual(received, [null], "navigation cleanup ignores late worker replies");
+
+/* #220: collapsed replies are classified, never an eternal wait. A
+   valid empty scoped log is an empty snapshot with status ok, not a
+   loading state. */
+const collect = (app, contentWorker) => {
+  received = []; statuses = [];
+  return pollDocumentDiagnostics(scope, app, contentWorker, (value, status) => { received.push(value); statuses.push(status); }, schedule, cancel);
+};
+const gone = async () => { throw new Error("worker gone"); };
+const stopGone = collect(gone, gone);
+await flush();
+assert.deepEqual(statuses, ["starting", "unavailable"], "thrown query reports unavailable");
+stopGone();
+
+const silent = async () => null;
+const stopSilent = collect(silent, silent);
+await flush();
+assert.deepEqual(statuses, ["starting", "unavailable"], "missing reply reports unavailable");
+stopSilent();
+
+const refused = async () => ({ ok: false });
+const stopRefused = collect(refused, refused);
+await flush();
+assert.equal(statuses.at(-1), "rejected", "explicit refusal reports rejected");
+assert.equal(received.at(-1), null, "refusal clears the snapshot");
+stopRefused();
+
+const older = async (m) => (m.type === "zl:getNetLog" ? net() : { clientId: "page-a", generation: 10, events: [] });
+const stopOlder = collect(older, older);
+await flush();
+assert.equal(statuses.at(-1), "unsupported", "old worker without ok:true reports unsupported");
+stopOlder();
+
+const otherDoc = async (m) => (m.type === "zl:getNetLog" ? net(10, "page-b") : diag(10, "page-b", []));
+const stopOther = collect(otherDoc, otherDoc);
+await flush();
+assert.equal(statuses.at(-1), "mismatch", "different document answers report mismatch");
+stopOther();
+
+const emptyScoped = async (m) => (m.type === "zl:getNetLog" ? net() : { ok: true, clientId: "page-a", generation: 10, events: [] });
+const stopEmpty = collect(emptyScoped, emptyScoped);
+await flush();
+assert.equal(statuses.at(-1), "ok", "valid empty scoped log reports ok");
+const empty = received.at(-1);
+assert(empty && empty.events.length === 0, "a valid empty scoped log is an empty snapshot, not a collection failure");
+stopEmpty();
 
 const appCalls = [];
 const appStop = pollDocumentDiagnostics(diagnosticsScope("page-a", "app"), async (message) => {
@@ -96,4 +147,4 @@ const appStop = pollDocumentDiagnostics(diagnosticsScope("page-a", "app"), async
 await flush();
 assert.equal(appCalls.length, 2);
 appStop();
-console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction and sequential cleanup passed");
+console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction, sequential cleanup and #220 collection statuses passed");

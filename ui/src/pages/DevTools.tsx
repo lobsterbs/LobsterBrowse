@@ -18,7 +18,7 @@ import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
   diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
-  type DiagnosticsSnapshot, type EngineSource, type ZlDiagEvent,
+  type DiagnosticsSnapshot, type DiagnosticsStatus, type EngineSource, type ZlDiagEvent,
 } from "../browser/diagnosticsScope";
 
 export type ConsoleEntry = {
@@ -210,25 +210,51 @@ function exportDiag(snapshot: DiagnosticsSnapshot) {
   setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
+/* #220: explicit collection statuses replace the eternal "Awaiting..."
+   placeholders. A valid empty scoped log renders as a normal snapshot
+   with zero events; every collapsed null carries the reason it
+   collapsed, with reload guidance where a failed bootstrap handshake
+   would otherwise block collection forever. */
+const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
+  ok: "Diagnostics collected.",
+  starting: "Collecting diagnostics for this document...",
+  identity: "No engine identity for this document yet. Reload the page to retry the handshake.",
+  unavailable: "Diagnostics unavailable: the engine worker did not answer the scoped query. Retrying every 5 seconds; reload the page if this persists.",
+  rejected: "The engine worker refused the scoped diagnostics query for this document. Retrying every 5 seconds.",
+  unsupported: "This engine worker version does not support scoped diagnostics for this document.",
+  mismatch: "A different document answered the scoped query; retrying for this document every 5 seconds.",
+  restart: "The engine worker restarted while collecting; retrying.",
+  malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
+};
+
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
   clientId?: string;
   source?: EngineSource;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
+  statusRef: MutableRefObject<DiagnosticsStatus | null>;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(clientId, source);
   /* Hide the preceding document before effect cleanup, including Export. */
   const current = snapshotForScope(snapshot, scope);
   useEffect(() => pollDocumentDiagnostics(
     diagnosticsScope(clientId, source), zlSend, zlContentQuery,
-    (next) => {
+    (next, why) => {
       snapshotRef.current = next;
       setSnapshot(next);
+      const s = why ?? (next ? "ok" : "unavailable");
+      statusRef.current = s;
+      setStatus(s);
     },
-  ), [clientId, source, snapshotRef]);
+  ), [clientId, source, snapshotRef, statusRef]);
 
-  if (!scope) return <p className="lb-muted">Awaiting this document&apos;s engine identity.</p>;
-  if (!current) return <p className="lb-muted">Awaiting diagnostics for this document.</p>;
+  if (!scope) {
+    return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
+  }
+  if (!current) {
+    return <p className="lb-muted">{DIAG_STATUS_TEXT[status ?? "starting"]}</p>;
+  }
   const { stats, events } = current;
   const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
@@ -407,6 +433,8 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   }, [dt.console.length]);
 
   const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
+  /* #220: the latest collection status, mirrored for copy/export. */
+  const diagStatusRef = useRef<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
   /* A mounted instance may be reused across tabs or document navigation. */
   snapshotRef.current = snapshotForScope(snapshotRef.current, scope);
@@ -430,7 +458,8 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         e.category + ": " + e.message + (e.stage ? " stage=" + e.stage : "") +
         (e.url ? " " + e.url : "") + (e.technicalReason ? " (" + e.technicalReason + ")" : "")));
     } else {
-      rows.push(scope ? "Awaiting diagnostics for this document." : "Awaiting this document's engine identity.");
+      /* #220: copy/export carries the explicit collection status. */
+      rows.push(scope ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"] : "No engine identity for this document yet.");
     }
     const ok = await writeClipboard(rows.map((row) => sanitizeText(row)).join("\n"));
     setCopyState(ok ? "ok" : "fail");
@@ -876,7 +905,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             fallbacks (every HTML and CSS load uses one).
           </p>
           <ZeoliteEngineTools frame={frame} />
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} />
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
               <p className="lb-muted">No resource failures captured.</p>
