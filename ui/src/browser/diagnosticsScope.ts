@@ -63,33 +63,55 @@ export function diagnosticsSnapshot(
   return { scope, generation: net.generation, stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };
 }
 
+/* #220: every collapsed null is classified so the panel can separate a
+   collection failure (worker unavailable, refused, unsupported reply
+   shape, restart, document change) from a valid empty scoped log. */
+export type DiagnosticsStatus = "ok" | "starting" | "identity" | "unavailable" | "rejected" | "unsupported" | "mismatch" | "restart" | "malformed";
+
+export function classifyDiagnosticsReply(
+  scope: DiagnosticsScope | null,
+  net: Record<string, unknown> | null,
+  diag: Record<string, unknown> | null,
+): DiagnosticsStatus {
+  if (!scope) return "identity";
+  if (!net || !diag) return "unavailable";
+  if (net.ok === false || diag.ok === false) return "rejected";
+  if (diag.ok !== true || typeof net.generation !== "number" || !Number.isFinite(net.generation)) return "unsupported";
+  if (net.clientId !== scope.clientId || diag.clientId !== scope.clientId) return "mismatch";
+  if (net.generation !== diag.generation) return "restart";
+  return "malformed";
+}
+
 /* Each tick starts after the preceding one settles. Cleanup discards
    late replies. Scheduling is injectable for lifecycle tests. */
 export function pollDocumentDiagnostics(
   scope: DiagnosticsScope | null,
   appQuery: DiagnosticsQuery,
   contentQuery: DiagnosticsQuery,
-  receive: (snapshot: DiagnosticsSnapshot | null) => void,
+  receive: (snapshot: DiagnosticsSnapshot | null, status?: DiagnosticsStatus) => void,
   schedule: (fn: () => void, ms: number) => unknown = setTimeout,
   cancel: (timer: unknown) => void = (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
 ): () => void {
   let stopped = false;
   let timer: unknown;
-  receive(null);
+  receive(null, scope ? "starting" : "identity");
   if (!scope) return () => { stopped = true; };
   const query = scope.source === "content" ? contentQuery : appQuery;
   const tick = async () => {
     let snapshot: DiagnosticsSnapshot | null = null;
+    let status: DiagnosticsStatus = "unavailable";
     try {
       const net = await query({ type: "zl:getNetLog", clientId: scope.clientId, since: 0 });
       if (stopped) return;
       const diag = await query({ type: "zl:getDiag", clientId: scope.clientId, since: 0 });
       snapshot = diagnosticsSnapshot(scope, net, diag);
+      status = snapshot ? "ok" : classifyDiagnosticsReply(scope, net, diag);
     } catch {
-      /* Unavailable workers clear the preceding snapshot. */
+      /* Unavailable workers clear the preceding snapshot; #220 reports
+         it as an explicit unavailable status, never an eternal wait. */
     }
     if (stopped) return;
-    receive(snapshot);
+    receive(snapshot, status);
     timer = schedule(() => { void tick(); }, 5000);
   };
   void tick();
