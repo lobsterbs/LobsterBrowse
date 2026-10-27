@@ -10,7 +10,8 @@ import { useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 import { routeUrl } from "../settings";
 import { zlSend } from "../zeolite";
-import { fmtBytes } from "./browserShared";
+import { pushLog } from "../store";
+import { extWarnings, fmtBytes } from "./browserShared";
 
 /* One AMO search hit: only the fields the UI shows. */
 type AmoHit = {
@@ -95,18 +96,21 @@ export default function AmoSearch() {
   const [sq, setSq] = useState("");
   const [sres, setSres] = useState<AmoHit[] | null>(null);
   const [sbusy, setSbusy] = useState(false);
-  const [serr, setSerr] = useState("");
-  const [sok, setSok] = useState("");
   const [sdetail, setSdetail] = useState<AmoHit | null>(null);
   const [installing, setInstalling] = useState(false);
 
+  /* Transient statuses report through the snackbar (the
+     "Searching AMO" card and the inline result notes are gone);
+     failures also land in the client log. */
+  const snackbar = (msg: string, duration: number) => {
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) M3eSnackbar.open(msg, { duration });
+  };
   const runSearch = async () => {
     const q = sq.trim();
     if (!q || sbusy) return;
     setSbusy(true);
-    setSerr("");
-    setSok("");
     setSdetail(null);
+    snackbar("Searching AMO...", 2500);
     try {
       const api =
         "https://addons.mozilla.org/api/v5/addons/search/?q=" + encodeURIComponent(q) +
@@ -118,7 +122,9 @@ export default function AmoSearch() {
       setSres(hits);
     } catch (e) {
       setSres(null);
-      setSerr("AMO search failed: " + ((e as Error)?.message ?? "unknown error"));
+      const msg = "AMO search failed: " + ((e as Error)?.message ?? "unknown error");
+      pushLog("warn", "amo search: " + msg);
+      snackbar(msg, 6000);
     }
     setSbusy(false);
   };
@@ -130,8 +136,7 @@ export default function AmoSearch() {
   const install = async (h: AmoHit) => {
     if (installing) return;
     setInstalling(true);
-    setSerr("");
-    setSok("");
+    snackbar("Downloading and installing " + h.name + "...", 4000);
     try {
       let bytes: Uint8Array<ArrayBuffer> | null = null;
       const isXpi = (b: Uint8Array<ArrayBuffer> | null): b is Uint8Array<ArrayBuffer> =>
@@ -182,13 +187,13 @@ export default function AmoSearch() {
             : "the Zeolite service worker could not be reached on this origin"
         );
       }
-      setSok(
-        "Installed " + h.name +
-          (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
-      );
+      const warnings = extWarnings(rep);
+      snackbar("Installed " + h.name + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), 5000);
       setSdetail(null);
     } catch (e) {
-      setSerr("Install failed: " + ((e as Error)?.message ?? "unknown error"));
+      const msg = "Install failed: " + ((e as Error)?.message ?? "unknown error");
+      pushLog("error", "amo install: " + msg);
+      snackbar(msg, 7000);
     }
     setInstalling(false);
   };
@@ -213,9 +218,6 @@ export default function AmoSearch() {
           <m3e-icon name="search" aria-hidden={true} />
         </m3e-icon-button>
       </div>
-      {sbusy && <p className="lb-ext-note">Searching AMO...</p>}
-      {sok && !sbusy && <p className="lb-ext-note">{sok}</p>}
-      {serr && !sbusy && <p className="lb-ext-err">{serr}</p>}
       {sres && !sbusy && (
         <div className="lb-ext-hits">
           {sres.length === 0 && (
@@ -281,13 +283,9 @@ export default function AmoSearch() {
             {sdetail.rating !== null ? " · rated " + sdetail.rating.toFixed(1) + " / 5" : ""}
             {sdetail.size > 0 ? " · " + fmtBytes(sdetail.size) : ""}
           </p>
-          {installing ? (
-            <p className="lb-ext-note">Downloading and installing...</p>
-          ) : (
-            <m3e-button onClick={() => void install(sdetail)} {...{ class: "lb-ext-optbtn" }}>
-              <m3e-icon name="download" aria-hidden={true} /> Install
-            </m3e-button>
-          )}
+          <m3e-button onClick={() => void install(sdetail)} disabled={installing ? true : undefined} {...{ class: "lb-ext-optbtn" }}>
+            <m3e-icon name="download" aria-hidden={true} /> {installing ? "Installing..." : "Install"}
+          </m3e-button>
         </div>
       )}
     </div>
