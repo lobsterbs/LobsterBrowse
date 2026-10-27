@@ -29,6 +29,17 @@ export function dlIconFor(name: string): string {
   return "draft";
 }
 
+/* Install-result warnings the engine may report. background.page
+   is a known unsupported manifest field (Zeolite tracks support for
+   it; the manifest still parses and the extension runs), so it is
+   filtered out of user-facing results instead of being surfaced as
+   an error. */
+export const KNOWN_EXT_WARNING = /background\.page is not supported/;
+export function extWarnings(rep: unknown): string[] {
+  if (!rep || typeof rep !== "object" || !Array.isArray((rep as { warnings?: unknown }).warnings)) return [];
+  return (rep as { warnings: unknown[] }).warnings.map(String).filter((w) => !KNOWN_EXT_WARNING.test(w));
+}
+
 /* Human byte count for download sizes and logs. */
 export function fmtBytes(n: number): string {
   if (!n || n < 0) return "0 B";

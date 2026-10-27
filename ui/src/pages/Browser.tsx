@@ -395,7 +395,8 @@ export default function BrowserView(props: Props) {
     const tb = toolbarRef.current;
     if (!tb) return;
     tb.classList.remove("lb-site-tint");
-    const src = settings.siteTint ? icons[active.id] : undefined;
+    /* Always on: the Settings toggle was removed. */
+    const src = icons[active.id];
     if (!src || !active.url) return;
     let dead = false;
     const img = new Image();
@@ -423,7 +424,7 @@ export default function BrowserView(props: Props) {
     return () => {
       dead = true;
     };
-  }, [active.id, active.url, icons, settings.siteTint]);
+  }, [active.id, active.url, icons]);
 
   const iconCache = useRef<Map<string, string>>(new Map());
   const iconUrls = useRef<Set<string>>(new Set());
@@ -1151,45 +1152,9 @@ export default function BrowserView(props: Props) {
   /* Extension detail card: the manifest surface from zl:extInfo. */
   const [extDetail, setExtDetail] = useState<ExtDetail | null>(null);
   const [extDetailError, setExtDetailError] = useState<string | null>(null);
-  /* Per-extension incognito grants. UI-side only for now: the engine
-     has no incognito concept yet, so this records the user's intent
-     (and is enforced once the engine grows incognito tabs). */
-  const [extIncognito, setExtIncognito] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("lobsterbrowse-ext-incognito") ?? "{}") as Record<string, boolean>;
-    } catch {
-      return {};
-    }
-  });
-  const saveExtIncognito = (next: Record<string, boolean>) => {
-    setExtIncognito(next);
-    /* Incognito data-flow: while the browser session is incognito, the
-       toggle applies only to this session. Persisting it would leak
-       which extensions the user toggled during incognito into the
-       normal profile's localStorage. */
-    if (props.incognito) return;
-    try {
-      localStorage.setItem("lobsterbrowse-ext-incognito", JSON.stringify(next));
-    } catch {
-      /* storage unavailable (private mode quirks) */
-    }
-  };
-  /* #62: snapshot the persisted grants when an incognito session
-     starts and restore them when it ends, so session-only toggles
-     never survive into the normal-profile state (and can never
-     ride along into the next persist). */
-  const extIncognitoSnapshot = useRef<Record<string, boolean> | null>(null);
-  useEffect(() => {
-    if (props.incognito) {
-      if (extIncognitoSnapshot.current === null) extIncognitoSnapshot.current = { ...extIncognito };
-    } else {
-      const snap = extIncognitoSnapshot.current;
-      if (snap !== null) {
-        extIncognitoSnapshot.current = null;
-        setExtIncognito(snap);
-      }
-    }
-  }, [props.incognito]);
+  /* Per-extension incognito grants are gone: extensions are always
+     allowed in incognito tabs (the engine has no incognito gating
+     either way; the removed toggle only recorded UI-side intent). */
   const openExtDetail = async (id: string) => {
     setExtDetailError(null);
     setExtDetail(null);
@@ -1214,8 +1179,6 @@ export default function BrowserView(props: Props) {
     loadExtensions();
     setExtDetail((d) => (d && d.id === id ? { ...d, enabled: on } : d));
   };
-  const toggleExtIncognito = (id: string, on: boolean) =>
-    saveExtIncognito({ ...extIncognito, [id]: on });
   /* Extension pages are gated: an options page that is not a
      web-accessible resource is served only behind a short-lived page
      token. Ask the worker to mint one via zl:openExtPage and open the
@@ -2715,42 +2678,18 @@ export default function BrowserView(props: Props) {
           </m3e-button-group>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
           <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
-          {/* #211: Reload is an m3e-split-button. The leading segment is
-              the same reload as before (same load call, same tooltip,
-              same keyboard behavior); the trailing segment opens the
-              reload menu. 2.8.2 ships no text variant, so the pair rides
-              tonal. The menu trigger must sit inside the trailing icon
-              button: ActionElementBase listens on its parent element. */}
-          <m3e-split-button variant="tonal" size="small">
-            <m3e-button
-              slot="leading-button"
-              id="lb-reload-btn"
-              aria-label="Reload"
-              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
-            >
-              <m3e-icon slot="icon" name="refresh" aria-hidden={true} />
-            </m3e-button>
-            <m3e-icon-button slot="trailing-button" id="lb-reload-menu-btn" aria-label="Reload options">
-              <m3e-icon name="arrow_drop_down" aria-hidden={true} />
-              <m3e-menu-trigger for="lb-reload-menu"></m3e-menu-trigger>
-            </m3e-icon-button>
-          </m3e-split-button>
+          {/* Reload: one plain icon button, visually identical to its
+              neighbours (the split-button look and its bypass menu
+              were removed; the engine's zl:reloadBypass stays on the
+              control plane). */}
+          <m3e-icon-button
+            id="lb-reload-btn"
+            aria-label="Reload"
+            onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+          >
+            <m3e-icon name="refresh" aria-hidden={true} />
+          </m3e-icon-button>
           <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
-          <m3e-menu id="lb-reload-menu" aria-label="Reload options">
-            {/* Zeolite zl:reloadBypass (#211): arm the one-shot page
-                cache bypass on the app-origin engine, then run the same
-                reload; the engine consumes the flag on the next page
-                fetch. "Clear this site's data and reload" stays out
-                until an engine control exists for it. */}
-            <m3e-menu-item
-              onClick={() => {
-                void zlSend({ type: "zl:reloadBypass" }, 8000);
-                if (active.url) load(active, active.url, { push: false });
-              }}
-            >
-              Reload and bypass cache
-            </m3e-menu-item>
-          </m3e-menu>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
@@ -2847,16 +2786,8 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
-          <m3e-icon-button
-            id="lb-devtools-btn"
-            aria-label="Developer tools"
-            toggle
-            selected={activeDt.open ? "" : undefined}
-            onClick={() => setDt(active.id, { open: !activeDt.open })}
-          >
-            <m3e-icon name="bug_report" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-devtools-btn" position="above">Developer tools</m3e-tooltip>
+          {/* Developer tools live in the three-dot overflow menu only
+              (the toolbar button was removed: no duplicated chrome). */}
           {/* Compaction 3: the diagnostics summary lives on the
               toolbar. The chip appears only when this tab captured
               load failures; it opens DevTools on the diagnostics
@@ -2903,20 +2834,7 @@ export default function BrowserView(props: Props) {
             <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
-          <m3e-icon-button
-            id="lb-ext-btn"
-            aria-label="Extensions"
-            toggle
-            selected={extPanelOpen ? "" : undefined}
-            onClick={() => {
-              const next = !extPanelOpen;
-              setExtPanelOpen(next);
-              if (next) loadExtensions();
-            }}
-          >
-            <m3e-icon name="extension" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-ext-btn" position="above">Extensions</m3e-tooltip>
+          {/* Extensions live in the three-dot overflow menu only. */}
           {/* Incognito toggle: a regular 40x40 icon button inside the
               toolbar, same slot as the other toggles. Toggling on
               suspends the normal session and opens one empty
@@ -2939,13 +2857,11 @@ export default function BrowserView(props: Props) {
             <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-incognito-pill" position="above">
-            {props.incognito
-              ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
-              : "Turn on incognito: stops history and session recording."}
+            {props.incognito ? "Turn off incognito" : "Turn on incognito"}
           </m3e-tooltip>
-          {/* #96: persistent incognito identity: the badge stays
-              visible in the chrome the whole time the mode is on. */}
-          {props.incognito && <span className="lb-incognito-badge">Incognito</span>}
+          {/* Incognito identity is the domino icon's color now
+              (theme.css: body.lb-incognito .lb-incognito-ic); the
+              text badge and the toolbar outline are gone. */}
           {/* #210: grouped overflow for the secondary toolbar actions.
               The menu trigger sits inside the icon button
               (ActionElementBase listens on its parent element). */}
@@ -3020,13 +2936,11 @@ export default function BrowserView(props: Props) {
           error={extError}
           detail={extDetail}
           detailError={extDetailError}
-          incognito={extIncognito}
           onRefresh={() => loadExtensions()}
           onClose={() => setExtPanelOpen(false)}
           onOpenDetail={openExtDetail}
           onCloseDetail={() => setExtDetail(null)}
           onToggleEnabled={toggleExtEnabled}
-          onToggleIncognito={toggleExtIncognito}
           onOpenOptions={openExtOptions}
           onDelete={uninstallExt}
           onFindAddons={() => props.onOpenSettings()}
