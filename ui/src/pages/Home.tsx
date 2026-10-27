@@ -103,6 +103,23 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /* The clear (X) button: m3e-search-bar empties the slotted input
+     directly and fires a "clear" event; React's value tracker dedupes
+     the synthetic input event, so the controlled state never learned
+     the box was emptied (the X hid, the text stayed). Listen for the
+     component's own clear event instead. */
+  const searchBarRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const bar = searchBarRef.current;
+    if (!bar) return;
+    const onClear = () => {
+      setUrl("");
+      setOpen(false);
+      setIdx(-1);
+    };
+    bar.addEventListener("clear", onClear);
+    return () => bar.removeEventListener("clear", onClear);
+  }, []);
   /* Engine-queried completions, fetched through the server's /suggest
      endpoint and merged below the local matches. */
   const [remote, setRemote] = useState<{ text: string; src: string }[]>([]);
@@ -230,7 +247,7 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
                                                                            `}</pre>
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
-        <m3e-search-bar clearable>
+        <m3e-search-bar clearable {...{ ref: searchBarRef }}>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
           <input
             slot="input"

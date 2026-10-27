@@ -11,6 +11,7 @@ import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
+import { extWarnings } from "../browser/browserShared";
 
 /* Cloaking popout: a fresh window whose address bar reads about:blank.
    The window inherits this origin, so the app and its service worker run
@@ -247,20 +248,26 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   /* Extension import: one action, Import package (.xpi/.zip). The file
      bytes are handed to the engine worker, which owns the package
      parser and registration. */
-  const [extImport, setExtImport] = useState<{ status: string; busy: boolean }>({ status: "", busy: false });
+  /* Import results report through the snackbar (the inline status
+     line and the other transient status cards are gone). */
   const importZip = async (file: File) => {
-    setExtImport({ status: "Importing " + file.name + "...", busy: true });
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open("Importing " + file.name + "...", { duration: 3000 });
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
-    setExtImport({
-      status:
-        rep && rep.ok
-          ? "Installed " + String(rep.id) + (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
-          : rep && rep.error
-            ? "Import failed: " + String(rep.error)
-            : "Import failed: the Zeolite service worker could not be reached on this origin.",
-      busy: false,
-    });
+    const warnings = extWarnings(rep);
+    if (rep && rep.ok) {
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Installed " + String(rep.id) + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), { duration: 5000 });
+      }
+    } else {
+      const msg = rep && rep.error ? "Import failed: " + String(rep.error) : "Import failed: the Zeolite service worker could not be reached on this origin.";
+      pushLog("error", "extension import: " + msg);
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open(msg, { duration: 7000 });
+      }
+    }
   };
 
   /* About / Build: one authoritative source. The /build endpoint on
@@ -414,7 +421,6 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             The engine validates the manifest and permission grants; a bad package only lands that
             extension in an error state.
           </p>
-          {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
         </div>
       </Panel>
 
@@ -443,7 +449,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
-            <Row id="set-site-tint" label="Tint toolbar with the site color" icon="palette" on={settings.siteTint} toggle={() => onChange({ siteTint: !settings.siteTint })} />
+            {/* The toolbar site tint is always on now: its Settings
+                toggle was removed (the pill picks up the active site's
+                favicon hue unconditionally). */}
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
             Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
