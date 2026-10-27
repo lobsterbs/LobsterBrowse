@@ -456,6 +456,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   min-height: 44px;
   --m3e-toolbar-size: 44px;
   --m3e-toolbar-rounded-padding: 4px;
+  --m3e-toolbar-spacing: var(--md-sys-measurement-space100, 8px);
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
   --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
