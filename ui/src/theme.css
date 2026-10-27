@@ -57,10 +57,19 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* The proxy browser wants every pixel it can get. */
 /* Browser view fills the viewport: no scrolling, no chrome. */
 .lb-shell:has(.lb-browser) { height: 100vh; overflow: hidden; }
-/* Home view: the hero fits one viewport, no page scroll. */
 .lb-shell:has(.lb-home) { height: 100vh; overflow: hidden; }
-.app-content:has(.lb-browser) { padding: 0; max-width: none; height: 100%; }
-.app-content:has(.lb-browser) .lb-view { max-width: none; height: 100%; }
+/* View shape keys off data-view on .app-content (set in App.tsx):
+   the Browse view stays mounted while the user visits other views
+   (tab keep-alive), so presence-based :has() selectors would fire
+   in the wrong views. */
+/* Browser view fills the viewport: no scrolling, no chrome - only
+   the proxied page inside its iframe ever scrolls. */
+.app-content[data-view="browser"] { padding: 0; max-width: none; height: 100%; overflow: hidden; }
+.app-content[data-view="browser"] .lb-view { max-width: none; height: 100%; }
+/* Home: the page itself never scrolls; its inner rows do (the
+   recent-sites row scrolls horizontally, the suggestion card
+   internally). */
+.app-content[data-view="home"] { overflow: hidden; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
@@ -145,6 +154,13 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-setting-group { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space50); }
 .lb-setting-sub { margin-top: var(--md-sys-measurement-space50); }
 .lb-seed-row { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; flex-wrap: wrap; }
+/* Theme color chips are buttons: the M3E chip host carries no cursor
+   affordance, so they did not read as clickable. */
+.lb-seed-row m3e-chip { cursor: pointer; }
+.lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
+/* Segmented setting controls (search/proxy engine) scroll sideways on
+   narrow screens instead of stretching the panel. */
+.lb-seg-wrap { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .lb-color-input { width: 40px; height: 32px; border: none; background: none; cursor: pointer; }
 .lb-text-input { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); margin: var(--md-sys-measurement-space125) 0; }
 /* LB #73: per-site rules are m3e chips now; the chip set owns layout. */
@@ -442,15 +458,17 @@ body.lb-fancy .lb-home pre.lb-ascii {
   --m3e-toolbar-rounded-padding: 4px;
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
-  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
-  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
+  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
   opacity: 1;
   width: fit-content;
   max-width: calc(100vw - 16px);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
+  /* Frosted glass, no outline: the toolbar reads as translucent
+     glass over the page it floats on. */
+  background: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: none !important;
   border-radius: 999px !important;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
 }.lb-set-search { margin: var(--md-sys-measurement-space100) 0 var(--md-sys-measurement-space150); }
@@ -706,6 +724,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
   .lb-tab { max-width: 150px; }
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: var(--md-sys-measurement-space100); }
+  /* Settings on small screens: tighter panel padding and full-width
+     inputs keep the page usable without horizontal pan. */
+  .lb-panel-body { padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px); }
+  .lb-text-input { width: 100%; }
 }
 /* ---- #215: medium window band (601-839px) ----
    Between the phone band (<=600px) and desktop (>=840px) only the two
@@ -1307,7 +1329,7 @@ m3e-snackbar {
   .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
-  .app-content:has(.lb-browser) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
+  .app-content[data-view="browser"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
   .app-content {
     padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
   }
@@ -1433,33 +1455,30 @@ m3e-snackbar {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 40%, transparent);
 }
 
-/* #96: persistent incognito identity in the chrome. */
-.lb-incognito-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--md-sys-measurement-space100);
-  border-radius: 999px;
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  font-variation-settings: "wght" 500;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
-  background: color-mix(in srgb, var(--md-sys-color-primary-container, var(--md-sys-color-surface-container-high)) 55%, transparent);
-}
-body.lb-incognito .lb-toolbar {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent) !important;
+/* #96 (revised): incognito identity is the domino icon's color,
+   not a text badge (removed) and not a toolbar outline (the toolbar
+   carries no outline at all now). */
+body.lb-incognito .lb-incognito-ic {
+  color: var(--md-sys-color-primary);
 }
 
 /* #93: recent-sites chips on Home (local history only). */
 .lb-recent {
+  /* One horizontally scrollable row (Home never scrolls). The auto
+     margins keep the row centered while it fits and collapse to zero
+     once it scrolls (plain centering would clip the left edge). */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--md-sys-measurement-space75);
   margin-top: var(--md-sys-measurement-space200);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
 }
+.lb-recent > :first-child { margin-inline-start: auto; }
+.lb-recent > :last-child { margin-inline-end: auto; }
 .lb-recent-chip {
   display: inline-flex;
   align-items: stretch;

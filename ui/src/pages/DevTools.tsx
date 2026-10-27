@@ -347,52 +347,15 @@ function ZeoliteDownloads() {
   );
 }
 
-/* Engine-side developer tools: the tracing toggle, deterministic
-   session recording, and Eruda (an embeddable console/network panel)
-   injected into the live proxied page - the iframe is same-origin,
-   so the script runs in the page JS context directly. All control
-   rides the engine plane (zlSend). */
+/* Engine-side developer tools: Eruda (an embeddable console/network
+   panel) injected into the live proxied page - the iframe is
+   same-origin, so the script runs in the page JS context directly.
+   Control rides the engine plane (zlSend). The tracing toggle and
+   session recording were removed from this surface; zl:tracing /
+   zl:recordStart / zl:recordStop stay available on the engine
+   plane. */
 function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }) {
-  const [tracingOn, setTracingOn] = useState(false);
-  const [recId, setRecId] = useState("");
   const [note, setNote] = useState("");
-  useEffect(() => {
-    let dead = false;
-    void zlSend({ type: "zl:getTracing" }, 8000).then((r) => {
-      if (!dead && r && r.ok) setTracingOn(Boolean(r.enabled));
-    });
-    return () => { dead = true; };
-  }, []);
-  const toggleTracing = async () => {
-    const r = await zlSend({ type: "zl:tracing", enabled: !tracingOn }, 8000);
-    if (r && r.ok) setTracingOn(Boolean(r.enabled));
-  };
-  const startRec = async () => {
-    const id = "lb-" + Date.now();
-    const r = await zlSend({ type: "zl:recordStart", recId: id }, 8000);
-    if (r && r.ok) {
-      const rid = typeof r.record === "object" && r.record !== null && "id" in r.record ? String((r.record as { id?: unknown }).id) : id;
-      setRecId(rid);
-      setNote("Recording engine activity (tracing is forced on while recording).");
-    } else {
-      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
-    }
-  };
-  const stopRec = async () => {
-    const r = await zlSend({ type: "zl:recordStop" }, 15000);
-    if (r && r.ok) {
-      const blob = new Blob([JSON.stringify(r.record, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "zeolite-record.json";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setRecId("");
-      setNote("Recording saved as zeolite-record.json.");
-    } else {
-      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
-    }
-  };
   const injectEruda = async () => {
     const w = frame()?.contentWindow;
     if (!w) { setNote("No proxied page in this tab."); return; }
@@ -419,21 +382,6 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   };
   return (
     <div className="lb-dt-toolbar" style={{ flexWrap: "wrap", rowGap: 8 }}>
-      <m3e-button onClick={() => void toggleTracing()}>
-        <m3e-icon name={tracingOn ? "pause_circle" : "play_circle"} aria-hidden={true} />
-        {tracingOn ? "Tracing on" : "Tracing off"}
-      </m3e-button>
-      {recId ? (
-        <m3e-button onClick={() => void stopRec()}>
-          <m3e-icon name="stop_circle" aria-hidden={true} />
-          Stop recording
-        </m3e-button>
-      ) : (
-        <m3e-button onClick={() => void startRec()}>
-          <m3e-icon name="radio_button_checked" aria-hidden={true} />
-          Record session
-        </m3e-button>
-      )}
       <m3e-button onClick={() => void injectEruda()}>
         <m3e-icon name="terminal" aria-hidden={true} />
         Eruda in page
