@@ -511,18 +511,20 @@ export default function BrowserView(props: Props) {
      must NOT go away while the site still loads components, and
      it must REAPPEAR for new activity. "loading" = the document
      parser is still running, or the frame's resource-timing
-     count moved this tick; "settled" = parsing done AND the
-     count held steady for three consecutive poll ticks
-     (bounded idle), with the #172 long-quiet escape and the
-     45s ceiling unchanged. Unobservable frames (no probe
-     record, cross-origin throw) read "settled": an armed tab
-     must never stick the bar, and a settled tab is never
-     re-armed by what cannot be seen. A settled tab re-arms
-     only on a BURST (2+ new resource entries in one tick) or
-     the parser back at "loading" (redirect / new document
-     activity): single-entry ticks are idle pings and
-     long-polls, which must not flicker the chip forever, and
-     persistent sockets never create resource entries at all. */
+     count moved this tick - ANY delta counts: single entries are
+     how slow proxy loads actually arrive, and the old burst-only
+     re-arm was exactly the mid-load hide the user reported.
+     "settled" = parsing done AND the count held steady for three
+     consecutive poll ticks (bounded idle), with the #172
+     long-quiet escape and the 45s ceiling (both now measured
+     from the last activity, not from navigation start).
+     Unobservable frames (no probe record, cross-origin throw)
+     read "settled": an armed tab must never stick the bar, and a
+     settled tab is never re-armed by what cannot be seen.
+     Long-poll pings re-arm the chip for one tick and the bounded
+     idle clears it again about 3.6s later: brief honest flashes,
+     never a stuck bar; persistent sockets never create resource
+     entries at all. */
   const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
   const pageState = (
     tabId: number,
@@ -546,14 +548,17 @@ export default function BrowserView(props: Props) {
     if (blank) return "loading";
     const armed = !!statusRef.current[tabId]?.loading;
     if (count !== s.last) {
-      const burst = s.last >= 0 && count - s.last >= 2;
       s.last = count;
       s.streak = 0;
-      /* A re-arm gets a fresh 45s ceiling: without this, a tab
-         whose original navigation is older than 45s would clear
-         the re-armed chip on the very next quiet tick. */
-      if (!armed && (burst || !done)) s.t0 = Date.now();
-      return armed || burst || !done ? "loading" : "settled";
+      /* Any new entry is visible activity (single images, XHRs,
+         one-at-a-time subresources through the slow proxy); the
+         old burst-only re-arm hid the chip mid-load and never
+         brought it back. Every activity also refreshes the 45s
+         ceiling: the bound measures quiet time, not time since
+         navigation, so a legitimately slow load is never cut
+         off mid-stream while it still moves. */
+      s.t0 = Date.now();
+      return "loading";
     }
     s.streak += 1;
     /* #172: a document whose parser never finishes (eternal
@@ -1971,7 +1976,7 @@ export default function BrowserView(props: Props) {
         });
       else if (ps === "loading" && !statusRef.current[t.id]?.loading)
         /* #216: new document activity on a settled tab re-arms the
-           indicator (a resource burst or the parser back at work);
+           indicator (any new resource entry or the parser back at work);
            the tracker's bounded idle above clears it again. */
         setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
@@ -2557,7 +2562,7 @@ export default function BrowserView(props: Props) {
             the class toggle drives the CSS transition so both
             directions animate. st.loading flips off only after the
             #216 activity tracker's bounded idle holds (and re-arms
-            on new resource bursts), and engineBusy tracks engine            in-flight work, so the indicator stays up while small
+            on any new resource entry), and engineBusy tracks engine            in-flight work, so the indicator stays up while small
             resources are still loading after first paint. No
             backdrop: the view never goes dark and the site stays
             visible and interactive while it loads. */}

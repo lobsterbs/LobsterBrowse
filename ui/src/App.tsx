@@ -20,7 +20,9 @@ import * as store from "./store";
 import { engineSwSource, zlContentConfig, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
-import { emptyExperimental, loadDebugOverrides } from "./debug";
+import { createPortal } from "react-dom";
+import { StarsBackground } from "./components/ui/stars";
+import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
 
@@ -110,9 +112,13 @@ export default function App() {
       if (!key || key === lastEngineKey.current) return;
       lastEngineKey.current = key;
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        /* duration 0 = never auto-dismiss: the notice stays until the
+           user reloads (picking up the new engine) or presses Reload
+           now. The old 8s timeout silently dropped the notice while
+           the old worker kept serving. */
         M3eSnackbar.open("Engine updated - reload to pick it up", "Reload now", {
           actionCallback: () => window.location.reload(),
-          duration: 8000,
+          duration: 0,
         });
       }
     };
@@ -438,7 +444,7 @@ export default function App() {
            The hidden debug menu (beta) can override the choice at
            runtime; the override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
-        experimental: { ...emptyExperimental(), ...loadDebugOverrides().experimental },
+        experimental: { ...defaultExperimental(), ...loadDebugOverrides().experimental },
       });
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
@@ -562,7 +568,7 @@ export default function App() {
            push. The hidden debug menu (beta) can override the
            choice at runtime; the override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
-        experimental: { ...emptyExperimental(), ...loadDebugOverrides().experimental },
+        experimental: { ...defaultExperimental(), ...loadDebugOverrides().experimental },
       };
       void zlSend(msg, 8000);
       /* Per-origin parity: the content worker rewrites and serves the
@@ -809,6 +815,18 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
+      {/* Enhanced UI setting (was Home-only): the starfield is portaled
+          to <body> so no view ancestor can trap the fixed layer, and it
+          stays mounted in EVERY view so the frosted rail and dock always
+          frost it instead of a flat surface (the in-flow rail has
+          nothing else behind it in the browser view). Off = not rendered. */}
+      {settings.fancyBackground &&
+        createPortal(
+          <div className="lb-stars-bg" aria-hidden={true}>
+            <StarsBackground />
+          </div>,
+          document.body
+        )}
       <div className="lb-shell">
         {/* Expressive wide rail: the M3E defaults are the spec
            (96dp collapsed with persistent labels, 44dp top inset);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { zlSend, zlContentConfig } from "../zeolite";
 import { engineRoutePrefix, type Settings } from "../settings";
-import { clearDebugOverrides, emptyExperimental, loadDebugOverrides, saveDebugOverrides, EXPERIMENTAL_KEYS, type ExperimentalKey, type DebugOverrides } from "../debug";
+import { clearDebugOverrides, defaultExperimental, loadDebugOverrides, saveDebugOverrides, EXPERIMENTAL_KEYS, type ExperimentalKey, type DebugOverrides } from "../debug";
 
 /* Hidden debug menu (beta): opened with five quick clicks on the Home
    wordmark. Shows a live engine readout (/build + zl:ping) and runtime
@@ -80,7 +80,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
     imageLazy: ov.imageLazy ?? true,
     split: ov.split ?? true,
-    experimental: { ...emptyExperimental(), ...ov.experimental },
+    experimental: { ...defaultExperimental(), ...ov.experimental },
   };
 
   /* Same shape the App settings effect sends (the parity push): the
@@ -92,7 +92,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       httpsUpgrade: next.httpsUpgrade ?? settings.httpsUpgrade,
       imageLazy: next.imageLazy ?? true,
       queryRoutes: next.queryRoutes ?? qr,
-      experimental: { ...emptyExperimental(), ...next.experimental },
+      experimental: { ...defaultExperimental(), ...next.experimental },
     };
     void zlSend(msg, 8000).then((r) => {
       const e = r?.experimental as {
@@ -170,7 +170,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       </m3e-list-item>
       <m3e-divider />
       <p className="lb-muted" style={{ margin: "10px 16px 4px" }}>
-        Experimental flags — choices are off by default. They do not enable unfinished
+        Experimental flags — choices are ON by default (beta, user request 2026-10-28). They do not enable unfinished
         engine features until Zeolite reports them as effective.
       </p>
       {([
