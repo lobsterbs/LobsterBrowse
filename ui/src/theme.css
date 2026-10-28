@@ -88,14 +88,12 @@ body.lb-fancy .lb-home m3e-search-bar {
      blurred backdrop to the pill shape. */
   border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 /* Suggestion dropdown: same frosted treatment as the search bar. */
 body.lb-fancy .lb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 /* The frosted rail needs something behind it to blur: the fancy
@@ -127,7 +125,6 @@ m3e-nav-rail {
   z-index: 9;
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
 /* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
@@ -139,7 +136,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
   border-radius: var(--m3e-shape-lg);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
@@ -296,7 +292,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
   padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space100);
   background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
   border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
   transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
 }
@@ -456,7 +451,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
   max-width: calc(100vw - 16px);
   background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
   backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
   border-radius: 999px !important;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
@@ -1458,7 +1452,6 @@ body .lb-devtools,
 body .lb-ext-panel {
   background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 85%, transparent);
   backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
   border-color: color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
   border-radius: var(--m3e-shape-lg);
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
