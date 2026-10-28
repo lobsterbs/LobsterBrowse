@@ -2664,18 +2664,16 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          {/* Back / Forward stay one navigation cluster: a real M3E
-              button group (standard variant) ties the two icon buttons
-              together. Tooltips anchor by for= id and stay outside the
-              group so the group only arranges buttons. */}
-          <m3e-button-group aria-label="Page navigation">
-            <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
-              <m3e-icon name="arrow_back" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
-              <m3e-icon name="arrow_forward" aria-hidden={true} />
-            </m3e-icon-button>
-          </m3e-button-group>
+          {/* Back / Forward are plain icon buttons (#227): the
+              m3e-button-group expressive press choreography slid the
+              grouped buttons into each other on every press. Tooltips
+              anchor by for= id exactly as before. */}
+          <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
+            <m3e-icon name="arrow_back" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
+            <m3e-icon name="arrow_forward" aria-hidden={true} />
+          </m3e-icon-button>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
           <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
           {/* Reload: one plain icon button, visually identical to its
