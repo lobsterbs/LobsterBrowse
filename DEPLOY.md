@@ -1,28 +1,28 @@
 # Deploying LobsterBrowse
 
-## Render services (workspace migrated 2026-10-23)
+## Render services (workspace migrated 2026-10-28)
 
-The 2026-10-20 workspace and its onrender.com domains are gone (suspended
+The 2026-10-23 workspace and its onrender.com domains are gone (suspended
 account). Current free-tier services, region frankfurt, autoDeploy off:
 
-- lobsterbrowse (main branch): https://lobsterbrowse-yiy9.onrender.com
+- lobsterbrowse (main branch): https://lobsterbrowse-g0bs.onrender.com
 - lobsterbrowse-beta (beta/zeolite-nativetransit):
-  https://lobsterbrowse-beta-cts6.onrender.com
+  https://lobsterbrowse-beta-9bct.onrender.com
 - lobsterbrowse-content (the #107 split content origin: same Docker
   image, branch main; both app services announce it through
   ZL_CONTENT_ORIGIN):
-  https://lobsterbrowse-content-ocbg.onrender.com
+  https://lobsterbrowse-content-2djv.onrender.com
 - lobsterbrowse-fixture (node, "node tests/transit/fixture.mjs",
   PORT=10000, FIXTURE_HOST=0.0.0.0):
-  https://lobsterbrowse-fixture-rtus.onrender.com - the FIXTURE_ORIGIN
+  https://lobsterbrowse-fixture-okp6.onrender.com - the FIXTURE_ORIGIN
   of the transit-live CI job.
 
 The standalone Wisp backend was restored on 2026-10-25 for the Zeolite
 `brave-wisp` policy route (#209), using the existing `Dockerfile.wisp`:
 
-- lobsterbrowse-wisp: https://lobsterbrowse-wisp.onrender.com
-- Service `srv-dbf1qr8ae00c73efs9vg`, branch main, Frankfurt, free,
-  autoDeploy off; WebSocket endpoint `wss://lobsterbrowse-wisp.onrender.com/`.
+- lobsterbrowse-wisp: https://lobsterbrowse-wisp-8ec1.onrender.com
+- Service `srv-dbgtoinlk1mc739f8tf0`, branch main, Frankfurt, free,
+  autoDeploy off; WebSocket endpoint `wss://lobsterbrowse-wisp-8ec1.onrender.com/`.
 - Set `SCRAMJET_WISP_URL` to that WebSocket endpoint on main, beta **and
   content**, then deploy each. The content worker owns split-origin page
   traffic, so configuring only the app services does not restore Brave.
