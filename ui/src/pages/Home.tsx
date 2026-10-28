@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createPortal } from "react-dom";
-import { StarsBackground } from "../components/ui/stars";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 import DebugMenu from "./DebugMenu";
@@ -222,17 +220,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
 
   return (
     <section className="lb-view-content lb-home">
-      {/* Enhanced UI setting: the starfield is portaled to <body> so
-          no view ancestor (transforms, stacking contexts) can trap
-          the fixed layer or shrink it. z-index -1 keeps it above the
-          body background but under the app. Off = not rendered. */}
-      {settings.fancyBackground &&
-        createPortal(
-          <div className="lb-stars-bg" aria-hidden="true">
-            <StarsBackground />
-          </div>,
-          document.body
-        )}
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"

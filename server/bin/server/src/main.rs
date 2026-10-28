@@ -3091,7 +3091,7 @@ async fn build_payload(headers: &axum::http::HeaderMap) -> String {
         std::env::var("ZL_QUERY_ROUTES").as_deref(),
         Ok("0") | Ok("false") | Ok("FALSE") | Ok("no")
     );
-    let lb_version = format!("{} Zirconium", env!("CARGO_PKG_VERSION"));
+    let lb_version = format!("{} Tungsten", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,

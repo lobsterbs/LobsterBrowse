@@ -1,17 +1,20 @@
 /* Beta hidden picker overrides, consumed on every zl:config push.
    Experimental selections are NOT evidence that unfinished features run.
    Zeolite reports requested/effective separately; effective remains false
-   until each independent feature is implemented and verified. */
+   until each independent feature is implemented and verified.
+   Defaults are ON (user request 2026-10-28): every experimental flag the
+   engine grows goes live on beta without a debug-menu visit; stored
+   per-flag overrides still win over the defaults. */
 export const EXPERIMENTAL_KEYS = [
   "adaptiveTransit", "hybridLocation", "cspTranslation", "virtualSW",
 ] as const;
 export type ExperimentalKey = typeof EXPERIMENTAL_KEYS[number];
 export type ExperimentalSelections = Record<ExperimentalKey, boolean>;
-export const emptyExperimental = (): ExperimentalSelections => ({
-  adaptiveTransit: false,
-  hybridLocation: false,
-  cspTranslation: false,
-  virtualSW: false,
+export const defaultExperimental = (): ExperimentalSelections => ({
+  adaptiveTransit: true,
+  hybridLocation: true,
+  cspTranslation: true,
+  virtualSW: true,
 });
 
 export type DebugOverrides = {
