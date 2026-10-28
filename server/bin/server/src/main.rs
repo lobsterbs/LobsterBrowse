@@ -68,6 +68,50 @@ struct AppState {
     suggest_cache: Mutex<HashMap<String, (u64, String)>>,
     cert_cache: Mutex<HashMap<String, (u64, String)>>,
     lookup_permits: tokio::sync::Semaphore,
+    /// LB #224: engine diagnostics reports (KDL) shared from the
+    /// browser DevTools panel for the MCP read tools. User-initiated
+    /// shares only; bounded ring (8, 1 h TTL).
+    mcp_reports: Mutex<VecDeque<McpSharedReport>>,
+}
+
+/// LB #224: one shared engine diagnostics report. KDL text as the
+/// engine's zl:exportDiagnostics produced it; never parsed here.
+struct McpSharedReport {
+    id: String,
+    ts: u64,
+    expires_at: u64,
+    kdl: String,
+}
+
+/// LB #224: validate, bound and store one shared report. Returns the
+/// new report id. Shared by the HTTP endpoint and the tests so the
+/// bounds are pinned once.
+fn mcp_share_push(state: &AppState, sess: &str, kdl: &str) -> Result<String, &'static str> {
+    if !valid_session_token(sess) {
+        return Err("missing or invalid lb_sess session token");
+    }
+    if kdl.is_empty() || kdl.len() > 128 * 1024 {
+        return Err("kdl empty or above the size bound");
+    }
+    let now = now_secs();
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(sess.as_bytes());
+    h.update(now.to_le_bytes());
+    h.update(kdl.as_bytes());
+    let id: String = h.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect();
+    let mut ring = state.mcp_reports.lock().unwrap_or_else(|e| e.into_inner());
+    ring.retain(|r| r.expires_at > now);
+    if ring.len() >= 8 {
+        ring.pop_front();
+    }
+    ring.push_back(McpSharedReport {
+        id: id.clone(),
+        ts: now,
+        expires_at: now + 3600,
+        kdl: kdl.to_string(),
+    });
+    Ok(id)
 }
 
 fn now_secs() -> u64 {
@@ -2546,7 +2590,7 @@ async fn mcp_endpoint(
             serde_json::json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.3.0" }
+                "serverInfo": { "name": "lobsterbrowse-mcp", "version": "0.4.0" }
             }),
         ),
         "ping" => mcp_rpc_result(id, serde_json::json!({})),
@@ -2589,6 +2633,61 @@ fn mcp_rpc_error(id: serde_json::Value, code: i64, message: &str) -> Response {
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
 }
 
+/// LB #224: the DevTools "Share to MCP" bridge. The caller must
+/// present its own valid lb_sess token (the same shape /logs
+/// requires), the body must be a JSON object with a bounded kdl
+/// string. The ring keeps the last 8 reports for 1 hour; the MCP
+/// tools lb_diag_reports / lb_diag_report read only this ring.
+async fn mcp_share_endpoint(
+    State(state): State<Arc<AppState>>,
+    RawQuery(raw): RawQuery,
+    body: String,
+) -> Response {
+    let sess = raw
+        .as_deref()
+        .and_then(|rq| {
+            rq.split('&')
+                .find_map(|p| p.strip_prefix("lb_sess=").map(|v| v.to_string()))
+        })
+        .unwrap_or_default();
+    if body.len() > 160 * 1024 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"error\":\"report too large\"}",
+        )
+            .into_response();
+    }
+    let kdl = match scan_json_str(&body, "kdl") {
+        Some(k) => k,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"body must be JSON with a kdl string\"}",
+            )
+                .into_response()
+        }
+    };
+    match mcp_share_push(&state, &sess, &kdl) {
+        Ok(id) => {
+            push_log(&state, "info", "mcp share: diagnostics report accepted");
+            let expires_at = now_secs() + 3600;
+            (
+                [(header::CONTENT_TYPE, "application/json")],
+                format!("{{\"ok\":true,\"id\":\"{id}\",\"expires_at\":{expires_at}}}"),
+            )
+                .into_response()
+        }
+        Err(msg) => (
+            StatusCode::FORBIDDEN,
+            [(header::CONTENT_TYPE, "application/json")],
+            format!("{{\"error\":\"{msg}\"}}"),
+        )
+            .into_response(),
+    }
+}
+
 fn mcp_tool_list() -> serde_json::Value {
     let tool = |name: &str, desc: &str, schema: serde_json::Value| serde_json::json!({ "name": name, "description": desc, "inputSchema": schema });
     serde_json::json!({
@@ -2599,7 +2698,9 @@ fn mcp_tool_list() -> serde_json::Value {
             tool("lb_fetch", "Debug fetch of one absolute http(s) URL from the deployment: status, latency, MIME, sanitized response headers (set-cookie and authorization redacted), the first bytes of the body and the server log lines the fetch generated. Redirects are never followed: a 30x plus its Location is reported as the next hop. The destination must pass the relay's own SSRF gate before any connect.", serde_json::json!({ "type": "object", "properties": { "url": { "type": "string" }, "max_body": { "type": "integer", "minimum": 64, "maximum": 16384 } }, "required": ["url"] })),
             tool("lb_egress_check", "HTTPS reachability and latency from the deployment to a fixed allowlist of upstream hosts (example.com, DuckDuckGo, Brave, claude.ai, Microsoft login, Outlook, apis.google.com). Diagnoses egress IP blocks and tarpits; the host list is not configurable.", serde_json::json!({ "type": "object", "properties": {} })),
             tool("lb_serve", "Served engine artifact hashes (sha256-16) and byte sizes: sw.js, bootstrap.js, rewriter_wasm_bg.wasm, scramjet.js. Unreadable honestly reported; distinguishes wasm-only Zeolite pins where /build zlswSha is byte-identical across pins.", serde_json::json!({ "type": "object", "properties": {} })),
-            tool("lb_stats", "Summary of the global request/diagnostic ring: line and byte counts, counts by level, oldest/newest timestamps, top message kinds. Does not dump entries (lb_logs does that).", serde_json::json!({ "type": "object", "properties": {} }))
+            tool("lb_stats", "Summary of the global request/diagnostic ring: line and byte counts, counts by level, oldest/newest timestamps, top message kinds. Does not dump entries (lb_logs does that).", serde_json::json!({ "type": "object", "properties": {} })),
+            tool("lb_diag_reports", "Engine diagnostics reports shared from the browser DevTools panel (user-initiated only; last 8, 1 hour TTL). Lists ids with shared-at timestamps and byte sizes.", serde_json::json!({ "type": "object", "properties": {} })),
+            tool("lb_diag_report", "One shared engine diagnostics report (KDL text) by id, from the lb_diag_reports list.", serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }))
         ]
     })
 }
@@ -2622,6 +2723,35 @@ async fn mcp_tool_call(
     args: &serde_json::Value,
 ) -> (String, bool) {
     match name {
+        "lb_diag_reports" => {
+            let now = now_secs();
+            let ring = state.mcp_reports.lock().unwrap_or_else(|e| e.into_inner());
+            let reports: Vec<serde_json::Value> = ring
+                .iter()
+                .filter(|r| r.expires_at > now)
+                .map(|r| {
+                    serde_json::json!({ "id": r.id, "shared_at": r.ts, "bytes": r.kdl.len(), "expires_at": r.expires_at })
+                })
+                .collect();
+            (serde_json::json!({ "reports": reports }).to_string(), false)
+        }
+        "lb_diag_report" => {
+            let Some(id) = args.get("id").and_then(|v| v.as_str()) else {
+                return (
+                    serde_json::json!({ "error": "id is required (see lb_diag_reports)" }).to_string(),
+                    true,
+                );
+            };
+            let now = now_secs();
+            let ring = state.mcp_reports.lock().unwrap_or_else(|e| e.into_inner());
+            match ring.iter().find(|r| r.expires_at > now && r.id == id) {
+                Some(r) => (r.kdl.clone(), false),
+                None => (
+                    serde_json::json!({ "error": "no such report (expired, evicted, or never shared)" }).to_string(),
+                    true,
+                ),
+            }
+        }
         "lb_build" => (build_payload(headers).await, false),
         "lb_health" => (
             serde_json::json!({ "ok": true, "healthz": "ok", "ts": now_secs() }).to_string(),
@@ -3330,6 +3460,7 @@ async fn main() {
         suggest_cache: Mutex::new(HashMap::new()),
         cert_cache: Mutex::new(HashMap::new()),
         lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
+        mcp_reports: Mutex::new(VecDeque::new()),
     });
     push_log(&state, "info", "server log buffer initialised");
 
@@ -3394,6 +3525,7 @@ async fn main() {
         // JSON-RPC 2.0 with read-only tools. Fail closed: while
         // LB_MCP_TOKEN is unset the route answers 404.
         .route("/mcp", post(mcp_endpoint))
+        .route("/mcp/share", post(mcp_share_endpoint))
         // #107: SW registration page for the provisioned content
         // origin (see zlsw_register).
         .route("/zlsw-register", get(zlsw_register))
@@ -3404,6 +3536,7 @@ async fn main() {
         // untouched. Its chunks and wasm assets are plain static files
         // under the same prefix.
         .route("/zlsw/sw.js", get(zl_sw_js))
+        .route("/guest-host.html", get(zl_guest_host))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
         // ScramJet engine bundle (upstream MercuryWorkshop, vendored
         // into sj/ at build time): the controller worker loads from
@@ -3531,6 +3664,23 @@ async fn zl_sw_js() -> Response {
             .header(header::CONTENT_TYPE, "application/javascript")
             .header(header::CACHE_CONTROL, "no-cache")
             .header("service-worker-allowed", "/")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+/// Zeolite guest-host page (vendored build, zlsw/guest-host.html): the
+/// engine-origin realm that spawns guest service-worker workers for
+/// the kernel (#477 wave 3). Served at the origin root so the same
+/// worker scope controls it; no-store so pin updates are picked up
+/// promptly.
+async fn zl_guest_host() -> Response {
+    match tokio::fs::read("zlsw/guest-host.html").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .header(header::CACHE_CONTROL, "no-store")
             .body(Body::from(bytes))
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
@@ -3710,6 +3860,7 @@ mod session_log_tests {
             suggest_cache: Mutex::new(HashMap::new()),
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
+            mcp_reports: Mutex::new(VecDeque::new()),
         }
     }
 
@@ -4012,11 +4163,12 @@ mod mcp_tests {
             suggest_cache: Mutex::new(HashMap::new()),
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
+            mcp_reports: Mutex::new(VecDeque::new()),
         }
     }
 
     #[test]
-    fn mcp_tools_list_seven_unique_read_only_tools() {
+    fn mcp_tools_list_nine_unique_read_only_tools() {
         let v = mcp_tool_list();
         let tools = v
             .get("tools")
@@ -4034,6 +4186,8 @@ mod mcp_tests {
             "lb_egress_check",
             "lb_serve",
             "lb_stats",
+            "lb_diag_reports",
+            "lb_diag_report",
         ];
         assert_eq!(names.len(), want.len());
         for w in want {
@@ -4047,6 +4201,102 @@ mod mcp_tests {
                 Some("object")
             );
         }
+    }
+
+    #[tokio::test]
+    async fn mcp_share_roundtrip_and_bounds() {
+        let state = mcp_state();
+        // An invalid or missing session token never reaches the ring.
+        assert!(mcp_share_push(&state, "short", "kdl {}").is_err());
+        assert!(mcp_share_push(&state, "", "kdl {}").is_err());
+        let headers = axum::http::HeaderMap::new();
+        // Empty kdl refused.
+        assert!(mcp_share_push(&state, "0123456789abcdef", "").is_err());
+        // A valid share is listed and readable by the tools.
+        let id = mcp_share_push(&state, "0123456789abcdef", "report \"one\" {}")
+            .expect("share ok");
+        let (text, is_err) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_reports",
+            &serde_json::json!({}),
+        )
+        .await;
+        assert!(!is_err);
+        assert!(text.contains(&id));
+        let (text, is_err) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_report",
+            &serde_json::json!({ "id": id }),
+        )
+        .await;
+        assert!(!is_err);
+        assert_eq!(text, "report \"one\" {}");
+        // Unknown id is an honest error, never a fabricated report.
+        let (text, is_err) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_report",
+            &serde_json::json!({ "id": "deadbeefdeadbeef" }),
+        )
+        .await;
+        assert!(is_err);
+        assert!(text.contains("no such report"));
+    }
+
+    #[tokio::test]
+    async fn mcp_share_cap_eight_and_ttl_prune() {
+        let state = mcp_state();
+        let headers = axum::http::HeaderMap::new();
+        let mut ids = Vec::new();
+        for i in 0..9 {
+            ids.push(
+                mcp_share_push(&state, "0123456789abcdef", &format!("report {i}"))
+                    .expect("share ok"),
+            );
+        }
+        let (text, _) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_reports",
+            &serde_json::json!({}),
+        )
+        .await;
+        let v: serde_json::Value = serde_json::from_str(&text).expect("json");
+        let reports = v.get("reports").and_then(|r| r.as_array()).expect("reports");
+        assert_eq!(reports.len(), 8);
+        assert!(!text.contains(&ids[0]));
+        for id in &ids[1..] {
+            assert!(text.contains(id));
+        }
+        // An expired report is never listed or readable.
+        state
+            .mcp_reports
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(McpSharedReport {
+                id: "expired0000000".to_string(),
+                ts: 1,
+                expires_at: 2,
+                kdl: "stale".to_string(),
+            });
+        let (text, _) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_reports",
+            &serde_json::json!({}),
+        )
+        .await;
+        assert!(!text.contains("expired0000000"));
+        let (text, is_err) = mcp_tool_call(
+            &state,
+            &headers,
+            "lb_diag_report",
+            &serde_json::json!({ "id": "expired0000000" }),
+        )
+        .await;
+        assert!(is_err);
     }
 
     #[tokio::test]

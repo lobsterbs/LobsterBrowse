@@ -177,7 +177,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         ["adaptiveTransit", "Adaptive NativeTransit", "Shadow comparison diagnostics; routing stays conservative"],
         ["hybridLocation", "Hybrid location rewriting", "Requires verified per-site source rewriting"],
         ["cspTranslation", "CSP translation", "Deny-only HTML CSP subset; never translates arbitrary origins"],
-        ["virtualSW", "Virtual Service Workers", "Prototype only; isolated guest runtime not shipped"],
+        ["virtualSW", "Virtual Service Workers", "Shipped (#477): a page register spawns an isolated guest realm on the guest-host page; guest fetch events dispatch under a 250 ms fail-closed budget"],
       ] as const).map(([key, label, detail]) => (
         <m3e-list-item key={key}>
           <div className="lb-setting-row">
