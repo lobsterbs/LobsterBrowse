@@ -227,15 +227,55 @@ const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
   malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
 };
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
+/* LB #224: "Share to MCP" asks the engine for the document's KDL
+   diagnostics export (host-only, fail-closed on identity) and posts
+   it to the session-scoped /mcp/share bridge, where the MCP tools
+   lb_diag_reports / lb_diag_report pick it up for 1 hour. */
+function ZeoliteDiagnostics({ clientId, source, sess, snapshotRef, statusRef }: {
   clientId?: string;
   source?: EngineSource;
+  sess?: string;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
   statusRef: MutableRefObject<DiagnosticsStatus | null>;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const scope = diagnosticsScope(clientId, source);
+  const shareDiag = async (snap: DiagnosticsSnapshot, cid?: string) => {
+    setShareMsg("Sharing...");
+    if (!cid) {
+      setShareMsg("No engine identity for this document: cannot export.");
+      return;
+    }
+    const trace =
+      snap.events.map((e) => e.traceId).find((t): t is string => typeof t === "string") ??
+      snap.stats.fallbacks.map((f) => f.traceId).find((t): t is string => typeof t === "string");
+    if (!trace) {
+      setShareMsg("No trace recorded for this document yet; retry after page activity.");
+      return;
+    }
+    const reply = await zlSend({ type: "zl:exportDiagnostics", clientId: cid, traceId: trace });
+    if (!reply || reply.ok !== true || typeof reply.kdl !== "string" || !reply.kdl) {
+      setShareMsg("The engine refused the diagnostics export (identity unavailable).");
+      return;
+    }
+    try {
+      const r = await fetch("/mcp/share?lb_sess=" + encodeURIComponent(sess ?? ""), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kdl: reply.kdl }),
+      });
+      const data = r.ok ? await r.json().catch(() => null) : null;
+      if (data && data.ok === true && typeof data.id === "string") {
+        setShareMsg("Shared as report " + data.id + " (lb_diag_reports, 1 hour TTL).");
+      } else {
+        setShareMsg("The server refused the share (HTTP " + r.status + ").");
+      }
+    } catch (e) {
+      setShareMsg("Share failed: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
   /* Hide the preceding document before effect cleanup, including Export. */
   const current = snapshotForScope(snapshot, scope);
   useEffect(() => pollDocumentDiagnostics(
@@ -269,7 +309,11 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
         <m3e-button onClick={() => exportDiag(current)}>
           <m3e-icon name="download" aria-hidden={true} /> Export
         </m3e-button>
+        <m3e-button onClick={() => void shareDiag(current, clientId)}>
+          <m3e-icon name="share" aria-hidden={true} /> Share to MCP
+        </m3e-button>
       </div>
+      {shareMsg && <p className="lb-muted" style={{ margin: "0 8px 4px" }}>{shareMsg}</p>}
       {notable.length === 0 && (
         <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No retained transport or rewrite failures for this document.</p>
       )}
@@ -905,7 +949,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             fallbacks (every HTML and CSS load uses one).
           </p>
           <ZeoliteEngineTools frame={frame} />
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} sess={tab.sess} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
               <p className="lb-muted">No resource failures captured.</p>

@@ -591,3 +591,22 @@ export function zlContentRegister(co: string): void {
   f.src = co + "/zlsw-register";
   document.body.appendChild(f);
 }
+
+/* #477 wave 3: the Zeolite SW cannot create workers itself, so guest
+   service-worker realms spawn on the engine-origin guest-host page.
+   Keep one hidden guest-host iframe open per engine origin (app plus
+   content when split-origin is active). The page connects itself to
+   its own service worker (zl:guestHost) and stays embedded so guests
+   survive app navigation. Idempotent; best-effort, no ack needed. */
+export function zlGuestHost(co: string | null): void {
+  const open = (src: string) => {
+    if (document.querySelector('iframe[data-lb-zlguest="' + src + '"]')) return;
+    const f = document.createElement("iframe");
+    f.setAttribute("data-lb-zlguest", src);
+    f.style.display = "none";
+    f.src = src;
+    document.body.appendChild(f);
+  };
+  open("/guest-host.html");
+  if (co) open(co + "/guest-host.html");
+}
