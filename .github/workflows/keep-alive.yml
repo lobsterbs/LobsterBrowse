@@ -16,11 +16,11 @@ jobs:
       - name: Ping free-tier services
         run: |
           for url in \
-            https://lobsterbrowse-yiy9.onrender.com/healthz \
-            https://lobsterbrowse-beta-cts6.onrender.com/healthz \
-            https://lobsterbrowse-content-ocbg.onrender.com/healthz \
-            https://lobsterbrowse-wisp.onrender.com/ \
-            https://lobsterbrowse-fixture-rtus.onrender.com/ ; do
+            https://lobsterbrowse-g0bs.onrender.com/healthz \
+            https://lobsterbrowse-beta-9bct.onrender.com/healthz \
+            https://lobsterbrowse-content-2djv.onrender.com/healthz \
+            https://lobsterbrowse-wisp-8ec1.onrender.com/ \
+            https://lobsterbrowse-fixture-okp6.onrender.com/ ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::warning::keep-alive ping failed: $url"
             fi
