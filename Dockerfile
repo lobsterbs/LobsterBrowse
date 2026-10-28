@@ -1629,7 +1629,19 @@ FROM debian:bookworm-slim AS zl-builder
 # Cargo-side pin moves a385fa9 -> d4ca407: zeolite-server
 # lib.rs, wisp-core handshake.rs and wisp-wasm lib.rs changed
 # since a385fa9.
-ARG ZEOLITE_COMMIT=219895728d0712859ff30977bd1a0a9033052cc7
+# Pin 133 (2026-10-28): dist 107bd7d (Zeolite main 59bf14d, CI run
+# 1182, build 40696089310) ships #477 wave 3, the client virtual
+# service worker: per-tab virtual SW contexts, register() dispatch,
+# capture and forward semantics, postMessage bridging and the
+# guest-host page (docs/virtual-service-worker-phase2.md), plus the
+# one-shot wedge-restart retest in the e2e torture harness. sw.js
+# 207f93aacf2b0f5b -> 49b602e9abc78923 (698533 bytes); bootstrap.js
+# 435087f83b79c0e1 -> 22429c1203f3c8f5 (39501 bytes); wasm
+# unchanged 4853d08234b4a35a. Cargo-side pin stays d4ca407: no
+# crates changed since pin 132 (wave 3 touched app/ and suite/
+# only; the engine bundle bytes match the 34de2eb build, now from
+# a green run).
+ARG ZEOLITE_COMMIT=107bd7d20f474f495f3bfdc8da49ae35c2fc62c6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1688,7 +1700,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=207f93aacf2b0f5b ZEOLITE_BOOTSTRAP_SHA=435087f83b79c0e1 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49b602e9abc78923 ZEOLITE_BOOTSTRAP_SHA=22429c1203f3c8f5 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
