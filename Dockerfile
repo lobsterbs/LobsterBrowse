@@ -1621,7 +1621,26 @@ FROM debian:bookworm-slim AS zl-builder
 # (644519 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
 # bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
 # a385fa9 (SW-side wave).
-ARG ZEOLITE_COMMIT=e92bef406a42db1298f73e49198945918c25cc47
+# Pin 132: PR #480 engine compatibility wave (Zeolite issues
+# #452, #477, #503, #508, #509): the CSP translation layer is
+# deny-only with worker/frame/child audited (#452); virtual
+# service worker phase 2 gives guests a fetch handler with a
+# 250 ms budget and scope-routed live request-path bridging,
+# serving guest answers verbatim minus set-cookie (#477);
+# long-path asset recovery gets the generic 5-8 segment gate
+# under the mint-marker discipline (#503); the routekey
+# rotation keeps its lifecycle audit (#508); origin= Telegram
+# URLs virtualize their origin (#509); the streaming
+# CssRewriter carries its boundary byte, riding in the wasm
+# (#507). CI 40677887471 green (Zeolite main d4ca407, PR #480
+# merged); sw.js b09a2bedaa8f77f0 -> 207f93aacf2b0f5b
+# (697523 bytes); bootstrap.js d1ac5f255c2c56ed ->
+# 435087f83b79c0e1 (39223 bytes, budget 39424); wasm
+# c1d626bde245279e -> 4853d08234b4a35a (675013 bytes).
+# Cargo-side pin moves a385fa9 -> d4ca407: zeolite-server
+# lib.rs, wisp-core handshake.rs and wisp-wasm lib.rs changed
+# since a385fa9.
+ARG ZEOLITE_COMMIT=219895728d0712859ff30977bd1a0a9033052cc7
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1680,7 +1699,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b09a2bedaa8f77f0 ZEOLITE_BOOTSTRAP_SHA=d1ac5f255c2c56ed SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=207f93aacf2b0f5b ZEOLITE_BOOTSTRAP_SHA=435087f83b79c0e1 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
