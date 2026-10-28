@@ -1641,7 +1641,20 @@ FROM debian:bookworm-slim AS zl-builder
 # crates changed since pin 132 (wave 3 touched app/ and suite/
 # only; the engine bundle bytes match the 34de2eb build, now from
 # a green run).
-ARG ZEOLITE_COMMIT=107bd7d20f474f495f3bfdc8da49ae35c2fc62c6
+# Pin 134 (2026-10-28): dist c2bb017 (Zeolite main 8e0fb18, CI run
+# 1184, build 40745551849) ships the #510 URL parse seam: the scan
+# harvests route-shaped literals from inline script text (SvelteKit-
+# style hydration data islands) and the wrapped realm URL
+# constructor serves the decoded virtual destination, so Brave's
+# SERP infobox website row shows telegram.org instead of the
+# engine content host (#112/#420 class); page-realm engine
+# internals (swshim, vloc, embedsync, postmsg, ws, siteid) keep the
+# captured NativeURL after the first CI round caught swshim's
+# origin check parsing through the seam. sw.js 49b602e9abc78923 ->
+# ecc27c096d6323d1 (698539 bytes); bootstrap.js 22429c1203f3c8f5 ->
+# 6d0b04860be9077f (40522 bytes; the CI budget gate rose
+# 39680 -> 40704). Cargo-side pin stays d4ca407: no crates changed.
+ARG ZEOLITE_COMMIT=c2bb017b4e157c9646d396ae17649aa947833812
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1700,7 +1713,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=49b602e9abc78923 ZEOLITE_BOOTSTRAP_SHA=22429c1203f3c8f5 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ecc27c096d6323d1 ZEOLITE_BOOTSTRAP_SHA=6d0b04860be9077f SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
