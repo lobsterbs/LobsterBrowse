@@ -99,7 +99,12 @@ fn mcp_share_push(state: &AppState, sess: &str, kdl: &str) -> Result<String, &'s
     h.update(sess.as_bytes());
     h.update(now.to_le_bytes());
     h.update(kdl.as_bytes());
-    let id: String = h.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect();
+    let id: String = h
+        .finalize()
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let mut ring = state.mcp_reports.lock().unwrap_or_else(|e| e.into_inner());
     ring.retain(|r| r.expires_at > now);
     if ring.len() >= 8 {
@@ -2738,7 +2743,8 @@ async fn mcp_tool_call(
         "lb_diag_report" => {
             let Some(id) = args.get("id").and_then(|v| v.as_str()) else {
                 return (
-                    serde_json::json!({ "error": "id is required (see lb_diag_reports)" }).to_string(),
+                    serde_json::json!({ "error": "id is required (see lb_diag_reports)" })
+                        .to_string(),
                     true,
                 );
             };
@@ -4213,15 +4219,9 @@ mod mcp_tests {
         // Empty kdl refused.
         assert!(mcp_share_push(&state, "0123456789abcdef", "").is_err());
         // A valid share is listed and readable by the tools.
-        let id = mcp_share_push(&state, "0123456789abcdef", "report \"one\" {}")
-            .expect("share ok");
-        let (text, is_err) = mcp_tool_call(
-            &state,
-            &headers,
-            "lb_diag_reports",
-            &serde_json::json!({}),
-        )
-        .await;
+        let id = mcp_share_push(&state, "0123456789abcdef", "report \"one\" {}").expect("share ok");
+        let (text, is_err) =
+            mcp_tool_call(&state, &headers, "lb_diag_reports", &serde_json::json!({})).await;
         assert!(!is_err);
         assert!(text.contains(&id));
         let (text, is_err) = mcp_tool_call(
@@ -4256,15 +4256,13 @@ mod mcp_tests {
                     .expect("share ok"),
             );
         }
-        let (text, _) = mcp_tool_call(
-            &state,
-            &headers,
-            "lb_diag_reports",
-            &serde_json::json!({}),
-        )
-        .await;
+        let (text, _) =
+            mcp_tool_call(&state, &headers, "lb_diag_reports", &serde_json::json!({})).await;
         let v: serde_json::Value = serde_json::from_str(&text).expect("json");
-        let reports = v.get("reports").and_then(|r| r.as_array()).expect("reports");
+        let reports = v
+            .get("reports")
+            .and_then(|r| r.as_array())
+            .expect("reports");
         assert_eq!(reports.len(), 8);
         assert!(!text.contains(&ids[0]));
         for id in &ids[1..] {
@@ -4281,15 +4279,10 @@ mod mcp_tests {
                 expires_at: 2,
                 kdl: "stale".to_string(),
             });
-        let (text, _) = mcp_tool_call(
-            &state,
-            &headers,
-            "lb_diag_reports",
-            &serde_json::json!({}),
-        )
-        .await;
+        let (text, _) =
+            mcp_tool_call(&state, &headers, "lb_diag_reports", &serde_json::json!({})).await;
         assert!(!text.contains("expired0000000"));
-        let (text, is_err) = mcp_tool_call(
+        let (_text, is_err) = mcp_tool_call(
             &state,
             &headers,
             "lb_diag_report",
