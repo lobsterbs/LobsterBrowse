@@ -515,6 +515,10 @@ export default function BrowserView(props: Props) {
     if (count !== s.last) {
       s.last = count;
       s.streak = 0;
+      /* #216: every activity refreshes the 45s ceiling: the bound
+         measures quiet time, not time since navigation, so a
+         legitimately slow load is never cut off mid-stream. */
+      s.t0 = Date.now();
       return false;
     }
     s.streak += 1;
@@ -1953,6 +1957,12 @@ export default function BrowserView(props: Props) {
           const cur = prev[t.id];
           return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
         });
+      else if (!statusRef.current[t.id]?.loading)
+        /* #216: any new activity after a settle re-arms the chip
+           (single resource entries included: slow proxy loads
+           arrive one at a time); it clears again on the next
+           settle, and the 45s ceiling still bounds the quiet. */
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));
       loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
