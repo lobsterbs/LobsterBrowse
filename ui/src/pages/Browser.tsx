@@ -471,6 +471,9 @@ export default function BrowserView(props: Props) {
      settled. streams is engine-global, so a background tab still
      pumping a document holds the spinner: all tabs' work counts. */
   const [engineBusy, setEngineBusy] = useState(false);
+  /* #216: timestamp of the last real engine activity; the busy
+     grace below uses it to bridge zero-inflight gaps. */
+  const engineBusyHoldRef = useRef(0);
   useEffect(() => {
     if (!active?.url) return;
     let host = "";
@@ -493,7 +496,15 @@ export default function BrowserView(props: Props) {
           if (stop) return;
           const c = crep as { ok?: boolean; inflight?: number; streams?: number } | null;
           const contentBusy = !!(c && c.ok && ((c.inflight ?? 0) > 0 || (c.streams ?? 0) > 0));
-          setEngineBusy(appBusy || contentBusy);
+          /* #216 hysteresis: waves of subresource fetches through the
+             slow proxy leave brief zero-inflight gaps while the site
+             is still loading (HTML parsed, the next wave not yet
+             issued); the chip used to drop on every gap. Hold the
+             busy state for a bounded grace after the last real
+             engine activity, so the indicator stays up mid-load
+             and still clears promptly once work truly stops. */
+          if (appBusy || contentBusy) engineBusyHoldRef.current = Date.now() + 1800;
+          setEngineBusy(appBusy || contentBusy || Date.now() < engineBusyHoldRef.current);
         });
       });
     };
