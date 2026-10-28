@@ -164,7 +164,23 @@ main service (verified open by an unauthenticated probe
 before; the engine wisp client has no auth support, so
 content-origin pages ride the relay).
 
-Update (2026-10-23, wave 50 redeploy): the 2026-10-20 Render account was suspended; every service was recreated in a fresh workspace (frankfurt, free tier, autoDeploy off): main https://lobsterbrowse-yiy9.onrender.com (srv-dbdmgn8473hc73cssrh0), beta https://lobsterbrowse-beta-cts6.onrender.com (srv-dbdmuu29lscs73caph7g), content origin https://lobsterbrowse-content-ocbg.onrender.com (srv-dbdmgj7avr4c73ajkccg; both app services announce it via ZL_CONTENT_ORIGIN, so the split seam is live on main and beta), fixture https://lobsterbrowse-fixture-rtus.onrender.com (srv-dbdmuttg1s2s73c26cf0). The ScramJet wisp backend was not recreated: sjWisp was already empty on both services and Zeolite is the only engine. All four verified live on pin 115 via /build (zlswSha 378e4396918d9393, zlQueryRoutes true).
+Update (2026-10-23, wave 50 redeploy): the 2026-10-20 Render account was suspended; every service was recreated in a fresh workspace (frankfurt, free tier, autoDeploy off): main https://lobsterbrowse-g0bs.onrender.com (srv-dbdmgn8473hc73cssrh0), beta https://lobsterbrowse-beta-9bct.onrender.com (srv-dbdmuu29lscs73caph7g), content origin https://lobsterbrowse-content-2djv.onrender.com (srv-dbdmgj7avr4c73ajkccg; both app services announce it via ZL_CONTENT_ORIGIN, so the split seam is live on main and beta), fixture https://lobsterbrowse-fixture-okp6.onrender.com (srv-dbdmuttg1s2s73c26cf0). The ScramJet wisp backend was not recreated: sjWisp was already empty on both services and Zeolite is the only engine. All four verified live on pin 115 via /build (zlswSha 378e4396918d9393, zlQueryRoutes true).
+
+
+Update (2026-10-28, pin-132 redeploy): the 2026-10-23 Render workspace and its
+onrender.com domains are gone; every service was recreated in a fresh workspace
+(frankfurt, free tier, autoDeploy off): main https://lobsterbrowse-g0bs.onrender.com
+(srv-dbgtn40n74is73dcpk5g), beta https://lobsterbrowse-beta-9bct.onrender.com
+(srv-dbgtn4d9fdbs73d2f590), content origin
+https://lobsterbrowse-content-2djv.onrender.com (srv-dbgtn208v5cc73fi86r0;
+announced via ZL_CONTENT_ORIGIN on main and beta), fixture
+https://lobsterbrowse-fixture-okp6.onrender.com (srv-dbgto6uc6qcc73ck159g, node
+tests/transit/fixture.mjs, FIXTURE_HOST=0.0.0.0), wisp
+https://lobsterbrowse-wisp-8ec1.onrender.com (srv-dbgtoinlk1mc739f8tf0,
+Dockerfile.wisp; SCRAMJET_WISP_URL points at it on main, beta and content, and
+WISP_PASSWORD is restored on the app services). The ci.yml transit-live pair and
+the keep-alive ping list point at the new URLs. First engine pin on the new
+workspace: 132 (dist 2198957, sw 207f93aacf2b0f5b, bootstrap 435087f83b79c0e1).
 
 ## Anubis and challenge pages (honest gap, ScramJet removal 2026-10-01)
 ScramJet's anubis_bridge and the /.within.website/ server route are gone. The Zeolite engine is challenge-DETECT only (no solve verb), so PoW-protected hosts - Anubis; Startpage, the DEFAULT search engine, fronts every page with one - show the honest engine error instead of solving. Filed against Zeolite as a challenge-cookie handoff surface. Third-party widget frames must stay genuinely cross-origin; the engine's navguard owns that decision (Zeolite #28). Never fake a solved challenge, and never claim challenge support the code does not have.
