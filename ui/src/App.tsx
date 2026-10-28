@@ -136,7 +136,8 @@ export default function App() {
   }, []);
 
   /* Enhanced UI flag on <body>: theme.css scopes the frosted-glass
-     search bar and nav rail treatments to this class. */
+     search bar treatment to this class; the nav rail frosted-glass
+     treatment is always on (#226). */
   useEffect(() => {
     document.body.classList.toggle("lb-fancy", settings.fancyBackground);
   }, [settings.fancyBackground]);
