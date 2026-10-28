@@ -1,7 +1,7 @@
 /* Run: node --experimental-strip-types tests/experimental-flags/check.mjs */
 import assert from "node:assert/strict";
 import {
-  EXPERIMENTAL_KEYS, emptyExperimental, cleanExperimental,
+  EXPERIMENTAL_KEYS, defaultExperimental, cleanExperimental,
   loadDebugOverrides, saveDebugOverrides, clearDebugOverrides,
 } from "../../ui/src/debug.ts";
 
@@ -13,7 +13,7 @@ globalThis.localStorage = {
 };
 
 assert.deepEqual(EXPERIMENTAL_KEYS, ["adaptiveTransit", "hybridLocation", "cspTranslation", "virtualSW"]);
-assert.deepEqual(Object.values(emptyExperimental()), [false, false, false, false]);
+assert.deepEqual(Object.values(defaultExperimental()), [true, true, true, true]);
 assert.deepEqual(cleanExperimental(null), {});
 assert.deepEqual(cleanExperimental([]), {});
 assert.deepEqual(cleanExperimental({
@@ -21,10 +21,10 @@ assert.deepEqual(cleanExperimental({
   cspTranslation: "true", virtualSW: true, __proto__: { enabled: true },
 }), { adaptiveTransit: true, hybridLocation: false, virtualSW: true });
 
-const selected = { ...emptyExperimental(), adaptiveTransit: true, virtualSW: true };
+const selected = { ...defaultExperimental(), adaptiveTransit: true, virtualSW: true };
 saveDebugOverrides({ queryRoutes: false, experimental: selected });
 assert.deepEqual(loadDebugOverrides(), { queryRoutes: false, experimental: selected });
-assert.deepEqual({ ...emptyExperimental(), ...loadDebugOverrides().experimental }, selected);
+assert.deepEqual({ ...defaultExperimental(), ...loadDebugOverrides().experimental }, selected);
 
 data.set("lb_debug_overrides", JSON.stringify({
   queryRoutes: "false", imageLazy: true,
@@ -39,4 +39,4 @@ assert.deepEqual(loadDebugOverrides(), {});
 clearDebugOverrides();
 assert.deepEqual(loadDebugOverrides(), { experimental: {} });
 
-console.log("experimental-flags: four default-off picks, migration, validation, reset passed");
+console.log("experimental-flags: four default-ON picks (beta), migration, validation, reset passed");
