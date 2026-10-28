@@ -2970,6 +2970,7 @@ async fn main() {
         // untouched. Its chunks and wasm assets are plain static files
         // under the same prefix.
         .route("/zlsw/sw.js", get(zl_sw_js))
+        .route("/guest-host.html", get(zl_guest_host))
         .nest_service("/zlsw", ServeDir::new("zlsw"))
         // ScramJet engine bundle (upstream MercuryWorkshop, vendored
         // into sj/ at build time): the controller worker loads from
@@ -3097,6 +3098,23 @@ async fn zl_sw_js() -> Response {
             .header(header::CONTENT_TYPE, "application/javascript")
             .header(header::CACHE_CONTROL, "no-cache")
             .header("service-worker-allowed", "/")
+            .body(Body::from(bytes))
+            .expect("static response build"),
+        Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),
+    }
+}
+
+/// Zeolite guest-host page (vendored build, zlsw/guest-host.html): the
+/// engine-origin realm that spawns guest service-worker workers for
+/// the kernel (#477 wave 3). Served at the origin root so the same
+/// worker scope controls it; no-store so pin updates are picked up
+/// promptly.
+async fn zl_guest_host() -> Response {
+    match tokio::fs::read("zlsw/guest-host.html").await {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .header(header::CACHE_CONTROL, "no-store")
             .body(Body::from(bytes))
             .expect("static response build"),
         Err(_) => (StatusCode::NOT_FOUND, "zeolite bundle not vendored").into_response(),

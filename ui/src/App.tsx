@@ -16,7 +16,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentConfig, zlContentRegister, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import type { Tab } from "./store";
@@ -185,6 +185,10 @@ export default function App() {
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         zlAnnounceContentOrigin(co);
         if (co) zlContentRegister(co);
+        /* #477 wave 3: keep the guest-host realm open on the app and
+           content origins so proxied-page service-worker registrations
+           can spawn their isolated guest realms. */
+        zlGuestHost(co);
       })
       .catch(() => zlAnnounceContentOrigin(""));
     const re = () => {
