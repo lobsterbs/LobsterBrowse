@@ -13,6 +13,10 @@ export type ZlDiagEvent = {
 export type DiagnosticsSnapshot = {
   scope: DiagnosticsScope;
   generation: number;
+  /* Engine version line (zl:getNetLog version), when the serving
+     worker reports one: a stale-engine capture must be identifiable
+     from its own export. */
+  engine?: string;
   stats: ZlStats;
   events: ZlDiagEvent[];
 };
@@ -60,7 +64,8 @@ export function diagnosticsSnapshot(
       ts: f.ts, url: sanitizeUrl(f.url), reason: sanitizeText(f.reason),
       ...(typeof f.traceId === "string" ? { traceId: sanitizeText(f.traceId) } : {}),
     }));
-  return { scope, generation: net.generation, stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };
+  const version = typeof net.version === "string" ? sanitizeText(net.version) : undefined;
+  return { scope, generation: net.generation, ...(version ? { engine: version } : {}), stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };
 }
 
 /* Each tick starts after the preceding one settles. Cleanup discards
