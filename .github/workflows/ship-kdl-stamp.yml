@@ -5,6 +5,7 @@ on:
       - ".github/workflows/ship-kdl-stamp.yml"
 permissions:
   contents: write
+  workflows: write
 jobs:
   ship:
     runs-on: ubuntu-latest
