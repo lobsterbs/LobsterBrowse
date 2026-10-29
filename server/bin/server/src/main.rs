@@ -1215,7 +1215,11 @@ mod relay_bad_tests {
     fn pre_dispatch_rejections_declare_no_delivery() {
         let r = relay_bad(StatusCode::BAD_GATEWAY, "upstream connect refused", true);
         assert_eq!(r.headers().get("x-zl-relay-delivery").unwrap(), "no");
-        let r = relay_bad(StatusCode::BAD_GATEWAY, "no response headers within 20s", false);
+        let r = relay_bad(
+            StatusCode::BAD_GATEWAY,
+            "no response headers within 20s",
+            false,
+        );
         assert!(r.headers().get("x-zl-relay-delivery").is_none());
     }
 }
@@ -1350,7 +1354,13 @@ async fn zl_relay_endpoint(
         }
         /* the upstream already answered, so the request was delivered;
         an encode bug must not invite a replay */
-        _ => return bad(StatusCode::INTERNAL_SERVER_ERROR, "relay: header encode", false),
+        _ => {
+            return bad(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "relay: header encode",
+                false,
+            )
+        }
     }
     /* LB #137: the permit moves into the stream so it is held for the
     body's whole life, and the stream carries a total deadline - the
