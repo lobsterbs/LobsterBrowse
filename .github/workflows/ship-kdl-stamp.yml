@@ -1,0 +1,61 @@
+name: ship-kdl-stamp
+on:
+  push:
+    paths:
+      - ".github/workflows/ship-kdl-stamp.yml"
+permissions:
+  contents: write
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the kdl engine-stamp patch
+        run: |
+          node <<'NODEEOF'
+          const fs = require("node:fs");
+          const FILES = [{"path":"ui/src/browser/diagnosticsScope.ts","pairs":[["  scope: DiagnosticsScope;\n  generation: number;","  scope: DiagnosticsScope;\n  generation: number;\n  /* Engine version line (zl:getNetLog version), when the serving\n     worker reports one: a stale-engine capture must be identifiable\n     from its own export. */\n  engine?: string;"],["  return { scope, generation: net.generation, stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };","  const version = typeof net.version === \"string\" ? sanitizeText(net.version) : undefined;\n  return { scope, generation: net.generation, ...(version ? { engine: version } : {}), stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };"]]},{"path":"ui/src/kdl.ts","pairs":[["import { sanitizeText, sanitizeUrl } from \"./sanitize\";\nimport type { DiagnosticsSnapshot } from \"./browser/diagnosticsScope\";","import { sanitizeText, sanitizeUrl } from \"./sanitize.ts\";\nimport type { DiagnosticsSnapshot } from \"./browser/diagnosticsScope.ts\";"],["    if (ch === '\"') out += '\\\"';","    if (ch === '\"') out += '\\\\\"';"],["  statusLine: string,\n): string {","  statusLine: string,\n  buildChip?: string,\n): string {"],["  rows.push(\"  exported \" + kdlStr(new Date().toISOString()));\n  rows.push(\"  status \" + kdlStr(statusLine));","  rows.push(\"  exported \" + kdlStr(new Date().toISOString()));\n  /* Build identity (user request 2026-10-29): a capture that cannot\n     name its engine build invites stale-worker guesses. The engine\n     version line rides the snapshot (zl:getNetLog version); the\n     server build chip (buildShort + engine SW sha from /build) is\n     passed by the DevTools caller. Both rows are optional so an\n     older worker or a failed /build fetch degrades, never blocks. */\n  if (snapshot?.engine) rows.push(\"  engine \" + kdlStr(snapshot.engine));\n  if (buildChip) rows.push(\"  build \" + kdlStr(buildChip));\n  rows.push(\"  status \" + kdlStr(statusLine));"]]},{"path":"ui/src/pages/DevTools.tsx","pairs":[["  const [copyState, setCopyState] = useState<\"\" | \"ok\" | \"fail\">(\"\");","  const [copyState, setCopyState] = useState<\"\" | \"ok\" | \"fail\">(\"\");\n  /* Server build chip (buildShort + engine SW sha from /build), read\n     once per mount so the KDL export can name the build that served\n     the capture. A failed fetch leaves the chip empty and the KDL\n     simply omits the build row. */\n  const [buildChip, setBuildChip] = useState(\"\");\n  useEffect(() => {\n    let gone = false;\n    void fetch(\"/build\", { cache: \"no-store\" })\n      .then((r) => (r.ok ? r.json() : null))\n      .then((b) => {\n        const short = b && typeof b.buildShort === \"string\" ? b.buildShort : \"\";\n        const sha = b && typeof b.zlswSha === \"string\" ? b.zlswSha.slice(0, 16) : \"\";\n        if (!gone && (short || sha)) setBuildChip((short || \"unknown\") + (sha ? \" sw \" + sha : \"\"));\n      })\n      .catch(() => {});\n    return () => { gone = true; };\n  }, []);"],["    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));","    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine, buildChip));"]]},{"path":".github/workflows/ci.yml","pairs":[["      - name: Document diagnostics scope regression check\n        run: node --experimental-strip-types ../tests/diagnostics-scope/check.mjs","      - name: Document diagnostics scope regression check\n        run: node --experimental-strip-types ../tests/diagnostics-scope/check.mjs\n      - name: kdl export\n        run: node --experimental-strip-types ../tests/kdl/check.mjs"]]},{"path":"tests/diagnostics-scope/check.mjs","pairs":[["const snapshot = diagnosticsSnapshot(scope, net(), diag());\nassert(snapshot);","const snapshot = diagnosticsSnapshot(scope, net(), diag());\nassert(snapshot);\nassert(!(\"engine\" in snapshot), \"no version in the netlog reply, no engine field\");\nconst versioned = diagnosticsSnapshot(scope, { ...net(), version: \"3.0 Diamond\" }, diag());\nassert.equal(versioned.engine, \"3.0 Diamond\", \"engine version line rides the snapshot for the KDL export\");"]]}];
+          for (const f of FILES) {
+            let src = fs.readFileSync(f.path, "utf8");
+            for (const pair of f.pairs) {
+              const n = src.split(pair[0]).length - 1;
+              if (n !== 1) { console.error("ANCHOR COUNT " + n + " in " + f.path + " for: " + pair[0].slice(0, 70)); process.exit(1); }
+              src = src.replace(pair[0], pair[1]);
+            }
+            fs.writeFileSync(f.path, src);
+            console.log("ok " + f.path);
+          }
+          const NEW = "/* diagKdl (DevTools Diagnostics Copy logs, user request 2026-10-29):\n   the KDL document must name the build that produced it (engine\n   version line from the scoped snapshot, server build chip from\n   /build) so a stale-engine capture is identifiable from its own\n   export, and the existing header/stats/console/failure rows keep\n   their shape. */\nimport assert from \"node:assert/strict\";\nimport { diagKdl, kdlStr } from \"../../ui/src/kdl.ts\";\n\nconst snapshot = {\n  scope: { clientId: \"page-a\", source: \"content\" },\n  generation: 10,\n  engine: \"3.0 Diamond\",\n  stats: {\n    native: 3,\n    fallback: 2,\n    fallbacks: [{ ts: 1, url: \"https://example.com/x.js\", reason: \"JS_LITERAL_REWRITE_REQUIRED\" }],\n  },\n  events: [\n    { seq: 1, ts: 1, category: \"TRANSPORT\", severity: \"info\", message: \"request intercepted\", stage: \"REQUEST_INTERCEPTED\" },\n  ],\n};\n\nconst doc = diagKdl(snapshot, [], [], \"Diagnostics collected.\", \"e7a0f16 sw b489e3179d77798a\");\nassert(doc.includes('zeolite-diagnostics \"this document\" {'), \"header row\");\nassert(doc.includes('engine \"3.0 Diamond\"'), \"engine version row from the snapshot\");\nassert(doc.includes('build \"e7a0f16 sw b489e3179d77798a\"'), \"server build chip row\");\nassert(doc.includes('source \"content\"'), \"scope source row\");\nassert(doc.includes(\"generation 10\"), \"generation row\");\nassert(doc.includes('fallback \"https://example.com/x.js\" reason \"JS_LITERAL_REWRITE_REQUIRED\"'), \"fallback rows\");\nassert(doc.includes('event \"info\" \"TRANSPORT\" \"request intercepted\" stage \"REQUEST_INTERCEPTED\"'), \"event rows\");\n\n/* Older worker (no version) or failed /build: rows are omitted, never\n   guessed. */\nconst noVersion = diagKdl({ ...snapshot, engine: undefined }, [], [], \"Diagnostics collected.\");\nassert(!noVersion.includes(\"engine \"), \"no version, no engine row\");\nassert(!noVersion.includes(\"build \"), \"no chip, no build row\");\n\n/* A null snapshot (no engine identity yet) still exports the page\n   console and resource failures. */\nconst nullSnap = diagKdl(\n  null,\n  [{ kind: \"error\", text: \"boom\", ts: 1 }],\n  [{ kind: \"script\", url: \"https://example.com/f.js\", reason: \"HTTP_ERROR\", status: 404, ts: 2 }],\n  \"Awaiting this document engine identity.\",\n);\nassert(nullSnap.includes(\"Awaiting this document engine identity.\"), \"status line\");\nassert(nullSnap.includes('entry \"error\" \"boom\"'), \"console entries ride a null snapshot\");\nassert(nullSnap.includes('fail \"script\" \"https://example.com/f.js\" reason \"HTTP_ERROR\" status 404'), \"failure rows\");\n\n/* KDL string escaping, built from char codes so this file itself\n   carries no escape-sequence landmines: quote, backslash, newline;\n   controls dropped. */\nconst Q = String.fromCharCode(34);\nconst BS = String.fromCharCode(92);\nassert.equal(kdlStr(\"a\" + Q + \"b\" + BS + \"c\"), Q + \"a\" + BS + Q + \"b\" + BS + BS + \"c\" + Q, \"quote and backslash escape\");\nassert.equal(kdlStr(\"x\" + String.fromCharCode(10) + \"y\"), Q + \"x\" + BS + \"ny\" + Q, \"newline escape\");\nassert.equal(kdlStr(\"drop\" + String.fromCharCode(0) + \"me\"), Q + \"dropme\" + Q, \"NUL dropped\");\n\nconsole.log(\"kdl export: engine/build stamp, console/failure rows and KDL escaping passed\");\n";
+          if (fs.existsSync("tests/kdl/check.mjs")) { console.error("tests/kdl/check.mjs already exists"); process.exit(1); }
+          fs.mkdirSync("tests/kdl", { recursive: true });
+          fs.writeFileSync("tests/kdl/check.mjs", NEW);
+          console.log("ok tests/kdl/check.mjs (new)");
+          console.log("patch applied");
+          NODEEOF
+      - name: Patch touched exactly six files
+        run: |
+          N=$(git status --porcelain | wc -l)
+          echo "modified: $N"
+          git diff --stat
+          test "$N" = "6"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build ui
+        run: |
+          cd ui && npm ci && npm run build
+      - name: KDL export check
+        working-directory: ui
+        run: node --experimental-strip-types ../tests/kdl/check.mjs
+      - name: Diagnostics scope check
+        working-directory: ui
+        run: node --experimental-strip-types ../tests/diagnostics-scope/check.mjs
+      - name: Commit
+        run: |
+          git config user.name "lb-ci"
+          git config user.email "ci@lobsterbrowse.invalid"
+          git add -u
+          git add tests/kdl/check.mjs
+          git commit -q -m "diagnostics: KDL export names the serving engine and build; fix kdlStr double-quote escaping"
+          git push
