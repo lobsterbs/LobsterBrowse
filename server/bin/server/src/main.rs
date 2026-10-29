@@ -515,6 +515,7 @@ fn build_relay_client() -> reqwest::Client {
 ///   relay fetches at 60s (RELAY_HEADER_DEADLINE_MS, relayfetch.ts),
 ///   so 45s covers slow-but-legitimate APIs with margin and still
 ///   surfaces the relay's own 502 before the engine deadline.
+///
 /// send() resolves at the first response header, so a healthy
 /// streamed body never pays either wait; the 30s read timeout still
 /// bounds a stalled one.
