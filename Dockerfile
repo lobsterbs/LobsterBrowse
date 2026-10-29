@@ -1678,7 +1678,21 @@ FROM debian:bookworm-slim AS zl-builder
 # d4ca407: no crates changed. The bundle was published by run
 # 1187's app job; that run's browser job failed on runner
 # timeouts (not reproduced locally with this exact bundle).
-ARG ZEOLITE_COMMIT=f0ad3de320ede2d25ac94a373469db0af45dc14a
+# Pin 136 (2026-10-29): dist 074c927 (Zeolite main 2b81426, CI run
+# 40968942486, build 40968942486, all 5 jobs green) ships the #511
+# navguard mint seam: an absolute-URL location write mints a
+# query-shape handle behind queryRoutes (nav=true on the zl:mint
+# ControlMessage; mintRoute gains a nav flag with memo key
+# "nav:"+dest), so pathname-routed SPAs like Blooket's
+# /:gameId/play/:playerId join page resolve the decoded virtual
+# destination instead of tripping the catch-all ("Game not
+# found"); subresource re-emission stays path-form so
+# browser-visible request records never print the real path.
+# sw.js b489e3179d77798a -> ff73bac6fd111fe2 (699138 bytes);
+# bootstrap.js 6d0b04860be9077f -> 3936718bd9dcdd64 (40587
+# bytes; budget 40704). Cargo-side pin stays d4ca407: no
+# crates changed.
+ARG ZEOLITE_COMMIT=074c9271653e39187e4bc35c532e55c57626c4b8
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1737,7 +1751,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b489e3179d77798a ZEOLITE_BOOTSTRAP_SHA=6d0b04860be9077f SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ff73bac6fd111fe2 ZEOLITE_BOOTSTRAP_SHA=3936718bd9dcdd64 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
