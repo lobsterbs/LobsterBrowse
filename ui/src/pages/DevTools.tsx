@@ -20,6 +20,7 @@ import {
   diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
   type DiagnosticsSnapshot, type DiagnosticsStatus, type EngineSource, type ZlDiagEvent,
 } from "../browser/diagnosticsScope";
+import { diagKdl } from "../kdl";
 
 export type ConsoleEntry = {
   id: number;
@@ -486,26 +487,17 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
+  /* Copy logs serializes the same content the JSON export carries as
+     KDL (user request 2026-10-29): header, stats, console errors and
+     warnings, resource failures, and the full retained event ring. */
   const copyLogs = async () => {
-    const line = (t: number, level: string, msg: string) => new Date(t).toISOString() + " " + level + " " + msg;
-    const rows = [
-      ...dt.console.filter((e) => e.kind === "error" || e.kind === "warn").map((e) => line(e.ts, e.kind, e.text)),
-      ...dt.fails.map((f) => line(f.ts, "FAIL", (f.kind ? f.kind + " " : "") + (f.url || "unknown resource") + ": " + reasonText(f.reason) + (f.nav ? " (" + f.nav + ")" : ""))),
-    ];
     const snapshot = snapshotForScope(snapshotRef.current, scope);
-    if (snapshot) {
-      const notable = snapshot.events.filter(zlNotable).slice(-25).reverse();
-      rows.push("Zeolite retained page requests (this document): " + (snapshot.stats.native + snapshot.stats.fallback) +
-        ", NativeTransit: " + snapshot.stats.native + ", rewrite-routed loads (normal): " + snapshot.stats.fallback +
-        ", retained failures: " + notable.length);
-      for (const e of notable) rows.push(line(e.ts, e.severity,
-        e.category + ": " + e.message + (e.stage ? " stage=" + e.stage : "") +
-        (e.url ? " " + e.url : "") + (e.technicalReason ? " (" + e.technicalReason + ")" : "")));
-    } else {
-      /* #220: copy/export carries the explicit collection status. */
-      rows.push(scope ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"] : "No engine identity for this document yet.");
-    }
-    const ok = await writeClipboard(rows.map((row) => sanitizeText(row)).join("\n"));
+    const statusLine = snapshot
+      ? "Diagnostics collected."
+      : scope
+        ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"]
+        : "No engine identity for this document yet.";
+    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
   };
