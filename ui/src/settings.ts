@@ -155,9 +155,9 @@ export type Settings = {
   autoHideChrome: boolean;
   /* #213: the toolbar pill tint from the active tab's favicon hue
      is always on (the Settings toggle was removed; dark scheme only). */
-  /* Enhanced UI: animated starfield background on the Home page
+  /* Enhanced UI: animated starfield background in every view
      instead of the flat surface. Transform-composited animation,
-     opt-in. */
+     on by default (user request 2026-10-29). */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
@@ -182,7 +182,7 @@ export const DEFAULT_SETTINGS: Settings = {
   prefetchLinks: true,
   autoHideChrome: true,
   density: "normal",
-  fancyBackground: false,
+  fancyBackground: true,
 };
 
 const KEY = "lobsterbrowse-settings";

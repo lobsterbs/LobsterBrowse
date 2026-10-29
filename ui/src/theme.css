@@ -102,6 +102,9 @@ body.lb-fancy .lb-home m3e-search-bar {
 }
 /* Suggestion dropdown: same frosted treatment as the search bar. */
 body.lb-fancy .lb-ac {
+  /* Frosted glass drops the opaque dropdown outline; the ring and
+     inset gloss below carry the edge definition (2026-10-29). */
+  border-color: transparent;
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
