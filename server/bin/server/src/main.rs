@@ -311,7 +311,7 @@ fn truncate_bytes(s: &str, max: usize) -> String {
     while end > 0 && !s.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}â¦[truncated]", &s[..end])
+    format!("{}…[truncated]", &s[..end])
 }
 
 /// LB #135: push a line into a ring, evicting oldest lines until both
@@ -1562,7 +1562,7 @@ mod percent_decode_tests {
 
     #[test]
     fn non_ascii_after_percent_stays_literal() {
-        assert_eq!(percent_decode("%1Ã©"), "%1Ã©");
+        assert_eq!(percent_decode("%1é"), "%1é");
     }
 }
 #[cfg(test)]
@@ -1781,7 +1781,7 @@ button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
 <h1>{title}</h1>
 <p>{line}</p>
 <p>{action}</p>
-<p class="dt">{category} Â· HTTP {status}</p>
+<p class="dt">{category} · HTTP {status}</p>
 {retry_form}
 {heal_script}
 </main></body></html>"#,
