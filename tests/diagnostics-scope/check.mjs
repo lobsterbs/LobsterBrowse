@@ -7,6 +7,9 @@ const net = (generation = 10, clientId = "page-a") => ({ clientId, generation, s
 const diag = (generation = 10, clientId = "page-a", events = [event(1)]) => ({ ok: true, clientId, generation, events });
 const snapshot = diagnosticsSnapshot(scope, net(), diag());
 assert(snapshot);
+assert(!("engine" in snapshot), "no version in the netlog reply, no engine field");
+const versioned = diagnosticsSnapshot(scope, { ...net(), version: "3.0 Diamond" }, diag());
+assert.equal(versioned.engine, "3.0 Diamond", "engine version line rides the snapshot for the KDL export");
 assert.equal(snapshot.stats.native + snapshot.stats.fallback, 5);
 assert.equal(snapshotForScope(snapshot, scope), snapshot);
 assert.equal(snapshotForScope(snapshot, diagnosticsScope("page-b", "content")), null);

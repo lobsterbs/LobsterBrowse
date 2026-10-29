@@ -402,6 +402,23 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
 
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, open }: Props) {
   const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
+  /* Server build chip (buildShort + engine SW sha from /build), read
+     once per mount so the KDL export can name the build that served
+     the capture. A failed fetch leaves the chip empty and the KDL
+     simply omits the build row. */
+  const [buildChip, setBuildChip] = useState("");
+  useEffect(() => {
+    let gone = false;
+    void fetch("/build", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        const short = b && typeof b.buildShort === "string" ? b.buildShort : "";
+        const sha = b && typeof b.zlswSha === "string" ? b.zlswSha.slice(0, 16) : "";
+        if (!gone && (short || sha)) setBuildChip((short || "unknown") + (sha ? " sw " + sha : ""));
+      })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, []);
 
   const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
   const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
@@ -421,7 +438,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       : scope
         ? "Awaiting diagnostics for this document."
         : "Awaiting this document's engine identity.";
-    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
+    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine, buildChip));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
   };

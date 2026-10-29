@@ -3,15 +3,15 @@
    emitted as a KDL document in the style of the engine's KDL exports.
    Structurally typed against the DevTools console and failure rows so
    this module owns no state and has no import cycle with the page. */
-import { sanitizeText, sanitizeUrl } from "./sanitize";
-import type { DiagnosticsSnapshot } from "./browser/diagnosticsScope";
+import { sanitizeText, sanitizeUrl } from "./sanitize.ts";
+import type { DiagnosticsSnapshot } from "./browser/diagnosticsScope.ts";
 
 /* KDL strings escape backslash and double quote; CR, LF, and tab map to
    their KDL escapes; other C0 controls and DEL are dropped. */
 export function kdlStr(v: string): string {
   let out = '"';
   for (const ch of v) {
-    if (ch === '"') out += '\"';
+    if (ch === '"') out += '\\"';
     else if (ch === "\\") out += "\\\\";
     else if (ch === "\n") out += "\\n";
     else if (ch === "\r") out += "\\r";
@@ -44,12 +44,21 @@ export function diagKdl(
   consoleEntries: ReadonlyArray<ConsoleLike>,
   fails: ReadonlyArray<FailLike>,
   statusLine: string,
+  buildChip?: string,
 ): string {
   const iso = (t: number) => new Date(t).toISOString();
   const errs = consoleEntries.filter((e) => e.kind === "error" || e.kind === "warn");
   const rows: string[] = [];
   rows.push('zeolite-diagnostics "this document" {');
   rows.push("  exported " + kdlStr(new Date().toISOString()));
+  /* Build identity (user request 2026-10-29): a capture that cannot
+     name its engine build invites stale-worker guesses. The engine
+     version line rides the snapshot (zl:getNetLog version); the
+     server build chip (buildShort + engine SW sha from /build) is
+     passed by the DevTools caller. Both rows are optional so an
+     older worker or a failed /build fetch degrades, never blocks. */
+  if (snapshot?.engine) rows.push("  engine " + kdlStr(snapshot.engine));
+  if (buildChip) rows.push("  build " + kdlStr(buildChip));
   rows.push("  status " + kdlStr(statusLine));
   rows.push("  console-errors-and-warnings " + errs.length);
   rows.push("  resource-failures " + fails.length);
