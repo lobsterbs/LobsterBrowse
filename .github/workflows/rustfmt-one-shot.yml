@@ -1,0 +1,27 @@
+name: rustfmt one-shot (#501)
+on:
+  push:
+    paths:
+      - ".github/workflows/rustfmt-one-shot.yml"
+permissions:
+  contents: write
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply rustfmt
+        working-directory: server
+        run: cargo fmt --all
+      - name: Commit and push if changed
+        run: |
+          git config user.name "zl-bot"
+          git config user.email "zl-bot@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "style(server): apply rustfmt to the #501 relay patch"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
