@@ -503,14 +503,31 @@ fn build_relay_client() -> reqwest::Client {
         .expect("reqwest relay client")
 }
 
-/// First-byte wait for relayed requests (2026-10-14 report, issue 3):
-/// strictly shorter than the engine's navigation deadline (30s
-/// NAV_TTFB_DEADLINE_MS) so the relay's own diagnostic 502 with the
-/// failure source chain wins the race; the user sees the cause
-/// instead of the service worker's generic deadline error. send()
-/// resolves at the first response header, so a healthy streamed body
-/// never pays it; the 30s read timeout still bounds a stalled one.
-const RELAY_HEADER_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
+/// First-byte wait for relayed requests, one class per engine
+/// deadline (2026-10-14 report, issue 3; Zeolite #501 slow-API repro):
+/// - NAV (sec-fetch-dest: document): strictly shorter than the
+///   engine's navigation deadline (30s NAV_TTFB_DEADLINE_MS) so the
+///   relay's own diagnostic 502 with the failure source chain wins
+///   the race; the user sees the cause instead of the service
+///   worker's generic deadline error.
+/// - SUBRESOURCE (Zeolite #501, live repro: amiunique.org's
+///   fingerprint API answers in ~22s): the engine bounds subresource
+///   relay fetches at 60s (RELAY_HEADER_DEADLINE_MS, relayfetch.ts),
+///   so 45s covers slow-but-legitimate APIs with margin and still
+///   surfaces the relay's own 502 before the engine deadline.
+/// send() resolves at the first response header, so a healthy
+/// streamed body never pays either wait; the 30s read timeout still
+/// bounds a stalled one.
+const RELAY_HEADER_WAIT_NAV: std::time::Duration = std::time::Duration::from_secs(20);
+const RELAY_HEADER_WAIT_SUBRESOURCE: std::time::Duration =
+    std::time::Duration::from_secs(45);
+
+fn relay_header_wait(sec_fetch_dest: Option<&str>) -> std::time::Duration {
+    match sec_fetch_dest {
+        Some(d) if d.eq_ignore_ascii_case("document") => RELAY_HEADER_WAIT_NAV,
+        _ => RELAY_HEADER_WAIT_SUBRESOURCE,
+    }
+}
 
 /// LB #137: total wall-clock budget for one relayed response body.
 /// Generous by design - a healthy slow stream must never pay it - but
@@ -628,6 +645,33 @@ mod relay_wait {
             Err((_msg, pre)) => assert!(pre, "a refused connect must be pre-dispatch"),
             Ok(_) => panic!("a refused connect must not produce headers"),
         }
+    }
+
+    /* Zeolite #501: the wait is classed by the RELAYED envelope's own
+    sec-fetch-dest; navigations keep the 20s diagnostic race and
+    subresources get 45s, still under the engine's 60s relay header
+    deadline (relayfetch.ts RELAY_HEADER_DEADLINE_MS). */
+    #[test]
+    fn relay_header_wait_is_classed_by_sec_fetch_dest() {
+        assert_eq!(
+            relay_header_wait(Some("document")),
+            RELAY_HEADER_WAIT_NAV
+        );
+        assert_eq!(
+            relay_header_wait(Some("DOCUMENT")),
+            RELAY_HEADER_WAIT_NAV
+        );
+        for d in ["empty", "script", "iframe", "image"] {
+            assert_eq!(
+                relay_header_wait(Some(d)),
+                RELAY_HEADER_WAIT_SUBRESOURCE,
+                "dest {d}"
+            );
+        }
+        assert_eq!(relay_header_wait(None), RELAY_HEADER_WAIT_SUBRESOURCE);
+        /* the two invariants the classes exist to keep */
+        assert!(RELAY_HEADER_WAIT_NAV < std::time::Duration::from_secs(30));
+        assert!(RELAY_HEADER_WAIT_SUBRESOURCE < std::time::Duration::from_secs(60));
     }
 }
 
@@ -1188,7 +1232,7 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
 /// set-cookie from browser JS, so cookies ride as data). SSRF:
 /// resolve-then-validate at connect time via the same PolicyDns
 /// resolver the engine clients use. Redirects are NOT followed (the
-/// engine hop chain re-issues them). ponytail: RELAY_HEADER_WAIT
+/// engine hop chain re-issues them). ponytail: relay_header_wait()
 /// bounds only the wait for the first response header, so a healthy
 /// streamed body never pays it; long-lived event-stream relays are
 /// not a use case.
@@ -1291,13 +1335,22 @@ async fn zl_relay_endpoint(
         return bad(StatusCode::BAD_REQUEST, "relay: bad method", true);
     };
     let mut out = state.relay_client.request(method, dest);
+    /* Zeolite #501: the RELAYED envelope carries the page's own
+    sec-fetch-dest; document means a navigation (20s diagnostic
+    race), anything else a subresource (45s, under the engine's 60s
+    relay header deadline). */
+    let mut sec_fetch_dest: Option<&str> = None;
     if let Some(pairs) = req.get("headers").and_then(|v| v.as_array()) {
         for p in pairs {
             if let (Some(k), Some(v)) = (
                 p.get(0).and_then(|x| x.as_str()),
                 p.get(1).and_then(|x| x.as_str()),
             ) {
-                if relay_request_header_allowed(&k.to_ascii_lowercase()) {
+                let kl = k.to_ascii_lowercase();
+                if kl == "sec-fetch-dest" {
+                    sec_fetch_dest = Some(v);
+                }
+                if relay_request_header_allowed(&kl) {
                     out = out.header(k, v);
                 }
             }
@@ -1318,7 +1371,7 @@ async fn zl_relay_endpoint(
             None => return bad(StatusCode::BAD_REQUEST, "relay: bad body_b64", true),
         }
     }
-    let upstream = match relay_send_wait(out, RELAY_HEADER_WAIT).await {
+    let upstream = match relay_send_wait(out, relay_header_wait(sec_fetch_dest)).await {
         Ok(r) => r,
         Err((msg, pre_dispatch)) => return bad(StatusCode::BAD_GATEWAY, &msg, pre_dispatch),
     };
