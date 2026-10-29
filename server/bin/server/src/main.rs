@@ -519,8 +519,7 @@ fn build_relay_client() -> reqwest::Client {
 /// streamed body never pays either wait; the 30s read timeout still
 /// bounds a stalled one.
 const RELAY_HEADER_WAIT_NAV: std::time::Duration = std::time::Duration::from_secs(20);
-const RELAY_HEADER_WAIT_SUBRESOURCE: std::time::Duration =
-    std::time::Duration::from_secs(45);
+const RELAY_HEADER_WAIT_SUBRESOURCE: std::time::Duration = std::time::Duration::from_secs(45);
 
 fn relay_header_wait(sec_fetch_dest: Option<&str>) -> std::time::Duration {
     match sec_fetch_dest {
@@ -653,14 +652,8 @@ mod relay_wait {
     deadline (relayfetch.ts RELAY_HEADER_DEADLINE_MS). */
     #[test]
     fn relay_header_wait_is_classed_by_sec_fetch_dest() {
-        assert_eq!(
-            relay_header_wait(Some("document")),
-            RELAY_HEADER_WAIT_NAV
-        );
-        assert_eq!(
-            relay_header_wait(Some("DOCUMENT")),
-            RELAY_HEADER_WAIT_NAV
-        );
+        assert_eq!(relay_header_wait(Some("document")), RELAY_HEADER_WAIT_NAV);
+        assert_eq!(relay_header_wait(Some("DOCUMENT")), RELAY_HEADER_WAIT_NAV);
         for d in ["empty", "script", "iframe", "image"] {
             assert_eq!(
                 relay_header_wait(Some(d)),
