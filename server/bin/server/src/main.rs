@@ -539,7 +539,7 @@ const RELAY_RATE_MAX_PER_WINDOW: usize = 150;
 async fn relay_send_wait(
     req: reqwest::RequestBuilder,
     wait: std::time::Duration,
-) -> Result<reqwest::Response, String> {
+) -> Result<reqwest::Response, (String, bool)> {
     match tokio::time::timeout(wait, req.send()).await {
         Ok(Ok(r)) => Ok(r),
         Ok(Err(e)) => {
@@ -553,11 +553,18 @@ async fn relay_send_wait(
                 chain.push_str(&s.to_string());
                 src = s.source();
             }
-            Err(chain)
+            /* Zeolite #501: a connect-phase failure never wrote request
+            bytes upstream, so the delivery contract may replay the
+            request on another transport; every other send error stays
+            delivery-unknown (the request may already have left). */
+            Err((chain, e.is_connect()))
         }
-        Err(_) => Err(format!(
-            "relay: no response headers within {}s :: operation timed out",
-            wait.as_secs()
+        Err(_) => Err((
+            format!(
+                "relay: no response headers within {}s :: operation timed out",
+                wait.as_secs()
+            ),
+            false,
         )),
     }
 }
@@ -587,12 +594,39 @@ mod relay_wait {
         )
         .await;
         match res {
-            Err(msg) => assert!(
-                msg.contains("no response headers within"),
-                "diagnostic: {}",
-                msg
-            ),
+            Err((msg, pre)) => {
+                assert!(
+                    msg.contains("no response headers within"),
+                    "diagnostic: {}",
+                    msg
+                );
+                assert!(!pre, "a header timeout is not pre-dispatch evidence");
+            }
             Ok(_) => panic!("a stalled upstream must not produce headers"),
+        }
+    }
+
+    /* Zeolite #501: a refused connection never wrote request bytes, so
+    relay_send_wait must report pre-dispatch evidence for it. */
+    #[tokio::test]
+    async fn refused_connect_is_pre_dispatch_evidence() {
+        let port = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .connect_timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let res = relay_send_wait(
+            client.get(format!("http://127.0.0.1:{}/", port)),
+            std::time::Duration::from_secs(3),
+        )
+        .await;
+        match res {
+            Err((_msg, pre)) => assert!(pre, "a refused connect must be pre-dispatch"),
+            Ok(_) => panic!("a refused connect must not produce headers"),
         }
     }
 }
@@ -1158,13 +1192,41 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
 /// bounds only the wait for the first response header, so a healthy
 /// streamed body never pays it; long-lived event-stream relays are
 /// not a use case.
+/// Zeolite #501: a rejection that provably happens before any upstream
+/// request is written declares itself with x-zl-relay-delivery: no, which
+/// the embedder relays to the engine as replay-safe pre-dispatch
+/// evidence. Post-dispatch failures stay silent (delivery-unknown).
+fn relay_bad(code: StatusCode, msg: &str, pre_dispatch: bool) -> Response {
+    let mut resp = (code, msg.to_string()).into_response();
+    if pre_dispatch {
+        resp.headers_mut().insert(
+            "x-zl-relay-delivery",
+            axum::http::HeaderValue::from_static("no"),
+        );
+    }
+    resp
+}
+
+#[cfg(test)]
+mod relay_bad_tests {
+    use super::*;
+
+    #[test]
+    fn pre_dispatch_rejections_declare_no_delivery() {
+        let r = relay_bad(StatusCode::BAD_GATEWAY, "upstream connect refused", true);
+        assert_eq!(r.headers().get("x-zl-relay-delivery").unwrap(), "no");
+        let r = relay_bad(StatusCode::BAD_GATEWAY, "no response headers within 20s", false);
+        assert!(r.headers().get("x-zl-relay-delivery").is_none());
+    }
+}
+
 async fn zl_relay_endpoint(
     State(state): State<Arc<AppState>>,
     axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
-    let bad = |code: StatusCode, msg: &str| -> Response { (code, msg.to_string()).into_response() };
+    let bad = relay_bad;
     /* #110: authorize BEFORE any JSON parsing or outbound work. The
     request body stays bounded by the route-level 32 MiB DefaultBodyLimit
     on /zlrelay (#200), so a relay envelope can never balloon memory. */
@@ -1177,7 +1239,7 @@ async fn zl_relay_endpoint(
             .and_then(|v| v.to_str().ok()),
         state.relay_token.as_deref(),
     ) {
-        return bad(StatusCode::FORBIDDEN, msg);
+        return bad(StatusCode::FORBIDDEN, msg, true);
     }
     if !relay_rate_allow(
         &state.relay_rate,
@@ -1191,6 +1253,7 @@ async fn zl_relay_endpoint(
         return bad(
             StatusCode::TOO_MANY_REQUESTS,
             "relay: rate limit exceeded, retry later",
+            true,
         );
     }
     let relay_permit = match state.relay_permits.clone().try_acquire_owned() {
@@ -1199,20 +1262,21 @@ async fn zl_relay_endpoint(
             return bad(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "relay: too many concurrent relay connects",
+                true,
             )
         }
     };
     let req: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
-        Err(e) => return bad(StatusCode::BAD_REQUEST, &format!("relay body: {}", e)),
+        Err(e) => return bad(StatusCode::BAD_REQUEST, &format!("relay body: {}", e), true),
     };
     let Some(dest) = req.get("dest").and_then(|v| v.as_str()) else {
-        return bad(StatusCode::BAD_REQUEST, "relay: dest missing");
+        return bad(StatusCode::BAD_REQUEST, "relay: dest missing", true);
     };
     /* #115: literal-IP destinations bypass PolicyDns; the parsed,
     canonical host must pass the same DestinationPolicy first. */
     if let Some(msg) = relay_dest_rejected(dest) {
-        return bad(StatusCode::FORBIDDEN, &msg);
+        return bad(StatusCode::FORBIDDEN, &msg, true);
     }
     let method_s = req
         .get("method")
@@ -1220,7 +1284,7 @@ async fn zl_relay_endpoint(
         .unwrap_or("GET")
         .to_uppercase();
     let Ok(method) = reqwest::Method::from_bytes(method_s.as_bytes()) else {
-        return bad(StatusCode::BAD_REQUEST, "relay: bad method");
+        return bad(StatusCode::BAD_REQUEST, "relay: bad method", true);
     };
     let mut out = state.relay_client.request(method, dest);
     if let Some(pairs) = req.get("headers").and_then(|v| v.as_array()) {
@@ -1247,12 +1311,12 @@ async fn zl_relay_endpoint(
     } else if let Some(b64s) = req.get("body_b64").and_then(|v| v.as_str()) {
         match relay_base64_decode(b64s) {
             Some(bytes) => out = out.body(bytes),
-            None => return bad(StatusCode::BAD_REQUEST, "relay: bad body_b64"),
+            None => return bad(StatusCode::BAD_REQUEST, "relay: bad body_b64", true),
         }
     }
     let upstream = match relay_send_wait(out, RELAY_HEADER_WAIT).await {
         Ok(r) => r,
-        Err(msg) => return bad(StatusCode::BAD_GATEWAY, &msg),
+        Err((msg, pre_dispatch)) => return bad(StatusCode::BAD_GATEWAY, &msg, pre_dispatch),
     };
     let mut pairs: Vec<(String, String)> = Vec::new();
     for (name, value) in upstream.headers().iter() {
@@ -1284,7 +1348,9 @@ async fn zl_relay_endpoint(
             hm.insert("x-zl-relay-headers", b);
             hm.insert("x-zl-relay-set-cookie", c);
         }
-        _ => return bad(StatusCode::INTERNAL_SERVER_ERROR, "relay: header encode"),
+        /* the upstream already answered, so the request was delivered;
+        an encode bug must not invite a replay */
+        _ => return bad(StatusCode::INTERNAL_SERVER_ERROR, "relay: header encode", false),
     }
     /* LB #137: the permit moves into the stream so it is held for the
     body's whole life, and the stream carries a total deadline - the
@@ -2249,7 +2315,7 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
           const ac = new AbortController();
           controllers.set(m.rid, ac);
           (async () => {
-            const fail = (error) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error }); } catch (e) {} };
+            const fail = (error, delivery) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error, ...(delivery ? { delivery } : {}) }); } catch (e) {} };
             try {
               const bodyJson = JSON.stringify({
                 dest: m.dest, method: m.method, headers: m.headers,
@@ -2276,6 +2342,10 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
                   await new Promise((res) => setTimeout(res, 300 * (attempt + 1)));
                   if (ac.signal.aborted) throw new Error("relay aborted during retry");
                   continue;
+                }
+                if (r.headers.get("x-zl-relay-delivery") === "no") {
+                  fail("relay endpoint unavailable (" + r.status + ")", "definitely-not-delivered");
+                  return;
                 }
                 throw new Error("relay endpoint unavailable (" + r.status + ")");
               }

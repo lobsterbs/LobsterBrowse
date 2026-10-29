@@ -253,7 +253,12 @@ async function zlRelayFetch(
         res();
       };
     });
-  const fail = (error: string) => port.postMessage({ type: "zl:relayError", rid, error });
+  /* Zeolite #501: delivery carries the relay endpoint evidence for
+     pre-dispatch rejections, so the engine may replay a
+     non-idempotent request on the secondary transport; absent for
+     legacy peers and post-dispatch faults, which stay unknown. */
+  const fail = (error: string, delivery?: "definitely-not-delivered") =>
+    port.postMessage({ type: "zl:relayError", rid, error, ...(delivery ? { delivery } : {}) });
   try {
     const body =
       typeof m.body === "string"
@@ -294,6 +299,10 @@ async function zlRelayFetch(
         await new Promise((res) => setTimeout(res, 300 * (attempt + 1)));
         if (ac.signal.aborted) throw new Error("relay aborted during retry");
         continue;
+      }
+      if (r.headers.get("x-zl-relay-delivery") === "no") {
+        fail("relay endpoint unavailable (" + r.status + ")", "definitely-not-delivered");
+        return;
       }
       throw new Error("relay endpoint unavailable (" + r.status + ")");
     }
