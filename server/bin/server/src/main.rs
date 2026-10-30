@@ -77,8 +77,13 @@ struct AppState {
     /// The browser never sees them; /ai/chat forwards with them.
     cf_ai_key: Option<String>,
     cf_account: String,
-    /// LB AI mode: per-client sliding window of AI uses.
-    ai_uses: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
+    /// LB AI mode: per-client sliding window of AI uses, keyed by
+    /// the derived lb_ai_cid id (per-IP), so a page wipe or a cookie
+    /// clear cannot reset the bucket.
+    ai_uses: Mutex<HashMap<String, VecDeque<u64>>>,
+    /// LB AI mode: the one-time llama-4 license agree has been sent
+    /// on this process (see ai_chat_endpoint).
+    ai_vision_agreed: Mutex<bool>,
 }
 
 /// LB #224: one shared engine diagnostics report. KDL text as the
@@ -1280,31 +1285,33 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
  * whitelist, a message-count cap, the route-level 32 MiB body limit
  * (image data URLs), a 50-use rolling 6 h window per client, and the
  * SSE answer streamed through with the same poll_fn pattern as the
- * relay. ponytail: the rate key reuses relay_rate_key; on Render the
- * peer is the shared edge IP unless LB_TRUSTED_PROXY_CIDRS is set,
- * so the whole edge shares one AI bucket - the same documented
- * tradeoff the relay rate limit makes. */
+ * relay. The rate key is the per-IP derived lb_ai_cid id (see
+ * ai_cid_from): a page wipe or a cookie clear re-derives the same
+ * id, so neither resets the bucket; the browser also gets the id in
+ * a signed HttpOnly cookie so the bucket survives client IP
+ * changes. */
 const AI_MODELS: &[&str] = &[
     "@cf/openai/gpt-oss-120b",
     "@cf/openai/gpt-oss-20b",
     "@cf/qwen/qwen3-30b-a3b-fp8",
+    /* The whitelisted vision model: image attachments re-route to it
+    (llama-4-scout, $0.27/$0.85 per M tokens in/out, 131k context,
+    function calling + vision). */
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
 ];
+const AI_VISION_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const AI_RATE_MAX_PER_WINDOW: usize = 50;
 const AI_RATE_WINDOW_SECS: u64 = 6 * 3600;
 const AI_TOTAL_DEADLINE_SECS: u64 = 600;
 
 /// LB AI mode: sliding-window take, mirroring relay_rate_allow but
 /// returning the remaining count for the x-lb-ai-remaining header.
-fn ai_rate_take(
-    map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>,
-    ip: IpAddr,
-    now: u64,
-) -> Option<usize> {
+fn ai_rate_take(map: &Mutex<HashMap<String, VecDeque<u64>>>, key: &str, now: u64) -> Option<usize> {
     let mut map = map.lock().unwrap();
     if map.len() > 4096 {
         map.retain(|_, w| !w.is_empty());
     }
-    let win = map.entry(ip).or_default();
+    let win = map.entry(key.to_string()).or_default();
     while let Some(&t) = win.front() {
         if now.saturating_sub(t) >= AI_RATE_WINDOW_SECS {
             win.pop_front();
@@ -1333,14 +1340,95 @@ fn ai_err(code: StatusCode, msg: &str) -> Response {
         .into_response()
 }
 
+/// LB AI mode: the rate-limit client id. It is derived from the
+/// client IP (rightmost parseable x-forwarded-for hop, which
+/// Render's edge appends - never client-controlled; else the peer),
+/// so a page wipe or a cookie clear re-derives the SAME id and the
+/// bucket survives both. The browser also gets the id in a signed
+/// HttpOnly cookie (lb_ai_cid): it keeps the bucket when the client
+/// IP legitimately changes. The tag is sha256(secret||id) with a
+/// per-process secret (one honest reset per deploy), so a forged or
+/// borrowed cookie cannot reach another client's bucket. Clearing
+/// browser data on a shared NAT IP still merges users into that
+/// IP's bucket - the same tradeoff the relay rate limit makes.
+fn ai_cid_secret() -> &'static [u8; 32] {
+    use sha2::{Digest, Sha256};
+    static SECRET: std::sync::OnceLock<[u8; 32]> = std::sync::OnceLock::new();
+    SECRET.get_or_init(|| {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut h = Sha256::new();
+        h.update(nanos.to_le_bytes());
+        h.update(std::process::id().to_le_bytes());
+        let out = h.finalize();
+        let mut secret = [0u8; 32];
+        secret.copy_from_slice(&out);
+        secret
+    })
+}
+
+fn ai_hex(bytes: &[u8], len: usize) -> String {
+    bytes.iter().take(len).map(|b| format!("{b:02x}")).collect()
+}
+
+fn ai_cid_from(ip: IpAddr) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(ai_cid_secret());
+    h.update(b"lb-ai-cid:");
+    h.update(ip.to_string().as_bytes());
+    ai_hex(&h.finalize(), 8)
+}
+
+fn ai_cid_mint(ip: IpAddr) -> String {
+    use sha2::{Digest, Sha256};
+    let id = ai_cid_from(ip);
+    let mut h = Sha256::new();
+    h.update(ai_cid_secret());
+    h.update(b"lb-ai-cid:");
+    h.update(id.as_bytes());
+    format!("{id}.{}", ai_hex(&h.finalize(), 8))
+}
+
+fn ai_cid_ok(value: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let (id, tag) = value.split_once('.')?;
+    if id.len() != 16 || tag.len() != 16 {
+        return None;
+    }
+    if !id.bytes().all(|b| b.is_ascii_hexdigit()) || !tag.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut h = Sha256::new();
+    h.update(ai_cid_secret());
+    h.update(b"lb-ai-cid:");
+    h.update(id.as_bytes());
+    if ai_hex(&h.finalize(), 8) != tag {
+        return None;
+    }
+    Some(id.to_string())
+}
+
 /// LB AI mode: validate the proxy request before any upstream work.
 /// Only what OUR client legitimately sends passes: whitelisted
-/// model, 1..=41 messages, known roles, string or typed-part content
-/// with inline data: images only. Everything else is rejected, never
+/// model, 1..=41 messages, known roles (system/user/assistant/tool),
+/// string or typed-part content, inline data: images only on the
+/// vision model, plus the tool schema and tool_calls for the
+/// model-invoked web search. Everything else is rejected, never
 /// forwarded.
 fn ai_validate(
     req: &serde_json::Value,
-) -> Result<(String, Vec<serde_json::Value>, bool), &'static str> {
+) -> Result<
+    (
+        String,
+        Vec<serde_json::Value>,
+        bool,
+        Option<Vec<serde_json::Value>>,
+    ),
+    &'static str,
+> {
     let model = req
         .get("model")
         .and_then(|v| v.as_str())
@@ -1358,8 +1446,59 @@ fn ai_validate(
     let mut out = Vec::with_capacity(msgs.len());
     for m in msgs {
         let role = m.get("role").and_then(|v| v.as_str()).ok_or("bad role")?;
-        if !matches!(role, "system" | "user" | "assistant") {
+        if !matches!(role, "system" | "user" | "assistant" | "tool") {
             return Err("bad role");
+        }
+        if role == "tool" {
+            let id = m
+                .get("tool_call_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing tool_call_id")?;
+            if id.is_empty() || id.len() > 128 {
+                return Err("bad tool_call_id");
+            }
+            let content = m
+                .get("content")
+                .and_then(|v| v.as_str())
+                .ok_or("tool content must be a string")?;
+            if content.len() > 200_000 {
+                return Err("message too long");
+            }
+            out.push(m.clone());
+            continue;
+        }
+        if let Some(calls) = m.get("tool_calls") {
+            let calls = calls.as_array().ok_or("bad tool_calls")?;
+            if calls.len() > 4 {
+                return Err("too many tool calls");
+            }
+            for c in calls {
+                let id = c
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("bad tool call")?;
+                if id.is_empty() || id.len() > 128 {
+                    return Err("bad tool call id");
+                }
+                if c.get("type").and_then(|v| v.as_str()) != Some("function") {
+                    return Err("bad tool call type");
+                }
+                let f = c.get("function").ok_or("bad tool call function")?;
+                let name = f
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or("bad tool name")?;
+                if name.is_empty() || name.len() > 64 {
+                    return Err("bad tool name");
+                }
+                let args = f
+                    .get("arguments")
+                    .and_then(|v| v.as_str())
+                    .ok_or("bad tool arguments")?;
+                if args.len() > 32_768 {
+                    return Err("tool arguments too long");
+                }
+            }
         }
         let content = m.get("content").ok_or("missing content")?;
         match content {
@@ -1384,6 +1523,11 @@ fn ai_validate(
                             }
                         }
                         Some("image_url") => {
+                            if model != AI_VISION_MODEL {
+                                return Err(
+                                    "model does not accept images; image attachments re-route to the vision model",
+                                );
+                            }
                             let url = part
                                 .get("image_url")
                                 .and_then(|v| v.get("url"))
@@ -1401,29 +1545,107 @@ fn ai_validate(
         }
         out.push(m.clone());
     }
+    let mut tools = None;
+    if let Some(list) = req.get("tools") {
+        let list = list.as_array().ok_or("bad tools")?;
+        if list.len() > 4 {
+            return Err("too many tools");
+        }
+        for t in list {
+            if t.get("type").and_then(|v| v.as_str()) != Some("function") {
+                return Err("bad tool type");
+            }
+            let f = t.get("function").ok_or("bad tool function")?;
+            let name = f
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("bad tool name")?;
+            if name.is_empty() || name.len() > 64 {
+                return Err("bad tool name");
+            }
+            if let Some(d) = f.get("description").and_then(|v| v.as_str()) {
+                if d.len() > 2000 {
+                    return Err("tool description too long");
+                }
+            }
+            let params = f
+                .get("parameters")
+                .and_then(|v| v.as_object())
+                .ok_or("bad tool parameters")?;
+            if params.len() > 16 {
+                return Err("too many tool parameters");
+            }
+        }
+        tools = Some(list.clone());
+    }
     let thinking = req
         .get("thinking")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    Ok((model.to_string(), out, thinking))
+    Ok((model.to_string(), out, thinking, tools))
 }
 
 /// LB AI mode: POST /ai/chat. Forwards to Cloudflare Workers AI
 /// with the server key and pipes the SSE answer through unchanged;
-/// the remaining
-/// quota rides x-lb-ai-remaining. 503 when the deployment has no
-/// key, 429 when the window is exhausted.
+/// the remaining quota rides x-lb-ai-remaining. 503 when the
+/// deployment has no key, 429 when the window is exhausted. The rate
+/// key prefers the signed lb_ai_cid cookie; a request without one
+/// re-derives the id from the client IP (what a wiped or cleared
+/// cookie re-derives too) and gets the cookie minted onto the
+/// response.
 async fn ai_chat_endpoint(
     State(state): State<Arc<AppState>>,
     axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
+    let mut cid: Option<String> = None;
+    for hv in headers.get_all("cookie") {
+        if let Ok(s) = hv.to_str() {
+            for pair in s.split(';') {
+                if let Some(v) = pair.trim().strip_prefix("lb_ai_cid=") {
+                    cid = ai_cid_ok(v);
+                }
+            }
+        }
+    }
+    let xff = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok());
+    let ip = xff
+        .and_then(|list| {
+            list.rsplit(',')
+                .find_map(|s| s.trim().parse::<IpAddr>().ok())
+        })
+        .unwrap_or(peer.ip());
+    let set_cookie = if cid.is_none() {
+        Some(ai_cid_mint(ip))
+    } else {
+        None
+    };
+    let rate_key = match cid {
+        Some(id) => format!("c:{id}"),
+        None => format!("c:{}", ai_cid_from(ip)),
+    };
+    let mut resp = ai_chat_inner(state, body, rate_key).await;
+    if let Some(value) = set_cookie {
+        if let Ok(b) = HeaderValue::from_str(&format!(
+            "lb_ai_cid={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
+        )) {
+            resp.headers_mut().insert(header::SET_COOKIE, b);
+        }
+    }
+    resp
+}
+
+async fn ai_chat_inner(
+    state: Arc<AppState>,
+    body: axum::body::Bytes,
+    rate_key: String,
+) -> Response {
     let req: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => return ai_err(StatusCode::BAD_REQUEST, &format!("bad body: {}", e)),
     };
-    let (model, messages, thinking) = match ai_validate(&req) {
+    let (model, messages, thinking, tools) = match ai_validate(&req) {
         Ok(v) => v,
         Err(msg) => return ai_err(StatusCode::BAD_REQUEST, msg),
     };
@@ -1433,26 +1655,57 @@ async fn ai_chat_endpoint(
             "AI is not configured on this deployment (CLOUDFLARE_AI_KEY or CLOUDFLARE_ACCOUNT_ID unset)",
         );
     };
-    let ip = relay_rate_key(
-        peer.ip(),
-        headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
-        &state.relay_trusted_proxies,
-    );
-    let Some(remaining) = ai_rate_take(&state.ai_uses, ip, now_secs()) else {
+    let Some(remaining) = ai_rate_take(&state.ai_uses, &rate_key, now_secs()) else {
         return ai_err(
             StatusCode::TOO_MANY_REQUESTS,
             "AI rate limit exceeded (50 messages per 6 hours); retry later",
         );
     };
+    /* The llama-4 license gate is account-wide and one-time; only
+    the raw /ai/run endpoint accepts the agree prompt, so satisfy it
+    lazily right before the first vision-model request. */
+    if model == AI_VISION_MODEL {
+        /* The flag flips before the request: the guard must drop
+        before the await (a std MutexGuard held across an await
+        makes the future non-Send), and one attempt is enough. */
+        let needs_agree = {
+            let mut agreed = state
+                .ai_vision_agreed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let first = !*agreed;
+            *agreed = true;
+            first
+        };
+        if needs_agree {
+            let url = format!(
+                "https://api.cloudflare.com/client/v4/accounts/{}/ai/run/{}",
+                state.cf_account, AI_VISION_MODEL
+            );
+            let _ = state
+                .relay_client
+                .post(url.as_str())
+                .bearer_auth(key)
+                .header("content-type", "application/json")
+                .body("{\"prompt\":\"agree\"}")
+                .send()
+                .await;
+        }
+    }
     /* Cloudflare has no "none" effort: low is the lightest the
-    gpt-oss models accept, and non-reasoning models ignore the
-    parameter. */
-    let upstream = serde_json::json!({
+    gpt-oss models accept; only the reasoning families take the
+    parameter (scout rejects it). */
+    let mut upstream = serde_json::json!({
         "model": model,
         "messages": messages,
         "stream": true,
-        "reasoning_effort": if thinking { "high" } else { "low" },
     });
+    if model.starts_with("@cf/openai/gpt-oss") || model.starts_with("@cf/qwen/") {
+        upstream["reasoning_effort"] = if thinking { "high" } else { "low" }.into();
+    }
+    if let Some(tools) = tools {
+        upstream["tools"] = tools.into();
+    }
     let cf_url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions",
         state.cf_account
@@ -4240,6 +4493,7 @@ async fn main() {
             .filter(|k| !k.is_empty()),
         cf_account: std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default(),
         ai_uses: Mutex::new(HashMap::new()),
+        ai_vision_agreed: Mutex::new(false),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
             bytes: 0,
@@ -4658,6 +4912,7 @@ mod session_log_tests {
             cf_ai_key: None,
             cf_account: String::new(),
             ai_uses: Mutex::new(HashMap::new()),
+            ai_vision_agreed: Mutex::new(false),
         }
     }
 
@@ -4964,6 +5219,7 @@ mod mcp_tests {
             cf_ai_key: None,
             cf_account: String::new(),
             ai_uses: Mutex::new(HashMap::new()),
+            ai_vision_agreed: Mutex::new(false),
         }
     }
 
@@ -5241,24 +5497,22 @@ mod ai_tests {
     #[test]
     fn ai_rate_take_caps_reports_and_slides() {
         let map = Mutex::new(HashMap::new());
-        let ip: IpAddr = "127.0.0.1".parse().unwrap();
         /* Fill the window: each take reports one fewer remaining. */
         for i in 0..AI_RATE_MAX_PER_WINDOW {
             assert_eq!(
-                ai_rate_take(&map, ip, 1000),
+                ai_rate_take(&map, "c:aa", 1000),
                 Some(AI_RATE_MAX_PER_WINDOW - 1 - i)
             );
         }
         /* Full window: refused; a different client keeps its own bucket. */
-        assert_eq!(ai_rate_take(&map, ip, 1000), None);
-        let other: IpAddr = "127.0.0.2".parse().unwrap();
+        assert_eq!(ai_rate_take(&map, "c:aa", 1000), None);
         assert_eq!(
-            ai_rate_take(&map, other, 1000),
+            ai_rate_take(&map, "c:bb", 1000),
             Some(AI_RATE_MAX_PER_WINDOW - 1)
         );
         /* Uses older than the window expire, so the bucket slides. */
         assert_eq!(
-            ai_rate_take(&map, ip, 1000 + AI_RATE_WINDOW_SECS),
+            ai_rate_take(&map, "c:aa", 1000 + AI_RATE_WINDOW_SECS),
             Some(AI_RATE_MAX_PER_WINDOW - 1)
         );
     }
@@ -5270,7 +5524,7 @@ mod ai_tests {
     #[test]
     fn ai_validate_accepts_only_the_whitelisted_shape() {
         let ok = serde_json::json!({
-            "model": "@cf/openai/gpt-oss-120b",
+            "model": AI_VISION_MODEL,
             "thinking": true,
             "messages": [
                 msg("system", "You are helpful.".into()),
@@ -5280,10 +5534,11 @@ mod ai_tests {
                 ])),
             ],
         });
-        let (model, messages, thinking) = ai_validate(&ok).expect("valid request");
-        assert_eq!(model, "@cf/openai/gpt-oss-120b");
+        let (model, messages, thinking, tools) = ai_validate(&ok).expect("valid request");
+        assert_eq!(model, AI_VISION_MODEL);
         assert_eq!(messages.len(), 2);
         assert!(thinking);
+        assert!(tools.is_none());
 
         let bad_model = serde_json::json!({
             "model": "some-other-model",
@@ -5299,13 +5554,52 @@ mod ai_tests {
 
         let bad_role = serde_json::json!({
             "model": "@cf/openai/gpt-oss-120b",
-            "messages": [msg("tool", "hi".into())],
+            "messages": [msg("narrator", "hi".into())],
         });
         assert_eq!(ai_validate(&bad_role).unwrap_err(), "bad role");
+        /* Model-invoked web search round trip: the tool schema, the
+        assistant tool_calls and the tool reply all validate. */
+        let tools_ok = serde_json::json!({
+            "model": "@cf/openai/gpt-oss-120b",
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "Search the public web.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": { "query": { "type": "string" } },
+                        "required": ["query"],
+                    },
+                },
+            }],
+            "messages": [
+                msg("user", "hi".into()),
+                { "role": "assistant", "content": "", "tool_calls": [
+                    { "id": "call_1", "type": "function",
+                      "function": { "name": "web_search", "arguments": "{\"query\":\"hi\"}" } },
+                ]},
+                { "role": "tool", "tool_call_id": "call_1", "content": "[]" },
+            ],
+        });
+        let (_, _, _, tools) = ai_validate(&tools_ok).expect("valid tool turn");
+        assert_eq!(tools.expect("tools").len(), 1);
+        /* Images are vision-model-only: the reasoning models reject
+        image parts, so image turns re-route to scout. */
+        let img = serde_json::json!({
+            "model": "@cf/openai/gpt-oss-120b",
+            "messages": [msg("user", serde_json::json!([
+                { "type": "image_url", "image_url": { "url": "data:image/png;base64,AAAA" } },
+            ]))],
+        });
+        assert_eq!(
+            ai_validate(&img).unwrap_err(),
+            "model does not accept images; image attachments re-route to the vision model"
+        );
 
         /* Remote image URLs are refused: only inline data survives. */
         let remote_img = serde_json::json!({
-            "model": "@cf/openai/gpt-oss-120b",
+            "model": AI_VISION_MODEL,
             "messages": [msg("user", serde_json::json!([
                 { "type": "image_url", "image_url": { "url": "https://example.com/x.png" } },
             ]))],
@@ -5314,5 +5608,23 @@ mod ai_tests {
             ai_validate(&remote_img).unwrap_err(),
             "only inline data image URLs are accepted"
         );
+    }
+
+    #[test]
+    fn ai_cookie_derives_tamperproof_ids() {
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        /* The id is derived from the client IP, so it is
+        deterministic: a wiped or cleared cookie re-derives the SAME
+        bucket. */
+        let cid = ai_cid_mint(ip);
+        let id = ai_cid_ok(&cid).expect("valid cookie");
+        assert_eq!(id.len(), 16);
+        assert_eq!(ai_cid_ok(&ai_cid_mint(ip)).expect("same id"), id);
+        /* A tampered tag is rejected; the caller re-derives from the
+        IP instead, so a forged cookie reaches no other bucket. */
+        let forged = format!("{}.{}", "0".repeat(16), &cid[17..]);
+        assert!(ai_cid_ok(&forged).is_none());
+        assert!(ai_cid_ok("junk").is_none());
+        assert!(ai_cid_ok("deadbeefdeadbeef.deadbeefdeadbeef").is_none());
     }
 }
