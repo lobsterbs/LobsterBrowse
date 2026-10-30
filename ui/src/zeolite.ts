@@ -393,7 +393,7 @@ function zlWsPost(port: MessagePort, msg: Record<string, unknown>): void {
 function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort, chan: RelayChannel): void {
   let ws: WebSocket;
   try {
-    ws = new WebSocket("/zlws");
+    ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/zlws");
   } catch {
     zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: "zlws unavailable" });
     return;

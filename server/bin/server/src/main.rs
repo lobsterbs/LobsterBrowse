@@ -2785,7 +2785,7 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
     const wsConns = new Map();
     const wsRelayOpen = (m, port) => {
       let ws;
-      try { ws = new WebSocket("/zlws"); } catch (e) {
+      try { ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/zlws"); } catch (e) {
         port.postMessage({ type: "zl:wsError", rid: m.rid, error: "zlws unavailable" });
         return;
       }
