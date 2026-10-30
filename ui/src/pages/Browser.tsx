@@ -42,6 +42,7 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
    in this page; the components are presentational. */
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
+import AdBlockCard from "../browser/AdBlockCard";
 import DownloadsCard from "../browser/DownloadsCard";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
@@ -612,6 +613,17 @@ export default function BrowserView(props: Props) {
     return () => clearTimeout(t);
   }, [dlOpen]);
   const dlSeq = useRef(1);
+  /* ---- Ad-blocking card: mount-stay mirrors the downloads card. ---- */
+  const [adOpen, setAdOpen] = useState(false);
+  const [adMounted, setAdMounted] = useState(false);
+  useEffect(() => {
+    if (adOpen) {
+      setAdMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setAdMounted(false), 280);
+    return () => clearTimeout(t);
+  }, [adOpen]);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
   /* Per-document/per-window wiring for the new-tab interception. */
@@ -2506,6 +2518,44 @@ export default function BrowserView(props: Props) {
     }, 240);
   };
 
+  /* ---- Ad-blocking card: the site scope mirrors the lock popup's
+       host derivation (raw hostname first, www-stripped fallback),
+       and the switch reuses the per-site rules store the Settings
+       page owns (adblock can only disable per site; the global
+       setting still wins, so a global off disables the switch). ---- */
+  let adHost = "";
+  let adHostAlt = "";
+  try {
+    const u = new URL(active.url);
+    adHost = u.hostname;
+    adHostAlt = u.hostname.replace(/^www\./, "");
+  } catch {
+    /* not a URL yet */
+  }
+  const adRule =
+    rules.find((r) => r.domain === adHost || (!!adHostAlt && r.domain === adHostAlt));
+  const setSiteAdblock = (enabled: boolean) => {
+    const idx =
+      rules.findIndex((r) => r.domain === adHost || (!!adHostAlt && r.domain === adHostAlt));
+    if (enabled) {
+      /* Inherit: drop an explicit adblock:false, change nothing when
+         no rule exists. */
+      if (idx < 0) return;
+      props.onRulesChange(rules.map((r, i) => {
+        if (i !== idx) return r;
+        const copy = { ...r };
+        delete copy.adblock;
+        return copy;
+      }));
+      return;
+    }
+    if (idx >= 0) {
+      props.onRulesChange(rules.map((r, i) => i === idx ? { ...r, adblock: false } : r));
+    } else {
+      props.onRulesChange([...rules, { domain: adHostAlt || adHost, adblock: false }]);
+    }
+  };
+
   /* ---- Lock popup: connection facts + cookies of the active site. ---- */
   const secure = !!active.url && active.url.startsWith("https://");
   let uParts = { scheme: "", host: "", port: "" };
@@ -2910,6 +2960,14 @@ export default function BrowserView(props: Props) {
             >
               Downloads
             </m3e-menu-item>
+            <m3e-menu-item
+              onClick={() => {
+                setAdOpen(true);
+                setTabsOpen(false);
+              }}
+            >
+              AdBlocking
+            </m3e-menu-item>
             <m3e-menu-item onClick={() => props.onOpenSettings()}>Settings</m3e-menu-item>
           </m3e-menu>
         </m3e-toolbar>
@@ -2929,6 +2987,19 @@ export default function BrowserView(props: Props) {
               onClose={() => setDlOpen(false)}
               onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
               onCancel={cancelDownload}
+            />
+          )}
+          {adMounted && (
+            <AdBlockCard
+              closing={!adOpen}
+              clientId={activeDt.engineClientId}
+              source={activeDt.engineSource}
+              host={adHost}
+              globalAdblock={settings.adblock}
+              siteAdblock={adRule?.adblock}
+              onSiteToggle={setSiteAdblock}
+              onOpenSettings={() => props.onOpenSettings()}
+              onClose={() => setAdOpen(false)}
             />
           )}
           {fileView && (

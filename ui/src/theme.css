@@ -1223,7 +1223,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
 .lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
+  .lb-tabs-card, .lb-dl-card, .lb-ad-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
 }
 
@@ -1865,3 +1865,36 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 }
 .lb-ai-send:hover { filter: brightness(1.08); }
 .lb-ai-send:active { filter: brightness(0.92); }
+
+/* ---- Ad-blocking card (overflow menu): same floating placement and
+       in/out animations as the downloads card. ---- */
+.lb-ad-card {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  z-index: 45;
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+}
+.lb-ad-card.lb-out {
+  animation: lb-card-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+}
+.lb-ad-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150);
+  box-sizing: border-box;
+}
+.lb-ad-count { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); }
+.lb-ad-count > m3e-icon { color: var(--md-sys-color-primary); }
+.lb-ad-num { font-size: 40px; font-variation-settings: "wght" 600; line-height: 1; color: var(--md-sys-color-primary); }
+.lb-ad-sub { margin: 0; font-size: 13px; }
+.lb-ad-hosts { display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
+.lb-ad-host { font-size: 12px; word-break: break-all; }
+.lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
+.lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
+.lb-ad-rowtitle { font-size: 13px; }
