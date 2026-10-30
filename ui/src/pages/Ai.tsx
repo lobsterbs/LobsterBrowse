@@ -7,12 +7,14 @@ import {
   saveChat,
   saveModelId,
   streamChat,
+  WEB_SEARCH_TOOL,
   RateLimitError,
   type AiModel,
   type AiMsg,
   type ChatContent,
   type ChatMsg,
   type AiSource,
+  type ToolCall,
 } from "../ai/aiStore";
 import { Markdown } from "../ai/Markdown";
 import { ToolRow } from "../ai/ToolRow";
@@ -21,7 +23,9 @@ import { ToolRow } from "../ai/ToolRow";
    server: sends go to this origin's /ai/chat proxy, which enforces
    the rate limit (50 messages per rolling 6 h) and reports the
    remaining count in the x-lb-ai-remaining header. Web search is
-   keyless (Exa MCP). Chats persist encrypted in IndexedDB with a
+   model-invoked: the model streams web_search tool calls and the
+   page runs the keyless Exa MCP search for it. Chats persist
+   encrypted in IndexedDB with a
    non-exportable key. Errors surface through the M3E snackbar; AI
    failures carry a Try again action that replays the failed turn.
    Provider marks (OpenAI, Qwen) live on the model entries in
@@ -218,29 +222,24 @@ export default function AiPage() {
     setDraft("");
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
-    setPhase("searching");
+    setPhase("streaming");
 
-    /* Always-on search: Exa's MCP search is keyless, so every
-       question searches first; a search failure never blocks the
-       answer. */
-    let sources: AiSource[] | undefined;
-    try {
-      sources = await aiSearch(text);
-    } catch (e) {
-      toast("Web search failed: " + msg(e) + " Answering without it.");
-    }
-
-    const thinking = model.thinking && needsThinking(withFiles);
+    /* Image parts are vision-model-only on Cloudflare: an image
+       turn re-routes to the vision model for that turn (noted on
+       the reply). */
+    const hasImage = files.some((f) => f.kind === "image");
+    const turnModel =
+      hasImage && !model.vision ? (AI_MODELS.find((m) => m.vision) ?? model) : model;
+    const thinking = turnModel.thinking && needsThinking(withFiles);
+    /* Web search is model-invoked (function calling): the system
+       prompt teaches the tool; the loop below runs the calls the
+       model streams back. */
     const sys =
       "You are the assistant inside LobsterBrowse, a private web proxy browser. Be concise and accurate. " +
-      (sources?.length
-        ? "Ground your answer in the provided web search results and cite them by number."
-        : "");
-    const searchBlock = sources?.length
-      ? "\n\nWeb search results for the latest user message (retrieved just now):\n" +
-        sources.map((s, i) => "[" + (i + 1) + "] " + s.title + " - " + s.url + "\n" + s.snippet).join("\n\n")
-      : "";
-    const parts: ChatContent = [{ type: "text", text: withFiles + searchBlock }];
+      "You can call the web_search tool whenever the question benefits from current web information " +
+      "(news, prices, releases, anything recent or uncertain); answer citing the results by number. " +
+      "Skip the tool when the answer needs no web lookup.";
+    const parts: ChatContent = [{ type: "text", text: withFiles }];
     for (const f of files)
       if (f.kind === "image" && f.dataUrl) parts.push({ type: "image_url", image_url: { url: f.dataUrl } });
 
@@ -255,34 +254,79 @@ export default function AiPage() {
 
     setMessages((m) => [
       ...m,
-      { role: "assistant", text: "", model: model.id, sources },
+      { role: "assistant", text: "", model: turnModel.id },
     ]);
     setPhase(thinking ? "thinking" : "streaming");
     let acc = "";
     let thinkAcc = "";
+    let sources: AiSource[] | undefined;
     const flush = () =>
       setMessages((m) => {
         const copy = m.slice();
-        copy[copy.length - 1] = { ...copy[copy.length - 1], text: acc, thinking: thinkAcc || undefined };
+        copy[copy.length - 1] = {
+          ...copy[copy.length - 1],
+          text: acc,
+          thinking: thinkAcc || undefined,
+          sources,
+        };
         return copy;
       });
     let ok = false;
     try {
-      for await (const ev of streamChat({
-        model: model.id,
-        messages: apiMessages,
-        thinking,
-      })) {
-        if (ev.type === "quota") {
-          setQuota(ev.remaining);
-        } else if (ev.type === "thinking") {
-          thinkAcc += ev.text;
-          setPhase("thinking");
-        } else {
-          acc += ev.text;
-          setPhase("streaming");
+      for (let round = 0; round < 3; round++) {
+        let calls: ToolCall[] = [];
+        let finish = "stop";
+        for await (const ev of streamChat({
+          model: turnModel.id,
+          messages: apiMessages,
+          thinking,
+          tools: [WEB_SEARCH_TOOL],
+        })) {
+          if (ev.type === "quota") {
+            setQuota(ev.remaining);
+          } else if (ev.type === "thinking") {
+            thinkAcc += ev.text;
+            setPhase("thinking");
+          } else if (ev.type === "text") {
+            acc += ev.text;
+            setPhase("streaming");
+          } else if (ev.type === "tool_calls") {
+            calls = ev.calls;
+          } else if (ev.type === "finish") {
+            finish = ev.reason;
+          }
+          flush();
         }
-        flush();
+        if (finish !== "tool_calls" || !calls.length) break;
+        /* The model invoked web_search: replay its calls, run the
+        keyless Exa search, and answer with the tool results. */
+        apiMessages.push({ role: "assistant", content: "", tool_calls: calls });
+        for (const call of calls) {
+          let q = text;
+          try {
+            q = String(JSON.parse(call.function.arguments).query ?? text);
+          } catch {
+            /* malformed arguments: fall back to the turn text */
+          }
+          setPhase("searching");
+          try {
+            const found = await aiSearch(q);
+            sources = [...(sources ?? []), ...found];
+            apiMessages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: JSON.stringify(found),
+            });
+          } catch (e) {
+            toast("Web search failed: " + msg(e) + " Answering without it.");
+            apiMessages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: "web search failed",
+            });
+          }
+          flush();
+        }
       }
       if (!acc && !thinkAcc) throw new Error("The model returned an empty response.");
       ok = true;
@@ -310,7 +354,7 @@ export default function AiPage() {
               role: "assistant" as const,
               text: acc,
               thinking: thinkAcc || undefined,
-              model: model.id,
+              model: turnModel.id,
               sources,
             },
           ];
@@ -333,6 +377,9 @@ export default function AiPage() {
   return (
     <div className="lb-ai">
       <div className="lb-ai-msgs" ref={scrollRef}>
+        {messages.length === 0 && !busy && (
+          <div className="lb-ai-hello">How can I help you today?</div>
+        )}
         {messages.map((m, i) => {
           const last = i === messages.length - 1;
           return (
@@ -436,9 +483,12 @@ export default function AiPage() {
             }}
           />
         </m3e-search-bar>
-        <m3e-icon-button aria-label="Send" onClick={() => void send()}>
-          <m3e-icon name="arrow_forward" aria-hidden={true} />
-        </m3e-icon-button>
+        <button type="button" className="lb-ai-send" aria-label="Send" onClick={() => void send()}>
+          <span className="lb-ai-send-seg lb-ai-send-a">
+            <m3e-icon name="arrow_forward" aria-hidden={true} />
+          </span>
+          <span className="lb-ai-send-seg lb-ai-send-b">Send</span>
+        </button>
       </div>
 
       <div className="lb-ai-under">

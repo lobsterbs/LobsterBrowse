@@ -1631,7 +1631,7 @@ body .lb-ext-panel {
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 
 /* ---- AI mode (beta-only): view, messages, chatbar ---- */
-.app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space150, 12px); overflow: hidden; }
+.app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); overflow: hidden; }
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
 .lb-ai { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
 
@@ -1658,7 +1658,7 @@ body .lb-ext-panel {
 .lb-ai-mp-opt:hover { background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); }
 .lb-ai-mp-check { display: inline-flex; color: var(--md-sys-color-primary, #7f9cf5); margin-left: auto; }
 
-.lb-ai-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150, 12px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px); }
+.lb-ai-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150, 12px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px) 0; }
 .lb-ai-msg { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); }
 .lb-ai-user { align-items: flex-end; }
 .lb-ai-bubble { padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-large, 16px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
@@ -1669,17 +1669,18 @@ body .lb-ext-panel {
 .lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .lb-ai-src:hover { text-decoration: underline; }
 .lb-ai-files { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); justify-content: flex-end; }
-.lb-ai-att { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); padding: 0 var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space75, 6px); max-width: 720px; width: 100%; margin: 0 auto; }
+.lb-ai-att { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); padding: 0 var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space50, 4px); max-width: 720px; width: 100%; margin: 0 auto; }
 .lb-ai-file-chip { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-secondary, #b8c4d8) 16%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ai-file-x { border: none; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
 
 /* Chatbar: the plus button rides the search bar's leading slot. */
-.lb-ai-bar { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space100, 8px) 0; max-width: 760px; width: 100%; margin: 0 auto; flex: none; }
+.lb-ai-bar { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) 0; max-width: 760px; width: 100%; margin: 0 auto; flex: none; }
 .lb-ai-bar m3e-search-bar { flex: 1; min-width: 0; }
 
-/* Under-bar row: model picker + server quota, aligned to the bar. */
-.lb-ai-under { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space100, 8px); flex: none; }
-.lb-ai-under .lb-ai-quota { margin-left: auto; }
+/* Under-bar row: model picker + server quota, centered under the
+   chatbar. */
+.lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space50, 4px); flex: none; }
+.lb-ai-under .lb-ai-quota { margin-left: 0; }
 /* Frosted glass under Enhanced UI: same treatment as the Home bar
    (tint + blur + ring + gloss), scoped to the setting's body class. */
 body.lb-fancy .lb-ai-bar m3e-search-bar {
@@ -1817,7 +1818,50 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 /* Reduced motion: entrances off, transitions instant; the popover and
    the accordion still work as instant state changes. */
 @media (prefers-reduced-motion: reduce) {
-  .lb-ai-msg, .lb-ai-file-chip { animation: none; }
+  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello { animation: none; }
   .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
-  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src { transition: none; }
+  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src, .lb-ai-send { transition: none; }
 }
+
+
+/* ---- AI page: empty state + segmented send (2026-10-30) ---- */
+
+/* Empty state: centers in the message area while the chat is fresh,
+   with the same decelerate entrance as the messages. */
+.lb-ai-hello {
+  margin: auto;
+  text-align: center;
+  font-size: var(--md-sys-typescale-headline-small-font-size, 24px);
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  animation: lb-ai-msg-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+}
+
+/* Segmented send button (the 21st.dev segmented-button-group pattern
+   hand-ported onto M3E tokens): one pill split into two segments, a
+   filled primary icon segment plus an outlined text segment with the
+   divider from the source pattern, fused onto the chatbar's right
+   edge (negative margin, right-side radius only, overflow clipped). */
+.lb-ai-send {
+  display: inline-flex;
+  align-self: stretch;
+  margin-left: calc(-1 * var(--md-sys-measurement-space150, 12px));
+  padding: 0;
+  border: none;
+  border-radius: 0 var(--md-sys-shape-corner-full, 9999px) var(--md-sys-shape-corner-full, 9999px) 0;
+  overflow: hidden;
+  font: inherit;
+  cursor: pointer;
+  flex: none;
+}
+.lb-ai-send-seg { display: inline-flex; align-items: center; padding: 0 var(--md-sys-measurement-space150, 12px); }
+.lb-ai-send-a { background: var(--md-sys-color-primary, #7f9cf5); color: var(--md-sys-color-on-primary, #101418); }
+.lb-ai-send-b {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 92%, transparent);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border-left: 1px solid var(--md-sys-color-outline-variant, #48484e);
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  font-weight: 500;
+}
+.lb-ai-send:hover { filter: brightness(1.08); }
+.lb-ai-send:active { filter: brightness(0.92); }

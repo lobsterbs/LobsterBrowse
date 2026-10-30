@@ -3,8 +3,9 @@
    this origin's /ai/chat proxy, which holds CLOUDFLARE_AI_KEY and
    CLOUDFLARE_ACCOUNT_ID on the deployment and enforces the rate
    limit (50 messages per rolling 6 h). The remaining count rides the
-   x-lb-ai-remaining response header. Web search is keyless: Exa's
-   free MCP endpoint (mcp.exa.ai) answers with no account. Chats
+   x-lb-ai-remaining response header. Web search is model-invoked
+   function calling (the web_search tool) and keyless: Exa's free MCP
+   endpoint (mcp.exa.ai) answers with no account. Chats
    persist encrypted in IndexedDB with a non-exportable key. By
    design there is no key export: losing the browser profile loses
    the chats. */
@@ -21,25 +22,31 @@ export interface AiModel {
   note: string;
   thinking: boolean;
   mark: string;
+  vision: boolean;
 }
 
-/* Parameter lines stay honest: all three verified against the live
+/* Parameter lines stay honest: all four verified against the live
    Workers AI catalog on 2026-10-30 (prices per M tokens in/out):
    gpt-oss-120b $0.35/$0.75 (128k context, reasoning, function
    calling), gpt-oss-20b $0.20/$0.30, qwen3-30b-a3b-fp8 $0.051/$0.335
-   (MoE, 3B active, reasons on every turn). The deployment account
-   runs the Workers Free plan (10,000 neurons/day), so the gated
-   GLM/DeepSeek/Kimi tier is unavailable. The marks are the
-   providers' official logos (CC0 simple-icons geometry). */
+   (MoE, 3B active, reasons on every turn), llama-4-scout $0.27/$0.85
+   (vision + function calling; the only model here that accepts image
+   parts). The deployment account runs the Workers Free plan (10,000
+   neurons/day), so the gated GLM/DeepSeek/Kimi tier is unavailable.
+   The marks are the providers' official logos (CC0 simple-icons
+   geometry). */
 const OPENAI_MARK =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/></svg>';
 const QWEN_MARK =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M23.919 14.545L20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828l-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801l-6.205-.002l1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315l-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/></svg>';
+const META_MARK =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z"/></svg>';
 
 export const AI_MODELS: AiModel[] = [
-  { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, mark: OPENAI_MARK },
-  { id: "@cf/openai/gpt-oss-20b", name: "GPT-OSS", version: "1", params: "20B", note: "fast, lightweight reasoning", thinking: true, mark: OPENAI_MARK },
-  { id: "@cf/qwen/qwen3-30b-a3b-fp8", name: "Qwen", version: "3", params: "30B", note: "MoE, 3B active, reasons every turn", thinking: true, mark: QWEN_MARK },
+  { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, vision: false, mark: OPENAI_MARK },
+  { id: "@cf/openai/gpt-oss-20b", name: "GPT-OSS", version: "1", params: "20B", note: "fast, lightweight reasoning", thinking: true, vision: false, mark: OPENAI_MARK },
+  { id: "@cf/qwen/qwen3-30b-a3b-fp8", name: "Qwen", version: "3", params: "30B", note: "MoE, 3B active, reasons every turn", thinking: true, vision: false, mark: QWEN_MARK },
+  { id: "@cf/meta/llama-4-scout-17b-16e-instruct", name: "Scout", version: "Llama 4", params: "17B", note: "vision: reads your images", thinking: false, vision: true, mark: META_MARK },
 ];
 
 export function loadModelId(): string {
@@ -360,13 +367,38 @@ export type ChatContent =
   | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 
 export interface ChatMsg {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: ChatContent;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
 }
+
+/* Model-invoked web search (Cloudflare function calling): the tool
+   schema the model sees, and the call it streams back. */
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export const WEB_SEARCH_TOOL = {
+  type: "function",
+  function: {
+    name: "web_search",
+    description: "Search the public web for current information.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+  },
+} as const;
 
 export type StreamEvent =
   | { type: "thinking" | "text"; text: string }
-  | { type: "quota"; remaining: number };
+  | { type: "quota"; remaining: number }
+  | { type: "tool_calls"; calls: ToolCall[] }
+  | { type: "finish"; reason: string };
 
 /* Rate-limit refusals carry their own class so the UI offers the
    Try again action only where a retry can actually help. */
@@ -387,6 +419,7 @@ export async function* streamChat(opts: {
   model: string;
   messages: ChatMsg[];
   thinking: boolean;
+  tools?: unknown[];
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
   if (isMocked()) {
@@ -401,6 +434,7 @@ export async function* streamChat(opts: {
       model: opts.model,
       messages: opts.messages,
       thinking: opts.thinking,
+      tools: opts.tools,
     }),
   });
   if (!res.ok || !res.body) {
@@ -412,6 +446,11 @@ export async function* streamChat(opts: {
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
+  /* Function calling: Cloudflare streams tool_calls as indexed
+     deltas (arguments arrive in fragments) and closes the round
+     with finish_reason "tool_calls". */
+  const calls: Record<number, ToolCall> = {};
+  let finish = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -422,15 +461,43 @@ export async function* streamChat(opts: {
       buf = buf.slice(nl + 1);
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
-      if (payload === "[DONE]") return;
-      let evt: { choices?: { delta?: { content?: unknown; reasoning_content?: unknown } }[] };
+      if (payload === "[DONE]") break;
+      let evt: {
+        choices?: {
+          delta?: {
+            content?: unknown;
+            reasoning_content?: unknown;
+            tool_calls?: { index?: number; id?: unknown; function?: { name?: unknown; arguments?: unknown } }[];
+          };
+          finish_reason?: unknown;
+        }[];
+      };
       try {
         evt = JSON.parse(payload);
       } catch {
         continue;
       }
-      const delta = evt.choices?.[0]?.delta;
+      const choice = evt.choices?.[0];
+      if (!choice) continue;
+      if (typeof choice.finish_reason === "string" && choice.finish_reason) {
+        finish = choice.finish_reason;
+      }
+      const delta = choice.delta;
       if (!delta) continue;
+      if (Array.isArray(delta.tool_calls)) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          const slot = (calls[idx] ??= {
+            id: "",
+            type: "function",
+            function: { name: "", arguments: "" },
+          });
+          if (typeof tc.id === "string" && tc.id) slot.id = tc.id;
+          const fn = tc.function;
+          if (fn && typeof fn.name === "string" && fn.name) slot.function.name = fn.name;
+          if (fn && typeof fn.arguments === "string") slot.function.arguments += fn.arguments;
+        }
+      }
       /* gpt-oss and qwen stream their reasoning before the answer;
       reasoning_content is the OpenAI-compatible field Cloudflare
       uses for it. */
@@ -450,4 +517,11 @@ export async function* streamChat(opts: {
       }
     }
   }
+  const list = Object.keys(calls)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((k) => calls[k])
+    .filter((c): c is ToolCall => Boolean(c));
+  if (list.length) yield { type: "tool_calls", calls: list };
+  yield { type: "finish", reason: finish || "stop" };
 }
