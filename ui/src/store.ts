@@ -3,6 +3,7 @@
    lobsterbrowse-* keys so "Delete all data" can wipe them. */
 
 import { sanitizeText, sanitizeUrl } from "./sanitize.ts";
+import { wipeAiData } from "./ai/aiStore.ts";
 
 export type Tab = {
   id: number;
@@ -296,4 +297,6 @@ export function clearAllData() {
   }
   logRing.length = 0;
   incognitoRing = [];
+  /* AI mode chats: the encrypted IndexedDB store is wiped too. */
+  void wipeAiData();
 }
