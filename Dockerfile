@@ -1678,21 +1678,21 @@ FROM debian:bookworm-slim AS zl-builder
 # d4ca407: no crates changed. The bundle was published by run
 # 1187's app job; that run's browser job failed on runner
 # timeouts (not reproduced locally with this exact bundle).
-# Pin 136 (2026-10-29): dist 074c927 (Zeolite main 2b81426, CI run
-# 40968942486, build 40968942486, all 5 jobs green) ships the #511
-# navguard mint seam: an absolute-URL location write mints a
-# query-shape handle behind queryRoutes (nav=true on the zl:mint
-# ControlMessage; mintRoute gains a nav flag with memo key
-# "nav:"+dest), so pathname-routed SPAs like Blooket's
-# /:gameId/play/:playerId join page resolve the decoded virtual
-# destination instead of tripping the catch-all ("Game not
-# found"); subresource re-emission stays path-form so
-# browser-visible request records never print the real path.
-# sw.js b489e3179d77798a -> ff73bac6fd111fe2 (699138 bytes);
-# bootstrap.js 6d0b04860be9077f -> 3936718bd9dcdd64 (40587
-# bytes; budget 40704). Cargo-side pin stays d4ca407: no
-# crates changed.
-ARG ZEOLITE_COMMIT=074c9271653e39187e4bc35c532e55c57626c4b8
+# Pin 137 (2026-10-29): dist fce7466 (Zeolite main eab792b, CI run
+# 40976199122, all 5 jobs green) ships the #492 RFC 2606 demotion:
+# exact reserved documentation hosts (example.com/.net/.org) stay
+# verbatim in the JS URL literal pass, so Startpage's placeholder
+# base idiom (a `http://example.com` default base; the page fetches
+# the derived pathname+search against its own origin) no longer
+# mints a live route to the documentation host: SERP favicon
+# fetches (/sp/favicon?fqdn=...) serve through the content origin
+# instead of 404ing upstream. sw.js stays ff73bac6fd111fe2 (699138
+# bytes); bootstrap.js stays 3936718bd9dcdd64 (40587 bytes; budget
+# 40704); the fix rides in rewriter_wasm_bg.wasm, 6e0f11c9bd64bed4
+# -> 0fcad50982ab7686 (675565 bytes) - the /build zlswSha cannot
+# distinguish this bump, verify the served wasm hash instead.
+# Cargo-side pin stays d4ca407: no crates changed.
+ARG ZEOLITE_COMMIT=fce7466acc0985012f8ad778bb1773609ee20c4d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
