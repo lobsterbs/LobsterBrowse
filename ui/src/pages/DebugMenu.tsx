@@ -7,7 +7,9 @@ import { clearDebugOverrides, defaultExperimental, loadDebugOverrides, saveDebug
    wordmark. Shows a live engine readout (/build + zl:ping) and runtime
    engine toggles that would otherwise need a redeploy - the Injector
    query-shape toggle, the https-upgrade and lazy-image page options,
-   and the split content-origin mode. Config toggles write debug
+   and the split content-origin mode, plus an AI-mode mock
+   toggle (canned search, reasoning, and answer; override-only,
+   the AI store reads it). Config toggles write debug
    overrides (localStorage) and push zl:config to BOTH workers
    immediately; the split toggle is override-only (zlContentHref
    reads it: off = frames stay on the app origin). App-side pushes
@@ -80,6 +82,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
     imageLazy: ov.imageLazy ?? true,
     split: ov.split ?? true,
+    aiMock: ov.aiMock ?? false,
     experimental: { ...defaultExperimental(), ...ov.experimental },
   };
 
@@ -115,12 +118,13 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     void zlContentConfig(msg);
   };
 
-  const flip = (k: "queryRoutes" | "httpsUpgrade" | "imageLazy" | "split") => () => {
+  const flip = (k: "queryRoutes" | "httpsUpgrade" | "imageLazy" | "split" | "aiMock") => () => {
     const next: DebugOverrides = { ...ov, [k]: !cur[k] };
     setOv(next);
     saveDebugOverrides(next);
     /* split is override-only: zlContentHref reads it, no push */
-    if (k !== "split") push(next);
+    /* split and aiMock are override-only: no zl:config push */
+    if (k !== "split" && k !== "aiMock") push(next);
   };
 
   const flipExperimental = (key: ExperimentalKey) => () => {
@@ -166,6 +170,15 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         <div className="lb-setting-row">
           <span className="lb-setting-label">Lazy images</span>
           <m3e-switch checked={cur.imageLazy ? "" : undefined} icons="selected" onClick={flip("imageLazy")} />
+        </div>
+      </m3e-list-item>
+      <m3e-list-item>
+        <div className="lb-setting-row">
+          <span>
+            <span className="lb-setting-label">Mock AI responses</span>
+            <small style={{ display: "block", opacity: 0.75 }}>AI mode answers, reasoning, and search come from canned local data; no Mistral or Exa request is made.</small>
+          </span>
+          <m3e-switch aria-label="Mock AI responses" checked={cur.aiMock ? "" : undefined} icons="selected" onClick={flip("aiMock")} />
         </div>
       </m3e-list-item>
       <m3e-divider />
