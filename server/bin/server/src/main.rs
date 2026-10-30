@@ -72,6 +72,11 @@ struct AppState {
     /// browser DevTools panel for the MCP read tools. User-initiated
     /// shares only; bounded ring (8, 1 h TTL).
     mcp_reports: Mutex<VecDeque<McpSharedReport>>,
+    /// LB AI mode: the server-side Mistral key (MISTRAL_API_KEY).
+    /// The browser never sees it; /ai/chat forwards with it.
+    mistral_key: Option<String>,
+    /// LB AI mode: per-client sliding window of AI uses.
+    ai_uses: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
 }
 
 /// LB #224: one shared engine diagnostics report. KDL text as the
@@ -1263,6 +1268,225 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
     } else {
         false
     }
+}
+
+/* LB AI mode: server-side Mistral proxy. The API key never reaches
+ * the browser: the AI page posts to this same-origin endpoint and
+ * the server forwards to api.mistral.ai with MISTRAL_API_KEY.
+ * Bounds mirror the other unauthenticated endpoints: a model
+ * whitelist, a message-count cap, the route-level 32 MiB body limit
+ * (image data URLs), a 50-use rolling 6 h window per client, and the
+ * SSE answer streamed through with the same poll_fn pattern as the
+ * relay. ponytail: the rate key reuses relay_rate_key; on Render the
+ * peer is the shared edge IP unless LB_TRUSTED_PROXY_CIDRS is set,
+ * so the whole edge shares one AI bucket - the same documented
+ * tradeoff the relay rate limit makes. */
+const AI_MODELS: &[&str] = &["mistral-small-latest"];
+const AI_RATE_MAX_PER_WINDOW: usize = 50;
+const AI_RATE_WINDOW_SECS: u64 = 6 * 3600;
+const AI_TOTAL_DEADLINE_SECS: u64 = 600;
+
+/// LB AI mode: sliding-window take, mirroring relay_rate_allow but
+/// returning the remaining count for the x-lb-ai-remaining header.
+fn ai_rate_take(
+    map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>,
+    ip: IpAddr,
+    now: u64,
+) -> Option<usize> {
+    let mut map = map.lock().unwrap();
+    if map.len() > 4096 {
+        map.retain(|_, w| !w.is_empty());
+    }
+    let win = map.entry(ip).or_default();
+    while let Some(&t) = win.front() {
+        if now.saturating_sub(t) >= AI_RATE_WINDOW_SECS {
+            win.pop_front();
+        } else {
+            break;
+        }
+    }
+    if win.len() < AI_RATE_MAX_PER_WINDOW {
+        win.push_back(now);
+        Some(AI_RATE_MAX_PER_WINDOW - win.len())
+    } else {
+        None
+    }
+}
+
+/// LB AI mode: honest JSON error body; the UI snackbar shows it.
+fn ai_err(code: StatusCode, msg: &str) -> Response {
+    (
+        code,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        )],
+        serde_json::json!({ "error": msg }).to_string(),
+    )
+        .into_response()
+}
+
+/// LB AI mode: validate the proxy request before any upstream work.
+/// Only what OUR client legitimately sends passes: whitelisted
+/// model, 1..=41 messages, known roles, string or typed-part content
+/// with inline data: images only. Everything else is rejected, never
+/// forwarded.
+fn ai_validate(
+    req: &serde_json::Value,
+) -> Result<(String, Vec<serde_json::Value>, bool), &'static str> {
+    let model = req
+        .get("model")
+        .and_then(|v| v.as_str())
+        .ok_or("missing model")?;
+    if !AI_MODELS.contains(&model) {
+        return Err("unknown model");
+    }
+    let msgs = req
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .ok_or("missing messages")?;
+    if msgs.is_empty() || msgs.len() > 41 {
+        return Err("messages out of range");
+    }
+    let mut out = Vec::with_capacity(msgs.len());
+    for m in msgs {
+        let role = m.get("role").and_then(|v| v.as_str()).ok_or("bad role")?;
+        if !matches!(role, "system" | "user" | "assistant") {
+            return Err("bad role");
+        }
+        let content = m.get("content").ok_or("missing content")?;
+        match content {
+            serde_json::Value::String(t) => {
+                if t.len() > 200_000 {
+                    return Err("message too long");
+                }
+            }
+            serde_json::Value::Array(parts) => {
+                if parts.len() > 9 {
+                    return Err("too many content parts");
+                }
+                for part in parts {
+                    match part.get("type").and_then(|v| v.as_str()) {
+                        Some("text") => {
+                            let t = part
+                                .get("text")
+                                .and_then(|v| v.as_str())
+                                .ok_or("bad text part")?;
+                            if t.len() > 200_000 {
+                                return Err("message too long");
+                            }
+                        }
+                        Some("image_url") => {
+                            let url = part
+                                .get("image_url")
+                                .and_then(|v| v.get("url"))
+                                .and_then(|v| v.as_str())
+                                .ok_or("bad image part")?;
+                            if !url.starts_with("data:image/") {
+                                return Err("only inline data image URLs are accepted");
+                            }
+                        }
+                        _ => return Err("bad content part"),
+                    }
+                }
+            }
+            _ => return Err("bad content"),
+        }
+        out.push(m.clone());
+    }
+    let thinking = req
+        .get("thinking")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    Ok((model.to_string(), out, thinking))
+}
+
+/// LB AI mode: POST /ai/chat. Forwards to Mistral with the server
+/// key and pipes the SSE answer through unchanged; the remaining
+/// quota rides x-lb-ai-remaining. 503 when the deployment has no
+/// key, 429 when the window is exhausted.
+async fn ai_chat_endpoint(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let req: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return ai_err(StatusCode::BAD_REQUEST, &format!("bad body: {}", e)),
+    };
+    let (model, messages, thinking) = match ai_validate(&req) {
+        Ok(v) => v,
+        Err(msg) => return ai_err(StatusCode::BAD_REQUEST, msg),
+    };
+    let Some(key) = state.mistral_key.as_ref() else {
+        return ai_err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "AI is not configured on this deployment (MISTRAL_API_KEY unset)",
+        );
+    };
+    let ip = relay_rate_key(
+        peer.ip(),
+        headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
+        &state.relay_trusted_proxies,
+    );
+    let Some(remaining) = ai_rate_take(&state.ai_uses, ip, now_secs()) else {
+        return ai_err(
+            StatusCode::TOO_MANY_REQUESTS,
+            "AI rate limit exceeded (50 messages per 6 hours); retry later",
+        );
+    };
+    let upstream = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+        "reasoning_effort": if thinking { "high" } else { "none" },
+    });
+    let send = state
+        .relay_client
+        .post("https://api.mistral.ai/v1/chat/completions")
+        .bearer_auth(key)
+        /* wreq has no .json() helper on RequestBuilder: serialize
+        and set the content type explicitly. */
+        .header("content-type", "application/json")
+        .body(upstream.to_string());
+    /* First-chunk wait is longer than the relay's 45s: a reasoning
+    pass can hold the stream briefly before the first delta. */
+    let upstream = match relay_send_wait(send, std::time::Duration::from_secs(90)).await {
+        Ok(r) => r,
+        Err((msg, _)) => return ai_err(StatusCode::BAD_GATEWAY, &msg),
+    };
+    if !upstream.status().is_success() {
+        let status = upstream.status();
+        let detail = read_body_capped(upstream, 4096).await.unwrap_or_default();
+        return ai_err(
+            StatusCode::BAD_GATEWAY,
+            &format!("mistral: {} - {}", status, detail),
+        );
+    }
+    let mut hm = axum::http::HeaderMap::new();
+    hm.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream"),
+    );
+    if let Ok(b) = HeaderValue::from_str(&remaining.to_string()) {
+        hm.insert("x-lb-ai-remaining", b);
+    }
+    /* LB #137 pattern: a total deadline stops a drip-fed upstream the
+    30s read_timeout alone cannot. */
+    let deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_secs(AI_TOTAL_DEADLINE_SECS);
+    let mut upstream_stream = Box::pin(upstream.bytes_stream());
+    let streamed = Body::from_stream(futures_util::stream::poll_fn(move |cx| {
+        if tokio::time::Instant::now() >= deadline {
+            return std::task::Poll::Ready(Some(Err(
+                "ai: total body deadline exceeded".to_string()
+            )));
+        }
+        futures_util::Stream::poll_next(upstream_stream.as_mut(), cx)
+            .map(|opt| opt.map(|res| res.map_err(|e| e.to_string())))
+    }));
+    (StatusCode::OK, hm, streamed).into_response()
 }
 
 /// Zeolite #137 embedder relay endpoint. The service worker relays
@@ -3994,6 +4218,12 @@ async fn main() {
             _ => Vec::new(),
         },
         relay_rate: Mutex::new(HashMap::new()),
+        /* LB AI mode: strict server-side key. Unset = /ai/chat answers
+        503 honestly; the UI mock mode still works without it. */
+        mistral_key: std::env::var("MISTRAL_API_KEY")
+            .ok()
+            .filter(|k| !k.is_empty()),
+        ai_uses: Mutex::new(HashMap::new()),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
             bytes: 0,
@@ -4056,6 +4286,9 @@ async fn main() {
         .route("/__zl_nav__", any(zl_sw_required))
         .route("/__zl_nav__/*path", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
+        // LB AI mode: same-origin Mistral proxy (ai_chat_endpoint);
+        // the 32 MiB cap covers inline image data URLs.
+        .route("/ai/chat", post(ai_chat_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         // #200: a fixed 32 MiB route-level body cap (not streaming),
         // above axum's 2 MiB default so relay upload envelopes fit.
         // ponytail: one layer call, no new extractor machinery.
@@ -4406,6 +4639,8 @@ mod session_log_tests {
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
             mcp_reports: Mutex::new(VecDeque::new()),
+            mistral_key: None,
+            ai_uses: Mutex::new(HashMap::new()),
         }
     }
 
@@ -4709,6 +4944,8 @@ mod mcp_tests {
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
             mcp_reports: Mutex::new(VecDeque::new()),
+            mistral_key: None,
+            ai_uses: Mutex::new(HashMap::new()),
         }
     }
 
@@ -4976,5 +5213,88 @@ mod mcp_tests {
             // every row must say unreadable, never an invented hash.
             assert_eq!(a.get("error").and_then(|x| x.as_str()), Some("unreadable"));
         }
+    }
+}
+
+#[cfg(test)]
+mod ai_tests {
+    use super::*;
+
+    #[test]
+    fn ai_rate_take_caps_reports_and_slides() {
+        let map = Mutex::new(HashMap::new());
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        /* Fill the window: each take reports one fewer remaining. */
+        for i in 0..AI_RATE_MAX_PER_WINDOW {
+            assert_eq!(
+                ai_rate_take(&map, ip, 1000),
+                Some(AI_RATE_MAX_PER_WINDOW - 1 - i)
+            );
+        }
+        /* Full window: refused; a different client keeps its own bucket. */
+        assert_eq!(ai_rate_take(&map, ip, 1000), None);
+        let other: IpAddr = "127.0.0.2".parse().unwrap();
+        assert_eq!(
+            ai_rate_take(&map, other, 1000),
+            Some(AI_RATE_MAX_PER_WINDOW - 1)
+        );
+        /* Uses older than the window expire, so the bucket slides. */
+        assert_eq!(
+            ai_rate_take(&map, ip, 1000 + AI_RATE_WINDOW_SECS),
+            Some(AI_RATE_MAX_PER_WINDOW - 1)
+        );
+    }
+
+    fn msg(role: &str, content: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({ "role": role, "content": content })
+    }
+
+    #[test]
+    fn ai_validate_accepts_only_the_whitelisted_shape() {
+        let ok = serde_json::json!({
+            "model": "mistral-small-latest",
+            "thinking": true,
+            "messages": [
+                msg("system", "You are helpful.".into()),
+                msg("user", serde_json::json!([
+                    { "type": "text", "text": "hi" },
+                    { "type": "image_url", "image_url": { "url": "data:image/png;base64,AAAA" } },
+                ])),
+            ],
+        });
+        let (model, messages, thinking) = ai_validate(&ok).expect("valid request");
+        assert_eq!(model, "mistral-small-latest");
+        assert_eq!(messages.len(), 2);
+        assert!(thinking);
+
+        let bad_model = serde_json::json!({
+            "model": "some-other-model",
+            "messages": [msg("user", "hi".into())],
+        });
+        assert_eq!(ai_validate(&bad_model).unwrap_err(), "unknown model");
+
+        let no_messages = serde_json::json!({ "model": "mistral-small-latest", "messages": [] });
+        assert_eq!(
+            ai_validate(&no_messages).unwrap_err(),
+            "messages out of range"
+        );
+
+        let bad_role = serde_json::json!({
+            "model": "mistral-small-latest",
+            "messages": [msg("tool", "hi".into())],
+        });
+        assert_eq!(ai_validate(&bad_role).unwrap_err(), "bad role");
+
+        /* Remote image URLs are refused: only inline data survives. */
+        let remote_img = serde_json::json!({
+            "model": "mistral-small-latest",
+            "messages": [msg("user", serde_json::json!([
+                { "type": "image_url", "image_url": { "url": "https://example.com/x.png" } },
+            ]))],
+        });
+        assert_eq!(
+            ai_validate(&remote_img).unwrap_err(),
+            "only inline data image URLs are accepted"
+        );
     }
 }

@@ -209,3 +209,6 @@ Settings carries settings.density ("normal" | "compact"), migration-safe in load
 
 ## Content worker handoff (#196)
 The content registration page resolves navigator.serviceWorker.getRegistration("/") for every relay/control handoff. Its controller and the registration captured at boot may belong to an orphaned worker after another client unregisters and re-registers the scope. Relay recovery coalesces wake broadcasts, closes the old port and aborts its requests, then re-announces config, Wisp and embedder origin to the same active instance. Controller changes also trigger recovery. tests/relay-recovery/check.mjs executes the actual boot page against a replaced registration with an intentionally stale controller.
+
+## AI mode (beta, 2026-10-30)
+AI chat calls never carry a key in the browser: ui/src/ai/aiStore.ts posts to the same-origin /ai/chat route, and the server (main.rs ai_chat_endpoint) forwards to api.mistral.ai with the deployment's MISTRAL_API_KEY (unset = honest 503). The server owns the model whitelist (mistral-small-latest), request validation and the rate limit (50 messages per rolling 6 h per client; the remaining count rides x-lb-ai-remaining). Web search stays keyless client-side (Exa MCP). The debug menu "Mock AI responses" override replaces search, reasoning and the answer locally with zero network.
