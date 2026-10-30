@@ -6,7 +6,7 @@
    The rate limit is a UX quota, not a security control: clearing site
    data resets it. */
 
-import { loadDebugOverrides } from "../debug";
+import { loadDebugOverrides } from "../debug.ts";
 
 const KEY_MODEL = "lobsterbrowse-ai-model";
 const KEY_KEYS = "lobsterbrowse-ai-keys";
