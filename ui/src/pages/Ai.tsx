@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AI_MODELS,
   aiSearch,
+  isMocked,
   listChats,
   loadKeys,
   needsThinking,
@@ -222,7 +223,7 @@ export default function AiPage() {
     const text = draft.trim();
     if (!text || busy) return;
     const k = loadKeys();
-    if (!k.mistral) {
+    if (!k.mistral && !isMocked()) {
       setError("No Mistral API key is configured on this device.");
       return;
     }

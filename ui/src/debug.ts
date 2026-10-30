@@ -22,6 +22,9 @@ export type DebugOverrides = {
   httpsUpgrade?: boolean;
   imageLazy?: boolean;
   split?: boolean;
+  /* UI-only override: the AI mode mock (canned local answers). Never
+     pushed to the engine workers; ui/src/ai/aiStore.ts reads it. */
+  aiMock?: boolean;
   experimental?: Partial<ExperimentalSelections>;
 };
 const KEY = "lb_debug_overrides";
@@ -49,6 +52,7 @@ export function loadDebugOverrides(): DebugOverrides {
       ...(typeof obj.httpsUpgrade === "boolean" ? { httpsUpgrade: obj.httpsUpgrade } : {}),
       ...(typeof obj.imageLazy === "boolean" ? { imageLazy: obj.imageLazy } : {}),
       ...(typeof obj.split === "boolean" ? { split: obj.split } : {}),
+      ...(typeof obj.aiMock === "boolean" ? { aiMock: obj.aiMock } : {}),
       experimental: cleanExperimental(obj.experimental),
     };
   } catch { return {}; }

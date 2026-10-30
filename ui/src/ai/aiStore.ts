@@ -6,6 +6,8 @@
    The rate limit is a UX quota, not a security control: clearing site
    data resets it. */
 
+import { loadDebugOverrides } from "../debug";
+
 const KEY_MODEL = "lobsterbrowse-ai-model";
 const KEY_KEYS = "lobsterbrowse-ai-keys";
 const KEY_USES = "lobsterbrowse-ai-usage";
@@ -245,6 +247,39 @@ export async function wipeAiData(): Promise<void> {
   });
 }
 
+/* ---- mock mode (debug menu "Mock AI responses"): canned local
+   data, zero network. Everything the AI page can do is mocked: the
+   search sources, the reasoning stream, and the word-by-word answer.
+   The flag lives in the debug overrides (localStorage), so it survives
+   reloads and the debug menu "Clear overrides" clears it. */
+export function isMocked(): boolean {
+  return loadDebugOverrides().aiMock === true;
+}
+
+const MOCK_SOURCES: AiSource[] = [
+  { title: "Mock result one", url: "https://example.com/mock-one", snippet: "A canned search result produced locally by mock mode." },
+  { title: "Mock result two", url: "https://example.com/mock-two", snippet: "Second canned result; no Exa request was made." },
+];
+
+const mockWait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+async function* mockStream(thinking: boolean): AsyncGenerator<StreamEvent> {
+  if (thinking) {
+    for (const step of ["Reading the question.", "Weighing the mock sources.", "Drafting the mock answer."]) {
+      await mockWait(350);
+      yield { type: "thinking", text: step + "\n" };
+    }
+  }
+  const answer =
+    "This is a mock answer produced locally by the debug menu. No Mistral API call and no Exa search " +
+    "happened. It cites the mock sources [1] and [2] so the reasoning panel, the streamed text, and " +
+    "the source chips render exactly as they do against the real APIs.";
+  for (const word of answer.split(" ")) {
+    await mockWait(40);
+    yield { type: "text", text: word + " " };
+  }
+}
+
 /* ---- web search: Exa MCP (https://mcp.exa.ai/mcp) ----
    Keyless by design: Exa serves free, rate-limited search over MCP
    with no account or key, and the endpoint is CORS-open from the
@@ -341,6 +376,7 @@ function parseExaResults(text: string): AiSource[] {
 }
 
 export async function aiSearch(query: string): Promise<AiSource[]> {
+  if (isMocked()) return MOCK_SOURCES;
   await exaEnsureSession();
   try {
     return await exaSearchCall(query);
@@ -376,6 +412,10 @@ export async function* streamMistral(opts: {
   thinking: boolean;
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
+  if (isMocked()) {
+    yield* mockStream(opts.thinking);
+    return;
+  }
   const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + opts.key },
