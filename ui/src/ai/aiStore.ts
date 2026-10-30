@@ -1,28 +1,31 @@
 /* AI mode storage and provider clients.
-   Everything runs client-side in the browser: the LB server is not
-   involved in any AI call. Chats are encrypted at rest with a
-   non-exportable AES-GCM key held in IndexedDB. By design there is no
-   key export: losing the browser profile loses the chats.
-   The rate limit is a UX quota, not a security control: clearing site
-   data resets it. */
+   The Mistral key is SERVER-SIDE: streamMistral posts to this
+   origin's /ai/chat proxy, which holds MISTRAL_API_KEY on the
+   deployment and enforces the rate limit (50 messages per rolling
+   6 h). The remaining count rides the x-lb-ai-remaining response
+   header. Web search is keyless: Exa's free MCP endpoint
+   (mcp.exa.ai) answers with no account. Chats persist encrypted in
+   IndexedDB with a non-exportable key. By design there is no key
+   export: losing the browser profile loses the chats. */
 
 import { loadDebugOverrides } from "../debug.ts";
 
 const KEY_MODEL = "lobsterbrowse-ai-model";
-const KEY_KEYS = "lobsterbrowse-ai-keys";
-const KEY_USES = "lobsterbrowse-ai-usage";
 
 export interface AiModel {
   id: string;
   name: string;
+  version: string;
   params: string;
   note: string;
   thinking: boolean;
 }
 
-/* Parameter lines stay honest: undisclosed stays undisclosed. */
+/* Parameter lines stay honest: Mistral Small 4 (mistral-small-latest),
+   verified 2026-10-30 - 119B total MoE, 6.5B active, 256k context,
+   multimodal input. */
 export const AI_MODELS: AiModel[] = [
-  { id: "mistral-small-latest", name: "Mistral Small", params: "119B total / 6B active MoE, 256k context", note: "Multimodal, dynamic thinking.", thinking: true },
+  { id: "mistral-small-latest", name: "Mistral Small", version: "4", params: "119B", note: "6.5B active MoE, 256k context, multimodal", thinking: true },
 ];
 
 export function loadModelId(): string {
@@ -37,60 +40,6 @@ export function loadModelId(): string {
 export function saveModelId(id: string): void {
   try {
     localStorage.setItem(KEY_MODEL, id);
-  } catch {
-    /* ignore */
-  }
-}
-
-export interface AiKeys {
-  mistral: string;
-}
-
-export function loadKeys(): AiKeys {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY_KEYS) || "{}") as Partial<AiKeys>;
-    return { mistral: typeof v.mistral === "string" ? v.mistral : "" };
-  } catch {
-    return { mistral: "" };
-  }
-}
-
-/* ---- rate limit: 50 messages per sliding 6 hour window ---- */
-
-const QUOTA = 50;
-const WINDOW_MS = 6 * 60 * 60 * 1000;
-
-function pruneUses(now: number): number[] {
-  let uses: number[] = [];
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY_USES) || "[]");
-    if (Array.isArray(v)) uses = v.filter((n) => typeof n === "number" && now - n < WINDOW_MS);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.setItem(KEY_USES, JSON.stringify(uses));
-  } catch {
-    /* ignore */
-  }
-  return uses;
-}
-
-export function remainingQuota(): number {
-  return Math.max(0, QUOTA - pruneUses(Date.now()).length);
-}
-
-export function quotaResetInMs(): number {
-  const uses = pruneUses(Date.now());
-  return uses.length ? WINDOW_MS - (Date.now() - uses[0]) : 0;
-}
-
-export function recordUse(): void {
-  const now = Date.now();
-  const uses = pruneUses(now);
-  uses.push(now);
-  try {
-    localStorage.setItem(KEY_USES, JSON.stringify(uses));
   } catch {
     /* ignore */
   }
@@ -389,7 +338,7 @@ export async function aiSearch(query: string): Promise<AiSource[]> {
   }
 }
 
-/* ---- Mistral streaming client ---- */
+/* ---- Mistral streaming client (via the server proxy) ---- */
 
 export type MistralContent =
   | string
@@ -400,13 +349,26 @@ export interface MistralMsg {
   content: MistralContent;
 }
 
-export interface StreamEvent {
-  type: "thinking" | "text";
-  text: string;
+export type StreamEvent =
+  | { type: "thinking" | "text"; text: string }
+  | { type: "quota"; remaining: number };
+
+/* Rate-limit refusals carry their own class so the UI offers the
+   Try again action only where a retry can actually help. */
+export class RateLimitError extends Error {}
+
+async function aiErrText(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  try {
+    const v = JSON.parse(text) as { error?: unknown };
+    if (typeof v.error === "string" && v.error) return v.error;
+  } catch {
+    /* not JSON: fall through */
+  }
+  return "AI service error (HTTP " + res.status + ")" + (text ? " - " + text.slice(0, 200) : "");
 }
 
 export async function* streamMistral(opts: {
-  key: string;
   model: string;
   messages: MistralMsg[];
   thinking: boolean;
@@ -416,22 +378,22 @@ export async function* streamMistral(opts: {
     yield* mockStream(opts.thinking);
     return;
   }
-  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+  const res = await fetch("/ai/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + opts.key },
+    headers: { "Content-Type": "application/json" },
     signal: opts.signal,
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
-      stream: true,
-      /* Dynamic thinking: high only when the heuristic fired. */
-      reasoning_effort: opts.thinking ? "high" : "none",
+      thinking: opts.thinking,
     }),
   });
   if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => "");
-    throw new Error("Mistral API " + res.status + (detail ? " - " + detail.slice(0, 200) : ""));
+    const detail = await aiErrText(res);
+    throw res.status === 429 ? new RateLimitError(detail) : new Error(detail);
   }
+  const remaining = Number(res.headers.get("x-lb-ai-remaining"));
+  if (Number.isFinite(remaining) && remaining >= 0) yield { type: "quota", remaining };
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";

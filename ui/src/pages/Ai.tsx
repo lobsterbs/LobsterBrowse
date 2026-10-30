@@ -2,41 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import {
   AI_MODELS,
   aiSearch,
-  isMocked,
-  listChats,
-  loadKeys,
   needsThinking,
-  quotaResetInMs,
-  recordUse,
-  remainingQuota,
   saveChat,
   streamMistral,
-  type AiChat,
+  RateLimitError,
   type AiMsg,
   type MistralContent,
   type MistralMsg,
   type AiSource,
 } from "../ai/aiStore";
-import { ParticleHero } from "../ai/ParticleHero";
+import { Markdown } from "../ai/Markdown";
+import { ToolRow } from "../ai/ToolRow";
 
-/* AI mode (beta-only). Fully client-side: the Mistral API key lives in
-   localStorage and calls go straight from the browser to Mistral. Web
-   search is keyless: Exa's free MCP endpoint (mcp.exa.ai) answers with
-   no account. Chats persist encrypted in IndexedDB (non-exportable
-   key). Rate limit: 50 messages per 6 hours, sliding window. */
-
-const PRESETS = [
-  "What should we look into today?",
-  "Ask anything. Your questions stay on this device.",
-  "No accounts, no trails. Just answers.",
-  "Every question opens a door.",
-  "Curiosity, privately served.",
-  "What is on your mind?",
-  "The web has answers. You keep the identity.",
-  "Ask the web without handing over your name.",
-  "Think out loud. Something is listening.",
-  "Where shall we wander today?",
-];
+/* AI mode (beta-only). The Mistral key lives on the server: sends go
+   to this origin's /ai/chat proxy, which enforces the rate limit
+   (50 messages per rolling 6 h) and reports the remaining count in
+   the x-lb-ai-remaining header. Web search is keyless (Exa MCP).
+   Chats persist encrypted in IndexedDB with a non-exportable key.
+   Errors surface through the M3E snackbar; AI failures carry a
+   Try again action that replays the failed turn. */
 
 /* Official Mistral mark (the model's parent company): the mark-only
    crop of the docs.mistral.ai logo asset, exact official geometry. */
@@ -58,11 +42,6 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function fmtReset(ms: number): string {
-  const m = Math.max(1, Math.ceil(ms / 60000));
-  return m < 60 ? m + " min" : Math.ceil(m / 60) + " h";
-}
-
 function readAsDataUrl(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -72,9 +51,24 @@ function readAsDataUrl(f: File): Promise<string> {
   });
 }
 
+/* The notification service (M3E snackbar, same one App uses). AI
+   failures pass a retry callback so the Try again action replays
+   the failed turn; informational notices open without an action. */
+function toast(text: string, retry?: () => void): void {
+  if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+  if (retry) {
+    M3eSnackbar.open(text, "Try again", { actionCallback: retry, duration: 8000 });
+  } else {
+    M3eSnackbar.open(text, { duration: 6000 });
+  }
+}
+
 /* Model picker: the 21st.dev model-picker pattern (pill trigger +
-   popover + checkmark) hand-ported onto M3E tokens, no new deps. */
-function ModelPicker({ current }: { current: string }) {
+   popover + checkmark) hand-ported onto M3E tokens. Entries are the
+   models the server proxy actually serves; the mark is the parent
+   company's official logo at text height, and the parameter count
+   is the one bold element in the row. */
+function ModelPicker() {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -92,7 +86,7 @@ function ModelPicker({ current }: { current: string }) {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const active = AI_MODELS.find((m) => m.id === current) ?? AI_MODELS[0];
+  const active = AI_MODELS[0];
   return (
     <div className="lb-ai-mp" ref={wrapRef}>
       <button
@@ -103,7 +97,8 @@ function ModelPicker({ current }: { current: string }) {
         onClick={() => setOpen((v) => !v)}
       >
         <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
-        <span className="lb-ai-mp-name">{active.name}</span>
+        <span className="lb-ai-mp-name">{active.name} {active.version}</span>
+        <span className="lb-ai-mp-params">{active.params}</span>
         <svg className="lb-ai-mp-chev" viewBox="0 0 24 24" aria-hidden={true}>
           <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -114,7 +109,7 @@ function ModelPicker({ current }: { current: string }) {
             <button key={m.id} type="button" className="lb-ai-mp-opt" onClick={() => setOpen(false)}>
               <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
               <span className="lb-ai-model-item">
-                <span className="lb-ai-model-name">{m.name}</span>
+                <span className="lb-ai-model-name">{m.name} <span className="lb-ai-model-ver">{m.version}</span></span>
                 <span className="lb-ai-model-params">{m.params}</span>
                 <span className="lb-ai-model-note">{m.note}</span>
               </span>
@@ -132,16 +127,13 @@ function ModelPicker({ current }: { current: string }) {
 }
 
 export default function AiPage() {
-  const [sentence] = useState(() => PRESETS[Math.floor(Math.random() * PRESETS.length)]);
-  const [chats, setChats] = useState<AiChat[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AiMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [quota, setQuota] = useState(remainingQuota);
+  /* Remaining server quota; null until the first send answers. */
+  const [quota, setQuota] = useState<number | null>(null);
   const [attached, setAttached] = useState<Attached[]>([]);
 
   const barRef = useRef<HTMLElement | null>(null);
@@ -150,18 +142,6 @@ export default function AiPage() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const currentModel = AI_MODELS[0];
-
-  useEffect(() => {
-    let alive = true;
-    listChats()
-      .then((all) => {
-        if (alive) setChats(all);
-      })
-      .catch(() => setError("Stored chats could not be read."));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   /* The search bar's own clear (X) event bypasses React's value
      tracker; mirror the Home.tsx pattern. */
@@ -181,22 +161,6 @@ export default function AiPage() {
     if (nearBottom || phase !== "streaming") el.scrollTop = el.scrollHeight;
   }, [messages, phase]);
 
-  function newChat() {
-    setCurrentId(null);
-    setMessages([]);
-    setAttached([]);
-    setError("");
-    setNotice("");
-    inputRef.current?.focus();
-  }
-
-  function openChat(c: AiChat) {
-    setCurrentId(c.id ?? null);
-    setMessages(c.messages);
-    setAttached([]);
-    setError("");
-  }
-
   async function onFiles(list: FileList | null) {
     if (!list) return;
     const max = 5 - attached.length;
@@ -204,7 +168,7 @@ export default function AiPage() {
     const out: Attached[] = [];
     for (const f of picked) {
       if (f.size > 4 * 1024 * 1024) {
-        setError(f.name + " is over the 4 MB limit.");
+        toast(f.name + " is over the 4 MB limit.");
         continue;
       }
       if (
@@ -219,22 +183,12 @@ export default function AiPage() {
     if (out.length) setAttached((a) => [...a, ...out].slice(0, 5));
   }
 
-  async function send() {
-    const text = draft.trim();
+  async function send(retry?: { text: string; files: Attached[] }) {
+    const text = retry ? retry.text : draft.trim();
+    const files = retry ? retry.files : attached;
     if (!text || busy) return;
-    const k = loadKeys();
-    if (!k.mistral && !isMocked()) {
-      setError("No Mistral API key is configured on this device.");
-      return;
-    }
-    if (remainingQuota() <= 0) {
-      setError("Rate limit reached. Try again in " + fmtReset(quotaResetInMs()) + ".");
-      return;
-    }
-    setError("");
-    setNotice("");
+    const before = messages.length;
 
-    const files = attached;
     const userMsg: AiMsg = { role: "user", text, files: files.map((f) => f.name) };
     const withFiles = files
       .filter((f) => f.kind === "text")
@@ -242,18 +196,17 @@ export default function AiPage() {
     setAttached([]);
     setDraft("");
     setMessages((m) => [...m, userMsg]);
-    recordUse();
-    setQuota(remainingQuota());
+    setBusy(true);
+    setPhase("searching");
 
     /* Always-on search: Exa's MCP search is keyless, so every
        question searches first; a search failure never blocks the
        answer. */
     let sources: AiSource[] | undefined;
-    setPhase("searching");
     try {
       sources = await aiSearch(text);
     } catch (e) {
-      setNotice("Web search failed: " + msg(e));
+      toast("Web search failed: " + msg(e) + " Answering without it.");
     }
 
     const thinking = currentModel.thinking && needsThinking(withFiles);
@@ -279,10 +232,11 @@ export default function AiPage() {
       { role: "user", content: parts },
     ];
 
-    const asst: AiMsg = { role: "assistant", text: "", model: currentModel.id, sources };
-    setMessages((m) => [...m, asst]);
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", text: "", model: currentModel.id, sources },
+    ]);
     setPhase(thinking ? "thinking" : "streaming");
-    setBusy(true);
     let acc = "";
     let thinkAcc = "";
     const flush = () =>
@@ -291,14 +245,16 @@ export default function AiPage() {
         copy[copy.length - 1] = { ...copy[copy.length - 1], text: acc, thinking: thinkAcc || undefined };
         return copy;
       });
+    let ok = false;
     try {
       for await (const ev of streamMistral({
-        key: k.mistral,
         model: currentModel.id,
         messages: apiMessages,
         thinking,
       })) {
-        if (ev.type === "thinking") {
+        if (ev.type === "quota") {
+          setQuota(ev.remaining);
+        } else if (ev.type === "thinking") {
           thinkAcc += ev.text;
         } else {
           acc += ev.text;
@@ -306,115 +262,110 @@ export default function AiPage() {
         }
         flush();
       }
-      if (!acc && !thinkAcc) setError("The model returned an empty response.");
+      if (!acc && !thinkAcc) throw new Error("The model returned an empty response.");
+      ok = true;
     } catch (e) {
-      setError(msg(e));
-      flush();
+      /* Roll the failed turn back so the notification's Try again
+         action replays it cleanly. */
+      setMessages((m) => m.slice(0, before));
+      const rl = e instanceof RateLimitError;
+      toast(
+        rl ? msg(e) : "AI error: " + msg(e),
+        rl ? undefined : () => {
+          void send({ text, files });
+        }
+      );
     } finally {
       setBusy(false);
       setPhase("idle");
       /* Persist the turn; a storage failure never loses it from view. */
-      try {
-        const title =
-          messages.length === 0
-            ? text.slice(0, 48)
-            : (chats.find((c) => c.id === currentId)?.title ?? text.slice(0, 48));
-        const all = [
-          ...messages,
-          userMsg,
-          { ...asst, text: acc, thinking: thinkAcc || undefined },
-        ];
-        const id = await saveChat({ id: currentId ?? undefined, title, messages: all, updated: Date.now() });
-        setCurrentId(id);
-        setChats(await listChats());
-      } catch {
-        setNotice("Chat could not be saved locally.");
+      if (ok) {
+        try {
+          const all = [
+            ...messages,
+            userMsg,
+            {
+              role: "assistant" as const,
+              text: acc,
+              thinking: thinkAcc || undefined,
+              model: currentModel.id,
+              sources,
+            },
+          ];
+          const id = await saveChat({
+            id: currentId ?? undefined,
+            title: text.slice(0, 48),
+            messages: all,
+            updated: Date.now(),
+          });
+          setCurrentId(id);
+        } catch {
+          toast("Chat could not be saved locally.");
+        }
       }
     }
   }
 
+  const quotaUsed = quota === null ? 0 : QUOTA_MAX - quota;
+
   return (
     <div className="lb-ai">
-      <ParticleHero text={sentence} />
-
-      <div className="lb-ai-head">
-        <m3e-menu-trigger for="lb-ai-chats-menu">
-          <m3e-icon-button aria-label="Chats">
-            <m3e-icon name="history" aria-hidden={true} />
-          </m3e-icon-button>
-        </m3e-menu-trigger>
-        <m3e-menu id="lb-ai-chats-menu">
-          {chats.length === 0 && <m3e-menu-item disabled={""}>No saved chats yet</m3e-menu-item>}
-          {chats.map((c) => (
-            <m3e-menu-item key={c.id} onClick={() => openChat(c)}>
-              {c.title || "Untitled"}
-            </m3e-menu-item>
-          ))}
-        </m3e-menu>
-        <m3e-button variant="text" onClick={newChat}>
-          New chat
-        </m3e-button>
-        <span className="lb-ai-sp"></span>
-        <ModelPicker current={currentModel.id} />
-        <span
-          className={"lb-ai-quota" + (quota === 0 ? " lb-ai-quota-out" : "")}
-          title={"Resets in " + fmtReset(quotaResetInMs())}
-        >
-          {QUOTA_MAX - quota}/{QUOTA_MAX}
-        </span>
-      </div>
-
       <div className="lb-ai-msgs" ref={scrollRef}>
-        {messages.length === 0 && (
-          <div className="lb-ai-empty">
-            <p>Ask anything. Web search is on.</p>
-          </div>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={"lb-ai-msg lb-ai-" + m.role}>
-            {m.files && m.files.length > 0 && (
-              <div className="lb-ai-files">
-                {m.files.map((n, j) => (
-                  <span key={j} className="lb-ai-file-chip">
-                    {n}
+        {messages.map((m, i) => {
+          const last = i === messages.length - 1;
+          return (
+            <div key={i} className={"lb-ai-msg lb-ai-" + m.role}>
+              {m.files && m.files.length > 0 && (
+                <div className="lb-ai-files">
+                  {m.files.map((n, j) => (
+                    <span key={j} className="lb-ai-file-chip">
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {m.role === "assistant" && m.sources && m.sources.length > 0 && (
+                <ToolRow label="Searching the web" doneLabel="Searched the web" active={last && busy && phase === "searching"}>
+                  <div className="lb-ai-sources">
+                    {m.sources.map((s, j) => (
+                      <a key={j} className="lb-ai-src" href={s.url} target="_blank" rel="noreferrer">
+                        {s.title}
+                      </a>
+                    ))}
+                  </div>
+                </ToolRow>
+              )}
+              {m.role === "assistant" && m.thinking && (
+                <ToolRow label="Thinking" doneLabel="Thought" active={last && busy && phase === "thinking"}>
+                  <pre className="lb-ai-think-pre">{m.thinking}</pre>
+                </ToolRow>
+              )}
+              {m.role === "user" && m.text && <div className="lb-ai-bubble">{m.text}</div>}
+              {m.role === "assistant" && m.text && (
+                <div className="lb-ai-bubble lb-ai-answer">
+                  <Markdown text={m.text} />
+                </div>
+              )}
+              {m.role === "assistant" && last && busy && phase === "streaming" && !m.text && !m.thinking && (
+                <div className="lb-ai-tool">
+                  <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
+                    Responding
                   </span>
-                ))}
-              </div>
-            )}
-            {m.thinking && (
-              <details className="lb-ai-think">
-                <summary>Reasoning</summary>
-                <pre>{m.thinking}</pre>
-              </details>
-            )}
-            {m.text && <div className="lb-ai-bubble">{m.text}</div>}
-            {m.sources && m.sources.length > 0 && (
-              <div className="lb-ai-sources">
-                {m.sources.map((s, j) => (
-                  <a key={j} className="lb-ai-src" href={s.url} target="_blank" rel="noreferrer">
-                    {s.title}
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-        {busy && phase !== "streaming" && (
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {busy && phase === "searching" && (
           <div className="lb-ai-msg lb-ai-assistant">
-            <div
-              className={"lb-ai-morph lb-ai-morph-" + (phase === "searching" ? "fast" : "slow")}
-              role="status"
-              aria-label={phase === "searching" ? "Searching the web" : "Thinking"}
-            ></div>
+            <div className="lb-ai-tool">
+              <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
+                Searching the web
+              </span>
+            </div>
           </div>
         )}
       </div>
-
-      {(error || notice) && (
-        <div className="lb-ai-err" role="alert">
-          {error || notice}
-        </div>
-      )}
 
       {attached.length > 0 && (
         <div className="lb-ai-att">
@@ -452,7 +403,7 @@ export default function AiPage() {
             slot="input"
             ref={inputRef}
             aria-label="Message the assistant"
-            placeholder="Ask anything"
+            placeholder="Ask Anything"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -466,6 +417,16 @@ export default function AiPage() {
         <m3e-icon-button aria-label="Send" onClick={() => void send()}>
           <m3e-icon name="arrow_forward" aria-hidden={true} />
         </m3e-icon-button>
+      </div>
+
+      <div className="lb-ai-under">
+        <ModelPicker />
+        <span
+          className={"lb-ai-quota" + (quota !== null && quota <= 0 ? " lb-ai-quota-out" : "")}
+          title={quota !== null ? quota + " of " + QUOTA_MAX + " messages left in the current 6 hour window" : undefined}
+        >
+          {quotaUsed}/{QUOTA_MAX}
+        </span>
       </div>
     </div>
   );

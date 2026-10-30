@@ -17,6 +17,7 @@
     "dompurify": "^3.2.0",
     "fflate": "^0.8.0",
     "file-type": "^22.0.0",
+    "marked": "^18.1.2",
     "material-symbols": "^0.47.0",
     "motion": "^14.2.0",
     "pdfjs-dist": "^5.0.0",
