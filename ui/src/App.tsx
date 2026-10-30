@@ -3,6 +3,8 @@ import HomePage from "./pages/Home";
 import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
+import AiPage from "./pages/Ai";
+import neurologySvg from "@material-symbols/svg-400/outlined/neurology.svg?raw";
 import {
   engineRoutePrefix,
   loadSettings,
@@ -26,7 +28,7 @@ import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
 
-type View = "home" | "browser" | "settings" | "logs";
+type View = "home" | "browser" | "ai" | "settings" | "logs";
 
 let tabSeq = 1;
 function freshTab(url = ""): Tab {
@@ -860,6 +862,13 @@ export default function App() {
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
           </m3e-nav-item>
           <m3e-nav-item
+            id="nav-ai"
+            selected={view === "ai" ? "" : undefined}
+            onClick={() => setView("ai")}
+          >
+            <span slot="icon" className="lb-ai-nav-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: neurologySvg }} />AI
+          </m3e-nav-item>
+          <m3e-nav-item
             id="nav-settings"
             selected={view === "settings" ? "" : undefined}
             onClick={() => setView("settings")}
@@ -886,6 +895,12 @@ export default function App() {
             }}
           >
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
+          </m3e-nav-item>
+          <m3e-nav-item
+            selected={view === "ai" ? "" : undefined}
+            onClick={() => setView("ai")}
+          >
+            <span slot="icon" className="lb-ai-nav-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: neurologySvg }} />AI
           </m3e-nav-item>
           <m3e-nav-item
             selected={view === "settings" ? "" : undefined}
@@ -947,6 +962,7 @@ export default function App() {
                   onImportSession={importSession}
                 />
               )}
+              {view === "ai" && <AiPage />}
               {view === "logs" && (
                 <LogsPage onBack={() => setView("home")} sess={tabs.find((t) => t.id === activeId)?.sess} />
               )}
