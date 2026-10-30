@@ -1418,17 +1418,18 @@ fn ai_cid_ok(value: &str) -> Option<String> {
 /// vision model, plus the tool schema and tool_calls for the
 /// model-invoked web search. Everything else is rejected, never
 /// forwarded.
-fn ai_validate(
-    req: &serde_json::Value,
-) -> Result<
-    (
-        String,
-        Vec<serde_json::Value>,
-        bool,
-        Option<Vec<serde_json::Value>>,
-    ),
-    &'static str,
-> {
+/// The distilled, validated AI turn: model id, the message
+/// list, the reasoning-effort flag and the optional typed image
+/// parts (vision turns only). The alias names the tuple shape and
+/// keeps the clippy type_complexity gate satisfied.
+type AiTurn = (
+    String,
+    Vec<serde_json::Value>,
+    bool,
+    Option<Vec<serde_json::Value>>,
+);
+
+fn ai_validate(req: &serde_json::Value) -> Result<AiTurn, &'static str> {
     let model = req
         .get("model")
         .and_then(|v| v.as_str())
