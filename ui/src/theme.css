@@ -85,6 +85,17 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    The starfield component owns its own dark radial background and
    fills this layer at 100%. */
 .lb-stars-bg { position: fixed; inset: 0; z-index: -1; }
+/* Frost needs a backdrop with content: two soft aurora blooms hug
+   the left edge behind the rail so the blur reads as glass. */
+body.lb-fancy .lb-stars-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(430px 640px at 0% 26%, color-mix(in srgb, var(--md-sys-color-primary, #d0bcff) 26%, transparent), transparent 70%),
+    radial-gradient(400px 580px at 0% 74%, color-mix(in srgb, var(--md-sys-color-tertiary, #efb8c8) 22%, transparent), transparent 70%);
+}
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
    readable over the animated background. Scoped to the body class
@@ -110,20 +121,22 @@ body.lb-fancy .lb-ac {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Frosted nav rail (#226, user refinement): frosted glass stays
-   ALWAYS on, and the rail keeps its reserved layout space (in
-   flow) so proxied page content never renders behind it. The
-   surface tint is 60% so the rail stays visibly darker than
-   adjacent bright pages and the nav icons keep contrast. The M3E
-   shadow .base carries an opaque surfaceContainer background
-   (inherited nav-bar styles), neutralized through the component's
-   own container token so the frosted host surface is what
-   shows. */
+/* Frosted nav rail (#226, live-probed 2026-10-30): the frost chain
+   works - a bright layer behind the rail shows through the blur -
+   so the flat look was the backdrop, not an overwrite: the only
+   thing behind the rail was the near-black starfield, and blur over
+   a flat dark field is invisible. The tint drops to 38% so the
+   starfield and the left-edge aurora blooms read through the
+   glass; the hairline edge and inset gloss match the search bar.
+   The @m3e/web 2.8.2 rail shadow paints no background of its own
+   (verified in dist nav-rail.js), so the container token stays a
+   harmless no-op kept for component updates. */
 m3e-nav-rail {
   --m3e-nav-bar-container-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 60%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 38%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
 }/* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
    the fancy setting; the plain background keeps the bare pre. */
