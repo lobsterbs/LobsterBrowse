@@ -2815,7 +2815,6 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
         } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
           const ac = controllers.get(m.rid);
           if (ac) ac.abort();
-        }
         } else if (m.type === "zl:wsRelay" && typeof m.rid === "number") {
           wsRelayOpen(m, ch.port1);
         } else if (m.type === "zl:wsSend" && typeof m.rid === "number") {
