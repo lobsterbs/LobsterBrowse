@@ -1681,7 +1681,32 @@ FROM debian:bookworm-slim AS zl-builder
 # -> 0fcad50982ab7686 (675565 bytes) - the /build zlswSha cannot
 # distinguish this bump, verify the served wasm hash instead.
 # Cargo-side pin stays d4ca407: no crates changed.
-ARG ZEOLITE_COMMIT=fce7466acc0985012f8ad778bb1773609ee20c4d
+# Pin 138 (2026-10-30): dist c1ad7a4 (Zeolite main 7cbac22f, CI run
+# 41038517509) ships the #511 WebSocket-over-relay bridge: when a
+# relay channel is registered, page WebSockets ride it as typed
+# zl:ws* frames through the LB /zlws egress instead of the primary
+# wisp transport (auth-refused on LB-class deployments, so every
+# socket wedged in readyState 0 with no error: the Blooket
+# "Joining Game" hang). Close parity: onclose fires when the
+# handshake completes (the echoed close envelope or a bounded 5 s
+# fallback), the conn stays registered while closing, sends after
+# close drop, a dead relay channel surfaces as onerror, pre-open
+# sockets end 1006. The embedder side (LB /zlws egress + relay ws
+# arms in zeolite.ts and the boot page) ships in this same deploy.
+# Pinned from a run whose browser job is red: the redirect-semantics
+# torture probe failed first in all five red runs today (the
+# intermittent engine transport death of Zeolite #514, present on
+# pre-#511 bytes too); the app job that builds this bundle is green
+# and the pin 135 precedent applies with the diagnosis on record.
+# sw.js ff73bac6fd111fe2 -> c4208f42a1552246 (701903 bytes);
+# bootstrap.js unchanged 3936718bd9dcdd64 (40587 bytes);
+# rewriter_wasm_bg.wasm 0fcad50982ab7686 -> 4701b161cab34b27
+# (678984 bytes) with NO Rust source change since pin 137 (only a
+# cfg-gated test landed): the wasm tracks crates.io because Zeolite
+# commits no Cargo.lock (Zeolite #513); rustc and wasm-pack were
+# identical in both builds. Cargo-side pin stays d4ca407: no crates
+# changed.
+ARG ZEOLITE_COMMIT=c1ad7a4cbddcee3cc8f8034746d4a670f439af4d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1740,7 +1765,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ff73bac6fd111fe2 ZEOLITE_BOOTSTRAP_SHA=3936718bd9dcdd64 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c4208f42a1552246 ZEOLITE_BOOTSTRAP_SHA=3936718bd9dcdd64 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
