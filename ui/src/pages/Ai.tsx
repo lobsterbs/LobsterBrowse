@@ -4,29 +4,25 @@ import {
   aiSearch,
   listChats,
   loadKeys,
-  loadModelId,
   needsThinking,
   quotaResetInMs,
   recordUse,
   remainingQuota,
   saveChat,
-  saveKeys,
-  saveModelId,
   streamMistral,
   type AiChat,
-  type AiKeys,
   type AiMsg,
   type MistralContent,
   type MistralMsg,
   type AiSource,
 } from "../ai/aiStore";
 import { ParticleHero } from "../ai/ParticleHero";
-import neurologySvg from "@material-symbols/svg-400/outlined/neurology.svg?raw";
 
-/* AI mode (beta-only). Fully client-side: the user's API keys live in
-   localStorage and calls go straight from the browser to Mistral and
-   Tavily. Chats persist encrypted in IndexedDB (non-exportable key).
-   Rate limit: 50 messages per 6 hours, sliding window. */
+/* AI mode (beta-only). Fully client-side: the Mistral API key lives in
+   localStorage and calls go straight from the browser to Mistral. Web
+   search is keyless: Exa's free MCP endpoint (mcp.exa.ai) answers with
+   no account. Chats persist encrypted in IndexedDB (non-exportable
+   key). Rate limit: 50 messages per 6 hours, sliding window. */
 
 const PRESETS = [
   "What should we look into today?",
@@ -41,20 +37,21 @@ const PRESETS = [
   "Where shall we wander today?",
 ];
 
-/* Stylized Mistral mark (the parent company of every listed model). */
+/* Official Mistral mark (the model's parent company): the mark-only
+   crop of the docs.mistral.ai logo asset, exact official geometry. */
 const MISTRAL_MARK =
-  '<svg viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="10" height="5" fill="#FAFF00"/><rect x="13" y="1" width="10" height="5" fill="#FAFF00"/><rect x="1" y="8" width="10" height="5" fill="#FF9D00"/><rect x="13" y="8" width="10" height="5" fill="#FF9D00"/><rect x="7" y="15" width="10" height="5" fill="#FF4B00"/></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 47 170 122"><g transform="matrix(.796709 0 0 .796709 61.562988 176.05127)"><path d="M-46.307-161.245h30.303v30.303h-30.303zm121.212 0h30.303v30.303H74.905z" fill="gold"/><path d="M-46.307-130.942h60.606v30.303h-60.606zm90.909 0h60.606v30.303H44.602z" fill="#ffaf00"/><path d="M-46.307-100.639h151.515v30.303H-46.307z" fill="#ff8205"/><path d="M-46.307-70.336h30.303v30.303h-30.303zm60.606 0h30.303v30.303H14.299zm60.606 0h30.303v30.303H74.905z" fill="#fa500f"/><path d="M-76.61-40.033h90.909V-9.73H-76.61zm121.212 0h90.909V-9.73H44.602z" fill="#e10500"/></g></svg>';
 
 const QUOTA_MAX = 50;
 
-type DialogEl = HTMLElement & { show: () => Promise<void>; hide: () => Promise<void> };
+type Phase = "idle" | "searching" | "thinking" | "streaming";
+
 interface Attached {
   name: string;
   kind: "text" | "image";
   text?: string;
   dataUrl?: string;
 }
-type Phase = "idle" | "searching" | "thinking" | "streaming";
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -74,10 +71,67 @@ function readAsDataUrl(f: File): Promise<string> {
   });
 }
 
+/* Model picker: the 21st.dev model-picker pattern (pill trigger +
+   popover + checkmark) hand-ported onto M3E tokens, no new deps. */
+function ModelPicker({ current }: { current: string }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const active = AI_MODELS.find((m) => m.id === current) ?? AI_MODELS[0];
+  return (
+    <div className="lb-ai-mp" ref={wrapRef}>
+      <button
+        type="button"
+        className="lb-ai-mp-btn"
+        aria-label="Select model"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
+        <span className="lb-ai-mp-name">{active.name}</span>
+        <svg className="lb-ai-mp-chev" viewBox="0 0 24 24" aria-hidden={true}>
+          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="lb-ai-mp-pop" role="dialog" aria-label="Select a model">
+          {AI_MODELS.map((m) => (
+            <button key={m.id} type="button" className="lb-ai-mp-opt" onClick={() => setOpen(false)}>
+              <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
+              <span className="lb-ai-model-item">
+                <span className="lb-ai-model-name">{m.name}</span>
+                <span className="lb-ai-model-params">{m.params}</span>
+                <span className="lb-ai-model-note">{m.note}</span>
+              </span>
+              {m.id === active.id && (
+                <span className="lb-ai-mp-check">
+                  <m3e-icon name="check" aria-hidden={true} />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AiPage() {
   const [sentence] = useState(() => PRESETS[Math.floor(Math.random() * PRESETS.length)]);
-  const [model, setModel] = useState(loadModelId);
-  const [keys, setKeys] = useState<AiKeys>(loadKeys);
   const [chats, setChats] = useState<AiChat[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AiMsg[]>([]);
@@ -92,13 +146,9 @@ export default function AiPage() {
   const barRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const keysDialogRef = useRef<DialogEl | null>(null);
-  const mistralKeyRef = useRef<HTMLInputElement | null>(null);
-  const tavilyKeyRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentModel = AI_MODELS.find((m) => m.id === model) ?? AI_MODELS[0];
-  const searchOn = Boolean(keys.tavily);
+  const currentModel = AI_MODELS[0];
 
   useEffect(() => {
     let alive = true;
@@ -168,31 +218,12 @@ export default function AiPage() {
     if (out.length) setAttached((a) => [...a, ...out].slice(0, 5));
   }
 
-  function openKeys() {
-    const dlg = keysDialogRef.current;
-    if (!dlg) return;
-    if (mistralKeyRef.current) mistralKeyRef.current.value = keys.mistral;
-    if (tavilyKeyRef.current) tavilyKeyRef.current.value = keys.tavily;
-    void dlg.show();
-  }
-
-  function storeKeys() {
-    const next: AiKeys = {
-      mistral: (mistralKeyRef.current?.value ?? "").trim(),
-      tavily: (tavilyKeyRef.current?.value ?? "").trim(),
-    };
-    saveKeys(next);
-    setKeys(next);
-    void keysDialogRef.current?.hide();
-  }
-
   async function send() {
     const text = draft.trim();
     if (!text || busy) return;
     const k = loadKeys();
     if (!k.mistral) {
-      openKeys();
-      setError("Add a Mistral API key first.");
+      setError("No Mistral API key is configured on this device.");
       return;
     }
     if (remainingQuota() <= 0) {
@@ -213,16 +244,15 @@ export default function AiPage() {
     recordUse();
     setQuota(remainingQuota());
 
-    /* Always-on search: runs before the model call whenever a key
-       exists; a search failure never blocks the answer. */
+    /* Always-on search: Exa's MCP search is keyless, so every
+       question searches first; a search failure never blocks the
+       answer. */
     let sources: AiSource[] | undefined;
-    if (k.tavily) {
-      setPhase("searching");
-      try {
-        sources = await aiSearch(text, k.tavily);
-      } catch (e) {
-        setNotice("Web search failed: " + msg(e));
-      }
+    setPhase("searching");
+    try {
+      sources = await aiSearch(text);
+    } catch (e) {
+      setNotice("Web search failed: " + msg(e));
     }
 
     const thinking = currentModel.thinking && needsThinking(withFiles);
@@ -304,6 +334,8 @@ export default function AiPage() {
 
   return (
     <div className="lb-ai">
+      <ParticleHero text={sentence} />
+
       <div className="lb-ai-head">
         <m3e-menu-trigger for="lb-ai-chats-menu">
           <m3e-icon-button aria-label="Chats">
@@ -322,44 +354,7 @@ export default function AiPage() {
           New chat
         </m3e-button>
         <span className="lb-ai-sp"></span>
-        <m3e-menu-trigger for="lb-ai-model-menu">
-          <m3e-button variant="text">
-            <span
-              slot="icon"
-              className="lb-ai-mark"
-              aria-hidden={true}
-              dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }}
-            />
-            {currentModel.name}
-          </m3e-button>
-        </m3e-menu-trigger>
-        <m3e-menu id="lb-ai-model-menu">
-          {AI_MODELS.map((m) => (
-            <m3e-menu-item-radio
-              key={m.id}
-              checked={m.id === model ? "" : undefined}
-              onClick={() => {
-                setModel(m.id);
-                saveModelId(m.id);
-              }}
-            >
-              <span
-                slot="icon"
-                className="lb-ai-mark"
-                aria-hidden={true}
-                dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }}
-              />
-              <span className="lb-ai-model-item">
-                <span className="lb-ai-model-name">{m.name}</span>
-                <span className="lb-ai-model-params">{m.params}</span>
-                <span className="lb-ai-model-note">{m.note}</span>
-              </span>
-            </m3e-menu-item-radio>
-          ))}
-        </m3e-menu>
-        <m3e-icon-button aria-label="API keys" onClick={openKeys}>
-          <m3e-icon name="settings" aria-hidden={true} />
-        </m3e-icon-button>
+        <ModelPicker current={currentModel.id} />
         <span
           className={"lb-ai-quota" + (quota === 0 ? " lb-ai-quota-out" : "")}
           title={"Resets in " + fmtReset(quotaResetInMs())}
@@ -368,12 +363,10 @@ export default function AiPage() {
         </span>
       </div>
 
-      <ParticleHero text={sentence} />
-
       <div className="lb-ai-msgs" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="lb-ai-empty">
-            <p>Ask anything. {searchOn ? "Web search is on." : "Add a Tavily key to turn web search on."}</p>
+            <p>Ask anything. Web search is on.</p>
           </div>
         )}
         {messages.map((m, i) => (
@@ -473,30 +466,6 @@ export default function AiPage() {
           <m3e-icon name="arrow_forward" aria-hidden={true} />
         </m3e-icon-button>
       </div>
-
-      <m3e-dialog id="lb-ai-keys" dismissible close-label="Close" {...{ ref: keysDialogRef }}>
-        <div slot="header">API keys</div>
-        <p className="lb-ai-keys-note">
-          Keys are stored only in this browser and are sent directly from your device to the provider.
-          Free keys: console.mistral.ai and app.tavily.com.
-        </p>
-        <label className="lb-ai-key-field">
-          <span>Mistral API key</span>
-          <input ref={mistralKeyRef} type="password" autoComplete="off" placeholder="Mistral API key" />
-        </label>
-        <label className="lb-ai-key-field">
-          <span>Tavily search key, optional</span>
-          <input ref={tavilyKeyRef} type="password" autoComplete="off" placeholder="Tavily key" />
-        </label>
-        <div slot="actions">
-          <m3e-button variant="text" onClick={() => void keysDialogRef.current?.hide()}>
-            Close
-          </m3e-button>
-          <m3e-button variant="filled" onClick={storeKeys}>
-            Save
-          </m3e-button>
-        </div>
-      </m3e-dialog>
     </div>
   );
 }

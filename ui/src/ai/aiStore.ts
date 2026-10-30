@@ -20,11 +20,7 @@ export interface AiModel {
 
 /* Parameter lines stay honest: undisclosed stays undisclosed. */
 export const AI_MODELS: AiModel[] = [
-  { id: "mistral-small-latest", name: "Mistral Small", params: "119B total / 6B active MoE, 256k context", note: "Default. Multimodal, dynamic thinking.", thinking: true },
-  { id: "mistral-medium-latest", name: "Mistral Medium", params: "Undisclosed, 128k context", note: "Strongest reasoning tier.", thinking: true },
-  { id: "mistral-large-latest", name: "Mistral Large", params: "Undisclosed, 256k context", note: "Flagship dense model, no thinking mode.", thinking: false },
-  { id: "ministral-8b-latest", name: "Ministral 8B", params: "8B dense, 128k context", note: "Light and fast.", thinking: false },
-  { id: "codestral-latest", name: "Codestral", params: "24B dense, 256k context", note: "Code specialist.", thinking: false },
+  { id: "mistral-small-latest", name: "Mistral Small", params: "119B total / 6B active MoE, 256k context", note: "Multimodal, dynamic thinking.", thinking: true },
 ];
 
 export function loadModelId(): string {
@@ -46,26 +42,14 @@ export function saveModelId(id: string): void {
 
 export interface AiKeys {
   mistral: string;
-  tavily: string;
 }
 
 export function loadKeys(): AiKeys {
   try {
     const v = JSON.parse(localStorage.getItem(KEY_KEYS) || "{}") as Partial<AiKeys>;
-    return {
-      mistral: typeof v.mistral === "string" ? v.mistral : "",
-      tavily: typeof v.tavily === "string" ? v.tavily : "",
-    };
+    return { mistral: typeof v.mistral === "string" ? v.mistral : "" };
   } catch {
-    return { mistral: "", tavily: "" };
-  }
-}
-
-export function saveKeys(keys: AiKeys): void {
-  try {
-    localStorage.setItem(KEY_KEYS, JSON.stringify(keys));
-  } catch {
-    /* ignore */
+    return { mistral: "" };
   }
 }
 
@@ -261,21 +245,112 @@ export async function wipeAiData(): Promise<void> {
   });
 }
 
-/* ---- web search: Tavily (CORS-open from the browser, free tier) ---- */
+/* ---- web search: Exa MCP (https://mcp.exa.ai/mcp) ----
+   Keyless by design: Exa serves free, rate-limited search over MCP
+   with no account or key, and the endpoint is CORS-open from the
+   browser (verified live). Streamable HTTP MCP: one initialize
+   handshake, keep the session id, then tools/call web_search_exa. */
 
-export async function aiSearch(query: string, key: string): Promise<AiSource[]> {
-  const res = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-    body: JSON.stringify({ query, max_results: 5 }),
+const EXA_MCP = "https://mcp.exa.ai/mcp";
+let exaSession: string | null = null;
+
+type ExaJson = Record<string, unknown>;
+
+function exaData(text: string): ExaJson | null {
+  /* SSE body: one JSON object per "data:" line; the last one carries
+     the id-matched result. */
+  let out: ExaJson | null = null;
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t.startsWith("data:")) continue;
+    try {
+      out = JSON.parse(t.slice(5).trim()) as ExaJson;
+    } catch {
+      /* keep the last parseable one */
+    }
+  }
+  return out;
+}
+
+async function exaPost(
+  body: unknown,
+  sessionId?: string | null
+): Promise<{ status: number; session: string | null; data: ExaJson | null }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+  };
+  if (sessionId) headers["mcp-session-id"] = sessionId;
+  const res = await fetch(EXA_MCP, { method: "POST", headers, body: JSON.stringify(body) });
+  const text = res.status === 202 ? "" : await res.text();
+  return {
+    status: res.status,
+    /* The session id rides the mcp-session-id response header. */
+    session: res.headers.get("mcp-session-id"),
+    data: res.status === 202 ? null : exaData(text),
+  };
+}
+
+async function exaEnsureSession(): Promise<void> {
+  if (exaSession) return;
+  const init = await exaPost({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "lobsterbrowse", version: "0.8.0" },
+    },
   });
-  if (!res.ok) throw new Error("Search failed (Tavily " + res.status + ")");
-  const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
-  return (data.results ?? []).map((r) => ({
-    title: r.title || r.url || "Result",
-    url: r.url || "",
-    snippet: (r.content || "").slice(0, 400),
-  }));
+  if (!init.session) throw new Error("Exa MCP did not open a session");
+  exaSession = init.session;
+  await exaPost({ jsonrpc: "2.0", method: "notifications/initialized" }, exaSession);
+}
+
+async function exaSearchCall(query: string): Promise<AiSource[]> {
+  const call = await exaPost(
+    {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "web_search_exa", arguments: { query, numResults: 5 } },
+    },
+    exaSession
+  );
+  const r = (call.data && call.data.result) as
+    | { content?: { text?: string }[]; isError?: boolean }
+    | undefined;
+  if (call.status !== 200 || !r) throw new Error("Exa search failed (HTTP " + call.status + ")");
+  if (r.isError) throw new Error("Exa search returned an error");
+  return parseExaResults((r.content ?? []).map((c) => c.text ?? "").join(""));
+}
+
+/* ponytail: the tool returns one text blob ("Title:/URL:/Highlights:");
+   a structured content field would remove this parser. */
+function parseExaResults(text: string): AiSource[] {
+  const out: AiSource[] = [];
+  for (const block of text.split(/\n---\n?/)) {
+    const url = block.match(/\bURL: (\S+)/);
+    if (!url) continue;
+    const title = (block.match(/\bTitle: (.*)/) ?? [])[1] ?? "";
+    const hl = block.split(/Highlights:\n?/)[1] ?? "";
+    out.push({ title: title.trim() || url[1], url: url[1], snippet: hl.trim().slice(0, 400) });
+  }
+  return out;
+}
+
+export async function aiSearch(query: string): Promise<AiSource[]> {
+  await exaEnsureSession();
+  try {
+    return await exaSearchCall(query);
+  } catch {
+    /* An expired session is the expected failure: one fresh
+       handshake, one retry, then give up honestly. */
+    exaSession = null;
+    await exaEnsureSession();
+    return await exaSearchCall(query);
+  }
 }
 
 /* ---- Mistral streaming client ---- */
