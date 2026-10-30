@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { diagnosticsScope, snapshotForScope, diagnosticsSnapshot, pollDocumentDiagnostics } from "../../ui/src/browser/diagnosticsScope.ts";
+import { blockedHostOf, diagnosticsScope, snapshotForScope, diagnosticsSnapshot, pollDocumentDiagnostics } from "../../ui/src/browser/diagnosticsScope.ts";
 
 const scope = diagnosticsScope("page-a", "content");
 const event = (seq, message = "page-a request failed") => ({ seq, ts: seq, category: "TRANSPORT", severity: "error", message });
@@ -148,3 +148,13 @@ await flush();
 assert.equal(appCalls.length, 2);
 appStop();
 console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction, sequential cleanup and #220 collection statuses passed");
+
+/* Ad-blocking card host derivation (2026-10-30): the blocked counter
+   groups by the host inside the rule message, with the event URL as
+   the fallback. */
+const blocked = (message, url) => ({ seq: 1, ts: 1, category: "BLOCKED", severity: "info", message, ...(url ? { url } : {}) });
+assert.equal(blockedHostOf(blocked("request blocked by rules (Ghostery: startpage.com)")), "startpage.com");
+assert.equal(blockedHostOf(blocked("request blocked by rules (googleadservices.com)")), "googleadservices.com");
+assert.equal(blockedHostOf(blocked("request blocked by rules", "https://partner.example.com/x.js")), "partner.example.com");
+assert.equal(blockedHostOf(blocked("request blocked by rules")), "request blocked by rules");
+console.log("blockedHostOf ok");

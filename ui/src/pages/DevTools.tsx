@@ -193,24 +193,6 @@ const PAGES: Array<[DtState["page"], string, string]> = [
 const zlNotable = (e: ZlDiagEvent) =>
   e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK";
 
-/* Export and Copy logs read the same per-instance scoped snapshot.
-   Sanitization happens before that snapshot reaches state or the ref. */
-function exportDiag(snapshot: DiagnosticsSnapshot) {
-  const data = JSON.stringify({
-    exportedAt: new Date().toISOString(),
-    scope: "this document", source: snapshot.scope.source,
-    generation: snapshot.generation,
-    counts: "retained page requests (bounded engine ring)",
-    stats: snapshot.stats, events: snapshot.events,
-  }, null, 2);
-  const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = "lobsterbrowse-diagnostics.json";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(href), 10000);
-}
-
 /* #220: explicit collection statuses replace the eternal "Awaiting..."
    placeholders. A valid empty scoped log renders as a normal snapshot
    with zero events; every collapsed null carries the reason it
@@ -228,56 +210,16 @@ const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
   malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
 };
 
-/* LB #224: "Share to MCP" asks the engine for the document's KDL
-   diagnostics export (host-only, fail-closed on identity) and posts
-   it to the session-scoped /mcp/share bridge, where the MCP tools
-   lb_diag_reports / lb_diag_report pick it up for 1 hour. */
-function ZeoliteDiagnostics({ clientId, source, sess, snapshotRef, statusRef }: {
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
   clientId?: string;
   source?: EngineSource;
-  sess?: string;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
   statusRef: MutableRefObject<DiagnosticsStatus | null>;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
-  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const scope = diagnosticsScope(clientId, source);
-  const shareDiag = async (snap: DiagnosticsSnapshot, cid?: string) => {
-    setShareMsg("Sharing...");
-    if (!cid) {
-      setShareMsg("No engine identity for this document: cannot export.");
-      return;
-    }
-    const trace =
-      snap.events.map((e) => e.traceId).find((t): t is string => typeof t === "string") ??
-      snap.stats.fallbacks.map((f) => f.traceId).find((t): t is string => typeof t === "string");
-    if (!trace) {
-      setShareMsg("No trace recorded for this document yet; retry after page activity.");
-      return;
-    }
-    const reply = await zlSend({ type: "zl:exportDiagnostics", clientId: cid, traceId: trace });
-    if (!reply || reply.ok !== true || typeof reply.kdl !== "string" || !reply.kdl) {
-      setShareMsg("The engine refused the diagnostics export (identity unavailable).");
-      return;
-    }
-    try {
-      const r = await fetch("/mcp/share?lb_sess=" + encodeURIComponent(sess ?? ""), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kdl: reply.kdl }),
-      });
-      const data = r.ok ? await r.json().catch(() => null) : null;
-      if (data && data.ok === true && typeof data.id === "string") {
-        setShareMsg("Shared as report " + data.id + " (lb_diag_reports, 1 hour TTL).");
-      } else {
-        setShareMsg("The server refused the share (HTTP " + r.status + ").");
-      }
-    } catch (e) {
-      setShareMsg("Share failed: " + (e instanceof Error ? e.message : String(e)));
-    }
-  };
-  /* Hide the preceding document before effect cleanup, including Export. */
+  /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
   useEffect(() => pollDocumentDiagnostics(
     diagnosticsScope(clientId, source), zlSend, zlContentQuery,
@@ -300,21 +242,10 @@ function ZeoliteDiagnostics({ clientId, source, sess, snapshotRef, statusRef }: 
   const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
     <div className="lb-net" style={{ marginBottom: "12px" }}>
-      <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-        Retained page requests for this document: {stats.native + stats.fallback}.
-        Child-frame requests and engine-wide lifecycle events are available in Engine DevTools.
-      </p>
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
         <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
-        <m3e-button onClick={() => exportDiag(current)}>
-          <m3e-icon name="download" aria-hidden={true} /> Export
-        </m3e-button>
-        <m3e-button onClick={() => void shareDiag(current, clientId)}>
-          <m3e-icon name="share" aria-hidden={true} /> Share to MCP
-        </m3e-button>
       </div>
-      {shareMsg && <p className="lb-muted" style={{ margin: "0 8px 4px" }}>{shareMsg}</p>}
       {notable.length === 0 && (
         <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No retained transport or rewrite failures for this document.</p>
       )}
@@ -457,10 +388,6 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
         <m3e-icon name="terminal" aria-hidden={true} />
         Eruda in page
       </m3e-button>
-      <m3e-button onClick={() => window.open("/zlsw/devtools.html", "_blank", "noopener")}>
-        <m3e-icon name="memory" aria-hidden={true} />
-        Engine DevTools
-      </m3e-button>
       {note && <span className="lb-muted">{note}</span>}
     </div>
   );
@@ -487,9 +414,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the same content the JSON export carries as
-     KDL (user request 2026-10-29): header, stats, console errors and
-     warnings, resource failures, and the full retained event ring. */
+  /* Copy logs serializes the document diagnostics as KDL (user
+     request 2026-10-29): header, stats, console errors and warnings,
+     resource failures, and the full retained event ring. It is the
+     single export path since Export and Share to MCP were removed
+     (user request 2026-10-30). */
   const copyLogs = async () => {
     const snapshot = snapshotForScope(snapshotRef.current, scope);
     const statusLine = snapshot
@@ -920,18 +849,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       {dt.page === "diagnostics" && (
         <div className="lb-dt-body">
           <div className="lb-dt-toolbar">
-            <m3e-icon-button aria-label="Clear diagnostics" onClick={() => setDt({ fails: [] })}>
-              <m3e-icon name="mop" aria-hidden={true} />
-            </m3e-icon-button>
             <m3e-button onClick={() => void copyLogs()}>
               <m3e-icon name="content_copy" aria-hidden={true} />
               {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
-            </m3e-button>
-            <m3e-button
-              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
-            >
-              <m3e-icon name="bug_report" aria-hidden={true} />
-              Report
             </m3e-button>
           </div>
           <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
@@ -941,7 +861,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             fallbacks (every HTML and CSS load uses one).
           </p>
           <ZeoliteEngineTools frame={frame} />
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} sess={tab.sess} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
           {dt.fails.length === 0 ? (
             <div className="lb-net">
               <p className="lb-muted">No resource failures captured.</p>

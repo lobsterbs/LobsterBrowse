@@ -84,6 +84,26 @@ export function classifyDiagnosticsReply(
 
 /* Each tick starts after the preceding one settles. Cleanup discards
    late replies. Scheduling is injectable for lifecycle tests. */
+/* Ad-blocking card: "request blocked by rules (Ghostery: startpage.com)"
+   carries the blocked host behind the list name; older rules name only
+   the host. The event URL is the fallback when the message has neither. */
+export function blockedHostOf(e: ZlDiagEvent): string {
+  const m = /\(([^()]+)\)\s*$/.exec(e.message);
+  if (m) {
+    const inner = m[1];
+    const i = inner.indexOf(": ");
+    return i >= 0 ? inner.slice(i + 2) : inner;
+  }
+  if (e.url) {
+    try {
+      return new URL(e.url).hostname;
+    } catch {
+      /* not a URL */
+    }
+  }
+  return e.message;
+}
+
 export function pollDocumentDiagnostics(
   scope: DiagnosticsScope | null,
   appQuery: DiagnosticsQuery,
