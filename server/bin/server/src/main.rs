@@ -1721,6 +1721,318 @@ async fn zl_sw_required(RawQuery(raw): RawQuery) -> Response {
     )
 }
 
+/// #511: validate a /zlws destination BEFORE any upstream connect:
+/// wss only (the engine upgrades ws before bridging), then the same
+/// canonical-host DestinationPolicy judgment as relay destinations
+/// (every numeric spelling normalizes inside the URL parser).
+fn ws_dest_rejected(dest: &str) -> Option<String> {
+    let url = match ::url::Url::parse(dest) {
+        Ok(u) => u,
+        Err(_) => return Some("ws relay: dest must be an absolute wss URL".into()),
+    };
+    if url.scheme() != "wss" {
+        return Some("ws relay: dest must be wss".into());
+    }
+    let Some(host_raw) = url.host_str() else {
+        return Some("ws relay: dest has no host".into());
+    };
+    let host = host_raw
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_string();
+    let policy = zeolite_server::policy::DestinationPolicy::default();
+    match policy.check_hostname(&host) {
+        zeolite_server::policy::Verdict::Allow => None,
+        zeolite_server::policy::Verdict::Block => {
+            Some(format!("ws relay: destination {host} is blocked by policy"))
+        }
+    }
+}
+
+/// #511: only engine-built identity headers forward onto an upstream
+/// ws handshake (Origin, Cookie, User-Agent); nothing a page could
+/// smuggle through the envelope rides.
+fn ws_forward_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "origin" | "cookie" | "user-agent"
+    )
+}
+
+/// #511: WebSocket-over-relay egress endpoint. The engine bridges every
+/// proxied page WebSocket onto its registered relay channel (Zeolite
+/// #511); this is the duplex half on the embedder origin: one browser
+/// WebSocket per page socket, one upstream wss connection opened here
+/// with the same SSRF policy, authorization, rate window and
+/// concurrency budget as /zlrelay. Frame protocol (JSON text frames
+/// control, native binary frames carry binary data, so page text can
+/// never collide with control envelopes):
+/// - in:  {op:"connect",url,protocols,headers}, then {op:"data",text},
+///   binary frames, {op:"close",code,reason}
+/// - out: {op:"open",protocol}, {op:"fail",message}, {op:"data",text},
+///   binary frames, {op:"close",code,reason}
+///
+/// ponytail ceiling: upstream TLS is rustls, not the wreq Chrome
+/// profile that fronts relayed fetches - a bot wall that fingerprints
+/// the ws handshake needs the btls-backed stream upgrade.
+async fn zl_ws_endpoint(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
+    ws: axum::extract::ws::WebSocketUpgrade,
+) -> Response {
+    if let Err(msg) = relay_client_authorized(
+        headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
+        headers.get(header::HOST).and_then(|v| v.to_str().ok()),
+        headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-zl-relay-token")
+            .and_then(|v| v.to_str().ok()),
+        state.relay_token.as_deref(),
+    ) {
+        return relay_bad(StatusCode::FORBIDDEN, msg, true);
+    }
+    if !relay_rate_allow(
+        &state.relay_rate,
+        relay_rate_key(
+            peer.ip(),
+            headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
+            &state.relay_trusted_proxies,
+        ),
+        now_secs(),
+    ) {
+        return relay_bad(
+            StatusCode::TOO_MANY_REQUESTS,
+            "relay: rate limit exceeded, retry later",
+            true,
+        );
+    }
+    let relay_permit = match state.relay_permits.clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            return relay_bad(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "relay: too many concurrent relay connects",
+                true,
+            )
+        }
+    };
+    ws.on_upgrade(move |socket| zl_ws_serve(socket, relay_permit))
+}
+
+/// The /zlws session: read the connect envelope, validate, dial the
+/// upstream wss, then pipe frames both ways until either side closes.
+/// Every abnormal end reports an honest close code downstream (1006);
+/// the permit releases when the session task drops.
+async fn zl_ws_serve(
+    socket: axum::extract::ws::WebSocket,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+) {
+    use axum::extract::ws::Message as WsMessage;
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as UpMessage};
+
+    let (mut dn_sink, mut dn_stream) = socket.split();
+    let first =
+        match tokio::time::timeout(std::time::Duration::from_secs(30), dn_stream.next()).await {
+            Ok(Some(Ok(WsMessage::Text(t)))) => t,
+            _ => return, /* no or malformed connect: nothing to answer */
+        };
+    let Ok(envelope) = serde_json::from_str::<serde_json::Value>(&first) else {
+        return;
+    };
+    if envelope.get("op").and_then(|v| v.as_str()) != Some("connect") {
+        return;
+    }
+    let Some(dest) = envelope.get("url").and_then(|v| v.as_str()) else {
+        return;
+    };
+    if let Some(msg) = ws_dest_rejected(dest) {
+        let _ = dn_sink
+            .send(WsMessage::Text(
+                serde_json::json!({ "op": "fail", "message": msg }).to_string(),
+            ))
+            .await;
+        return;
+    }
+    let mut upstream_req = match dest.into_client_request() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = dn_sink
+                .send(WsMessage::Text(
+                    serde_json::json!({ "op": "fail", "message": format!("bad ws destination: {e}") }).to_string(),
+                ))
+                .await;
+            return;
+        }
+    };
+    if let Some(pairs) = envelope.get("headers").and_then(|v| v.as_array()) {
+        for p in pairs {
+            if let (Some(k), Some(v)) = (
+                p.get(0).and_then(|x| x.as_str()),
+                p.get(1).and_then(|x| x.as_str()),
+            ) {
+                if !ws_forward_header(k) {
+                    continue;
+                }
+                if let (Ok(hk), Ok(hv)) = (
+                    axum::http::HeaderName::from_bytes(k.as_bytes()),
+                    axum::http::HeaderValue::from_str(v),
+                ) {
+                    upstream_req.headers_mut().insert(hk, hv);
+                }
+            }
+        }
+    }
+    let mut protocols: Vec<&str> = Vec::new();
+    if let Some(arr) = envelope.get("protocols").and_then(|v| v.as_array()) {
+        for p in arr {
+            if let Some(s) = p.as_str() {
+                protocols.push(s);
+            }
+        }
+    }
+    if !protocols.is_empty() {
+        if let Ok(hv) = axum::http::HeaderValue::from_str(&protocols.join(", ")) {
+            upstream_req
+                .headers_mut()
+                .insert("sec-websocket-protocol", hv);
+        }
+    }
+    let (upstream, upstream_resp) = match tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        tokio_tungstenite::connect_async(upstream_req),
+    )
+    .await
+    {
+        Ok(Ok((resp, ws))) => (resp, ws),
+        Ok(Err(e)) => {
+            let _ = dn_sink
+                    .send(WsMessage::Text(
+                        serde_json::json!({ "op": "fail", "message": format!("upstream refused: {e}") }).to_string(),
+                    ))
+                    .await;
+            return;
+        }
+        Err(_) => {
+            let _ = dn_sink
+                .send(WsMessage::Text(
+                    serde_json::json!({ "op": "fail", "message": "upstream connect timeout" })
+                        .to_string(),
+                ))
+                .await;
+            return;
+        }
+    };
+    let negotiated = upstream_resp
+        .headers()
+        .get("sec-websocket-protocol")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if dn_sink
+        .send(WsMessage::Text(
+            serde_json::json!({ "op": "open", "protocol": negotiated }).to_string(),
+        ))
+        .await
+        .is_err()
+    {
+        return;
+    }
+    let (mut up_sink, mut up_stream) = upstream.split();
+    let mut closed = false;
+    while !closed {
+        tokio::select! {
+            dn = dn_stream.next() => {
+                match dn {
+                    Some(Ok(WsMessage::Text(t))) => {
+                        let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) else { continue };
+                        match v.get("op").and_then(|x| x.as_str()) {
+                            Some("data") => {
+                                let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("");
+                                if up_sink.send(UpMessage::Text(text.to_string())).await.is_err() {
+                                    closed = true;
+                                }
+                            }
+                            Some("close") => {
+                                /* ponytail: a code-less close upstream; the page close
+                                   code is teardown intent, not a value the upstream
+                                   protocol reads. The envelope is echoed downstream
+                                   so the engine close event fires on handshake
+                                   completion (native parity), not on its fallback
+                                   timer. */
+                                let code = v
+                                    .get("code")
+                                    .and_then(|x| x.as_u64())
+                                    .unwrap_or(1000)
+                                    .min(65535) as u16;
+                                let reason = v
+                                    .get("reason")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let _ = up_sink.send(UpMessage::Close(None)).await;
+                                let _ = dn_sink
+                                    .send(WsMessage::Text(
+                                        serde_json::json!({ "op": "close", "code": code, "reason": reason }).to_string(),
+                                    ))
+                                    .await;
+                                closed = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(Ok(WsMessage::Binary(b))) => {
+                        if up_sink.send(UpMessage::Binary(b)).await.is_err() {
+                            closed = true;
+                        }
+                    }
+                    Some(Ok(_)) => { /* ping/pong: the ws runtime answers */ }
+                    Some(Err(_)) | None => {
+                        let _ = up_sink.send(UpMessage::Close(None)).await;
+                        closed = true;
+                    }
+                }
+            }
+            up = up_stream.next() => {
+                match up {
+                    Some(Ok(UpMessage::Text(t))) => {
+                        let frame = WsMessage::Text(serde_json::json!({ "op": "data", "text": t }).to_string());
+                        if dn_sink.send(frame).await.is_err() {
+                            closed = true;
+                        }
+                    }
+                    Some(Ok(UpMessage::Binary(b))) => {
+                        if dn_sink.send(WsMessage::Binary(b)).await.is_err() {
+                            closed = true;
+                        }
+                    }
+                    Some(Ok(UpMessage::Close(c))) => {
+                        let (code, reason) = c
+                            .map(|f| (u16::from(f.code), f.reason.to_string()))
+                            .unwrap_or((1005, String::new()));
+                        let frame = WsMessage::Text(
+                            serde_json::json!({ "op": "close", "code": code, "reason": reason }).to_string(),
+                        );
+                        let _ = dn_sink.send(frame).await;
+                        let _ = up_sink.send(UpMessage::Close(None)).await;
+                        closed = true;
+                    }
+                    Some(Ok(_)) => { /* ping/pong: tungstenite answers pings */ }
+                    Some(Err(_)) | None => {
+                        let frame = WsMessage::Text(
+                            serde_json::json!({ "op": "close", "code": 1006, "reason": "upstream ended" }).to_string(),
+                        );
+                        let _ = dn_sink.send(frame).await;
+                        closed = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// #193: true when the query already carries the self-heal guard.
 fn zlswheal_guarded(raw: Option<&str>) -> bool {
     raw.unwrap_or("").split('&').any(|p| p == "zlswheal=1")
@@ -1858,6 +2170,40 @@ button {{ font:inherit; padding:.45em 1.6em; background:none; color:inherit;
     body
 }
 
+#[cfg(test)]
+mod ws_relay_tests {
+    use super::{ws_dest_rejected, ws_forward_header, ZL_BOOT_PAGE};
+
+    #[test]
+    fn wss_destinations_pass_and_everything_else_rejects() {
+        assert!(ws_dest_rejected("wss://game.example/socket").is_none());
+        assert!(ws_dest_rejected("wss://localhost/socket").is_some());
+        assert!(ws_dest_rejected("wss://127.0.0.1/socket").is_some());
+        assert!(ws_dest_rejected("wss://2130706433/socket").is_some());
+        assert!(ws_dest_rejected("ws://game.example/socket").is_some());
+        assert!(ws_dest_rejected("https://game.example/socket").is_some());
+        assert!(ws_dest_rejected("not a url").is_some());
+    }
+
+    #[test]
+    fn only_engine_identity_headers_forward() {
+        assert!(ws_forward_header("origin"));
+        assert!(ws_forward_header("Cookie"));
+        assert!(ws_forward_header("user-agent"));
+        assert!(!ws_forward_header("x-forwarded-for"));
+        assert!(!ws_forward_header("sec-websocket-protocol"));
+        assert!(!ws_forward_header("host"));
+    }
+
+    #[test]
+    fn boot_page_carries_the_ws_relay_arm() {
+        assert!(
+            ZL_BOOT_PAGE.contains("zl:wsRelay"),
+            "ws relay listener missing"
+        );
+        assert!(ZL_BOOT_PAGE.contains("/zlws"), "ws relay endpoint missing");
+    }
+}
 #[cfg(test)]
 mod sw_heal_tests {
     use super::{embedder_notice_body, zlswheal_guarded, ZL_BOOT_PAGE};
@@ -2431,6 +2777,49 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
     let lastCfg = null;
     let relayOpening = null;
     let relayHost = null;
+    /* #511: WebSocket-over-relay: one /zlws browser socket per page
+       websocket; JSON text frames control, binary frames carry
+       binary data. The channel dies with this page (a worker restart
+       re-registers); the engine treats a lost frame stream as an
+       honest close. */
+    const wsConns = new Map();
+    const wsRelayOpen = (m, port) => {
+      let ws;
+      try { ws = new WebSocket("/zlws"); } catch (e) {
+        port.postMessage({ type: "zl:wsError", rid: m.rid, error: "zlws unavailable" });
+        return;
+      }
+      ws.binaryType = "arraybuffer";
+      ws.onopen = () => {
+        try {
+          ws.send(JSON.stringify({ op: "connect", url: m.url, protocols: Array.isArray(m.protocols) ? m.protocols : [], headers: Array.isArray(m.headers) ? m.headers : [] }));
+        } catch (e) {
+          wsConns.delete(m.rid);
+          port.postMessage({ type: "zl:wsError", rid: m.rid, error: "zlws send failed" });
+        }
+      };
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer) {
+          port.postMessage({ type: "zl:wsData", rid: m.rid, data: new Uint8Array(ev.data), bin: true });
+          return;
+        }
+        let msg = null;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (!msg || typeof msg.op !== "string") return;
+        if (msg.op === "open") port.postMessage({ type: "zl:wsOpen", rid: m.rid, protocol: typeof msg.protocol === "string" ? msg.protocol : "" });
+        else if (msg.op === "data") port.postMessage({ type: "zl:wsData", rid: m.rid, data: typeof msg.text === "string" ? msg.text : "" });
+        else if (msg.op === "close") { wsConns.delete(m.rid); port.postMessage({ type: "zl:wsClose", rid: m.rid, code: Number(msg.code) || 1006, reason: typeof msg.reason === "string" ? msg.reason : "" }); }
+        else if (msg.op === "fail") { wsConns.delete(m.rid); port.postMessage({ type: "zl:wsError", rid: m.rid, error: typeof msg.message === "string" ? msg.message : "upstream refused" }); }
+      };
+      ws.onclose = () => {
+        if (wsConns.get(m.rid) === ws) {
+          wsConns.delete(m.rid);
+          port.postMessage({ type: "zl:wsClose", rid: m.rid, code: 1006, reason: "" });
+        }
+      };
+      ws.onerror = () => {};
+      wsConns.set(m.rid, ws);
+    };
     const openRelay = () => {
       if (relayOpening) return relayOpening;
       relayOpening = (async () => {
@@ -2502,6 +2891,26 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
         } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
           const ac = controllers.get(m.rid);
           if (ac) ac.abort();
+        } else if (m.type === "zl:wsRelay" && typeof m.rid === "number") {
+          wsRelayOpen(m, ch.port1);
+        } else if (m.type === "zl:wsSend" && typeof m.rid === "number") {
+          const ws2 = wsConns.get(m.rid);
+          if (ws2) {
+            try {
+              if (m.bin === true) ws2.send(m.data);
+              else ws2.send(JSON.stringify({ op: "data", text: m.data }));
+            } catch (e) { try { ws2.close(); } catch (e2) {} }
+          }
+        } else if (m.type === "zl:wsClose" && typeof m.rid === "number") {
+          const ws3 = wsConns.get(m.rid);
+          if (ws3) {
+            wsConns.delete(m.rid);
+            /* #511 close parity: send the close envelope before closing so
+               /zlws echoes {op:"close"} and the engine close event fires
+               on handshake completion, not on its fallback timer. */
+            try { ws3.send(JSON.stringify({ op: "close", code: Number(m.code) || 1000, reason: typeof m.reason === "string" ? m.reason : "" })); } catch (e) {}
+            try { ws3.close(); } catch (e) {}
+          }
         }
       };
       swc.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
@@ -3651,6 +4060,9 @@ async fn main() {
         // above axum's 2 MiB default so relay upload envelopes fit.
         // ponytail: one layer call, no new extractor machinery.
         .route("/zlrelay", post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
+        // #511: duplex WebSocket egress for engine-bridged page sockets;
+        // the same relay authorization, rate window and permits apply.
+        .route("/zlws", get(zl_ws_endpoint))
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
