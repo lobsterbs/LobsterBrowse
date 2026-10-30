@@ -56,7 +56,11 @@ export function ToolRow({ label, doneLabel, active, children }: ToolRowProps) {
           {active ? label : doneLabel}
         </span>
       </button>
-      {open && hasBody && <div className="lb-ai-tool-body">{children}</div>}
+      {hasBody && (
+        <div className={"lb-ai-tool-body-wrap" + (open ? " lb-open" : "")}>
+          <div className="lb-ai-tool-body">{children}</div>
+        </div>
+      )}
     </div>
   );
 }

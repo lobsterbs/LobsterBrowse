@@ -72,9 +72,11 @@ struct AppState {
     /// browser DevTools panel for the MCP read tools. User-initiated
     /// shares only; bounded ring (8, 1 h TTL).
     mcp_reports: Mutex<VecDeque<McpSharedReport>>,
-    /// LB AI mode: the server-side Mistral key (MISTRAL_API_KEY).
-    /// The browser never sees it; /ai/chat forwards with it.
-    mistral_key: Option<String>,
+    /// LB AI mode: the server-side Cloudflare Workers AI key
+    /// (CLOUDFLARE_AI_KEY) and account id (CLOUDFLARE_ACCOUNT_ID).
+    /// The browser never sees them; /ai/chat forwards with them.
+    cf_ai_key: Option<String>,
+    cf_account: String,
     /// LB AI mode: per-client sliding window of AI uses.
     ai_uses: Mutex<HashMap<IpAddr, VecDeque<u64>>>,
 }
@@ -1270,9 +1272,10 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
     }
 }
 
-/* LB AI mode: server-side Mistral proxy. The API key never reaches
- * the browser: the AI page posts to this same-origin endpoint and
- * the server forwards to api.mistral.ai with MISTRAL_API_KEY.
+/* LB AI mode: server-side Cloudflare Workers AI proxy. The API key
+ * never reaches the browser: the AI page posts to this same-origin
+ * endpoint and the server forwards to api.cloudflare.com with
+ * CLOUDFLARE_AI_KEY.
  * Bounds mirror the other unauthenticated endpoints: a model
  * whitelist, a message-count cap, the route-level 32 MiB body limit
  * (image data URLs), a 50-use rolling 6 h window per client, and the
@@ -1281,7 +1284,11 @@ fn relay_rate_allow(map: &Mutex<HashMap<IpAddr, VecDeque<u64>>>, ip: IpAddr, now
  * peer is the shared edge IP unless LB_TRUSTED_PROXY_CIDRS is set,
  * so the whole edge shares one AI bucket - the same documented
  * tradeoff the relay rate limit makes. */
-const AI_MODELS: &[&str] = &["mistral-small-latest"];
+const AI_MODELS: &[&str] = &[
+    "@cf/openai/gpt-oss-120b",
+    "@cf/openai/gpt-oss-20b",
+    "@cf/qwen/qwen3-30b-a3b-fp8",
+];
 const AI_RATE_MAX_PER_WINDOW: usize = 50;
 const AI_RATE_WINDOW_SECS: u64 = 6 * 3600;
 const AI_TOTAL_DEADLINE_SECS: u64 = 600;
@@ -1401,8 +1408,9 @@ fn ai_validate(
     Ok((model.to_string(), out, thinking))
 }
 
-/// LB AI mode: POST /ai/chat. Forwards to Mistral with the server
-/// key and pipes the SSE answer through unchanged; the remaining
+/// LB AI mode: POST /ai/chat. Forwards to Cloudflare Workers AI
+/// with the server key and pipes the SSE answer through unchanged;
+/// the remaining
 /// quota rides x-lb-ai-remaining. 503 when the deployment has no
 /// key, 429 when the window is exhausted.
 async fn ai_chat_endpoint(
@@ -1419,10 +1427,11 @@ async fn ai_chat_endpoint(
         Ok(v) => v,
         Err(msg) => return ai_err(StatusCode::BAD_REQUEST, msg),
     };
-    let Some(key) = state.mistral_key.as_ref() else {
+    let (Some(key), false) = (state.cf_ai_key.as_deref(), state.cf_account.is_empty())
+    else {
         return ai_err(
             StatusCode::SERVICE_UNAVAILABLE,
-            "AI is not configured on this deployment (MISTRAL_API_KEY unset)",
+            "AI is not configured on this deployment (CLOUDFLARE_AI_KEY or CLOUDFLARE_ACCOUNT_ID unset)",
         );
     };
     let ip = relay_rate_key(
@@ -1436,15 +1445,22 @@ async fn ai_chat_endpoint(
             "AI rate limit exceeded (50 messages per 6 hours); retry later",
         );
     };
+    /* Cloudflare has no "none" effort: low is the lightest the
+    gpt-oss models accept, and non-reasoning models ignore the
+    parameter. */
     let upstream = serde_json::json!({
         "model": model,
         "messages": messages,
         "stream": true,
-        "reasoning_effort": if thinking { "high" } else { "none" },
+        "reasoning_effort": if thinking { "high" } else { "low" },
     });
+    let cf_url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions",
+        state.cf_account
+    );
     let send = state
         .relay_client
-        .post("https://api.mistral.ai/v1/chat/completions")
+        .post(cf_url.as_str())
         .bearer_auth(key)
         /* wreq has no .json() helper on RequestBuilder: serialize
         and set the content type explicitly. */
@@ -1461,7 +1477,7 @@ async fn ai_chat_endpoint(
         let detail = read_body_capped(upstream, 4096).await.unwrap_or_default();
         return ai_err(
             StatusCode::BAD_GATEWAY,
-            &format!("mistral: {} - {}", status, detail),
+            &format!("cloudflare: {} - {}", status, detail),
         );
     }
     let mut hm = axum::http::HeaderMap::new();
@@ -4220,9 +4236,11 @@ async fn main() {
         relay_rate: Mutex::new(HashMap::new()),
         /* LB AI mode: strict server-side key. Unset = /ai/chat answers
         503 honestly; the UI mock mode still works without it. */
-        mistral_key: std::env::var("MISTRAL_API_KEY")
+        cf_ai_key: std::env::var("CLOUDFLARE_AI_KEY")
             .ok()
             .filter(|k| !k.is_empty()),
+        cf_account: std::env::var("CLOUDFLARE_ACCOUNT_ID")
+            .unwrap_or_default(),
         ai_uses: Mutex::new(HashMap::new()),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
@@ -4286,7 +4304,7 @@ async fn main() {
         .route("/__zl_nav__", any(zl_sw_required))
         .route("/__zl_nav__/*path", any(zl_sw_required))
         .route("/suggest", get(suggest_endpoint))
-        // LB AI mode: same-origin Mistral proxy (ai_chat_endpoint);
+        // LB AI mode: same-origin Cloudflare Workers AI proxy (ai_chat_endpoint);
         // the 32 MiB cap covers inline image data URLs.
         .route("/ai/chat", post(ai_chat_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
         // #200: a fixed 32 MiB route-level body cap (not streaming),
@@ -4639,7 +4657,8 @@ mod session_log_tests {
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
             mcp_reports: Mutex::new(VecDeque::new()),
-            mistral_key: None,
+            cf_ai_key: None,
+            cf_account: String::new(),
             ai_uses: Mutex::new(HashMap::new()),
         }
     }
@@ -4944,7 +4963,8 @@ mod mcp_tests {
             cert_cache: Mutex::new(HashMap::new()),
             lookup_permits: tokio::sync::Semaphore::new(LOOKUP_MAX_CONCURRENT),
             mcp_reports: Mutex::new(VecDeque::new()),
-            mistral_key: None,
+            cf_ai_key: None,
+            cf_account: String::new(),
             ai_uses: Mutex::new(HashMap::new()),
         }
     }
@@ -5252,7 +5272,7 @@ mod ai_tests {
     #[test]
     fn ai_validate_accepts_only_the_whitelisted_shape() {
         let ok = serde_json::json!({
-            "model": "mistral-small-latest",
+            "model": "@cf/openai/gpt-oss-120b",
             "thinking": true,
             "messages": [
                 msg("system", "You are helpful.".into()),
@@ -5263,7 +5283,7 @@ mod ai_tests {
             ],
         });
         let (model, messages, thinking) = ai_validate(&ok).expect("valid request");
-        assert_eq!(model, "mistral-small-latest");
+        assert_eq!(model, "@cf/openai/gpt-oss-120b");
         assert_eq!(messages.len(), 2);
         assert!(thinking);
 
@@ -5273,21 +5293,21 @@ mod ai_tests {
         });
         assert_eq!(ai_validate(&bad_model).unwrap_err(), "unknown model");
 
-        let no_messages = serde_json::json!({ "model": "mistral-small-latest", "messages": [] });
+        let no_messages = serde_json::json!({ "model": "@cf/openai/gpt-oss-120b", "messages": [] });
         assert_eq!(
             ai_validate(&no_messages).unwrap_err(),
             "messages out of range"
         );
 
         let bad_role = serde_json::json!({
-            "model": "mistral-small-latest",
+            "model": "@cf/openai/gpt-oss-120b",
             "messages": [msg("tool", "hi".into())],
         });
         assert_eq!(ai_validate(&bad_role).unwrap_err(), "bad role");
 
         /* Remote image URLs are refused: only inline data survives. */
         let remote_img = serde_json::json!({
-            "model": "mistral-small-latest",
+            "model": "@cf/openai/gpt-oss-120b",
             "messages": [msg("user", serde_json::json!([
                 { "type": "image_url", "image_url": { "url": "https://example.com/x.png" } },
             ]))],

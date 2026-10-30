@@ -2,30 +2,30 @@ import { useEffect, useRef, useState } from "react";
 import {
   AI_MODELS,
   aiSearch,
+  loadModelId,
   needsThinking,
   saveChat,
-  streamMistral,
+  saveModelId,
+  streamChat,
   RateLimitError,
+  type AiModel,
   type AiMsg,
-  type MistralContent,
-  type MistralMsg,
+  type ChatContent,
+  type ChatMsg,
   type AiSource,
 } from "../ai/aiStore";
 import { Markdown } from "../ai/Markdown";
 import { ToolRow } from "../ai/ToolRow";
 
-/* AI mode (beta-only). The Mistral key lives on the server: sends go
-   to this origin's /ai/chat proxy, which enforces the rate limit
-   (50 messages per rolling 6 h) and reports the remaining count in
-   the x-lb-ai-remaining header. Web search is keyless (Exa MCP).
-   Chats persist encrypted in IndexedDB with a non-exportable key.
-   Errors surface through the M3E snackbar; AI failures carry a
-   Try again action that replays the failed turn. */
-
-/* Official Mistral mark (the model's parent company): the mark-only
-   crop of the docs.mistral.ai logo asset, exact official geometry. */
-const MISTRAL_MARK =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 47 170 122"><g transform="matrix(.796709 0 0 .796709 61.562988 176.05127)"><path d="M-46.307-161.245h30.303v30.303h-30.303zm121.212 0h30.303v30.303H74.905z" fill="gold"/><path d="M-46.307-130.942h60.606v30.303h-60.606zm90.909 0h60.606v30.303H44.602z" fill="#ffaf00"/><path d="M-46.307-100.639h151.515v30.303H-46.307z" fill="#ff8205"/><path d="M-46.307-70.336h30.303v30.303h-30.303zm60.606 0h30.303v30.303H14.299zm60.606 0h30.303v30.303H74.905z" fill="#fa500f"/><path d="M-76.61-40.033h90.909V-9.73H-76.61zm121.212 0h90.909V-9.73H44.602z" fill="#e10500"/></g></svg>';
+/* AI mode (beta-only). The Cloudflare Workers AI key lives on the
+   server: sends go to this origin's /ai/chat proxy, which enforces
+   the rate limit (50 messages per rolling 6 h) and reports the
+   remaining count in the x-lb-ai-remaining header. Web search is
+   keyless (Exa MCP). Chats persist encrypted in IndexedDB with a
+   non-exportable key. Errors surface through the M3E snackbar; AI
+   failures carry a Try again action that replays the failed turn.
+   Provider marks (OpenAI, Qwen) live on the model entries in
+   aiStore.ts. */
 
 const QUOTA_MAX = 50;
 
@@ -65,10 +65,13 @@ function toast(text: string, retry?: () => void): void {
 
 /* Model picker: the 21st.dev model-picker pattern (pill trigger +
    popover + checkmark) hand-ported onto M3E tokens. Entries are the
-   models the server proxy actually serves; the mark is the parent
-   company's official logo at text height, and the parameter count
-   is the one bold element in the row. */
-function ModelPicker() {
+   models the server proxy actually serves; the mark is the model
+   provider's official logo at text height, and the parameter count
+   is the one bold element in the row. Selecting an entry is real:
+   it persists (loadModelId/saveModelId) and the next send uses it.
+   The popover stays mounted so its open/close transition can play
+   in both directions (theme.css .lb-ai-mp-pop / .lb-open). */
+function ModelPicker({ value, onChange }: { value: AiModel; onChange: (m: AiModel) => void }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -86,7 +89,6 @@ function ModelPicker() {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const active = AI_MODELS[0];
   return (
     <div className="lb-ai-mp" ref={wrapRef}>
       <button
@@ -96,32 +98,43 @@ function ModelPicker() {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
-        <span className="lb-ai-mp-name">{active.name} {active.version}</span>
-        <span className="lb-ai-mp-params">{active.params}</span>
+        <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: value.mark }} />
+        <span className="lb-ai-mp-name">{value.name} {value.version}</span>
+        <span className="lb-ai-mp-params">{value.params}</span>
         <svg className="lb-ai-mp-chev" viewBox="0 0 24 24" aria-hidden={true}>
           <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {open && (
-        <div className="lb-ai-mp-pop" role="dialog" aria-label="Select a model">
-          {AI_MODELS.map((m) => (
-            <button key={m.id} type="button" className="lb-ai-mp-opt" onClick={() => setOpen(false)}>
-              <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: MISTRAL_MARK }} />
-              <span className="lb-ai-model-item">
-                <span className="lb-ai-model-name">{m.name} <span className="lb-ai-model-ver">{m.version}</span></span>
-                <span className="lb-ai-model-params">{m.params}</span>
-                <span className="lb-ai-model-note">{m.note}</span>
+      <div
+        className={"lb-ai-mp-pop" + (open ? " lb-open" : "")}
+        role="dialog"
+        aria-label="Select a model"
+        aria-hidden={!open}
+      >
+        {AI_MODELS.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            className="lb-ai-mp-opt"
+            onClick={() => {
+              onChange(m);
+              setOpen(false);
+            }}
+          >
+            <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: m.mark }} />
+            <span className="lb-ai-model-item">
+              <span className="lb-ai-model-name">{m.name} <span className="lb-ai-model-ver">{m.version}</span></span>
+              <span className="lb-ai-model-params">{m.params}</span>
+              <span className="lb-ai-model-note">{m.note}</span>
+            </span>
+            {m.id === value.id && (
+              <span className="lb-ai-mp-check">
+                <m3e-icon name="check" aria-hidden={true} />
               </span>
-              {m.id === active.id && (
-                <span className="lb-ai-mp-check">
-                  <m3e-icon name="check" aria-hidden={true} />
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -141,7 +154,15 @@ export default function AiPage() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentModel = AI_MODELS[0];
+  /* The selected model persists in localStorage; the picker changes
+  it and the next send uses it. */
+  const [model, setModel] = useState<AiModel>(
+    () => AI_MODELS.find((m) => m.id === loadModelId()) ?? AI_MODELS[0]
+  );
+  const pickModel = (m: AiModel) => {
+    setModel(m);
+    saveModelId(m.id);
+  };
 
   /* The search bar's own clear (X) event bypasses React's value
      tracker; mirror the Home.tsx pattern. */
@@ -209,7 +230,7 @@ export default function AiPage() {
       toast("Web search failed: " + msg(e) + " Answering without it.");
     }
 
-    const thinking = currentModel.thinking && needsThinking(withFiles);
+    const thinking = model.thinking && needsThinking(withFiles);
     const sys =
       "You are the assistant inside LobsterBrowse, a private web proxy browser. Be concise and accurate. " +
       (sources?.length
@@ -219,14 +240,14 @@ export default function AiPage() {
       ? "\n\nWeb search results for the latest user message (retrieved just now):\n" +
         sources.map((s, i) => "[" + (i + 1) + "] " + s.title + " - " + s.url + "\n" + s.snippet).join("\n\n")
       : "";
-    const parts: MistralContent = [{ type: "text", text: withFiles + searchBlock }];
+    const parts: ChatContent = [{ type: "text", text: withFiles + searchBlock }];
     for (const f of files)
       if (f.kind === "image" && f.dataUrl) parts.push({ type: "image_url", image_url: { url: f.dataUrl } });
 
     /* ponytail: history collapses to plain text; images only ride the
        turn they were attached to. */
-    const history: MistralMsg[] = messages.map((m) => ({ role: m.role, content: m.text }));
-    const apiMessages: MistralMsg[] = [
+    const history: ChatMsg[] = messages.map((m) => ({ role: m.role, content: m.text }));
+    const apiMessages: ChatMsg[] = [
       { role: "system", content: sys },
       ...history,
       { role: "user", content: parts },
@@ -234,7 +255,7 @@ export default function AiPage() {
 
     setMessages((m) => [
       ...m,
-      { role: "assistant", text: "", model: currentModel.id, sources },
+      { role: "assistant", text: "", model: model.id, sources },
     ]);
     setPhase(thinking ? "thinking" : "streaming");
     let acc = "";
@@ -247,8 +268,8 @@ export default function AiPage() {
       });
     let ok = false;
     try {
-      for await (const ev of streamMistral({
-        model: currentModel.id,
+      for await (const ev of streamChat({
+        model: model.id,
         messages: apiMessages,
         thinking,
       })) {
@@ -256,6 +277,7 @@ export default function AiPage() {
           setQuota(ev.remaining);
         } else if (ev.type === "thinking") {
           thinkAcc += ev.text;
+          setPhase("thinking");
         } else {
           acc += ev.text;
           setPhase("streaming");
@@ -288,7 +310,7 @@ export default function AiPage() {
               role: "assistant" as const,
               text: acc,
               thinking: thinkAcc || undefined,
-              model: currentModel.id,
+              model: model.id,
               sources,
             },
           ];
@@ -420,7 +442,7 @@ export default function AiPage() {
       </div>
 
       <div className="lb-ai-under">
-        <ModelPicker />
+        <ModelPicker value={model} onChange={pickModel} />
         <span
           className={"lb-ai-quota" + (quota !== null && quota <= 0 ? " lb-ai-quota-out" : "")}
           title={quota !== null ? quota + " of " + QUOTA_MAX + " messages left in the current 6 hour window" : undefined}

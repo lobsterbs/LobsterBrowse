@@ -176,7 +176,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         <div className="lb-setting-row">
           <span>
             <span className="lb-setting-label">Mock AI responses</span>
-            <small style={{ display: "block", opacity: 0.75 }}>AI mode answers, reasoning, and search come from canned local data; no Mistral or Exa request is made.</small>
+            <small style={{ display: "block", opacity: 0.75 }}>AI mode answers, reasoning, and search come from canned local data; no Cloudflare AI or Exa request is made.</small>
           </span>
           <m3e-switch aria-label="Mock AI responses" checked={cur.aiMock ? "" : undefined} icons="selected" onClick={flip("aiMock")} />
         </div>
