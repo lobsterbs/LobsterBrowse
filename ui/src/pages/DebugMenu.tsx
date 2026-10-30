@@ -122,8 +122,8 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     const next: DebugOverrides = { ...ov, [k]: !cur[k] };
     setOv(next);
     saveDebugOverrides(next);
-    /* split is override-only: zlContentHref reads it, no push */
-    /* split and aiMock are override-only: no zl:config push */
+    /* split and aiMock are override-only: no zl:config push
+       (zlContentHref reads split; the AI store reads aiMock) */
     if (k !== "split" && k !== "aiMock") push(next);
   };
 
