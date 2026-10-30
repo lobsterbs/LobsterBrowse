@@ -1717,7 +1717,23 @@ FROM debian:bookworm-slim AS zl-builder
 # commits no Cargo.lock (Zeolite #513); rustc and wasm-pack were
 # identical in both builds. Cargo-side pin stays d4ca407: no crates
 # changed.
-ARG ZEOLITE_COMMIT=c1ad7a4cbddcee3cc8f8034746d4a670f439af4d
+# Pin 139 (2026-10-30): dist cd11717 (Zeolite main 01bf05aa, CI run
+# 41136428811, all 5 jobs green) ships the storage wave (#557/#548/#555)
+# and the #543 fragment seams: page-cache entries carry Vary variant
+# metadata behind a fail-closed varyMatches gate (supported Vary
+# request headers finally cache; Vary:* stays refused), the page cache
+# holds a hard 60-entry bound with evict-before-put plus a fail-closed
+# pageCacheDisabled flag, and indexedDB.databases() is site-scoped in
+# both the page and worker realms. Navigations keep destination
+# fragments on the committed URL: mapped Location/Refresh routes carry
+# the fragment raw, marker/prel payloads stay fragment-free, and
+# decodeClientUrl joins the committed fragment (native hash wins over
+# a payload hash). sw.js c4208f42a1552246 -> 1b4a979dff9f3dbf
+# (702633 bytes); bootstrap.js 3936718bd9dcdd64 -> 77fb46f864491a2b
+# (41025 bytes; the Zeolite CI budget gate rose 40704 -> 41216 in
+# 4fd5870). Cargo-side pin unchanged: no crates changed (both waves
+# touched app/ and suite/ only).
+ARG ZEOLITE_COMMIT=cd11717700b5bd26d3898844758c2e9e36e36460
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1776,7 +1792,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c4208f42a1552246 ZEOLITE_BOOTSTRAP_SHA=3936718bd9dcdd64 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=1b4a979dff9f3dbf ZEOLITE_BOOTSTRAP_SHA=77fb46f864491a2b SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
