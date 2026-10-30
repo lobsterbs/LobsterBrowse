@@ -1427,8 +1427,7 @@ async fn ai_chat_endpoint(
         Ok(v) => v,
         Err(msg) => return ai_err(StatusCode::BAD_REQUEST, msg),
     };
-    let (Some(key), false) = (state.cf_ai_key.as_deref(), state.cf_account.is_empty())
-    else {
+    let (Some(key), false) = (state.cf_ai_key.as_deref(), state.cf_account.is_empty()) else {
         return ai_err(
             StatusCode::SERVICE_UNAVAILABLE,
             "AI is not configured on this deployment (CLOUDFLARE_AI_KEY or CLOUDFLARE_ACCOUNT_ID unset)",
@@ -4239,8 +4238,7 @@ async fn main() {
         cf_ai_key: std::env::var("CLOUDFLARE_AI_KEY")
             .ok()
             .filter(|k| !k.is_empty()),
-        cf_account: std::env::var("CLOUDFLARE_ACCOUNT_ID")
-            .unwrap_or_default(),
+        cf_account: std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default(),
         ai_uses: Mutex::new(HashMap::new()),
         logs: Mutex::new(LogRing {
             ring: VecDeque::new(),
