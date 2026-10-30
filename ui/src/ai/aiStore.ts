@@ -1,12 +1,13 @@
 /* AI mode storage and provider clients.
-   The Mistral key is SERVER-SIDE: streamMistral posts to this
-   origin's /ai/chat proxy, which holds MISTRAL_API_KEY on the
-   deployment and enforces the rate limit (50 messages per rolling
-   6 h). The remaining count rides the x-lb-ai-remaining response
-   header. Web search is keyless: Exa's free MCP endpoint
-   (mcp.exa.ai) answers with no account. Chats persist encrypted in
-   IndexedDB with a non-exportable key. By design there is no key
-   export: losing the browser profile loses the chats. */
+   The Cloudflare Workers AI key is SERVER-SIDE: streamChat posts to
+   this origin's /ai/chat proxy, which holds CLOUDFLARE_AI_KEY and
+   CLOUDFLARE_ACCOUNT_ID on the deployment and enforces the rate
+   limit (50 messages per rolling 6 h). The remaining count rides the
+   x-lb-ai-remaining response header. Web search is keyless: Exa's
+   free MCP endpoint (mcp.exa.ai) answers with no account. Chats
+   persist encrypted in IndexedDB with a non-exportable key. By
+   design there is no key export: losing the browser profile loses
+   the chats. */
 
 import { loadDebugOverrides } from "../debug.ts";
 
@@ -19,21 +20,34 @@ export interface AiModel {
   params: string;
   note: string;
   thinking: boolean;
+  mark: string;
 }
 
-/* Parameter lines stay honest: Mistral Small 4 (mistral-small-latest),
-   verified 2026-10-30 - 119B total MoE, 6.5B active, 256k context,
-   multimodal input. */
+/* Parameter lines stay honest: all three verified against the live
+   Workers AI catalog on 2026-10-30 (prices per M tokens in/out):
+   gpt-oss-120b $0.35/$0.75 (128k context, reasoning, function
+   calling), gpt-oss-20b $0.20/$0.30, qwen3-30b-a3b-fp8 $0.051/$0.335
+   (MoE, 3B active, reasons on every turn). The deployment account
+   runs the Workers Free plan (10,000 neurons/day), so the gated
+   GLM/DeepSeek/Kimi tier is unavailable. The marks are the
+   providers' official logos (CC0 simple-icons geometry). */
+const OPENAI_MARK =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/></svg>';
+const QWEN_MARK =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M23.919 14.545L20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828l-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801l-6.205-.002l1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315l-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/></svg>';
+
 export const AI_MODELS: AiModel[] = [
-  { id: "mistral-small-latest", name: "Mistral Small", version: "4", params: "119B", note: "6.5B active MoE, 256k context, multimodal", thinking: true },
+  { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, mark: OPENAI_MARK },
+  { id: "@cf/openai/gpt-oss-20b", name: "GPT-OSS", version: "1", params: "20B", note: "fast, lightweight reasoning", thinking: true, mark: OPENAI_MARK },
+  { id: "@cf/qwen/qwen3-30b-a3b-fp8", name: "Qwen", version: "3", params: "30B", note: "MoE, 3B active, reasons every turn", thinking: true, mark: QWEN_MARK },
 ];
 
 export function loadModelId(): string {
   try {
     const v = localStorage.getItem(KEY_MODEL);
-    return v && AI_MODELS.some((m) => m.id === v) ? v : "mistral-small-latest";
+    return v && AI_MODELS.some((m) => m.id === v) ? v : AI_MODELS[0].id;
   } catch {
-    return "mistral-small-latest";
+    return AI_MODELS[0].id;
   }
 }
 
@@ -220,7 +234,7 @@ async function* mockStream(thinking: boolean): AsyncGenerator<StreamEvent> {
     }
   }
   const answer =
-    "This is a mock answer produced locally by the debug menu. No Mistral API call and no Exa search " +
+    "This is a mock answer produced locally by the debug menu. No AI API call and no Exa search " +
     "happened. It cites the mock sources [1] and [2] so the reasoning panel, the streamed text, and " +
     "the source chips render exactly as they do against the real APIs.";
   for (const word of answer.split(" ")) {
@@ -338,15 +352,16 @@ export async function aiSearch(query: string): Promise<AiSource[]> {
   }
 }
 
-/* ---- Mistral streaming client (via the server proxy) ---- */
+/* ---- Cloudflare Workers AI streaming client (via the server
+   proxy) ---- */
 
-export type MistralContent =
+export type ChatContent =
   | string
   | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 
-export interface MistralMsg {
+export interface ChatMsg {
   role: "system" | "user" | "assistant";
-  content: MistralContent;
+  content: ChatContent;
 }
 
 export type StreamEvent =
@@ -368,9 +383,9 @@ async function aiErrText(res: Response): Promise<string> {
   return "AI service error (HTTP " + res.status + ")" + (text ? " - " + text.slice(0, 200) : "");
 }
 
-export async function* streamMistral(opts: {
+export async function* streamChat(opts: {
   model: string;
-  messages: MistralMsg[];
+  messages: ChatMsg[];
   thinking: boolean;
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
@@ -408,7 +423,7 @@ export async function* streamMistral(opts: {
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
       if (payload === "[DONE]") return;
-      let evt: { choices?: { delta?: { content?: unknown } }[] };
+      let evt: { choices?: { delta?: { content?: unknown; reasoning_content?: unknown } }[] };
       try {
         evt = JSON.parse(payload);
       } catch {
@@ -416,6 +431,12 @@ export async function* streamMistral(opts: {
       }
       const delta = evt.choices?.[0]?.delta;
       if (!delta) continue;
+      /* gpt-oss and qwen stream their reasoning before the answer;
+      reasoning_content is the OpenAI-compatible field Cloudflare
+      uses for it. */
+      if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+        yield { type: "thinking", text: delta.reasoning_content };
+      }
       const c = delta.content;
       if (typeof c === "string") {
         if (c) yield { type: "text", text: c };

@@ -1750,3 +1750,74 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 @media (prefers-reduced-motion: reduce) {
   .lb-ai-shimmer { animation: none; background: none; -webkit-background-clip: unset; background-clip: unset; -webkit-text-fill-color: currentColor; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
 }
+
+/* ---- AI page motion (2026-10-30): fills the teleport gaps on the AI
+   page with the same M3E motion tokens the rest of the site already
+   uses. Composite-only properties; the tool-row body is the
+   sanctioned accordion exception (grid 0fr -> 1fr). ---- */
+
+/* Provider marks are square 24x24 geometry (OpenAI, Qwen),
+   wider than a glyph is tall. */
+.lb-ai-mark { width: 14px; height: 14px; }
+
+/* Model-picker popover: stays mounted, fades + scales from the
+   trigger pill (bottom-right origin), 150ms decelerate; visibility
+   keeps the closed popover out of hit-testing and the a11y tree. */
+.lb-ai-mp-pop {
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  transform-origin: bottom right;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    visibility 0s var(--md-sys-motion-duration-short-3, 150ms);
+}
+.lb-ai-mp-pop.lb-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  transition: opacity var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    visibility 0s;
+}
+.lb-ai-mp-chev { transition: transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease-in-out); }
+.lb-ai-mp-btn[aria-expanded="true"] .lb-ai-mp-chev { transform: rotate(180deg); }
+
+/* Tool-row body: accordion expand, 200ms decelerate. The vertical
+   padding rides on the open state so the row can fully collapse. */
+.lb-ai-tool-body-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+.lb-ai-tool-body-wrap.lb-open { grid-template-rows: 1fr; }
+.lb-ai-tool-body-wrap > .lb-ai-tool-body { overflow: hidden; min-height: 0; padding: 0 0 0 var(--md-sys-measurement-space150, 12px); transition: padding var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+.lb-ai-tool-body-wrap.lb-open > .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
+
+/* Entrances: a new message fades + rises in, a file chip pops in;
+   both run once on mount, 200ms/150ms decelerate. */
+@keyframes lb-ai-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.lb-ai-msg { animation: lb-ai-msg-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+@keyframes lb-ai-chip-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+.lb-ai-file-chip { animation: lb-ai-chip-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+
+/* Press feedback on the page's custom buttons (M3E components carry
+   their own): 100ms settle, 0.97 press scale. */
+.lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src {
+  transition: transform var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
+}
+.lb-ai-mp-btn:active, .lb-ai-tool-btn:active, .lb-ai-file-x:active, .lb-ai-src:active {
+  transform: scale(0.97);
+}
+
+/* Reduced motion: entrances off, transitions instant; the popover and
+   the accordion still work as instant state changes. */
+@media (prefers-reduced-motion: reduce) {
+  .lb-ai-msg, .lb-ai-file-chip { animation: none; }
+  .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
+  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src { transition: none; }
+}
