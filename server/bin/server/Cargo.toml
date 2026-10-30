@@ -31,3 +31,10 @@ url = "2"
 sha2 = { workspace = true }
 # LB #137/#138: StreamExt for the capped relay and lookup body reads.
 futures-util = "0.3"
+# #511 relay WebSocket egress: the /zlws upstream client. rustls
+# because the tree deliberately has no openssl-sys (the btls symbols
+# need no prefixing); native roots so managed-trust environments work.
+# ponytail ceiling: the ClientHello is rustls, not the wreq Chrome
+# profile - a bot wall that fingerprints the ws handshake needs the
+# btls-backed stream upgrade.
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }

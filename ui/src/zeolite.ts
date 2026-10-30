@@ -225,6 +225,9 @@ function u8ToB64(u: Uint8Array): string {
 type RelayChannel = {
   controllers: Map<number, AbortController>;
   creditSinks: Map<number, (bytes: number) => void>;
+  /* #511: page-WebSocket conns ride the same per-channel scope (#218):
+     a rid from one registration can never route into another's socket. */
+  wsConns: Map<number, WebSocket>;
 };
 
 /* Zeolite #470 producer half: the engine's relay transport grants
@@ -365,6 +368,90 @@ async function zlRelayFetch(
   }
 }
 
+/* #511: WebSocket-over-relay, app-origin half. The engine bridges page
+   WebSockets onto the registered relay port; each opens one /zlws
+   browser socket here (JSON text frames control, binary frames carry
+   binary data, so page text can never collide with control frames).
+   The engine treats a lost frame stream as an honest close. The conn
+   map is per-channel (#218): two live registrations can never route
+   one channel's rid into another's socket. */
+interface ZlWsRelayMsg {
+  rid: number;
+  url: string;
+  protocols?: unknown;
+  headers?: unknown;
+}
+
+function zlWsPost(port: MessagePort, msg: Record<string, unknown>): void {
+  try {
+    port.postMessage(msg);
+  } catch {
+    /* the engine side is gone: its close frame tears the conn down */
+  }
+}
+
+function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort, chan: RelayChannel): void {
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket("/zlws");
+  } catch {
+    zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: "zlws unavailable" });
+    return;
+  }
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => {
+    try {
+      ws.send(
+        JSON.stringify({
+          op: "connect",
+          url: m.url,
+          protocols: Array.isArray(m.protocols) ? m.protocols : [],
+          headers: Array.isArray(m.headers) ? m.headers : [],
+        }),
+      );
+    } catch {
+      chan.wsConns.delete(m.rid);
+      zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: "zlws send failed" });
+    }
+  };
+  ws.onmessage = (ev: MessageEvent) => {
+    const d = ev.data;
+    if (d instanceof ArrayBuffer) {
+      zlWsPost(port, { type: "zl:wsData", rid: m.rid, data: new Uint8Array(d), bin: true });
+      return;
+    }
+    if (typeof d !== "string") return;
+    let msg: { op?: unknown; protocol?: unknown; text?: unknown; code?: unknown; reason?: unknown; message?: unknown } | null = null;
+    try {
+      msg = JSON.parse(d);
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg.op !== "string") return;
+    if (msg.op === "open") {
+      zlWsPost(port, { type: "zl:wsOpen", rid: m.rid, protocol: typeof msg.protocol === "string" ? msg.protocol : "" });
+    } else if (msg.op === "data") {
+      zlWsPost(port, { type: "zl:wsData", rid: m.rid, data: typeof msg.text === "string" ? msg.text : "" });
+    } else if (msg.op === "close") {
+      chan.wsConns.delete(m.rid);
+      zlWsPost(port, { type: "zl:wsClose", rid: m.rid, code: Number(msg.code) || 1006, reason: typeof msg.reason === "string" ? msg.reason : "" });
+    } else if (msg.op === "fail") {
+      chan.wsConns.delete(m.rid);
+      zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: typeof msg.message === "string" ? msg.message : "upstream refused" });
+    }
+  };
+  ws.onclose = () => {
+    if (chan.wsConns.get(m.rid) === ws) {
+      chan.wsConns.delete(m.rid);
+      zlWsPost(port, { type: "zl:wsClose", rid: m.rid, code: 1006, reason: "" });
+    }
+  };
+  ws.onerror = () => {
+    /* the onclose arm reports the channel death exactly once */
+  };
+  chan.wsConns.set(m.rid, ws);
+}
+
 export function zlRelayInit(): void {
   void zlWorker().then((sw) => {
     if (!sw) return;
@@ -373,7 +460,7 @@ export function zlRelayInit(): void {
        cancel and credit frames route only inside the port they
        arrived on, so two live registrations (a worker restart
        overlap) can never collide on rid. */
-    const chan: RelayChannel = { controllers: new Map(), creditSinks: new Map() };
+    const chan: RelayChannel = { controllers: new Map(), creditSinks: new Map(), wsConns: new Map() };
     ch.port1.onmessage = (ev) => {
       const m = ev.data as { type?: string; rid?: number };
       if (m && m.type === "zl:fetchRelay" && typeof m.rid === "number") {
@@ -383,6 +470,52 @@ export function zlRelayInit(): void {
       } else if (m && m.type === "zl:relayCredit" && typeof m.rid === "number") {
         /* #470: grant frames from the engine; bytes are advisory. */
         chan.creditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
+      } else if (m && m.type === "zl:wsRelay" && typeof m.rid === "number") {
+        zlWsRelayOpen(ev.data as ZlWsRelayMsg, ch.port1, chan);
+      } else if (m && m.type === "zl:wsSend" && typeof m.rid === "number") {
+        const ws = chan.wsConns.get(m.rid);
+        if (ws) {
+          try {
+            if ((m as { bin?: unknown }).bin === true) {
+              ws.send((m as { data?: unknown }).data as BufferSource);
+            } else {
+              ws.send(JSON.stringify({ op: "data", text: (m as { data?: unknown }).data }));
+            }
+          } catch {
+            try {
+              ws.close();
+            } catch {
+              /* already gone */
+            }
+          }
+        }
+      } else if (m && m.type === "zl:wsClose" && typeof m.rid === "number") {
+        const ws = chan.wsConns.get(m.rid);
+        if (ws) {
+          chan.wsConns.delete(m.rid);
+          /* #511 close parity: send the close envelope before closing so
+             /zlws echoes {op:"close"} and the engine close event fires
+             on handshake completion, not on its fallback timer. */
+          try {
+            ws.send(
+              JSON.stringify({
+                op: "close",
+                code: Number((m as { code?: unknown }).code) || 1000,
+                reason:
+                  typeof (m as { reason?: unknown }).reason === "string"
+                    ? (m as { reason?: unknown }).reason
+                    : "",
+              }),
+            );
+          } catch {
+            /* already gone */
+          }
+          try {
+            ws.close();
+          } catch {
+            /* already gone */
+          }
+        }
       }
     };
     /* credits:1 advertises this producer honors the credit protocol;
