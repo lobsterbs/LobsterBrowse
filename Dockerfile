@@ -1810,7 +1810,21 @@ FROM debian:bookworm-slim AS zl-builder
 # double CI load and the same suite passed 20/20 on the follow-up
 # main run (the remaining failures there are the known #556-bounded
 # replay-spool 480s timeout and a parallel-lane #533 vorigin item).
-ARG ZEOLITE_COMMIT=ad0922034eadc1b9654918ef886179075b3cbc72
+# Pin 145 (2026-10-31): dist c724a79 (Zeolite main 62f46df, which
+# merges 5dcf687 rooted extension pages + 050ceef adapter docs
+# with 5af37bf virtual document.baseURI #532) ships rooted
+# extension pages (#560 residual): zl:openExtPage answers a ROOTED
+# /<page>?zlExt=<id>&zlPageTok=<token> URL so pathname-keyed page
+# boot dispatch (Tampermonkey options worlds) matches the real
+# extension origin, plus sync runtime.getManifest, Chrome-shaped
+# callback page calls, and an injected base tag so relative
+# subresources resolve. sw.js 3623c60ce8174c8d -> fd4ea7f266d03215
+# (748779 bytes); bootstrap.js d91833dc41f5f7c2 -> d1c3881a6d190b9a
+# (44382 bytes, changed by #532). CI on 62f46df: all five jobs
+# green; the 1271 blob-worker failure on 5dcf687 was a load flake
+# disproven by the green 1272 rerun of the same runtime code.
+
+ARG ZEOLITE_COMMIT=c724a79dec65688d5eae2a5cbbbbc379afa11247
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1869,7 +1883,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3623c60ce8174c8d ZEOLITE_BOOTSTRAP_SHA=d91833dc41f5f7c2 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=fd4ea7f266d03215 ZEOLITE_BOOTSTRAP_SHA=d1c3881a6d190b9a SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
