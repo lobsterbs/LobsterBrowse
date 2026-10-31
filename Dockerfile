@@ -1824,7 +1824,24 @@ FROM debian:bookworm-slim AS zl-builder
 # green; the 1271 blob-worker failure on 5dcf687 was a load flake
 # disproven by the green 1272 rerun of the same runtime code.
 
-ARG ZEOLITE_COMMIT=c724a79dec65688d5eae2a5cbbbbc379afa11247
+# Pin 146 (2026-10-31): dist 71367403 (Zeolite main 109e6eac, which
+# includes 5aee1975) ships the runtime platform identity and
+# Chrome-parity message senders (#560 residual): MessageSender
+# carries the extension id on every sender surface, page
+# sendMessage/connect senders carry url null (the Tampermonkey
+# 5.5.0 options-page sender classifier), and runtime
+# getPlatformInfo/getBrowserInfo answer navigator-derived values
+# through the Chrome callback shape (CALLBACK_METHODS), with
+# compat matrix rows pinned. sw.js fd4ea7f266d03215 ->
+# cd57de1a4dde5771 (751251 bytes); bootstrap.js unchanged at
+# d1c3881a6d190b9a (44382 bytes). CI on 109e6eac: run 1280 all
+# five jobs green; the run 1279 blob-workers and run 1281 e2e
+# browser failures were runner flakes (blob-workers passed 16/16
+# three times locally on the 1279 tree; 1280 is content-identical
+# to 1281 except a ci.yml comment position). Cargo-side pin stays
+# d4ca407 (app TS only, no crates changed).
+
+ARG ZEOLITE_COMMIT=7136740337bbe1b99b5e0b7d67e85eedabfa0c56
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1883,7 +1900,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=fd4ea7f266d03215 ZEOLITE_BOOTSTRAP_SHA=d1c3881a6d190b9a SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cd57de1a4dde5771 ZEOLITE_BOOTSTRAP_SHA=d1c3881a6d190b9a SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
