@@ -1815,7 +1815,28 @@ FROM debian:bookworm-slim AS zl-builder
 # to 1281 except a ci.yml comment position). Cargo-side pin stays
 # d4ca407 (app TS only, no crates changed).
 
-ARG ZEOLITE_COMMIT=7136740337bbe1b99b5e0b7d67e85eedabfa0c56
+# Pin 147 (2026-10-31): dist 9bf04db8 (Zeolite main 6bfc8394, which
+# includes 7d754384 and d9a68582) ships the jar-backed cookieStore
+# facade (#534): cookieStore is exposed again, backed by the engine
+# jar, with schemeful SameSite (schemeful-site and top-level
+# navigation context, not referrer-derived) and deletion parity (a
+# local delete reaches the worker-owned jar immediately, not only
+# after a later jar reply). And Disqus page-URL virtualization
+# (#565): the comments embed builds t_u=/t_i= from window.location
+# (LegacyUnforgeable), which named the opaque engine origin on
+# virtualized pages; the fetch seam now virtualizes those query
+# parameters so the thread URL names the page's virtual origin.
+# sw.js cd57de1a4dde5771 -> 17ac1af1efa84398 (753544 bytes);
+# bootstrap.js d1c3881a6d190b9a -> e1cd770802a5db67 (46170 bytes).
+# CI on 6bfc8394: run 1290 rust, wasm, app and compat green; the
+# browser job fails only the #537 blob-worker suite, the day's
+# known runner-load flake (the same suite failed runs 1255/1279
+# with green sibling runs), corroborated green by run 1287 on
+# 7d754384 - identical engine content, since 6bfc8394 only changes
+# test polling - and by runs 1282/1283, green twice on d9a68582.
+# Cargo-side pin stays d4ca407 (app TS only, no crates changed).
+
+ARG ZEOLITE_COMMIT=9bf04db85abc2beeb6c8966e821fa89df9b60ce4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1874,7 +1895,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=cd57de1a4dde5771 ZEOLITE_BOOTSTRAP_SHA=d1c3881a6d190b9a SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=17ac1af1efa84398 ZEOLITE_BOOTSTRAP_SHA=e1cd770802a5db67 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
