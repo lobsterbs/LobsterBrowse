@@ -1721,7 +1721,20 @@ FROM debian:bookworm-slim AS zl-builder
 # 77fb46f864491a2b (41025 bytes; the Zeolite CI budget gate rose
 # 40704 -> 41216 in 4fd5870). Cargo-side pin stays d4ca407: no
 # crates changed.
-ARG ZEOLITE_COMMIT=afe08b6a648c8b8e1b37b8384364e64cd61fc0da
+# Pin 141 (2026-10-30): dist 790178cb (Zeolite main 7d14bb41, CI run
+# 41147759573, all 5 jobs green) ships the residual fixes of the
+# #558-#561 wave: the vloc anchor strips every zlNavh token a page
+# carries back into pushState/replaceState or a location write and
+# appends the live token once (google.com's home page stacked the
+# same handle three times via re-anchored replaceState), and Firefox
+# MV2 background pages get a sandboxed document stub and a real
+# script-tag loader as Function-scope params (Tampermonkey 5.5.0
+# boots past its document reads; the compat matrix states the stub
+# contract). sw.js 53b198940dc5e311 -> b7b9a7fcaee5990f (724053
+# bytes); bootstrap.js 77fb46f864491a2b -> 38807f6fe95d006f (41350
+# bytes; the vloc anchor ships in the bootstrap bundle). Cargo-side
+# pin unchanged: no crates changed (app/ TS only).
+ARG ZEOLITE_COMMIT=7d14bb416e5734de3f89edd2086bed72616acc0f
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1780,7 +1793,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=53b198940dc5e311 ZEOLITE_BOOTSTRAP_SHA=77fb46f864491a2b SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b7b9a7fcaee5990f ZEOLITE_BOOTSTRAP_SHA=38807f6fe95d006f SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
