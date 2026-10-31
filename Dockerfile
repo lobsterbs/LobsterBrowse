@@ -1760,7 +1760,24 @@ FROM debian:bookworm-slim AS zl-builder
 # bytes); bootstrap.js 77fb46f864491a2b -> 38807f6fe95d006f (41350
 # bytes; the vloc anchor ships in the bootstrap bundle). Cargo-side
 # pin unchanged: no crates changed (app/ TS only).
-ARG ZEOLITE_COMMIT=790178cb3f0a906db7955eb6c39e5002f4f8b694
+# Pin 142 (2026-10-31): dist d2119ddd (Zeolite main 4a8ee773, CI run
+# 41198199949) ships the #560 residual fix plus the merged #554
+# import-map wave: the MV2 chrome.extension namespace mounts for
+# MV2 records only (inIncognitoContext false, getURL shared with
+# runtime, getBackgroundPage null, getViews []; MV3 gets no
+# namespace, Chrome parity) and the page bridge materializes MV2
+# extension and permission-gated webRequest namespace objects
+# (filterResponseData stays undefined), so Tampermonkey 5.5.0's
+# background passes its chrome.extension.inIncognitoContext read
+# and its options page no longer crashes at module load on
+# webRequest.filterResponseData. sw.js b7b9a7fcaee5990f ->
+# 27b03c7346e6df73 (736681 bytes); bootstrap.js 38807f6fe95d006f ->
+# 1fc347670b10a066 (42761 bytes). CI stated plainly: app, compat,
+# rust and wasm green; the browser job fails only the #537 module
+# blob worker boot checks, a pre-existing failure identical without
+# this commit (reproduced on e1eefb08 and 3a33fbe6, the #537
+# wrapper wave's own runs).
+ARG ZEOLITE_COMMIT=d2119dddeb28394d78b8ba67a6f3a4829bd09f99
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1819,7 +1836,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b7b9a7fcaee5990f ZEOLITE_BOOTSTRAP_SHA=38807f6fe95d006f SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=27b03c7346e6df73 ZEOLITE_BOOTSTRAP_SHA=1fc347670b10a066 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
