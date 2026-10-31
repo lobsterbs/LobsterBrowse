@@ -1730,13 +1730,15 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 .lb-md ul, .lb-md ol { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding-left: var(--md-sys-measurement-space200, 16px); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); }
 .lb-md li > ul, .lb-md li > ol { margin: var(--md-sys-measurement-space50, 4px) 0 0; }
 .lb-md a { color: var(--md-sys-color-primary, #7f9cf5); }
-.lb-md blockquote { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); border-left: 3px solid var(--md-sys-color-primary, #7f9cf5); border-radius: var(--md-sys-shape-corner-extra-small, 4px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 45%, transparent); color: var(--md-sys-color-on-surface-variant, #cac4d0); }
+.lb-md blockquote { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); border-left: 3px solid var(--md-sys-color-primary, #7f9cf5); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 45%, transparent); color: var(--md-sys-color-on-surface-variant, #cac4d0); }
 .lb-md blockquote > :last-child { margin-bottom: 0; }
-.lb-md code { font-family: ui-monospace, monospace; font-size: 0.875em; padding: 1px 5px; border-radius: var(--md-sys-shape-corner-extra-small, 4px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); }
-.lb-md pre { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 75%, transparent); overflow-x: auto; }
+.lb-md code { font-family: ui-monospace, monospace; font-size: 0.875em; padding: 1px 5px; border-radius: var(--md-sys-shape-corner-small, 8px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); }
+.lb-md pre { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-large, 16px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 75%, transparent); overflow-x: auto; }
 .lb-md pre code { background: none; padding: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.5; }
-.lb-md table { border-collapse: collapse; margin: 0 0 var(--md-sys-measurement-space100, 8px); width: 100%; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); }
-.lb-md th, .lb-md td { border: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); text-align: left; }
+.lb-md table { border-collapse: separate; border-spacing: 0; margin: 0 0 var(--md-sys-measurement-space100, 8px); width: 100%; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); border: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); border-radius: var(--md-sys-shape-corner-medium, 12px); overflow: hidden; }
+.lb-md th, .lb-md td { padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); text-align: left; border-right: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); }
+.lb-md th:last-child, .lb-md td:last-child { border-right: none; }
+.lb-md tr:last-child td, .lb-md tbody > tr:last-child td { border-bottom: none; }
 .lb-md th { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); font-weight: 500; }
 .lb-md hr { border: none; border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); margin: var(--md-sys-measurement-space150, 12px) 0; }
 .lb-md img { max-width: 100%; border-radius: var(--md-sys-shape-corner-small, 8px); }
@@ -1840,15 +1842,15 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 /* Segmented send button (the 21st.dev segmented-button-group pattern
    hand-ported onto M3E tokens): one pill split into two segments, a
    filled primary icon segment plus an outlined text segment with the
-   divider from the source pattern, fused onto the chatbar's right
-   edge (negative margin, right-side radius only, overflow clipped). */
+   divider from the source pattern. Own rounded pill beside the
+   chatbar: fusing with a negative margin sat square edges against
+   the search bar's curve and read as broken spacing. */
 .lb-ai-send {
   display: inline-flex;
   align-self: stretch;
-  margin-left: calc(-1 * var(--md-sys-measurement-space150, 12px));
   padding: 0;
   border: none;
-  border-radius: 0 var(--md-sys-shape-corner-full, 9999px) var(--md-sys-shape-corner-full, 9999px) 0;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
   overflow: hidden;
   font: inherit;
   cursor: pointer;
