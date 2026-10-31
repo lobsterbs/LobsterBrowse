@@ -1795,7 +1795,22 @@ FROM debian:bookworm-slim AS zl-builder
 # parallel-lane location-targeting csp-enforce probe and the
 # #556-bounded replay-spool 480s timeout, both unrelated to this wave;
 # browser E2E 58/58 and torture 20/20 passed.
-ARG ZEOLITE_COMMIT=443097257f51292dc53f03c94aad9a8210f81adb
+# Pin 144 (2026-10-31): dist ad092203 (Zeolite main 1fc7ef74, which
+# includes d6f947e) ships page-world runtime.connect ports (#560
+# residual): the page bridge runtime.connect transfers one
+# MessageChannel end to the SW, which pairs it with the extension's
+# real port so background onConnect listeners receive the far end;
+# both port surfaces are Chrome-shaped (onMessage/onDisconnect as
+# event objects). Tampermonkey 5.5.0 options pages died on
+# runtime.connect is not a function (w572 on pin 143); this pin is
+# the live re-test. sw.js ae03d9108ff1100e -> 3623c60ce8174c8d
+# (744688 bytes); bootstrap.js 1fc347670b10a066 -> d91833dc41f5f7c2
+# (42842 bytes). CI on d6f947e: app, compat, rust and wasm green;
+# browser E2E 58/58, torture flaked one transport timing test under
+# double CI load and the same suite passed 20/20 on the follow-up
+# main run (the remaining failures there are the known #556-bounded
+# replay-spool 480s timeout and a parallel-lane #533 vorigin item).
+ARG ZEOLITE_COMMIT=ad0922034eadc1b9654918ef886179075b3cbc72
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1854,7 +1869,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ae03d9108ff1100e ZEOLITE_BOOTSTRAP_SHA=1fc347670b10a066 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3623c60ce8174c8d ZEOLITE_BOOTSTRAP_SHA=d91833dc41f5f7c2 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
