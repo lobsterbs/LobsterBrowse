@@ -1751,7 +1751,25 @@ FROM debian:bookworm-slim AS zl-builder
 # blob worker boot checks, a pre-existing failure identical without
 # this commit (reproduced on e1eefb08 and 3a33fbe6, the #537
 # wrapper wave's own runs).
-ARG ZEOLITE_COMMIT=d2119dddeb28394d78b8ba67a6f3a4829bd09f99
+# Pin 143 (2026-10-31): dist 44309725 (Zeolite main 66a2df40, which
+# includes 19131379) ships chrome.i18n (#560 residual): getMessage
+# answers from the package _locales (navigator.language, its primary
+# subtag, then default_locale; the first messages.json that exists
+# wins) with Chrome case-insensitive folding, $NAME$ placeholders
+# expanded before $1..$9 substitutions, and an empty string for a
+# missing name; getUILanguage/getAcceptLanguages report the resolved
+# locale and i18n.getAcceptLanguages also accepts the Chrome callback
+# shape; serve.ts embeds the resolved locales in ZL_PAGE_CFG so the
+# page bridge answers i18n synchronously. Tampermonkey 5.5.0 background
+# died on chrome.i18n.getMessage of undefined (w572 on pin 142); this
+# pin is the live re-test. sw.js 27b03c7346e6df73 -> ae03d9108ff1100e
+# (741802 bytes); bootstrap.js unchanged at 1fc347670b10a066 (42761
+# bytes; the app TS changes ship in sw.js only). CI on 19131379: app,
+# compat, rust and wasm green; the browser job fails only the
+# parallel-lane location-targeting csp-enforce probe and the
+# #556-bounded replay-spool 480s timeout, both unrelated to this wave;
+# browser E2E 58/58 and torture 20/20 passed.
+ARG ZEOLITE_COMMIT=443097257f51292dc53f03c94aad9a8210f81adb
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1810,7 +1828,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=27b03c7346e6df73 ZEOLITE_BOOTSTRAP_SHA=1fc347670b10a066 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ae03d9108ff1100e ZEOLITE_BOOTSTRAP_SHA=1fc347670b10a066 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
