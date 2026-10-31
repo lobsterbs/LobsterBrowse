@@ -1734,7 +1734,7 @@ FROM debian:bookworm-slim AS zl-builder
 # bytes); bootstrap.js 77fb46f864491a2b -> 38807f6fe95d006f (41350
 # bytes; the vloc anchor ships in the bootstrap bundle). Cargo-side
 # pin unchanged: no crates changed (app/ TS only).
-ARG ZEOLITE_COMMIT=7d14bb416e5734de3f89edd2086bed72616acc0f
+ARG ZEOLITE_COMMIT=790178cb3f0a906db7955eb6c39e5002f4f8b694
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
