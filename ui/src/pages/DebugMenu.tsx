@@ -183,12 +183,12 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       </m3e-list-item>
       <m3e-divider />
       <p className="lb-muted" style={{ margin: "10px 16px 4px" }}>
-        Experimental flags — choices are ON by default (beta, user request 2026-10-28). They do not enable unfinished
-        engine features until Zeolite reports them as effective.
+        Experimental flag defaults are per flag: hybrid location rewriting is OFF (operator decision 2026-11-01);
+        the others stay ON (beta, user request 2026-10-28). Effects follow what the engine reports as effective.
       </p>
       {([
         ["adaptiveTransit", "Adaptive NativeTransit", "Shadow comparison diagnostics; routing stays conservative"],
-        ["hybridLocation", "Hybrid location rewriting", "Requires verified per-site source rewriting"],
+        ["hybridLocation", "Hybrid location rewriting", "Wired (#456): on, every origin without an explicit per-site rule gets the bounded hybrid pass; off by default (operator 2026-11-01)"],
         ["cspTranslation", "CSP translation", "Deny-only HTML CSP subset; never translates arbitrary origins"],
         ["virtualSW", "Virtual Service Workers", "Shipped (#477): a page register spawns an isolated guest realm on the guest-host page; guest fetch events dispatch under a 250 ms fail-closed budget"],
       ] as const).map(([key, label, detail]) => (
