@@ -1836,7 +1836,26 @@ FROM debian:bookworm-slim AS zl-builder
 # test polling - and by runs 1282/1283, green twice on d9a68582.
 # Cargo-side pin stays d4ca407 (app TS only, no crates changed).
 
-ARG ZEOLITE_COMMIT=9bf04db85abc2beeb6c8966e821fa89df9b60ce4
+# Pin 148 (2026-11-01): dist f5d9183 (Zeolite main 939fdd67, which
+# includes 2298abeb) ships truthful proxied-site service-worker
+# registration (#576): engine-origin register arguments decode back
+# to real page URLs through the bounded zl:decodeRoutes oracle (a
+# null decode is an honest TypeError("Origin"), never an
+# opaque-route mint), the shim waits for the virtual base with a
+# 25 ms bounded poll that fails closed to "" (a raw engine route
+# is never used), and register forwards to the kernel with confirm
+# semantics so the page promise settles only when the kernel
+# confirms the guest realm is running (rejections carry the kernel
+# real reason: no guest host page connected / a different guest
+# script already active for the origin / spawn failed / handshake
+# timeout); a same-identity re-register on a running realm is a
+# native-style ok with no respawn. The browser e2e api check now
+# asserts the honest no-guest-host rejection. sw.js
+# 17ac1af1efa84398 -> 6eff076e95de07c1 (754828 bytes); bootstrap.js
+# e1cd770802a5db67 -> de6c46494c6fa117 (47288 bytes). CI on
+# 939fdd67: run 1301 all five jobs green. Cargo-side pin stays
+# d4ca407 (app TS only, no crates changed).
+ARG ZEOLITE_COMMIT=f5d9183c6ee907a4cd70098280b914f71937dcf5
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1895,7 +1914,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=17ac1af1efa84398 ZEOLITE_BOOTSTRAP_SHA=e1cd770802a5db67 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6eff076e95de07c1 ZEOLITE_BOOTSTRAP_SHA=de6c46494c6fa117 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
