@@ -13,7 +13,7 @@ globalThis.localStorage = {
 };
 
 assert.deepEqual(EXPERIMENTAL_KEYS, ["adaptiveTransit", "hybridLocation", "cspTranslation", "virtualSW"]);
-assert.deepEqual(Object.values(defaultExperimental()), [true, true, true, true]);
+assert.deepEqual(Object.values(defaultExperimental()), [true, false, true, true]);
 assert.deepEqual(cleanExperimental(null), {});
 assert.deepEqual(cleanExperimental([]), {});
 assert.deepEqual(cleanExperimental({
@@ -21,7 +21,7 @@ assert.deepEqual(cleanExperimental({
   cspTranslation: "true", virtualSW: true, __proto__: { enabled: true },
 }), { adaptiveTransit: true, hybridLocation: false, virtualSW: true });
 
-const selected = { ...defaultExperimental(), adaptiveTransit: true, virtualSW: true };
+const selected = { ...defaultExperimental(), adaptiveTransit: true, virtualSW: true, hybridLocation: true };
 saveDebugOverrides({ queryRoutes: false, experimental: selected });
 assert.deepEqual(loadDebugOverrides(), { queryRoutes: false, experimental: selected });
 assert.deepEqual({ ...defaultExperimental(), ...loadDebugOverrides().experimental }, selected);
@@ -39,4 +39,4 @@ assert.deepEqual(loadDebugOverrides(), {});
 clearDebugOverrides();
 assert.deepEqual(loadDebugOverrides(), { experimental: {} });
 
-console.log("experimental-flags: four default-ON picks (beta), migration, validation, reset passed");
+console.log("experimental-flags: per-flag defaults (hybridLocation OFF, operator 2026-11-01), stored-override wins, migration, validation, reset passed");
