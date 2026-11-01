@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { zlSend, zlContentConfig } from "../zeolite";
 import { engineRoutePrefix, type Settings } from "../settings";
 import { clearDebugOverrides, defaultExperimental, loadDebugOverrides, saveDebugOverrides, EXPERIMENTAL_KEYS, type ExperimentalKey, type DebugOverrides } from "../debug";
@@ -183,12 +183,12 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       </m3e-list-item>
       <m3e-divider />
       <p className="lb-muted" style={{ margin: "10px 16px 4px" }}>
-        Experimental flag defaults are per flag: hybrid location rewriting is OFF (operator decision 2026-11-01);
+        Experimental flag defaults are per flag: hybrid location rewriting is ON (operator flip 2026-11-01, mirroring the Zeolite engine default);
         the others stay ON (beta, user request 2026-10-28). Effects follow what the engine reports as effective.
       </p>
       {([
         ["adaptiveTransit", "Adaptive NativeTransit", "Shadow comparison diagnostics; routing stays conservative"],
-        ["hybridLocation", "Hybrid location rewriting", "Wired (#456): on, every origin without an explicit per-site rule gets the bounded hybrid pass; off by default (operator 2026-11-01)"],
+        ["hybridLocation", "Hybrid location rewriting", "Wired (#456): on, every origin without an explicit per-site rule gets the bounded hybrid pass; on by default (operator flip 2026-11-01)"],
         ["cspTranslation", "CSP translation", "Deny-only HTML CSP subset; never translates arbitrary origins"],
         ["virtualSW", "Virtual Service Workers", "Shipped (#477): a page register spawns an isolated guest realm on the guest-host page; guest fetch events dispatch under a 250 ms fail-closed budget"],
       ] as const).map(([key, label, detail]) => (
@@ -219,3 +219,4 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     </m3e-dialog>
   );
 }
+ 
