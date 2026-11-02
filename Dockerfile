@@ -1893,7 +1893,7 @@ FROM debian:bookworm-slim AS zl-builder
 # unchanged at de6c46494c6fa117 (47288 bytes). CI on 920582e: run
 # 1345 all five jobs green. Cargo-side pin stays d4ca407 (app TS
 # only, no crates changed).
-ARG ZEOLITE_COMMIT=abe0df835995e4d1494a829a30b2a18611726ec8
+ARG ZEOLITE_COMMIT=8223b1fff3eb05f7c0bef170b5091be206cc5f40
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1952,7 +1952,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=74d1159b69313158 ZEOLITE_BOOTSTRAP_SHA=de6c46494c6fa117 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=008cd5e5219e27d0 ZEOLITE_BOOTSTRAP_SHA=1c323643d670ba22 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
