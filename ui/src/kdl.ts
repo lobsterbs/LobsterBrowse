@@ -5,6 +5,7 @@
    this module owns no state and has no import cycle with the page. */
 import { sanitizeText, sanitizeUrl } from "./sanitize.ts";
 import type { DiagnosticsSnapshot } from "./browser/diagnosticsScope.ts";
+import type { DoctorView } from "./browser/exportArtifact.ts";
 
 /* KDL strings escape backslash and double quote; CR, LF, and tab map to
    their KDL escapes; other C0 controls and DEL are dropped. */
@@ -38,13 +39,16 @@ type FailLike = {
 
 /* One KDL document per copy: header, collection status, the scoped
    engine snapshot (stats, routing fallbacks, the full retained event
-   ring), captured console errors and warnings, and resource failures. */
+   ring, #228 the retained request ring), the zl:doctor checks when
+   the export fetched one, captured console errors and warnings, and
+   resource failures. */
 export function diagKdl(
   snapshot: DiagnosticsSnapshot | null,
   consoleEntries: ReadonlyArray<ConsoleLike>,
   fails: ReadonlyArray<FailLike>,
   statusLine: string,
   buildChip?: string,
+  doctor?: DoctorView | null,
 ): string {
   const iso = (t: number) => new Date(t).toISOString();
   const errs = consoleEntries.filter((e) => e.kind === "error" || e.kind === "warn");
@@ -85,6 +89,40 @@ export function diagKdl(
       );
     }
     rows.push("  }");
+    /* #228: the retained request ring, so the KDL copy carries the
+       same transport rows the JSON artifact does. An older snapshot
+       without the ring degrades to an empty section, never a throw. */
+    const reqs = Array.isArray(snapshot.requests) ? snapshot.requests : [];
+    rows.push("  requests " + reqs.length + " {");
+    for (const r of reqs) {
+      rows.push(
+        "    request " + kdlStr(r.method) + " " + kdlStr(r.dest) + " status " + r.status +
+          " ms " + r.ms + " rtype " + kdlStr(r.rtype) +
+          (r.transport ? " transport " + kdlStr(r.transport) : "") +
+          (r.rewritten ? " rewritten " + kdlStr(r.rewritten) : "") +
+          (r.fallbackReason ? " fallback-reason " + kdlStr(r.fallbackReason) : "") +
+          (r.err ? " err " + kdlStr(r.err) : "") +
+          (r.traceId ? " trace " + kdlStr(r.traceId) : "") +
+          " seq " + r.seq + " ts " + kdlStr(iso(r.ts)),
+      );
+    }
+    rows.push("  }");
+  }
+  /* #228: the session doctor report, when the export fetched one.
+   The engine redacts before storage; the view here is sanitized
+   field-by-field in exportArtifact.doctorView. */
+  if (doctor) {
+    rows.push("  doctor {");
+    rows.push("    engine " + kdlStr(doctor.engineVersion) + " healthy " + (doctor.healthy === null ? "unknown" : doctor.healthy ? "true" : "false"));
+    for (const c of doctor.checks) {
+      rows.push(
+        "    check " + kdlStr(c.code) + " " + kdlStr(c.status) + " " + kdlStr(c.summary) +
+          (c.remedy ? " remedy " + kdlStr(c.remedy) : ""),
+      );
+    }
+    rows.push("  }");
+  } else {
+    rows.push("  doctor-unavailable \"no doctor report in this capture\"");
   }
   rows.push("  console {");
   for (const e of errs) {

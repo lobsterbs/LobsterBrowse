@@ -99,4 +99,39 @@ const appStop = pollDocumentDiagnostics(diagnosticsScope("page-a", "app"), async
 await flush();
 assert.equal(appCalls.length, 2);
 appStop();
-console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction and sequential cleanup passed");
+
+/* #228: the net-log request ring rides the snapshot, sanitized
+   field-by-field like the events. */
+const entry = (seq, traceId) => ({
+  seq, ts: seq, method: "GET", path: "/zl/x", dest: "https://example.com/a.js?token=" + secret,
+  status: 200, ms: 12, bytes: 100, rtype: "SCRIPT",
+  rewritten: "js", transport: "RewriteFallback", fallbackReason: "JS_LITERAL_REWRITE_REQUIRED",
+  err: "password=" + secret, traceId,
+  headers: { authorization: "Bearer " + secret },
+});
+const withRows = diagnosticsSnapshot(scope, {
+  ...net(), version: "3.0 Diamond",
+  entries: [entry(1, "t-1"), { bogus: true }, entry(2), null],
+}, diag());
+assert(withRows);
+assert.equal(withRows.requests.length, 2, "malformed and null entries are dropped, the ring stays exportable");
+const row = withRows.requests[0];
+assert.deepEqual(
+  Object.keys(row).sort(),
+  ["bytes", "dest", "err", "fallbackReason", "method", "ms", "rewritten", "rtype", "seq", "status", "traceId", "transport", "ts"],
+  "unknown fields must not ride the request rows",
+);
+assert(!JSON.stringify(withRows).includes(secret), "request rows are sanitized before storage");
+assert.equal(withRows.requests[1].traceId, undefined, "a request without a traceId stays traceless");
+assert.equal(withRows.engine, "3.0 Diamond");
+/* bounded like the events */
+const flood = diagnosticsSnapshot(scope, {
+  ...net(), entries: Array.from({ length: 300 }, (_, i) => entry(i)),
+}, diag());
+assert.equal(flood.requests.length, 200);
+assert.equal(flood.requests[0].seq, 100);
+/* an absent entries array (older reply shape) degrades to an empty ring */
+const noEntries = diagnosticsSnapshot(scope, net(), diag());
+assert(noEntries && noEntries.requests.length === 0);
+
+console.log("Diagnostics scope: worker selection, identity, restart, bounded snapshots, redaction, request ring and sequential cleanup passed");
