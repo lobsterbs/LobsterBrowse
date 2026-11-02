@@ -10,6 +10,14 @@ export type ZlDiagEvent = {
   seq: number; ts: number; category: string; severity: string; message: string;
   stage?: string; url?: string; technicalReason?: string; traceId?: string;
 };
+/* #228: one sanitized net-log request row (the engine's zl:getNetLog
+   entries). Field-by-field: unknown fields never ride exports. */
+export type ZlNetRow = {
+  seq: number; ts: number; method: string; dest: string;
+  status: number; ms: number; bytes: number; rtype: string;
+  rewritten?: string; transport?: string; fallbackReason?: string;
+  err?: string; traceId?: string;
+};
 export type DiagnosticsSnapshot = {
   scope: DiagnosticsScope;
   generation: number;
@@ -19,6 +27,10 @@ export type DiagnosticsSnapshot = {
   engine?: string;
   stats: ZlStats;
   events: ZlDiagEvent[];
+  /* #228: the retained request ring (bounded, sanitized) so an export
+     can join requests and diag events by traceId instead of leaving
+     the transport log in a separate surface. */
+  requests: ZlNetRow[];
 };
 export type DiagnosticsQuery = (message: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
 
@@ -65,7 +77,30 @@ export function diagnosticsSnapshot(
       ...(typeof f.traceId === "string" ? { traceId: sanitizeText(f.traceId) } : {}),
     }));
   const version = typeof net.version === "string" ? sanitizeText(net.version) : undefined;
-  return { scope, generation: net.generation, ...(version ? { engine: version } : {}), stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events };
+  /* #228: the request ring, field-by-field like the events. An absent
+     or malformed entries array degrades to an empty ring, never a
+     null snapshot: the diag events and stats stay exportable. */
+  const rawEntries = Array.isArray(net.entries) ? net.entries : [];
+  const requests = rawEntries.filter((row): row is ZlNetRow => {
+    if (!row || typeof row !== "object") return false;
+    const r = row as Partial<ZlNetRow>;
+    return typeof r.seq === "number" && Number.isFinite(r.seq) &&
+      typeof r.ts === "number" && Number.isFinite(r.ts) &&
+      typeof r.method === "string" && typeof r.dest === "string" &&
+      typeof r.status === "number" && Number.isFinite(r.status) &&
+      typeof r.ms === "number" && Number.isFinite(r.ms) &&
+      typeof r.bytes === "number" && Number.isFinite(r.bytes) &&
+      typeof r.rtype === "string";
+  }).slice(-200).map((r) => ({
+    seq: r.seq, ts: r.ts, method: sanitizeText(r.method), dest: sanitizeUrl(r.dest),
+    status: r.status, ms: r.ms, bytes: r.bytes, rtype: sanitizeText(r.rtype),
+    ...(typeof r.rewritten === "string" ? { rewritten: sanitizeText(r.rewritten) } : {}),
+    ...(typeof r.transport === "string" ? { transport: sanitizeText(r.transport) } : {}),
+    ...(typeof r.fallbackReason === "string" ? { fallbackReason: sanitizeText(r.fallbackReason) } : {}),
+    ...(typeof r.err === "string" ? { err: sanitizeText(r.err) } : {}),
+    ...(typeof r.traceId === "string" ? { traceId: sanitizeText(r.traceId) } : {}),
+  }));
+  return { scope, generation: net.generation, ...(version ? { engine: version } : {}), stats: { native: stats.native, fallback: stats.fallback, fallbacks }, events, requests };
 }
 
 /* Each tick starts after the preceding one settles. Cleanup discards

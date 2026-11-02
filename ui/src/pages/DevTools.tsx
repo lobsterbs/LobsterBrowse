@@ -6,9 +6,9 @@
    console and network view, so LB carries no page-eval path of its
    own anymore. This panel keeps the engine diagnostics: transport
    stats, notable diag events, resource failures, the engine
-   download registry, and Copy logs. Page console errors and
-   resource failures still arrive over the {lb:...} hook messages
-   and feed Copy logs; successful requests are not captured.
+   download registry, Copy logs and the #228 Export diagnostics
+   artifact. Page console errors and resource failures still arrive
+   over the {lb:...} hook messages and feed both exports.
 
    Built from real M3E components: m3e-card as the container,
    m3e-tabs for the section switch, m3e-form-field for the edit fields. */
@@ -20,6 +20,7 @@ import {
   diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
   type DiagnosticsSnapshot, type EngineSource, type ZlDiagEvent,
 } from "../browser/diagnosticsScope";
+import { buildDiagnosticArtifact, doctorView, type DoctorView } from "../browser/exportArtifact";
 import { diagKdl } from "../kdl";
 
 export type ConsoleEntry = {
@@ -121,6 +122,18 @@ async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
+/* Shared status line for Copy logs and the export artifact (#228). */
+function diagStatusLine(
+  snapshot: DiagnosticsSnapshot | null,
+  scope: ReturnType<typeof diagnosticsScope>,
+): string {
+  return snapshot
+    ? "Diagnostics collected."
+    : scope
+      ? "Awaiting diagnostics for this document."
+      : "Awaiting this document's engine identity.";
+}
+
 type Props = {
   tab: Tab;
   dt: DtState;
@@ -145,23 +158,9 @@ const PAGES: Array<[DtState["page"], string, string]> = [
 const zlNotable = (e: ZlDiagEvent) =>
   e.severity === "error" || e.severity === "warning" || e.message.startsWith("redirect surfaced");
 
-/* Export and Copy logs read the same per-instance scoped snapshot.
-   Sanitization happens before that snapshot reaches state or the ref. */
-function exportDiag(snapshot: DiagnosticsSnapshot) {
-  const data = JSON.stringify({
-    exportedAt: new Date().toISOString(),
-    scope: "this document", source: snapshot.scope.source,
-    generation: snapshot.generation,
-    counts: "retained page requests (bounded engine ring)",
-    stats: snapshot.stats, events: snapshot.events,
-  }, null, 2);
-  const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = "lobsterbrowse-diagnostics.json";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(href), 10000);
-}
+/* Copy logs and the #228 Export diagnostics artifact read the same
+   per-instance scoped snapshot. Sanitization happens before that
+   snapshot reaches state, the ref, or the artifact. */
 
 function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
   clientId?: string;
@@ -193,9 +192,6 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
         <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
-        <m3e-button onClick={() => exportDiag(current)}>
-          <m3e-icon name="download" aria-hidden={true} /> Export
-        </m3e-button>
       </div>
       {notable.length === 0 && (
         <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No retained transport or rewrite failures for this document.</p>
@@ -428,19 +424,67 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the same content the JSON export carries as
-     KDL (user request 2026-10-29): header, stats, console errors and
-     warnings, resource failures, and the full retained event ring. */
+  /* Copy logs serializes the snapshot as KDL (user request
+     2026-10-29): header, stats, the event ring, #228 the request ring,
+     console errors and warnings, and resource failures. The clipboard
+     copy makes no control-plane round-trips, so its doctor row is the
+     honest unavailable note. */
   const copyLogs = async () => {
     const snapshot = snapshotForScope(snapshotRef.current, scope);
-    const statusLine = snapshot
-      ? "Diagnostics collected."
-      : scope
-        ? "Awaiting diagnostics for this document."
-        : "Awaiting this document's engine identity.";
-    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine, buildChip));
+    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, diagStatusLine(snapshot, scope), buildChip));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
+  };
+
+  /* #228: one Export diagnostics action. Assembles a single artifact
+     - the scoped snapshot (stats, diag events AND the net-log request
+     ring) joined by traceId, the page-side capture, and one session
+     zl:doctor report - and downloads it as JSON. The doctor is
+     best-effort: an unavailable worker degrades to an honest note in
+     the artifact, it never blocks or fails the export. The engine
+     redacts secrets before storage; the artifact only carries
+     sanitized fields, and the host adds no credentials back. */
+  const [exportState, setExportState] = useState<"" | "busy" | "ok" | "fail">("");
+  const exportDiagnostics = async () => {
+    setExportState("busy");
+    const snapshot = snapshotForScope(snapshotRef.current, scope);
+    let doctor: DoctorView | null = null;
+    let doctorNote: string | undefined;
+    try {
+      const r = await zlSend({ type: "zl:doctor" }, 8000);
+      if (r && r.ok === false && typeof r.error === "string") {
+        doctorNote = r.error;
+      } else if (r) {
+        doctor = doctorView(r);
+        if (!doctor) doctorNote = "doctor reply failed the shape check";
+      } else {
+        doctorNote = "the engine did not answer the doctor request";
+      }
+    } catch (err) {
+      doctorNote = err instanceof Error ? err.message : String(err);
+    }
+    try {
+      const artifact = buildDiagnosticArtifact({
+        snapshot,
+        consoleEntries: dt.console,
+        fails: dt.fails,
+        statusLine: diagStatusLine(snapshot, scope),
+        buildChip,
+        doctor,
+        doctorNote,
+      });
+      const data = JSON.stringify(artifact, null, 2);
+      const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = "lobsterbrowse-diagnostics-" + artifact.capturedAt.replace(/[:.]/g, "-") + ".json";
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(href), 10000);
+      setExportState("ok");
+    } catch {
+      setExportState("fail");
+    }
+    window.setTimeout(() => setExportState(""), 2000);
   };
 
   /* Failure counts by resource type for the diagnostics summary. */
@@ -523,6 +567,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             <m3e-button onClick={() => void copyLogs()}>
               <m3e-icon name="content_copy" aria-hidden={true} />
               {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
+            </m3e-button>
+            <m3e-button disabled={exportState === "busy" ? true : undefined} onClick={() => void exportDiagnostics()}>
+              <m3e-icon name="download" aria-hidden={true} />
+              {exportState === "busy" ? "Exporting" : exportState === "ok" ? "Exported" : exportState === "fail" ? "Export failed" : "Export diagnostics"}
             </m3e-button>
             <m3e-button
               onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
