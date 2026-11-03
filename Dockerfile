@@ -1886,7 +1886,29 @@ FROM debian:bookworm-slim AS zl-builder
 # compat green in all six, and the app job that builds this bundle
 # green in all six; the pin 135 precedent). Cargo-side pin stays
 # d4ca407: no crates changed.
-ARG ZEOLITE_COMMIT=9866c5e83fb296d4b90bcf9964c93b95f7bf1077
+# Pin 152 (2026-11-03): dist 4c58a57 (build 41636866431; Zeolite
+# wave head e3d0cebf over docs-only retrigger 709dc215) ships the
+# #546 WebSocket observability wave: the shim constructor maps
+# explicit and base-implied http(s):// scheme arguments to ws(s)://
+# like the Chromium WHATWG constructor (the old explicit-scheme
+# SyntaxError throw was a real divergence), and a failed handshake
+# now reaches CLOSED (readyState 3) before dispatching error per
+# the fail-the-connection steps. New CI browser gate
+# ws-negotiation.mjs differentials the shim against native
+# Chromium: URL serialization for nine inputs including the
+# http/https upgrade, subprotocol negotiation and token throws,
+# failed-handshake error-at-closed ordering, server close(1000)
+# with socket end, and worker-vs-page bufferedAmount slow-drain
+# decay - PASSED in CI twice (runs 41635594824 and 41636866431),
+# with the main e2e suite green on the wave's own head. Pinned per
+# operator instruction from runs whose browser job is red with
+# the diagnosis on record (the red arms are the non-engine img#uni
+# direct-oracle flake and the documented #514 main-e2e wedge
+# signature; docs/ci-torture-wedge.md; the pin 135 precedent).
+# sw.js 0be67794d1c15e81 -> 73e4dccabc9335e8 (819769 bytes);
+# bootstrap.js 097df230849e3d50 -> ba7e8e010a356496 (49682 bytes).
+# Cargo-side pin stays d4ca407 (app TS only, no crates changed).
+ARG ZEOLITE_COMMIT=4c58a5736ed6d329fc1ed12b39384220330acb37
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1945,7 +1967,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0be67794d1c15e81 ZEOLITE_BOOTSTRAP_SHA=097df230849e3d50 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=73e4dccabc9335e8 ZEOLITE_BOOTSTRAP_SHA=ba7e8e010a356496 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
