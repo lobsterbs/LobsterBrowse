@@ -1996,7 +1996,32 @@ FROM debian:bookworm-slim AS zl-builder
 # URL; e2e 66/66 green; the 1279/41351728517 runner-load
 # precedent, docs/ci-torture-wedge.md). Cargo-side pin stays
 # d4ca407 (app TS only, no crates changed).
-ARG ZEOLITE_COMMIT=0b19023271e37171ff706ab8720495618c72e26f
+# Pin 156 (2026-11-03): dist 41198e8a (build 41736313102) ships
+# the #618 Google signup fix: the #449 origin-pinning literal
+# skip (^https?: needle) also fires on generic scheme-sanity
+# regexes inside the accounts.google.com signup/signin module
+# chunks, so the whole-script skip left endpoint URL literals
+# verbatim and the runtime passed those cross-origin fetches
+# native - their responses are CORS-unreadable, which killed the
+# signup Next button (dead button, restart popup, /restart 400).
+# The owner page host now decides (same principle as the location
+# policy): transform.ts relaxes the skip for accounts.google.com
+# via the additive JsRewriter.set_origin_pinning_skip wasm setter,
+# honored by the document stream, the external-script pass (fresh
+# and cache-hit seams) and the inline script path; older wasm
+# without the setter keeps the skip (fail-safe). sw.js
+# 788c77125bc5b111 -> 027b379fce9eb979 (820226 -> 820730 bytes);
+# bootstrap.js 0c81efb9ba343dff unchanged (wasm + app TS only).
+# rewriter_wasm_bg.wasm changed but carries no alarm pin (the
+# served-artifact check covers sw.js and bootstrap.js; deploy
+# with a cleared build cache). CI on 7d2ebec: rust/wasm/app/compat
+# green; browser red on the documented #545-worker-initiator
+# main-e2e wedge cascade (57/66, every failure a 30s goto timeout
+# on the wedged embedder; the 41524458112/41607524709 signature
+# class, docs/ci-torture-wedge.md; the pin 135/151/152/155
+# precedent). Cargo-side pin stays d4ca407 (wasm + app TS only,
+# no crates changed).
+ARG ZEOLITE_COMMIT=41198e8ad79e6838b73a84cebe21c406743e5d40
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2055,7 +2080,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=788c77125bc5b111 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=027b379fce9eb979 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
