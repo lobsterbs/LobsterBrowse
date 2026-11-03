@@ -1893,7 +1893,26 @@ FROM debian:bookworm-slim AS zl-builder
 # unchanged at de6c46494c6fa117 (47288 bytes). CI on 920582e: run
 # 1345 all five jobs green. Cargo-side pin stays d4ca407 (app TS
 # only, no crates changed).
-ARG ZEOLITE_COMMIT=8223b1fff3eb05f7c0bef170b5091be206cc5f40
+# Pin 151 (2026-11-03): dist 9866c5e8 (build 41610671597) ships
+# the DoubleClick f.txt ad-artefact download filter (Zeolite main
+# c3268850: downloads.ts isAdArtefact + AD_HOST_SUFFIX + unit
+# tests): Google serves ad/DoubleClick responses with
+# Content-Disposition: attachment; filename="f.txt" (their 2014
+# anti-Flash RFD mitigation), and the download registry no longer
+# registers those artefacts, so DevTools download rows stay clean.
+# This entry also documents the skipped Pin 150 comment: pin 150
+# (dist 8223b1ff, green run 41483811807) shipped the 3.0.1
+# Diamond wave: the jar-backed cookie jar (#604), control routes
+# (#603), SW orchestration (#601/#602) and the transport deferred
+# reset (228518a). sw.js 008cd5e5219e27d0 -> 0be67794d1c15e81
+# (817519 bytes); bootstrap.js 1c323643d670ba22 -> 097df230849e3d50
+# (49787 bytes). Pinned per operator instruction from a run whose
+# browser job is red with the diagnosis on record (six wedge
+# strikes 2026-11-03, docs/ci-torture-wedge.md; rust/wasm/app/
+# compat green in all six, and the app job that builds this bundle
+# green in all six; the pin 135 precedent). Cargo-side pin stays
+# d4ca407: no crates changed.
+ARG ZEOLITE_COMMIT=9866c5e83fb296d4b90bcf9964c93b95f7bf1077
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1952,7 +1971,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=008cd5e5219e27d0 ZEOLITE_BOOTSTRAP_SHA=1c323643d670ba22 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0be67794d1c15e81 ZEOLITE_BOOTSTRAP_SHA=097df230849e3d50 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
