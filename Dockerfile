@@ -1934,7 +1934,26 @@ FROM debian:bookworm-slim AS zl-builder
 # 66/66 green, torture 19/20; docs/ci-torture-wedge.md; the pin
 # 135/151/152 precedent). Cargo-side pin stays d4ca407 (app TS
 # only, no crates changed).
-ARG ZEOLITE_COMMIT=20acf522b136d39e94649725af7e5977750f4a72
+# Pin 154 (2026-11-03): dist 305e6859ae1be00e (build 41706739889)
+# ships the #611 sign-in fix: main-surface tab navigations now
+# stamp sec-fetch-dest: document on the upstream request.
+# accounts.google.com/ServiceLogin answers a dest: iframe request
+# with a hard 401 (Google's own malformed-request page), and the
+# sign-in pane is an iframe on the engine origin, so the pane died
+# in-frame. The SW marks the client context mainSurface when the
+# client URL is a minted query handle or a NAVH route shape (serve
+# seam, redirect hop, and rehydrate after an SW restart), and
+# secFetchHeaders gains a mainSurface arm (mode: navigate, dest:
+# document, upgrade-insecure-requests, no sec-fetch-user). Panes
+# without a minted handle still fail closed to iframe. sw.js
+# 73e4dccabc9335e8 -> 657d9ced9f7af2ac (820125 bytes); bootstrap.js
+# 0c81efb9ba343dff unchanged (SW-side change only). CI on 9c278c61:
+# rust/wasm/app/compat green; browser red on the documented
+# non-engine img#uni direct-oracle flake (main e2e 66/66 green,
+# torture 19/20; docs/ci-torture-wedge.md; the pin 135/151/152/153
+# precedent). Cargo-side pin stays d4ca407 (app TS only, no crates
+# changed).
+ARG ZEOLITE_COMMIT=305e6859ae1be00e50ab14d4d17b1efebb89f1df
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1993,7 +2012,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=73e4dccabc9335e8 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=657d9ced9f7af2ac ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
