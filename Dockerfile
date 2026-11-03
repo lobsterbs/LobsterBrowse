@@ -1934,7 +1934,33 @@ FROM debian:bookworm-slim AS zl-builder
 # sw.js 0be67794d1c15e81 -> 73e4dccabc9335e8 (819769 bytes);
 # bootstrap.js 097df230849e3d50 -> ba7e8e010a356496 (49682 bytes).
 # Cargo-side pin stays d4ca407 (app TS only, no crates changed).
-ARG ZEOLITE_COMMIT=4c58a5736ed6d329fc1ed12b39384220330acb37
+
+# Pin 153 (2026-11-03): dist 20acf52 (build 41685158963) ships
+# the #558 partition-strand fix: a target=_top activation in an
+# embedded realm no longer commits the top document on the engine
+# origin. Chromium third-party storage partitioning gives the
+# first-party content-origin worker its own instance with a
+# different route key and no transport config, so the minted
+# query handle failed its MAC by construction and the host SPA
+# shell rendered (the Google sign-in strand). navguard now hands
+# the destination to the embedder (lb:navigateTab rides the
+# embedsync popup queue; the SPA navigates the active tab through
+# the content-worker query-handle mint), so the destination loads
+# in the embedded realm where decode and relay transport both
+# work. Standalone realms keep the native drive; a fail-closed
+# terminal treats a queued top activation like a queued popup
+# (not routed, not driven). bootstrap.js ba7e8e010a356496 ->
+# 0c81efb9ba343dff (49682 -> 49786 bytes, budget 49800: the first
+# two shapes of the handoff measured 50341 and 49907 and were
+# golfed - the ack round trip was dropped because its fallback
+# only ever re-entered the broken native drive). sw.js
+# 73e4dccabc9335e8 unchanged (bootstrap-side change only). CI on
+# 3d4e4234: rust/wasm/app/compat green; browser red on the
+# documented non-engine img#uni direct-oracle flake (main e2e
+# 66/66 green, torture 19/20; docs/ci-torture-wedge.md; the pin
+# 135/151/152 precedent). Cargo-side pin stays d4ca407 (app TS
+# only, no crates changed).
+ARG ZEOLITE_COMMIT=20acf522b136d39e94649725af7e5977750f4a72
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -1993,7 +2019,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=73e4dccabc9335e8 ZEOLITE_BOOTSTRAP_SHA=ba7e8e010a356496 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=73e4dccabc9335e8 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
