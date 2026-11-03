@@ -1674,12 +1674,13 @@ body .lb-ext-panel {
 .lb-ai-file-x { border: none; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
 
 /* Chatbar: the plus button rides the search bar's leading slot. */
-.lb-ai-bar { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) 0; max-width: 760px; width: 100%; margin: 0 auto; flex: none; }
+.lb-ai-bar { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; flex: none; }
 .lb-ai-bar m3e-search-bar { flex: 1; min-width: 0; }
 
 /* Under-bar row: model picker + server quota, centered under the
-   chatbar. */
-.lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space50, 4px); flex: none; }
+   chatbar. The 8px gap above the row (to the chatbar) matches the
+   8px below it (to the screen edge). */
+.lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space100, 8px); flex: none; }
 .lb-ai-under .lb-ai-quota { margin-left: 0; }
 /* Frosted glass under Enhanced UI: same treatment as the Home bar
    (tint + blur + ring + gloss), scoped to the setting's body class. */
@@ -1702,6 +1703,8 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 .lb-ai-tool-chev { width: 14px; height: 14px; flex: none; transition: transform 150ms var(--md-sys-motion-easing-standard, ease-in-out); }
 .lb-ai-tool-chev-open { transform: rotate(90deg); }
 .lb-ai-tool-label { user-select: none; }
+/* Settled step duration: tabular seconds beside the done label. */
+.lb-ai-tool-dur { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
 .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
 /* Shimmer: a slow gradient sweep clipped to the text; every active
    step (searching, thinking, responding) uses it. */
@@ -1821,8 +1824,9 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
    the accordion still work as instant state changes. */
 @media (prefers-reduced-motion: reduce) {
   .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello { animation: none; }
+  .lb-ai-hello.lb-out { animation: none; display: none; }
   .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
-  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src, .lb-ai-send { transition: none; }
+  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src { transition: none; }
 }
 
 
@@ -1839,34 +1843,25 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   animation: lb-ai-msg-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
 }
 
-/* Segmented send button (the 21st.dev segmented-button-group pattern
-   hand-ported onto M3E tokens): one pill split into two segments, a
-   filled primary icon segment plus an outlined text segment with the
-   divider from the source pattern. Own rounded pill beside the
-   chatbar: fusing with a negative margin sat square edges against
-   the search bar's curve and read as broken spacing. */
+/* First send: the heading sinks and fades out (accelerate); React
+   unmounts it on animationend. Reduced motion hides it instantly. */
+@keyframes lb-ai-hello-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(4px); }
+}
+.lb-ai-hello.lb-out {
+  animation: lb-ai-hello-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+  pointer-events: none;
+}
+
+/* Send/Stop: one m3e-button (tonal, icon slot + label) beside the
+   chatbar, pill-rounded to match the search bar's curve. While the
+   assistant works, the label and icon swap to Stop and pressing it
+   aborts the stream; m3e-button owns its own press and ripple. */
 .lb-ai-send {
-  display: inline-flex;
-  align-self: stretch;
-  padding: 0;
-  border: none;
-  border-radius: var(--md-sys-shape-corner-full, 9999px);
-  overflow: hidden;
-  font: inherit;
-  cursor: pointer;
   flex: none;
+  --m3e-button-shape-round: var(--md-sys-shape-corner-full, 9999px);
 }
-.lb-ai-send-seg { display: inline-flex; align-items: center; padding: 0 var(--md-sys-measurement-space150, 12px); }
-.lb-ai-send-a { background: var(--md-sys-color-primary, #7f9cf5); color: var(--md-sys-color-on-primary, #101418); }
-.lb-ai-send-b {
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 92%, transparent);
-  color: var(--md-sys-color-on-surface, #e4e2e6);
-  border-left: 1px solid var(--md-sys-color-outline-variant, #48484e);
-  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
-  font-weight: 500;
-}
-.lb-ai-send:hover { filter: brightness(1.08); }
-.lb-ai-send:active { filter: brightness(0.92); }
 
 /* ---- Ad-blocking card (overflow menu): same floating placement and
        in/out animations as the downloads card. ---- */

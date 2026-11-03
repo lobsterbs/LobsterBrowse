@@ -7,6 +7,7 @@ import {
   saveChat,
   saveModelId,
   streamChat,
+  stripStreamTokens,
   WEB_SEARCH_TOOL,
   RateLimitError,
   type AiModel,
@@ -28,7 +29,7 @@ import { ToolRow } from "../ai/ToolRow";
    encrypted in IndexedDB with a
    non-exportable key. Errors surface through the M3E snackbar; AI
    failures carry a Try again action that replays the failed turn.
-   Provider marks (OpenAI, Qwen) live on the model entries in
+   Provider marks (OpenAI, Meta) live on the model entries in
    aiStore.ts. */
 
 const QUOTA_MAX = 50;
@@ -115,7 +116,7 @@ function ModelPicker({ value, onChange }: { value: AiModel; onChange: (m: AiMode
         aria-label="Select a model"
         aria-hidden={!open}
       >
-        {AI_MODELS.map((m) => (
+        {AI_MODELS.filter((m) => m.picker !== false).map((m) => (
           <button
             key={m.id}
             type="button"
@@ -149,6 +150,10 @@ export default function AiPage() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
+  /* Per-turn step durations (ms), shown beside settled tool rows. */
+  const [dur, setDur] = useState<{ think?: number; search?: number }>({});
+  /* The empty-state heading stays mounted while it fades out. */
+  const [helloGone, setHelloGone] = useState(false);
   /* Remaining server quota; null until the first send answers. */
   const [quota, setQuota] = useState<number | null>(null);
   const [attached, setAttached] = useState<Attached[]>([]);
@@ -157,6 +162,8 @@ export default function AiPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /* Abort chain for the in-flight turn (the Stop button). */
+  const abortRef = useRef<AbortController | null>(null);
 
   /* The selected model persists in localStorage; the picker changes
   it and the next send uses it. */
@@ -223,6 +230,28 @@ export default function AiPage() {
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
     setPhase("streaming");
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setDur({});
+    /* Step timers: a span opens when a step starts and closes when
+       it settles; the accumulated ms render beside the settled
+       label. */
+    let thinkStart = 0;
+    let thinkMs = 0;
+    let searchStart = 0;
+    let searchMs = 0;
+    const endThink = () => {
+      if (!thinkStart) return;
+      thinkMs += Date.now() - thinkStart;
+      thinkStart = 0;
+      setDur((d) => ({ ...d, think: thinkMs }));
+    };
+    const endSearch = () => {
+      if (!searchStart) return;
+      searchMs += Date.now() - searchStart;
+      searchStart = 0;
+      setDur((d) => ({ ...d, search: searchMs }));
+    };
 
     /* Image parts are vision-model-only on Cloudflare: an image
        turn re-routes to the vision model for that turn (noted on
@@ -257,6 +286,7 @@ export default function AiPage() {
       { role: "assistant", text: "", model: turnModel.id },
     ]);
     setPhase(thinking ? "thinking" : "streaming");
+    if (thinking) thinkStart = Date.now();
     let acc = "";
     let thinkAcc = "";
     let sources: AiSource[] | undefined;
@@ -281,13 +311,16 @@ export default function AiPage() {
           messages: apiMessages,
           thinking,
           tools: [WEB_SEARCH_TOOL],
+          signal: ac.signal,
         })) {
           if (ev.type === "quota") {
             setQuota(ev.remaining);
           } else if (ev.type === "thinking") {
+            if (!thinkStart) thinkStart = Date.now();
             thinkAcc += ev.text;
             setPhase("thinking");
           } else if (ev.type === "text") {
+            endThink();
             acc += ev.text;
             setPhase("streaming");
           } else if (ev.type === "tool_calls") {
@@ -308,6 +341,7 @@ export default function AiPage() {
           } catch {
             /* malformed arguments: fall back to the turn text */
           }
+          if (!searchStart) searchStart = Date.now();
           setPhase("searching");
           try {
             const found = await aiSearch(q);
@@ -325,23 +359,35 @@ export default function AiPage() {
               content: "web search failed",
             });
           }
+          endSearch();
           flush();
         }
       }
       if (!acc && !thinkAcc) throw new Error("The model returned an empty response.");
       ok = true;
     } catch (e) {
-      /* Roll the failed turn back so the notification's Try again
-         action replays it cleanly. */
-      setMessages((m) => m.slice(0, before));
-      const rl = e instanceof RateLimitError;
-      toast(
-        rl ? msg(e) : "AI error: " + msg(e),
-        rl ? undefined : () => {
-          void send({ text, files });
-        }
-      );
+      if (ac.signal.aborted) {
+        /* Stop pressed: keep whatever already streamed and persist
+           it as the turn's answer; nothing streamed drops the empty
+           turn. No rollback, no toast, no summary. */
+        if (acc || thinkAcc) ok = true;
+        else setMessages((m) => m.slice(0, before));
+      } else {
+        /* Roll the failed turn back so the notification's Try again
+           action replays it cleanly. */
+        setMessages((m) => m.slice(0, before));
+        const rl = e instanceof RateLimitError;
+        toast(
+          rl ? msg(e) : "AI error: " + msg(e),
+          rl ? undefined : () => {
+            void send({ text, files });
+          }
+        );
+      }
     } finally {
+      endThink();
+      endSearch();
+      abortRef.current = null;
       setBusy(false);
       setPhase("idle");
       /* Persist the turn; a storage failure never loses it from view. */
@@ -352,8 +398,8 @@ export default function AiPage() {
             userMsg,
             {
               role: "assistant" as const,
-              text: acc,
-              thinking: thinkAcc || undefined,
+              text: stripStreamTokens(acc),
+              thinking: thinkAcc ? stripStreamTokens(thinkAcc) : undefined,
               model: turnModel.id,
               sources,
             },
@@ -377,8 +423,15 @@ export default function AiPage() {
   return (
     <div className="lb-ai">
       <div className="lb-ai-msgs" ref={scrollRef}>
-        {messages.length === 0 && !busy && (
-          <div className="lb-ai-hello">How can I help you today?</div>
+        {!helloGone && (
+          <div
+            className={"lb-ai-hello" + (messages.length > 0 || busy ? " lb-out" : "")}
+            onAnimationEnd={(e) => {
+              if (e.animationName === "lb-ai-hello-out") setHelloGone(true);
+            }}
+          >
+            How can I help you today?
+          </div>
         )}
         {messages.map((m, i) => {
           const last = i === messages.length - 1;
@@ -393,22 +446,37 @@ export default function AiPage() {
                   ))}
                 </div>
               )}
-              {m.role === "assistant" && m.sources && m.sources.length > 0 && (
-                <ToolRow label="Searching the web" doneLabel="Searched the web" active={last && busy && phase === "searching"}>
-                  <div className="lb-ai-sources">
-                    {m.sources.map((s, j) => (
-                      <a key={j} className="lb-ai-src" href={s.url} target="_blank" rel="noreferrer">
-                        {s.title}
-                      </a>
-                    ))}
-                  </div>
-                </ToolRow>
-              )}
-              {m.role === "assistant" && m.thinking && (
-                <ToolRow label="Thinking" doneLabel="Thought" active={last && busy && phase === "thinking"}>
-                  <pre className="lb-ai-think-pre">{m.thinking}</pre>
-                </ToolRow>
-              )}
+              {m.role === "assistant" &&
+                (m.thinking ||
+                  (m.sources && m.sources.length > 0) ||
+                  (last && busy && (phase === "thinking" || phase === "searching"))) && (
+                  <ToolRow
+                    label={phase === "searching" ? "Searching" : "Thinking"}
+                    doneLabel={m.thinking ? "Thought" : "Worked"}
+                    active={last && busy && phase !== "streaming" && phase !== "idle"}
+                    duration={last && m.thinking ? dur.think : undefined}
+                  >
+                    {m.thinking && (
+                      <pre className="lb-ai-think-pre">{stripStreamTokens(m.thinking)}</pre>
+                    )}
+                    {m.sources && m.sources.length > 0 && (
+                      <ToolRow
+                        label="Searching the web"
+                        doneLabel="Searched the web"
+                        active={last && busy && phase === "searching"}
+                        duration={last ? dur.search : undefined}
+                      >
+                        <div className="lb-ai-sources">
+                          {m.sources.map((s, j) => (
+                            <a key={j} className="lb-ai-src" href={s.url} target="_blank" rel="noreferrer">
+                              {s.title}
+                            </a>
+                          ))}
+                        </div>
+                      </ToolRow>
+                    )}
+                  </ToolRow>
+                )}
               {m.role === "user" && m.text && <div className="lb-ai-bubble">{m.text}</div>}
               {m.role === "assistant" && m.text && (
                 <div className="lb-ai-bubble lb-ai-answer">
@@ -418,22 +486,13 @@ export default function AiPage() {
               {m.role === "assistant" && last && busy && phase === "streaming" && !m.text && !m.thinking && (
                 <div className="lb-ai-tool">
                   <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
-                    Responding
+                    Working
                   </span>
                 </div>
               )}
             </div>
           );
         })}
-        {busy && phase === "searching" && (
-          <div className="lb-ai-msg lb-ai-assistant">
-            <div className="lb-ai-tool">
-              <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
-                Searching the web
-              </span>
-            </div>
-          </div>
-        )}
       </div>
 
       {attached.length > 0 && (
@@ -483,12 +542,15 @@ export default function AiPage() {
             }}
           />
         </m3e-search-bar>
-        <button type="button" className="lb-ai-send" aria-label="Send" onClick={() => void send()}>
-          <span className="lb-ai-send-seg lb-ai-send-a">
-            <m3e-icon name="arrow_forward" aria-hidden={true} />
-          </span>
-          <span className="lb-ai-send-seg lb-ai-send-b">Send</span>
-        </button>
+        <m3e-button
+          variant="tonal"
+          {...{ class: "lb-ai-send" }}
+          aria-label={busy ? "Stop" : "Send"}
+          onClick={() => (busy ? abortRef.current?.abort() : void send())}
+        >
+          <m3e-icon slot="icon" name={busy ? "stop" : "send"} aria-hidden={true} />
+          {busy ? "Stop" : "Send"}
+        </m3e-button>
       </div>
 
       <div className="lb-ai-under">
