@@ -19,7 +19,8 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentConfig, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
+import { parseNavTab } from "./frameNav";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
@@ -411,6 +412,39 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [tabs, activeId, newTab, closeTab, reopenTab]);
+
+  /* Zeolite #558: a target=_top activation inside a proxied frame
+     must not commit the top document on the content origin (the
+     first-party worker partition there cannot decode the embedded
+     realm's keyed route and serves the SPA shell, losing the
+     session). The engine hands the destination over with a bounded
+     ack; ack first so a silent host keeps its native fallback, then
+     navigate the active tab - the sender is a frame of this window,
+     and a click-driven activation can only come from the visible
+     tab. */
+  useEffect(() => {
+    const onFrameNav = (ev: MessageEvent) => {
+      const d = ev.data as { lb?: string; data?: unknown } | null;
+      if (!d || d.lb !== "navigateTab") return;
+      const co = zlContentOrigin();
+      if (ev.origin !== location.origin && !(co && ev.origin === co)) return;
+      const req = parseNavTab(d.data);
+      if (!req) return;
+      if (req.ack && ev.source) {
+        try {
+          (ev.source as Window).postMessage(
+            { lb: "navigateTabAck", nonce: req.ack },
+            ev.origin,
+          );
+        } catch {
+          /* the frame is gone; the engine's ack bound falls back */
+        }
+      }
+      navigateTo(req.href);
+    };
+    window.addEventListener("message", onFrameNav);
+    return () => window.removeEventListener("message", onFrameNav);
+  }, [navigateTo]);
 
   /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
