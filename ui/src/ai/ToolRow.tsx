@@ -10,10 +10,13 @@ interface ToolRowProps {
   label: string;
   doneLabel: string;
   active: boolean;
+  /* Settled step duration in ms; rendered as tabular seconds
+     beside the done label when present. */
+  duration?: number;
   children?: ReactNode;
 }
 
-export function ToolRow({ label, doneLabel, active, children }: ToolRowProps) {
+export function ToolRow({ label, doneLabel, active, duration, children }: ToolRowProps) {
   const hasBody = children != null;
   const [open, setOpen] = useState(active);
   /* Track manual toggles: an untouched row auto-expands while the
@@ -55,6 +58,9 @@ export function ToolRow({ label, doneLabel, active, children }: ToolRowProps) {
         >
           {active ? label : doneLabel}
         </span>
+        {!active && duration != null && duration > 0 && (
+          <span className="lb-ai-tool-dur">{(duration / 1000).toFixed(1)}s</span>
+        )}
       </button>
       {hasBody && (
         <div className={"lb-ai-tool-body-wrap" + (open ? " lb-open" : "")}>
