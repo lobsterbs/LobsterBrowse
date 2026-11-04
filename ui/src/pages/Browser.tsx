@@ -48,6 +48,7 @@ import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
 import XpiPrompt from "../browser/XpiPrompt";
 import ExtensionsPanel, { type ExtDetail, type ExtInfo } from "../browser/ExtensionsPanel";
+import { extLaunchPlan, openExtPageWindow } from "../browser/extLaunch";
 import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
@@ -1177,76 +1178,39 @@ export default function BrowserView(props: Props) {
   }, [extList]);
   /* Last registration/reply failure, shown verbatim in the panel. */
   const [extError, setExtError] = useState<string | null>(null);
-  /* Extension detail card: the manifest surface from zl:extInfo. */
-  const [extDetail, setExtDetail] = useState<ExtDetail | null>(null);
-  const [extDetailError, setExtDetailError] = useState<string | null>(null);
-  /* Per-extension incognito grants are gone: extensions are always
-     allowed in incognito tabs (the engine has no incognito gating
-     either way; the removed toggle only recorded UI-side intent). */
-  const openExtDetail = async (id: string) => {
-    setExtDetailError(null);
-    setExtDetail(null);
+  /* #230: pressing an extension in the toolbar card launches the
+     extension UI directly (its options page). The configuration UI
+     that used to render inside the card moved to Settings >
+     Extensions (browser/ExtManage.tsx). The launch decision and the
+     token-mint + placeholder-tab flow live in browser/extLaunch.ts. */
+  const [extLaunchError, setExtLaunchError] = useState<string | null>(null);
+  const launchExt = async (id: string) => {
+    setExtLaunchError(null);
     const rep = await zlSend({ type: "zl:extInfo", extId: id }, 6000);
-    if (rep && rep.ok && rep.extension) {
-      setExtDetail(rep.extension as ExtDetail);
-    } else {
-      setExtDetailError(
+    if (!rep || !rep.ok || !rep.extension) {
+      setExtLaunchError(
         rep && rep.error ? String(rep.error) : "the worker did not answer zl:extInfo",
       );
-    }
-  };
-  const toggleExtEnabled = async (id: string, on: boolean) => {
-    const rep = await zlSend({ type: "zl:extEnable", extId: id, enabled: on }, 6000);
-    if (!rep || !rep.ok) {
-      setExtDetailError(
-        rep && rep.error ? String(rep.error) : "the worker did not answer zl:extEnable",
-      );
       return;
     }
-    /* Mirror the new state locally and refresh list + detail. */
-    loadExtensions();
-    setExtDetail((d) => (d && d.id === id ? { ...d, enabled: on } : d));
-  };
-  /* Extension pages are gated: an options page that is not a
-     web-accessible resource is served only behind a short-lived page
-     token. Ask the worker to mint one via zl:openExtPage and open the
-     /zl-ext/ URL it answers; fail honestly in the panel when the
-     worker refuses or answers no URL. */
-  const openExtOptions = async (d: ExtDetail) => {
-    if (!d.optionsPath) return;
-    /* Open the placeholder synchronously INSIDE the user gesture:
-       the token mint is async, and Chrome drops window.open calls
-       that happen after transient activation expires (a cold service
-       worker can take seconds to answer). The placeholder keeps the
-       gesture alive; its location is set once the mint replies. */
-    const placeholder = window.open("", "_blank");
-    if (!placeholder) {
-      setExtDetailError("the browser blocked the new tab");
+    const plan = extLaunchPlan(rep.extension as ExtDetail);
+    if (!plan.launch) {
+      setExtLaunchError(plan.reason);
       return;
     }
-    const rep = await zlSend({ type: "zl:openExtPage", extId: d.id, which: "options" }, 6000);
-    if (!rep || !rep.ok) {
-      placeholder.close();
-      setExtDetailError(
-        rep && rep.error ? String(rep.error) : "the worker did not answer zl:openExtPage",
-      );
+    const err = await openExtPageWindow(zlSend, id, plan.which);
+    if (err) {
+      setExtLaunchError(err);
       return;
     }
-    const p = typeof rep.url === "string" ? rep.url : "";
-    if (!p.startsWith("/zl-ext/")) {
-      placeholder.close();
-      setExtDetailError("the worker returned no options page URL");
-      return;
-    }
-    pushLog("info", "ext options open " + p);
-    placeholder.location.assign(p);
+    pushLog("info", "ext launch " + id);
   };
   /* Uninstall (#76): the manager owns removal (storage, caches,
      menus, alarms, background). The panel refreshes from the reply. */
   const uninstallExt = async (id: string) => {
     const rep = await zlSend({ type: "zl:extUninstall", extId: id }, 8000);
     if (!rep || !rep.ok) {
-      setExtDetailError(
+      setExtLaunchError(
         rep && rep.error ? String(rep.error) : "the worker did not answer zl:extUninstall",
       );
       return;
@@ -1254,13 +1218,11 @@ export default function BrowserView(props: Props) {
     if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
       M3eSnackbar.open("Extension removed", { duration: 3000 });
     }
-    setExtDetail(null);
     loadExtensions();
   };
   const loadExtensions = async () => {
     setExtError(null);
-    setExtDetail(null);
-    setExtDetailError(null);
+    setExtLaunchError(null);
     if (!("serviceWorker" in navigator)) {
       setExtBusy(false);
       setExtList(null);
@@ -3019,14 +2981,10 @@ export default function BrowserView(props: Props) {
           list={extList}
           busy={extBusy}
           error={extError}
-          detail={extDetail}
-          detailError={extDetailError}
+          launchError={extLaunchError}
           onRefresh={() => loadExtensions()}
           onClose={() => setExtPanelOpen(false)}
-          onOpenDetail={openExtDetail}
-          onCloseDetail={() => setExtDetail(null)}
-          onToggleEnabled={toggleExtEnabled}
-          onOpenOptions={openExtOptions}
+          onLaunch={launchExt}
           onDelete={uninstallExt}
           onFindAddons={() => props.onOpenSettings()}
         />

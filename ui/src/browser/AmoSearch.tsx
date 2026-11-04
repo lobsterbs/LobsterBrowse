@@ -189,6 +189,8 @@ export default function AmoSearch() {
       }
       const warnings = extWarnings(rep);
       snackbar("Installed " + h.name + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), 5000);
+      /* #230: the Settings manage list re-lists when an install lands. */
+      window.dispatchEvent(new CustomEvent("lb-ext-changed"));
       setSdetail(null);
     } catch (e) {
       const msg = "Install failed: " + ((e as Error)?.message ?? "unknown error");
