@@ -11,6 +11,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  # The applied patch may touch workflow files (a ci.yml step rides
+  # the wave too); pushing those needs workflows: write.
+  workflows: write
 jobs:
   apply:
     runs-on: ubuntu-latest
