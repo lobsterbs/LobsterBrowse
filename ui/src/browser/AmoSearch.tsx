@@ -186,6 +186,8 @@ export default function AmoSearch() {
         "Installed " + h.name +
           (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
       );
+      /* #230: the Settings manage list re-lists when an install lands. */
+      window.dispatchEvent(new CustomEvent("lb-ext-changed"));
       setSdetail(null);
     } catch (e) {
       setSerr("Install failed: " + ((e as Error)?.message ?? "unknown error"));

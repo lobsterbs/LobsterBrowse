@@ -67,7 +67,9 @@
   opacity: 0.5;
 }
 
-/* Installed list entries are clickable: they open the detail card. */
+/* Installed list entries are clickable. #230: in the toolbar card they
+   launch the extension UI directly; in Settings they open the detail
+   card. */
 .lb-ext-item { cursor: pointer; }
 .lb-ext-item.sel { background: color-mix(in srgb, var(--md-sys-color-primary, #cfbfe0) 22%, transparent); }
 .lb-ext-detail {
@@ -112,6 +114,24 @@
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   color: var(--md-sys-color-error, #f28b82);
   word-break: break-word;
+}
+
+/* #230: the installed-extensions management block inside Settings
+   (browser/ExtManage.tsx). The toolbar card is fixed-positioned; this
+   one flows inside the panel body, reusing the row/detail styles. */
+.lb-ext-manage {
+  padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space100, 8px);
+}
+.lb-ext-mhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--md-sys-measurement-space50, 4px) 0;
+}
+.lb-ext-foot {
+  display: flex;
+  justify-content: center;
+  padding: var(--md-sys-measurement-space50, 4px);
 }
 
 /* AMO add-on search (public AMO API v5): query row + result hits.

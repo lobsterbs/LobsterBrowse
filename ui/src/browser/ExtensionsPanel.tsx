@@ -1,17 +1,27 @@
-/* Extensions toolbar panel: installed add-ons list + detail view.
-   Search-and-install over the AMO API lives in Settings
-   (browser/AmoSearch.tsx); the engine control-plane queries and
-   state stay in pages/Browser.tsx.
+/* Extensions toolbar card: the installed add-ons list as a launcher.
+   #230: pressing an extension launches its UI directly (its options
+   page); the configuration UI that used to render inside this card
+   moved to Settings > Extensions (browser/ExtManage.tsx, mounted by
+   pages/Settings.tsx). Search-and-install over the AMO API also lives
+   in Settings (browser/AmoSearch.tsx); the engine control-plane
+   queries and state stay in pages/Browser.tsx.
 
-   #76: the panel animates in and out (Browser.tsx keeps it mounted
+   #76: the card animates in and out (Browser.tsx keeps it mounted
    one animation longer and flips the exit class), and uninstall is
-   available from every surface: a trash affordance per row plus a
-   Delete in the detail view. Both ask first in a m3e-dialog (#99). */
+   available from every surface: a trash affordance per row here plus
+   the Delete button in Settings, both asking first in a m3e-dialog
+   (#99). */
 
 import { useEffect, useRef, useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
+
+/* Engine-reported errors that are known honest gaps, not failures this
+   card should surface: background.page is an unsupported manifest
+   field (Zeolite tracks support for it). */
+const shownError = (e: string | null): string | null =>
+  e && /background\.page is not supported/.test(e) ? null : e;
 
 export type ExtInfo = {
   id: string;
@@ -41,25 +51,21 @@ export default function ExtensionsPanel(props: {
   list: ExtInfo[] | null;
   busy: boolean;
   error: string | null;
-  detail: ExtDetail | null;
-  detailError: string | null;
-  incognito: Record<string, boolean>;
+  /* #230: honest failure text from the last direct-launch attempt. */
+  launchError: string | null;
   onRefresh: () => void;
   onClose: () => void;
-  onOpenDetail: (id: string) => void;
-  onCloseDetail: () => void;
-  onToggleEnabled: (id: string, on: boolean) => void;
-  onToggleIncognito: (id: string, on: boolean) => void;
-  onOpenOptions: (d: ExtDetail) => void;
+  /* #230: pressing the row launches the extension UI directly. */
+  onLaunch: (id: string) => void;
   onDelete: (id: string) => void;
-  /* #214: the empty state's concrete next step. The AMO search lives
-     in Settings, so Browser wires this to opening Settings. */
+  /* #214: the empty state's concrete next step, and the card footer:
+     both open Settings, where add-ons are installed and configured. */
   onFindAddons?: () => void;
 }) {
   /* Removal is irreversible (the engine deletes the extension's stored
-     data and caches), so both the row trash icon and the detail button
-     open a Cancel/Remove m3e-dialog (the Settings pattern). Escape,
-     the scrim and Cancel all close with no removal. */
+     data and caches), so the row trash icon opens a Cancel/Remove
+     m3e-dialog (the Settings pattern). Escape, the scrim and Cancel
+     all close with no removal. */
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const pendingRef = useRef(pendingDelete);
   pendingRef.current = pendingDelete;
@@ -144,18 +150,18 @@ export default function ExtensionsPanel(props: {
           {props.list.map((e) => (
             <div
               key={e.id}
-              className={"lb-ext-item" + (props.detail && props.detail.id === e.id ? " sel" : "")}
-              title={e.lastError ?? ""}
+              className="lb-ext-item"
+              title={shownError(e.lastError) ?? ""}
               role="button"
               tabIndex={0}
-              onClick={() => props.onOpenDetail(e.id)}
+              onClick={() => props.onLaunch(e.id)}
               onKeyDown={(ev) => {
                 /* #118: keys pressed on a nested control (Delete) belong
                    to that control alone; Space must not scroll either. */
                 if (ev.target !== ev.currentTarget) return;
                 if (ev.key === "Enter" || ev.key === " ") {
                   ev.preventDefault();
-                  props.onOpenDetail(e.id);
+                  props.onLaunch(e.id);
                 }
               }}
             >
@@ -182,55 +188,12 @@ export default function ExtensionsPanel(props: {
           ))}
         </div>
       )}
-      {props.detailError && <p className="lb-ext-err">{props.detailError}</p>}
-      {props.detail && (
-        <div className="lb-ext-detail">
-          <div className="lb-ext-dhead">
-            <span className="lb-ext-dtitle">
-              <div className="lb-ext-ava" aria-hidden={true}>
-                {props.detail.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
-              </div>
-              <span className="lb-ext-dname">
-                {props.detail.name} <span className="lb-ext-ver">{props.detail.version}</span>
-              </span>
-            </span>
-            <m3e-icon-button aria-label="Close extension details" onClick={props.onCloseDetail}>
-              <m3e-icon name="close" aria-hidden={true} />
-            </m3e-icon-button>
-          </div>
-          {props.detail.description && <p className="lb-ext-desc">{props.detail.description}</p>}
-          <div className="lb-ext-trow">
-            <span className="lb-ext-tlabel">Enabled</span>
-            <m3e-switch
-              checked={props.detail.enabled ? "" : undefined}
-              icons="selected"
-              aria-label="Extension enabled"
-              onClick={() => props.onToggleEnabled(props.detail!.id, !props.detail!.enabled)}
-            />
-          </div>
-          <div className="lb-ext-trow">
-            <span className="lb-ext-tlabel">Allow in incognito tabs</span>
-            <m3e-checkbox
-              checked={props.incognito[props.detail.id] ? "" : undefined}
-              aria-label="Allow extension in incognito tabs"
-              onClick={() => props.onToggleIncognito(props.detail!.id, !props.incognito[props.detail!.id])}
-            />
-          </div>
-          <div className="lb-ext-actions">
-            {props.detail.optionsPath && (
-              <m3e-button onClick={() => props.onOpenOptions(props.detail!)} {...{ class: "lb-ext-optbtn" }}>
-                <m3e-icon name="settings" aria-hidden={true} /> Open options page
-              </m3e-button>
-            )}
-            <m3e-button
-              onClick={() => setPendingDelete({ id: props.detail!.id, name: props.detail!.name })}
-              {...{ class: "lb-ext-delbtn" }}
-            >
-              <m3e-icon name="delete" aria-hidden={true} />
-              Delete extension
-            </m3e-button>
-          </div>
-          {props.detail.lastError && <p className="lb-ext-err">{props.detail.lastError}</p>}
+      {props.launchError && <p className="lb-ext-err">{props.launchError}</p>}
+      {props.onFindAddons && (
+        <div className="lb-ext-foot">
+          <m3e-button onClick={props.onFindAddons}>
+            <m3e-icon name="settings" aria-hidden={true} /> Manage in Settings
+          </m3e-button>
         </div>
       )}
     </div>
