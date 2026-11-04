@@ -1995,7 +1995,34 @@ FROM debian:bookworm-slim AS zl-builder
 # class, docs/ci-torture-wedge.md; the pin 135/151/152/155
 # precedent). Cargo-side pin stays d4ca407 (wasm + app TS only,
 # no crates changed).
-ARG ZEOLITE_COMMIT=41198e8ad79e6838b73a84cebe21c406743e5d40
+# Pin 157 (2026-11-04): dist 385007fe (build 41876450170) ships
+# the #636 NVIDIA GeForce NOW pricing-matrix fix: the gfn-product
+# -matrix chunks read window.top through minified variable
+# indirection ((null===(t=window.top)||void 0===t?void 0:
+# t.location.search)||window.location.search) and a
+# window.top.document.documentElement.lang walk at matrix mount;
+# through the engine window.top is the cross-origin app shell, so
+# the read threw SecurityError and the React error boundary
+# rendered NVIDIA's "Unexpected Error" instead of the pricing
+# tiers (the paywall API fetch never fired). antiframe.rs folds
+# window.top to window in two ordered rules: window.top.location
+# -> top.location first (keeps the existing write-sink/read-fold
+# pipeline), then the bare window.top -> window identity fold
+# for indirect reads and document walks; window.parent is
+# deliberately untouched (nested same-origin proxied frames
+# legitimately use it). sw.js 027b379fce9eb979 -> 67d06ae53876b4ec
+# (820730 bytes); bootstrap.js 0c81efb9ba343dff unchanged;
+# rewriter_wasm_bg.wasm carries the fix (sha256-16
+# 85a23042a2968e1f; wasm-only change with no alarm pin, so the
+# served wasm must be hash-checked post-deploy; deploy with a
+# cleared build cache). CI on 3fe8999: rust/wasm/app/compat
+# green; browser red on the documented #514/#545 torture wedge
+# cascade (61/66, every failure a 30s goto timeout on the wedged
+# embedder plus the #96 NativeTransit HUNG cascade; the pin
+# 135/151/155/156 precedent, docs/ci-torture-wedge.md).
+# Cargo-side pin stays d4ca407 (rewriter wasm only, no crates
+# changed).
+ARG ZEOLITE_COMMIT=385007fef038ba9b33be4693bde280b2b182e11b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2054,7 +2081,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=027b379fce9eb979 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=67d06ae53876b4ec ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
