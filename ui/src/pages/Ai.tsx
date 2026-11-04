@@ -3,21 +3,28 @@ import {
   AI_MODELS,
   aiSearch,
   loadModelId,
+  mergeUsage,
   needsThinking,
+  runSubAgent,
   saveChat,
   saveModelId,
+  SPAWN_AGENT_TOOL,
   streamChat,
   stripStreamTokens,
+  SUB_AGENT_MODELS,
   WEB_SEARCH_TOOL,
   RateLimitError,
   type AiModel,
   type AiMsg,
+  type AiSub,
+  type AiUsage,
   type ChatContent,
   type ChatMsg,
   type AiSource,
   type ToolCall,
 } from "../ai/aiStore";
 import { Markdown } from "../ai/Markdown";
+import { formatElapsed } from "../ai/metrics";
 import { ToolRow } from "../ai/ToolRow";
 
 /* AI mode (beta-only). The Cloudflare Workers AI key lives on the
@@ -34,7 +41,7 @@ import { ToolRow } from "../ai/ToolRow";
 
 const QUOTA_MAX = 50;
 
-type Phase = "idle" | "searching" | "thinking" | "streaming";
+type Phase = "idle" | "searching" | "thinking" | "streaming" | "subagent";
 
 interface Attached {
   name: string;
@@ -66,6 +73,48 @@ function toast(text: string, retry?: () => void): void {
   } else {
     M3eSnackbar.open(text, { duration: 6000 });
   }
+}
+
+/* Typewriter display (the 21st.dev ResponseStream pattern): rAF drains
+   the rendered prefix toward the growing streamed answer. The
+   per-frame chunk scales with the backlog so a long answer never lags
+   behind the stream, and the settled turn jumps to the full text. */
+function useTypewriter(target: string, active: boolean): string {
+  const [shown, setShown] = useState(target);
+  const posRef = useRef(0);
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  useEffect(() => {
+    if (!active) {
+      posRef.current = target.length;
+      setShown(target);
+      return;
+    }
+    let raf = 0;
+    const step = () => {
+      const t = targetRef.current;
+      if (posRef.current < t.length) {
+        const backlog = t.length - posRef.current;
+        posRef.current += Math.max(1, Math.ceil(backlog / 8));
+        setShown(t.slice(0, posRef.current));
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+  return active ? shown : target;
+}
+
+/* The answer bubble rendered through the typewriter layer while the
+   turn streams; the settled turn renders the full text. */
+function Answer({ text, typing }: { text: string; typing: boolean }) {
+  const shown = useTypewriter(text, typing);
+  return (
+    <div className="lb-ai-bubble lb-ai-answer">
+      <Markdown text={shown} />
+    </div>
+  );
 }
 
 /* Model picker: the 21st.dev model-picker pattern (pill trigger +
@@ -156,9 +205,10 @@ export default function AiPage() {
   const [helloGone, setHelloGone] = useState(false);
   /* Remaining server quota; null until the first send answers. */
   const [quota, setQuota] = useState<number | null>(null);
+  /* Sub agent runs this turn: one shim row each, elapsed when done. */
+  const [subs, setSubs] = useState<AiSub[]>([]);
   const [attached, setAttached] = useState<Attached[]>([]);
 
-  const barRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -174,16 +224,6 @@ export default function AiPage() {
     setModel(m);
     saveModelId(m.id);
   };
-
-  /* The search bar's own clear (X) event bypasses React's value
-     tracker; mirror the Home.tsx pattern. */
-  useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-    const onClear = () => setDraft("");
-    bar.addEventListener("clear", onClear);
-    return () => bar.removeEventListener("clear", onClear);
-  }, []);
 
   /* Keep the newest message in view while it streams. */
   useEffect(() => {
@@ -233,6 +273,12 @@ export default function AiPage() {
     const ac = new AbortController();
     abortRef.current = ac;
     setDur({});
+    setSubs([]);
+    let subRuns: AiSub[] = [];
+    /* Turn metrics: total elapsed and token usage (main model plus
+       every sub agent) for the counter line under the answer. */
+    const t0 = Date.now();
+    let usage: AiUsage | undefined;
     /* Step timers: a span opens when a step starts and closes when
        it settles; the accumulated ms render beside the settled
        label. */
@@ -267,7 +313,9 @@ export default function AiPage() {
       "You are the assistant inside LobsterBrowse, a private web proxy browser. Be concise and accurate. " +
       "You can call the web_search tool whenever the question benefits from current web information " +
       "(news, prices, releases, anything recent or uncertain); answer citing the results by number. " +
-      "Skip the tool when the answer needs no web lookup.";
+      "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Nemotron or Gemma) " +
+      "that can search the web itself; its answer returns to you as the tool result. " +
+      "Skip the tools when the answer needs no web lookup.";
     const parts: ChatContent = [{ type: "text", text: withFiles }];
     for (const f of files)
       if (f.kind === "image" && f.dataUrl) parts.push({ type: "image_url", image_url: { url: f.dataUrl } });
@@ -310,7 +358,7 @@ export default function AiPage() {
           model: turnModel.id,
           messages: apiMessages,
           thinking,
-          tools: [WEB_SEARCH_TOOL],
+          tools: [WEB_SEARCH_TOOL, SPAWN_AGENT_TOOL],
           signal: ac.signal,
         })) {
           if (ev.type === "quota") {
@@ -327,14 +375,54 @@ export default function AiPage() {
             calls = ev.calls;
           } else if (ev.type === "finish") {
             finish = ev.reason;
+            usage = mergeUsage(usage, ev.usage);
           }
           flush();
         }
         if (finish !== "tool_calls" || !calls.length) break;
-        /* The model invoked web_search: replay its calls, run the
-        keyless Exa search, and answer with the tool results. */
+        /* The model invoked a tool: replay its calls. web_search runs
+        the keyless Exa search; spawn_agent runs a full sub agent turn
+        whose text stays internal - the shim row is the only trace. */
         apiMessages.push({ role: "assistant", content: "", tool_calls: calls });
         for (const call of calls) {
+          if (call.function.name === "spawn_agent") {
+            let subModel = "";
+            let task = text;
+            try {
+              const a = JSON.parse(call.function.arguments) as { model?: unknown; task?: unknown };
+              subModel = String(a.model ?? "");
+              task = String(a.task ?? text);
+            } catch {
+              /* malformed arguments: fall back to the turn text */
+            }
+            if (!(SUB_AGENT_MODELS as readonly string[]).includes(subModel)) subModel = SUB_AGENT_MODELS[0];
+            setPhase("subagent");
+            subRuns = [...subRuns, { task: task.slice(0, 100), ms: 0 }];
+            setSubs(subRuns);
+            const subStart = Date.now();
+            try {
+              const r = await runSubAgent({ model: subModel, task, signal: ac.signal });
+              apiMessages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                content: r.answer || "the sub agent returned an empty answer",
+              });
+              usage = mergeUsage(usage, r.usage);
+            } catch (e) {
+              if (ac.signal.aborted) throw e;
+              apiMessages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                content: "sub agent failed: " + msg(e),
+              });
+            } finally {
+              const ms = Date.now() - subStart;
+              subRuns = subRuns.map((x, i) => (i === subRuns.length - 1 ? { ...x, ms } : x));
+              setSubs(subRuns);
+              setPhase("streaming");
+            }
+            continue;
+          }
           let q = text;
           try {
             q = String(JSON.parse(call.function.arguments).query ?? text);
@@ -390,6 +478,19 @@ export default function AiPage() {
       abortRef.current = null;
       setBusy(false);
       setPhase("idle");
+      /* The settled turn gets its counter line: total tokens (main
+         model plus sub agents) and elapsed wall time. */
+      const elapsed = Date.now() - t0;
+      const finalUsage = usage;
+      const finalSubs = subRuns.length ? subRuns : undefined;
+      setMessages((m) => {
+        const copy = m.slice();
+        const lastM = copy[copy.length - 1];
+        if (lastM && lastM.role === "assistant") {
+          copy[copy.length - 1] = { ...lastM, ms: elapsed, usage: finalUsage, subs: finalSubs };
+        }
+        return copy;
+      });
       /* Persist the turn; a storage failure never loses it from view. */
       if (ok) {
         try {
@@ -402,6 +503,9 @@ export default function AiPage() {
               thinking: thinkAcc ? stripStreamTokens(thinkAcc) : undefined,
               model: turnModel.id,
               sources,
+              ms: elapsed,
+              usage: finalUsage,
+              subs: finalSubs,
             },
           ];
           const id = await saveChat({
@@ -435,6 +539,9 @@ export default function AiPage() {
         )}
         {messages.map((m, i) => {
           const last = i === messages.length - 1;
+          /* Sub agent shim rows: the live state while the turn runs,
+             the recorded ones once the turn settles. */
+          const subList = m.subs ? m.subs : last && busy ? subs : undefined;
           return (
             <div key={i} className={"lb-ai-msg lb-ai-" + m.role}>
               {m.files && m.files.length > 0 && (
@@ -449,9 +556,16 @@ export default function AiPage() {
               {m.role === "assistant" &&
                 (m.thinking ||
                   (m.sources && m.sources.length > 0) ||
-                  (last && busy && (phase === "thinking" || phase === "searching"))) && (
+                  subList ||
+                  (last && busy && (phase === "thinking" || phase === "searching" || phase === "subagent"))) && (
                   <ToolRow
-                    label={phase === "searching" ? "Searching" : "Thinking"}
+                    label={
+                      phase === "searching"
+                        ? "Searching"
+                        : phase === "subagent"
+                          ? "Running sub agent"
+                          : "Thinking"
+                    }
                     doneLabel={m.thinking ? "Thought" : "Worked"}
                     active={last && busy && phase !== "streaming" && phase !== "idle"}
                     duration={last && m.thinking ? dur.think : undefined}
@@ -479,15 +593,39 @@ export default function AiPage() {
                 )}
               {m.role === "user" && m.text && <div className="lb-ai-bubble">{m.text}</div>}
               {m.role === "assistant" && m.text && (
-                <div className="lb-ai-bubble lb-ai-answer">
-                  <Markdown text={m.text} />
-                </div>
+                <Answer text={m.text} typing={last && busy && phase === "streaming"} />
               )}
               {m.role === "assistant" && last && busy && phase === "streaming" && !m.text && !m.thinking && (
                 <div className="lb-ai-tool">
                   <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
                     Working
                   </span>
+                </div>
+              )}
+              {m.role === "assistant" && subList && subList.length > 0 && (
+                <div className="lb-ai-subs">
+                  {subList.map((s, j) => (
+                    <div key={j} className="lb-ai-sub">
+                      <span
+                        className={"lb-ai-tool-label" + (s.ms ? "" : " lb-ai-shimmer")}
+                        role="status"
+                      >
+                        {s.ms ? "Sub agent done" : "Sub agent working"}
+                      </span>
+                      <span className="lb-ai-sub-task">{s.task}</span>
+                      {s.ms > 0 && <span className="lb-ai-sub-ms">{formatElapsed(s.ms)}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {m.role === "assistant" && !busy && (m.usage || m.ms != null) && (
+                <div className="lb-ai-meta">
+                  {m.usage && (
+                    <span>
+                      {m.usage.totalTokens} tokens ({m.usage.promptTokens} in / {m.usage.completionTokens} out)
+                    </span>
+                  )}
+                  {m.ms != null && <span>{formatElapsed(m.ms)}</span>}
                 </div>
               )}
             </div>
@@ -523,7 +661,7 @@ export default function AiPage() {
             e.target.value = "";
           }}
         />
-        <m3e-search-bar clearable {...{ ref: barRef }}>
+        <m3e-search-bar>
           <m3e-icon-button slot="leading" aria-label="Attach files" onClick={() => fileRef.current?.click()}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
@@ -545,6 +683,7 @@ export default function AiPage() {
         <m3e-button
           variant="tonal"
           {...{ class: "lb-ai-send" }}
+          disabled={!busy && !draft.trim() && attached.length === 0}
           aria-label={busy ? "Stop" : "Send"}
           onClick={() => (busy ? abortRef.current?.abort() : void send())}
         >

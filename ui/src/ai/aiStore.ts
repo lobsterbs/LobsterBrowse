@@ -104,6 +104,18 @@ export interface AiSource {
   snippet: string;
 }
 
+export interface AiUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/* One sub agent run this turn: a shim row label plus its elapsed. */
+export interface AiSub {
+  task: string;
+  ms: number;
+}
+
 export interface AiMsg {
   role: "user" | "assistant";
   text: string;
@@ -111,6 +123,11 @@ export interface AiMsg {
   sources?: AiSource[];
   model?: string;
   files?: string[];
+  /* Settled turn metrics: total tokens (main model plus every sub
+     agent) and the wall-clock elapsed under the answer. */
+  usage?: AiUsage;
+  ms?: number;
+  subs?: AiSub[];
 }
 
 export interface AiChat {
@@ -427,11 +444,60 @@ export const WEB_SEARCH_TOOL = {
   },
 } as const;
 
+/* Sub agents (wave B): the main model delegates self-contained
+   subtasks to Nemotron or Gemma through the spawn_agent tool. The
+   sub agent gets the same web_search tool; its text is NEVER shown
+   to the user - only its final answer returns to the main model as
+   the tool result. */
+export const SUB_AGENT_MODELS = [
+  "@cf/nvidia/nemotron-3-120b-a12b",
+  "@cf/google/gemma-4-26b-a4b-it",
+] as const;
+
+export const SPAWN_AGENT_TOOL = {
+  type: "function",
+  function: {
+    name: "spawn_agent",
+    description:
+      "Delegate a self-contained subtask to a smaller sub agent model (Nemotron or Gemma). The sub agent can search the web itself and its full answer returns to you as the tool result. Use it for parallel research or a second opinion.",
+    parameters: {
+      type: "object",
+      properties: {
+        model: {
+          type: "string",
+          enum: ["@cf/nvidia/nemotron-3-120b-a12b", "@cf/google/gemma-4-26b-a4b-it"],
+          description: "The sub agent model id.",
+        },
+        task: {
+          type: "string",
+          description: "The complete, self-contained instruction for the sub agent.",
+        },
+      },
+      required: ["model", "task"],
+    },
+  },
+} as const;
+
 export type StreamEvent =
   | { type: "thinking" | "text"; text: string }
   | { type: "quota"; remaining: number }
   | { type: "tool_calls"; calls: ToolCall[] }
-  | { type: "finish"; reason: string };
+  | { type: "finish"; reason: string; usage?: AiUsage };
+
+/* Usage sums across stream rounds (each tool round emits its own
+   final usage chunk) and across sub agents. */
+export function mergeUsage(
+  a: AiUsage | undefined,
+  b: AiUsage | undefined
+): AiUsage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    promptTokens: a.promptTokens + b.promptTokens,
+    completionTokens: a.completionTokens + b.completionTokens,
+    totalTokens: a.totalTokens + b.totalTokens,
+  };
+}
 
 /* Rate-limit refusals carry their own class so the UI offers the
    Try again action only where a retry can actually help. */
@@ -484,6 +550,7 @@ export async function* streamChat(opts: {
      with finish_reason "tool_calls". */
   const calls: Record<number, ToolCall> = {};
   let finish = "";
+  let usage: AiUsage | undefined;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -504,6 +571,8 @@ export async function* streamChat(opts: {
           };
           finish_reason?: unknown;
         }[];
+        /* The final usage chunk carries the turn's token counts. */
+        usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
       };
       try {
         evt = JSON.parse(payload);
@@ -511,6 +580,15 @@ export async function* streamChat(opts: {
         continue;
       }
       const choice = evt.choices?.[0];
+      const u = evt.usage;
+      if (u) {
+        const pt = Number(u.prompt_tokens);
+        const ct = Number(u.completion_tokens);
+        const tt = Number(u.total_tokens);
+        if ([pt, ct, tt].every(Number.isFinite)) {
+          usage = { promptTokens: pt, completionTokens: ct, totalTokens: tt };
+        }
+      }
       if (!choice) continue;
       if (typeof choice.finish_reason === "string" && choice.finish_reason) {
         finish = choice.finish_reason;
@@ -556,5 +634,63 @@ export async function* streamChat(opts: {
     .map((k) => calls[k])
     .filter((c): c is ToolCall => Boolean(c));
   if (list.length) yield { type: "tool_calls", calls: list };
-  yield { type: "finish", reason: finish || "stop" };
+  yield { type: "finish", reason: finish || "stop", usage };
+}
+
+/* ---- sub agents (wave B) ----
+   Runs one sub agent turn: up to three stream/tool rounds with the
+   same web_search tool. Its reasoning and text never render in the
+   page; only the final answer returns to the main model as the tool
+   result, and the UI shows just the shim row while it runs. */
+export async function runSubAgent(opts: {
+  model: string;
+  task: string;
+  signal?: AbortSignal;
+}): Promise<{ answer: string; usage?: AiUsage }> {
+  const messages: ChatMsg[] = [
+    {
+      role: "system",
+      content:
+        "You are a research sub agent inside LobsterBrowse. Complete the task fully and return only the answer. " +
+        "Call the web_search tool when current web information helps.",
+    },
+    { role: "user", content: opts.task },
+  ];
+  let answer = "";
+  let usage: AiUsage | undefined;
+  for (let round = 0; round < 3; round++) {
+    let calls: ToolCall[] = [];
+    let finish = "stop";
+    for await (const ev of streamChat({
+      model: opts.model,
+      messages,
+      thinking: false,
+      tools: [WEB_SEARCH_TOOL],
+      signal: opts.signal,
+    })) {
+      if (ev.type === "text") answer += ev.text;
+      else if (ev.type === "tool_calls") calls = ev.calls;
+      else if (ev.type === "finish") {
+        finish = ev.reason;
+        usage = mergeUsage(usage, ev.usage);
+      }
+    }
+    if (finish !== "tool_calls" || !calls.length) break;
+    messages.push({ role: "assistant", content: "", tool_calls: calls });
+    for (const call of calls) {
+      let q = opts.task;
+      try {
+        q = String(JSON.parse(call.function.arguments).query ?? opts.task);
+      } catch {
+        /* malformed arguments: fall back to the task */
+      }
+      try {
+        const found = await aiSearch(q);
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(found) });
+      } catch {
+        messages.push({ role: "tool", tool_call_id: call.id, content: "web search failed" });
+      }
+    }
+  }
+  return { answer: stripStreamTokens(answer), usage };
 }
