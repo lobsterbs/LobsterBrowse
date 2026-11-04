@@ -1895,3 +1895,16 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 .lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
 .lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
 .lb-ad-rowtitle { font-size: 13px; }
+
+/* ---- Clawd easter egg: the sleeping mascot in the Settings About
+       card, above the build chips. Pixel art: nearest-neighbour
+       upscaling keeps the edges crisp. ---- */
+.lb-clawd {
+  display: block;
+  width: 88px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  margin: 0 0 var(--md-sys-measurement-space100);
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+}

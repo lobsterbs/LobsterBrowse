@@ -611,6 +611,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
 
       <div className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>
+        {/* Clawd naps here, above the build pills (user request
+            2026-11-04). Vendored local asset, no external dependency. */}
+        <img className="lb-clawd" src="/clawd-sleep.gif" alt="Clawd sleeping" title="Shh. Clawd is sleeping." />
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
