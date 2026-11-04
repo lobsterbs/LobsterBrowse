@@ -3492,7 +3492,10 @@ async fn main() {
         // #200: a fixed 32 MiB route-level body cap (not streaming),
         // above axum's 2 MiB default so relay upload envelopes fit.
         // ponytail: one layer call, no new extractor machinery.
-        .route("/zlrelay", post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
+        .route(
+            "/zlrelay",
+            post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)),
+        )
         // #511: duplex WebSocket egress for engine-bridged page sockets;
         // the same relay authorization, rate window and permits apply.
         .route("/zlws", get(zl_ws_endpoint))
@@ -3553,12 +3556,25 @@ async fn main() {
         // slips past the worker gets an honest 404, never the SPA
         // fallback (see extension_route_not_found).
         .route("/zl-ext/*path", any(extension_route_not_found))
-        .route("/zl-cs/*path", any(extension_route_not_found))
-        .fallback_service(
+        .route("/zl-cs/*path", any(extension_route_not_found));
+    /* Wave A (LB): the content origin runs the same Docker image but
+    never serves the SPA. With ZL_STATUS_ORIGIN set the SPA fallback
+    answers a minimal inline status page instead of index.html; every
+    engine route above (/zlsw, /bootstrap.js, /build, /zl, wisp) is an
+    explicit route and stays live untouched. */
+    let app = if std::env::var("ZL_STATUS_ORIGIN")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        app.fallback(zl_status_page)
+    } else {
+        app.fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
                 .not_found_service(ServeFile::new("ui/index.html")),
         )
+    };
+    let app = app
         .route(
             &wisp_path,
             get({
@@ -3680,6 +3696,27 @@ async fn sj_sw_js() -> Response {
         .header(header::CACHE_CONTROL, "no-cache")
         .body(Body::from(SJ_SW))
         .expect("static response build")
+}
+
+/// Wave A (LB): minimal status page for the content origin
+/// (ZL_STATUS_ORIGIN): replaces the SPA fallback there. No script,
+/// no SPA JavaScript: a status card with the live endpoint list.
+async fn zl_status_page() -> axum::response::Html<&'static str> {
+    axum::response::Html(ZL_STATUS_PAGE_HTML)
+}
+
+const ZL_STATUS_PAGE_HTML: &str = "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>LobsterBrowse content origin</title><style>body{font:14px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1b1b1f;color:#e4e2e6}.c{padding:32px 40px;border-radius:16px;background:#2b2b2f;text-align:center}h1{margin:0 0 8px;font-size:18px;font-weight:500}p{margin:4px 0;color:#cac4d0}code{color:#7f9cf5}</style></head><body><div class='c'><h1>LobsterBrowse content origin</h1><p>Status: OK</p><p>Engine endpoints: <code>/zlsw/</code> <code>/bootstrap.js</code> <code>/build</code> <code>/healthz</code></p><p>This origin serves the engine, not the app UI.</p></div></body></html>";
+
+#[cfg(test)]
+mod zl_status_page_tests {
+    use super::*;
+
+    /* The status origin must never serve the SPA: no scripts at all. */
+    #[test]
+    fn zl_status_page_is_minimal_html() {
+        assert!(ZL_STATUS_PAGE_HTML.contains("LobsterBrowse content origin"));
+        assert!(!ZL_STATUS_PAGE_HTML.contains("<script"));
+    }
 }
 
 /// Zeolite bootstrap at the origin root (vendored build,
