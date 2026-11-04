@@ -2,8 +2,11 @@ name: apply-patch
 # Byte-exact big-file shipping: wave edits to large files (server
 # main.rs, theme css, AI pages) ride the repo as a generated git
 # patch; this workflow applies it, removes it, and pushes the real
-# changes. GITHUB_TOKEN pushes do not retrigger CI, so dispatch
-# ci.yml manually after it lands.
+# changes. The GITHUB_TOKEN cannot push workflow-file changes at all
+# (no workflows permission exists for it), so patches must never
+# touch .github/workflows; workflow changes go through direct pushes.
+# GITHUB_TOKEN pushes do not retrigger CI, so a follow-up push gates
+# the landed tree.
 on:
   push:
     branches: ["beta/zeolite-nativetransit"]
@@ -11,9 +14,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
-  # The applied patch may touch workflow files (a ci.yml step rides
-  # the wave too); pushing those needs workflows: write.
-  workflows: write
 jobs:
   apply:
     runs-on: ubuntu-latest
