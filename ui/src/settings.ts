@@ -166,7 +166,7 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   seed: "#6750A4",
-  engine: "startpage",
+  engine: "brave",
   proxyEngine: "zeolite",
   adblock: true,
   uaPreset: "chrome-win",
