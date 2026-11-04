@@ -1,0 +1,37 @@
+name: apply-patch
+# Byte-exact big-file shipping: wave edits to large files (server
+# main.rs, theme css, AI pages) ride the repo as a generated git
+# patch; this workflow applies it, removes it, and pushes the real
+# changes. GITHUB_TOKEN pushes do not retrigger CI, so dispatch
+# ci.yml manually after it lands.
+on:
+  push:
+    branches: ["beta/zeolite-nativetransit"]
+    paths: ["patches/*.patch"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply pending patches
+        run: |
+          set -e
+          shopt -s nullglob
+          files=(patches/*.patch)
+          if [ ${#files[@]} -eq 0 ]; then echo "no pending patches"; exit 0; fi
+          for p in "${files[@]}"; do
+            echo "applying $p"
+            git apply --check "$p"
+            git apply "$p"
+          done
+          msg="apply: pending patches"
+          if [ -f patches/message.txt ]; then msg=$(cat patches/message.txt); fi
+          rm -rf patches
+          git config user.name "zl-bot"
+          git config user.email "zl-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "$msg"
+          git push origin HEAD:refs/heads/beta/zeolite-nativetransit
