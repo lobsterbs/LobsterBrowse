@@ -22,6 +22,7 @@ import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
+import ExtManage from "../browser/ExtManage";
 
 /* Cloaking popout: a fresh window whose address bar reads about:blank.
    The window inherits this origin, so the app and its service worker run
@@ -72,7 +73,8 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
   { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
   { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
-  { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
+    { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", target: "set-manage-ext" },
+{ section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", target: "set-theme-color" },
   { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy starfield background animated", target: "set-fancy" },
@@ -270,6 +272,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     setExtImport({ status: "Importing " + file.name + "...", busy: true });
     const bytes = new Uint8Array(await file.arrayBuffer());
     const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
+    if (rep && rep.ok) {
+      /* #230: the manage list in this panel re-lists when an install
+         lands. */
+      window.dispatchEvent(new CustomEvent("lb-ext-changed"));
+    }
     setExtImport({
       status:
         rep && rep.ok
@@ -400,6 +407,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
+        <div className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
+          <div className="lb-setting-label">Manage installed</div>
+          {/* #230: the extension configuration UI moved here from the
+              toolbar extension card; the toolbar card now launches the
+              extension UI directly. */}
+          <ExtManage />
+        </div>
         <div className="lb-setting-group" id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
