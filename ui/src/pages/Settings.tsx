@@ -11,6 +11,7 @@ import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
+import ExtManage from "../browser/ExtManage";
 import { extWarnings } from "../browser/browserShared";
 
 /* Cloaking popout: a fresh window whose address bar reads about:blank.
@@ -62,6 +63,7 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
   { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
   { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
+  { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", target: "set-manage-ext" },
   { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", target: "set-theme-color" },
@@ -261,6 +263,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
         M3eSnackbar.open("Installed " + String(rep.id) + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), { duration: 5000 });
       }
+      /* #230: the manage list in this panel re-lists when an install
+         lands. */
+      window.dispatchEvent(new CustomEvent("lb-ext-changed"));
     } else {
       const msg = rep && rep.error ? "Import failed: " + String(rep.error) : "Import failed: the Zeolite service worker could not be reached on this origin.";
       pushLog("error", "extension import: " + msg);
@@ -389,6 +394,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
+        <div className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
+          <div className="lb-setting-label">Manage installed</div>
+          {/* #230: the extension configuration UI moved here from the
+              toolbar extension card; the toolbar card now launches the
+              extension UI directly. */}
+          <ExtManage />
+        </div>
         <div className="lb-setting-group" id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
