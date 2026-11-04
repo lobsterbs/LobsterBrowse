@@ -2048,7 +2048,29 @@ FROM debian:bookworm-slim AS zl-builder
 # 135/151/155/156 precedent, docs/ci-torture-wedge.md).
 # Cargo-side pin stays d4ca407 (rewriter wasm only, no crates
 # changed).
-ARG ZEOLITE_COMMIT=385007fef038ba9b33be4693bde280b2b182e11b
+# Pin 158 (2026-11-04): dist 59f0c621 (build 41919212238) ships the
+# #619-#632 engine scout wave: #619 self-closed script/style inside
+# SVG/MathML foreign content; #620 wisp CONNECT hostname >= 256
+# silent truncation (encode_packet now fails ProtocolViolation and
+# parse_hostname keeps a strict trailing check); #621 trailing-dot
+# host bypass in every app rule matcher; #622 SRI data-src
+# shadowing; #623 relay tab reload WS registry wedge; #624 rewriter
+# Tag-state retention cap (256 KiB TAG_HOLD_CAP); #625 legacy
+# no-semicolon HTML5 named refs; #626 wsbridge close 1006 and
+# wasClean; #627 siteconfig 5xx memoization; #628 bodyspool live
+# budget; #629 CSP :443 default port; #630 unterminated close-tag
+# prefix; #631 KDL junk suffix; #632 keepView x-zl-vary leak.
+# sw.js 67d06ae53876b4ec -> d02a3ee946ecaf61 (821572 bytes);
+# bootstrap.js 0c81efb9ba343dff unchanged; rewriter_wasm_bg.wasm
+# sha256-16 61929dfbd3076a4f (hash-check the served wasm
+# post-deploy; deploy with a cleared build cache). CI on 5073f316:
+# rust/wasm/app/compat green; browser e2e 66/66; torture wedged
+# 4/20, every failure a page.goto or page-evaluate 30s timeout
+# cascade (the documented #514/#545 wedge, docs/ci-torture-wedge.md).
+# Cargo-side pin bumps d4ca407 -> 5073f316 (#620 changed wisp-core
+# and zeolite-server; dns/policy public API verified unchanged for
+# the LB calls; Cargo.lock regenerated with cargo generate-lockfile).
+ARG ZEOLITE_COMMIT=59f0c621d3411e6fc84930560e2576d1637299b2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2107,7 +2129,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=67d06ae53876b4ec ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d02a3ee946ecaf61 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
