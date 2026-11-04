@@ -194,6 +194,15 @@ export default function App() {
            content origins so proxied-page service-worker registrations
            can spawn their isolated guest realms. */
         zlGuestHost(co);
+        /* Cold content origin: the Render service sleeps, so the first
+           real registration pays the whole dyno boot. Warm it at app
+           boot with fire-and-forget prefetches of the engine worker
+           script and the build manifest; opaque no-cors responses are
+           fine, the goal is only to have the service awake. */
+        if (co) {
+          void fetch(co + "/zlsw/sw.js", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+          void fetch(co + "/build", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+        }
       })
       .catch(() => zlAnnounceContentOrigin(""));
     const re = () => {

@@ -1303,6 +1303,11 @@ const AI_VISION_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const AI_RATE_MAX_PER_WINDOW: usize = 50;
 const AI_RATE_WINDOW_SECS: u64 = 6 * 3600;
 const AI_TOTAL_DEADLINE_SECS: u64 = 600;
+/// The upstream max_tokens for every /ai/chat turn. Cloudflare
+/// defaults max_tokens to 256, which truncated long answers
+/// mid-sentence (2026-11-04 user report); 16384 keeps full answers
+/// inside the model's 128k context.
+const AI_MAX_TOKENS: u32 = 16384;
 
 /// LB AI mode: sliding-window take, mirroring relay_rate_allow but
 /// returning the remaining count for the x-lb-ai-remaining header.
@@ -1637,6 +1642,33 @@ async fn ai_chat_endpoint(
     resp
 }
 
+/// The upstream chat-completions body for one turn. max_tokens is
+/// explicit: Cloudflare defaults it to 256, which truncated long
+/// answers mid-sentence (2026-11-04 user report). Cloudflare has no
+/// "none" reasoning effort: low is the lightest the gpt-oss models
+/// accept; only the reasoning families take the parameter (scout
+/// rejects it).
+fn ai_upstream_body(
+    model: &str,
+    messages: Vec<serde_json::Value>,
+    thinking: bool,
+    tools: Option<Vec<serde_json::Value>>,
+) -> serde_json::Value {
+    let mut upstream = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+        "max_tokens": AI_MAX_TOKENS,
+    });
+    if model.starts_with("@cf/openai/gpt-oss") || model.starts_with("@cf/qwen/") {
+        upstream["reasoning_effort"] = if thinking { "high" } else { "low" }.into();
+    }
+    if let Some(tools) = tools {
+        upstream["tools"] = tools.into();
+    }
+    upstream
+}
+
 async fn ai_chat_inner(
     state: Arc<AppState>,
     body: axum::body::Bytes,
@@ -1693,20 +1725,7 @@ async fn ai_chat_inner(
                 .await;
         }
     }
-    /* Cloudflare has no "none" effort: low is the lightest the
-    gpt-oss models accept; only the reasoning families take the
-    parameter (scout rejects it). */
-    let mut upstream = serde_json::json!({
-        "model": model,
-        "messages": messages,
-        "stream": true,
-    });
-    if model.starts_with("@cf/openai/gpt-oss") || model.starts_with("@cf/qwen/") {
-        upstream["reasoning_effort"] = if thinking { "high" } else { "low" }.into();
-    }
-    if let Some(tools) = tools {
-        upstream["tools"] = tools.into();
-    }
+    let upstream = ai_upstream_body(&model, messages, thinking, tools);
     let cf_url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions",
         state.cf_account
@@ -4559,11 +4578,17 @@ async fn main() {
         .route("/suggest", get(suggest_endpoint))
         // LB AI mode: same-origin Cloudflare Workers AI proxy (ai_chat_endpoint);
         // the 32 MiB cap covers inline image data URLs.
-        .route("/ai/chat", post(ai_chat_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
+        .route(
+            "/ai/chat",
+            post(ai_chat_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)),
+        )
         // #200: a fixed 32 MiB route-level body cap (not streaming),
         // above axum's 2 MiB default so relay upload envelopes fit.
         // ponytail: one layer call, no new extractor machinery.
-        .route("/zlrelay", post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)))
+        .route(
+            "/zlrelay",
+            post(zl_relay_endpoint).layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)),
+        )
         // #511: duplex WebSocket egress for engine-bridged page sockets;
         // the same relay authorization, rate window and permits apply.
         .route("/zlws", get(zl_ws_endpoint))
@@ -4629,12 +4654,25 @@ async fn main() {
         // slips past the worker gets an honest 404, never the SPA
         // fallback (see extension_route_not_found).
         .route("/zl-ext/*path", any(extension_route_not_found))
-        .route("/zl-cs/*path", any(extension_route_not_found))
-        .fallback_service(
+        .route("/zl-cs/*path", any(extension_route_not_found));
+    /* Wave A (LB): the content origin runs the same Docker image but
+    never serves the SPA. With ZL_STATUS_ORIGIN set the SPA fallback
+    answers a minimal inline status page instead of index.html; every
+    engine route above (/zlsw, /bootstrap.js, /build, /zl, wisp) is an
+    explicit route and stays live untouched. */
+    let app = if std::env::var("ZL_STATUS_ORIGIN")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        app.fallback(zl_status_page)
+    } else {
+        app.fallback_service(
             ServeDir::new("ui")
                 .append_index_html_on_directories(true)
                 .not_found_service(ServeFile::new("ui/index.html")),
         )
+    };
+    let app = app
         .route(
             &wisp_path,
             get({
@@ -4756,6 +4794,27 @@ async fn sj_sw_js() -> Response {
         .header(header::CACHE_CONTROL, "no-cache")
         .body(Body::from(SJ_SW))
         .expect("static response build")
+}
+
+/// Wave A (LB): minimal status page for the content origin
+/// (ZL_STATUS_ORIGIN): replaces the SPA fallback there. No script,
+/// no SPA JavaScript: a status card with the live endpoint list.
+async fn zl_status_page() -> axum::response::Html<&'static str> {
+    axum::response::Html(ZL_STATUS_PAGE_HTML)
+}
+
+const ZL_STATUS_PAGE_HTML: &str = "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>LobsterBrowse content origin</title><style>body{font:14px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1b1b1f;color:#e4e2e6}.c{padding:32px 40px;border-radius:16px;background:#2b2b2f;text-align:center}h1{margin:0 0 8px;font-size:18px;font-weight:500}p{margin:4px 0;color:#cac4d0}code{color:#7f9cf5}</style></head><body><div class='c'><h1>LobsterBrowse content origin</h1><p>Status: OK</p><p>Engine endpoints: <code>/zlsw/</code> <code>/bootstrap.js</code> <code>/build</code> <code>/healthz</code></p><p>This origin serves the engine, not the app UI.</p></div></body></html>";
+
+#[cfg(test)]
+mod zl_status_page_tests {
+    use super::*;
+
+    /* The status origin must never serve the SPA: no scripts at all. */
+    #[test]
+    fn zl_status_page_is_minimal_html() {
+        assert!(ZL_STATUS_PAGE_HTML.contains("LobsterBrowse content origin"));
+        assert!(!ZL_STATUS_PAGE_HTML.contains("<script"));
+    }
 }
 
 /// Zeolite bootstrap at the origin root (vendored build,
@@ -5520,6 +5579,32 @@ mod ai_tests {
 
     fn msg(role: &str, content: serde_json::Value) -> serde_json::Value {
         serde_json::json!({ "role": role, "content": content })
+    }
+
+    #[test]
+    fn ai_upstream_body_sets_max_tokens() {
+        /* Cloudflare's 256 default truncated real answers mid-sentence
+        (2026-11-04 user report); the explicit cap must ride every
+        upstream body, and scout must not carry reasoning_effort. */
+        let body = ai_upstream_body(
+            "@cf/openai/gpt-oss-120b",
+            vec![msg("user", "hi".into())],
+            true,
+            None,
+        );
+        assert_eq!(body["max_tokens"], AI_MAX_TOKENS);
+        assert_eq!(body["stream"], true);
+        assert_eq!(body["reasoning_effort"], "high");
+        assert!(body.get("tools").is_none());
+        let scout = ai_upstream_body(
+            AI_VISION_MODEL,
+            vec![msg("user", "hi".into())],
+            false,
+            Some(vec![]),
+        );
+        assert_eq!(scout["max_tokens"], AI_MAX_TOKENS);
+        assert!(scout.get("reasoning_effort").is_none());
+        assert!(scout["tools"].is_array());
     }
 
     #[test]

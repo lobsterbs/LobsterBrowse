@@ -1353,6 +1353,8 @@ m3e-snackbar {
   .app-content {
     padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
   }
+  /* AI view: keep the flush composer above the fixed bottom nav. */
+  .app-content[data-view="ai"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-devtools.lb-devtools-out,
@@ -1631,7 +1633,7 @@ body .lb-ext-panel {
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 
 /* ---- AI mode (beta-only): view, messages, chatbar ---- */
-.app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); overflow: hidden; }
+.app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); padding-bottom: 0; overflow: hidden; }
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
 .lb-ai { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
 
@@ -1706,10 +1708,16 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 /* Settled step duration: tabular seconds beside the done label. */
 .lb-ai-tool-dur { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
 .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
-/* Shimmer: a slow gradient sweep clipped to the text; every active
-   step (searching, thinking, responding) uses it. */
+/* TextShimmer (21st.dev pattern) on M3E tokens: the text clips a
+   single gradient band that sweeps across it; every active step
+   (searching, thinking, sub agents, responding) uses it. */
 .lb-ai-shimmer {
-  background: linear-gradient(90deg, var(--md-sys-color-on-surface-variant, #cac4d0) 0%, var(--md-sys-color-on-surface-variant, #cac4d0) 35%, var(--md-sys-color-primary, #7f9cf5) 50%, var(--md-sys-color-on-surface-variant, #cac4d0) 65%, var(--md-sys-color-on-surface-variant, #cac4d0) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--md-sys-color-on-surface-variant, #cac4d0) 40%,
+    var(--md-sys-color-primary, #7f9cf5) 50%,
+    var(--md-sys-color-on-surface-variant, #cac4d0) 60%
+  );
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1745,6 +1753,17 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 .lb-md th { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); font-weight: 500; }
 .lb-md hr { border: none; border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); margin: var(--md-sys-measurement-space150, 12px) 0; }
 .lb-md img { max-width: 100%; border-radius: var(--md-sys-shape-corner-small, 8px); }
+
+/* Sub agent shim rows (spawn_agent): what the sub agent is doing and
+   its elapsed once done; sub agent text itself is never shown. */
+.lb-ai-subs { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); padding: 2px var(--md-sys-measurement-space100, 8px); }
+.lb-ai-sub { display: flex; align-items: baseline; gap: var(--md-sys-measurement-space100, 8px); min-width: 0; }
+.lb-ai-sub-task { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ai-sub-ms { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Settled-turn counters at the very end of an answer: total tokens
+   (main model plus every sub agent) and the wall-clock elapsed. */
+.lb-ai-meta { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space150, 12px); padding: 2px var(--md-sys-measurement-space100, 8px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
 
 /* Rail icon: the AI glyph is an inline SVG (the bundled ligature set
    has gaps), sized like the sibling m3e icons. */
@@ -1838,6 +1857,11 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   margin: auto;
   text-align: center;
   font-size: var(--md-sys-typescale-headline-small-font-size, 24px);
+  /* The Google Sans Flex axes the product look asks for: weight 760,
+     width 130, and the round corner axis; font-weight stays as the
+     fallback when the variable axes are unavailable. */
+  font-family: "Google Sans Flex Variable", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
+  font-variation-settings: "wght" 760, "wdth" 130, "opsz" 15, "slnt" 0, "ROND" 15;
   font-weight: 500;
   color: var(--md-sys-color-on-surface, #e4e2e6);
   animation: lb-ai-msg-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
@@ -1860,6 +1884,13 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
    aborts the stream; m3e-button owns its own press and ripple. */
 .lb-ai-send {
   flex: none;
+  /* Fused into the chatbox: the button stretches to the search
+     bar's full height and shares its pill rounding; the negative
+     margin cancels the bar's 8px gap so the two pills sit flush
+     against each other. */
+  align-self: stretch;
+  min-height: 0;
+  margin-left: calc(-1 * var(--md-sys-measurement-space100, 8px));
   --m3e-button-shape-round: var(--md-sys-shape-corner-full, 9999px);
 }
 
