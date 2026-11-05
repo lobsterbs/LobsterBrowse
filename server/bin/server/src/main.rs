@@ -21,6 +21,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::info;
 /* wreq replaces reqwest wholesale: same client API (hard fork),
  * BoringSSL + Chrome TLS/HTTP2 emulation underneath. The alias keeps
@@ -4672,11 +4673,27 @@ async fn main() {
     {
         app.fallback(zl_status_page)
     } else {
-        app.fallback_service(
-            ServeDir::new("ui")
-                .append_index_html_on_directories(true)
-                .not_found_service(ServeFile::new("ui/index.html")),
-        )
+        /* w80: browsers heuristically cached index.html across deploys.
+        Hashed Vite assets are content-addressed (immutable); the SPA
+        shell and every other UI file must revalidate (no-cache), same
+        policy as the zl_sw_js route below. */
+        let assets = tower::ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            ))
+            .service(ServeDir::new("ui/assets"));
+        let ui = tower::ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache"),
+            ))
+            .service(
+                ServeDir::new("ui")
+                    .append_index_html_on_directories(true)
+                    .not_found_service(ServeFile::new("ui/index.html")),
+            );
+        app.nest_service("/assets", assets).fallback_service(ui)
     };
     let app = app
         .route(

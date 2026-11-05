@@ -13,7 +13,10 @@ path = "src/main.rs"
 zeolite-server = { git = "https://github.com/lobsterbs/Zeolite", rev = "5073f316022fcb9ace029a90d4c569cb0c07c412" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "set-header"] }
+# w80: ServiceBuilder to attach Cache-Control to the ServeDir fallback.
+tower = "0.5"
+
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # wreq: reqwest hard fork with BoringSSL and per-browser TLS/HTTP2
@@ -38,3 +41,4 @@ futures-util = "0.3"
 # profile - a bot wall that fingerprints the ws handshake needs the
 # btls-backed stream upgrade.
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+
