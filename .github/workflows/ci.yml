@@ -71,7 +71,7 @@ jobs:
         run: node --experimental-strip-types ../tests/ai-metrics/check.mjs
       - name: Extension launch regression check
         run: node --experimental-strip-types ../tests/ext-launch/check.mjs
-      - name: Wave 77 UI regression check (gated suggestor, engine marks, ASCII config)
+      - name: Wave 77/78 UI regression check (gated suggestor, engine marks, metal-ribbon background)
         run: node --experimental-strip-types ../tests/ui-wave77/check.mjs
 
   # #130: fixture-only self-test of the transit router against the
