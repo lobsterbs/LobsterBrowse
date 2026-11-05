@@ -110,10 +110,13 @@ export interface AiUsage {
   totalTokens: number;
 }
 
-/* One sub agent run this turn: a shim row label plus its elapsed. */
+/* One sub agent run this turn: a shim row label plus its elapsed.
+   status "failed" marks a run the proxy refused or that came back
+   empty; older saved turns without the field count as done. */
 export interface AiSub {
   task: string;
   ms: number;
+  status?: "working" | "done" | "failed";
 }
 
 export interface AiMsg {
@@ -228,6 +231,19 @@ export async function listChats(): Promise<AiChat[]> {
     }
   }
   return out.sort((a, b) => b.updated - a.updated);
+}
+
+/* History delete: the bottom-sheet menu removes the record; the
+   snackbar's Undo re-saves the kept AiChat (the same id restores
+   the row). */
+export async function deleteChat(id: number): Promise<void> {
+  const d = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = d.transaction("chats", "readwrite");
+    const req = tx.objectStore("chats").delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error ?? new Error("chat delete failed"));
+  });
 }
 
 /* Called from store.ts clearAllData(): close any open connection so
@@ -400,13 +416,44 @@ export async function aiSearch(query: string): Promise<AiSource[]> {
    model also emits zero-width joiners mid-word. Sanitizing the
    accumulated text (not per-delta, so tokens split across chunks
    still match) keeps both the thinking panel and answers clean. */
-const HARMONY_STRUCT_RE =
-  /<\|start\|>\s*assistant\s*<\|channel\|>\s*(?:analysis|final)\s*<\|message\|>/gi;
+const HARMONY_START_RE = /<\|start\|>\s*assistant/gi;
 const HARMONY_TOKEN_RE = /<\|[^<>|]{0,32}\|>/g;
 const ZERO_WIDTH_RE = /[\u200b\u200c\u200d\u2060\ufeff]/g;
+const HARMONY_CHANNEL_RE = /(<\|channel\|>\s*(?:analysis|final)\s*(?:<\|message\|>)?)/gi;
+const HARMONY_DEGENERATE_RE = /<\|start\|>\s*assistant\s*(analysis|final)\b/gi;
+
+const harmonyClean = (t: string): string =>
+  t.replace(HARMONY_START_RE, "").replace(HARMONY_TOKEN_RE, "").replace(ZERO_WIDTH_RE, "");
+
+/* The leaked harmony stream splits into channels: analysis (the
+   model's private reasoning, which the 2026-11-05 report showed
+   verbatim in the answer) and final (the answer). The answer renders
+   only final-channel text; analysis text moves to the thinking
+   panel. Text before the first channel marker stays in the answer, so
+   a clean stream without markers passes through whole. The degenerate
+   <|start|>assistantfinal glue (channel token eaten by the model)
+   normalizes to a channel marker first. */
+export function splitHarmony(s: string): { analysis: string; final: string } {
+  if (!s.includes("<|")) return { analysis: "", final: s.replace(ZERO_WIDTH_RE, "") };
+  const marked = s.replace(
+    HARMONY_DEGENERATE_RE,
+    (_m: string, ch: string) => "<|channel|>" + ch.toLowerCase()
+  );
+  const parts = marked.replace(HARMONY_START_RE, "").split(HARMONY_CHANNEL_RE);
+  if (parts.length === 1) return { analysis: "", final: harmonyClean(parts[0]) };
+  let analysis = "";
+  let final = harmonyClean(parts[0] ?? "");
+  for (let i = 1; i < parts.length; i += 2) {
+    const body = harmonyClean(parts[i + 1] ?? "");
+    if (/analysis/i.test(parts[i] ?? "")) analysis += body;
+    else final += body;
+  }
+  return { analysis, final };
+}
 
 export function stripStreamTokens(s: string): string {
-  return s.replace(HARMONY_STRUCT_RE, "").replace(HARMONY_TOKEN_RE, "").replace(ZERO_WIDTH_RE, "");
+  const h = splitHarmony(s);
+  return h.analysis ? h.analysis + "\n" + h.final : h.final;
 }
 
 /* ---- Cloudflare Workers AI streaming client (via the server
@@ -692,5 +739,5 @@ export async function runSubAgent(opts: {
       }
     }
   }
-  return { answer: stripStreamTokens(answer), usage };
+  return { answer: splitHarmony(answer).final, usage };
 }

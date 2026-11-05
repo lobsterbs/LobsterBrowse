@@ -1635,7 +1635,7 @@ body .lb-ext-panel {
 /* ---- AI mode (beta-only): view, messages, chatbar ---- */
 .app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); padding-bottom: 0; overflow: hidden; }
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
-.lb-ai { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+.lb-ai { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
 
 .lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
 .lb-ai-quota-out { color: var(--md-sys-color-error, #f2b8b5); }
@@ -1650,7 +1650,7 @@ body .lb-ext-panel {
 /* Model picker (21st.dev model-picker pattern on M3E tokens): pill
    trigger + popover + checkmark. */
 .lb-ai-mp { position: relative; display: inline-flex; }
-.lb-ai-mp-btn { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); height: 32px; padding: 0 var(--md-sys-measurement-space100, 8px); border: none; border-radius: var(--md-sys-shape-corner-full, 9999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); color: var(--md-sys-color-on-surface, #e4e2e6); font: inherit; font-size: var(--md-sys-typescale-label-large-font-size, 14px); cursor: pointer; }
+.lb-ai-mp-btn { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); height: auto; padding: 4px 10px; border: none; border-radius: var(--md-sys-shape-corner-full, 9999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); color: var(--md-sys-color-on-surface, #e4e2e6); font: inherit; font-size: var(--md-sys-typescale-label-medium-font-size, 12px); cursor: pointer; }
 .lb-ai-mp-btn:hover { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 95%, transparent); }
 .lb-ai-mp-name { font-weight: 500; white-space: nowrap; }
 .lb-ai-mp-params { font-weight: 700; white-space: nowrap; }
@@ -1671,7 +1671,7 @@ body .lb-ext-panel {
 .lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .lb-ai-src:hover { text-decoration: underline; }
 .lb-ai-files { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); justify-content: flex-end; }
-.lb-ai-att { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); padding: 0 var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space50, 4px); max-width: 720px; width: 100%; margin: 0 auto; }
+/* (.lb-ai-att removed: the attachment preview lives inside the chatbar; see .lb-ai-att-peek.) */
 .lb-ai-file-chip { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-secondary, #b8c4d8) 16%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ai-file-x { border: none; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
 
@@ -1842,8 +1842,9 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 /* Reduced motion: entrances off, transitions instant; the popover and
    the accordion still work as instant state changes. */
 @media (prefers-reduced-motion: reduce) {
-  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello { animation: none; }
+  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello, .lb-ai-att-peek { animation: none; }
   .lb-ai-hello.lb-out { animation: none; display: none; }
+  .lb-ai-att-peek.lb-out { display: none; }
   .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
   .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src { transition: none; }
 }
@@ -1892,6 +1893,167 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   min-height: 0;
   margin-left: calc(-1 * var(--md-sys-measurement-space100, 8px));
   --m3e-button-shape-round: var(--md-sys-shape-corner-full, 9999px);
+  /* Same height as the chatbox: the button container follows the
+     search bar's container token, so the two pills read as one bar. */
+  --m3e-button-container-height: var(--m3e-search-bar-container-height, 56px);
+}
+
+/* ---- AI: user-message glide. The user row rises from just below its
+   final resting point with the same decelerate curve as the assistant
+   rows, so a sent prompt visibly glides to where its bubble appears
+   instead of popping into existence. ---- */
+@keyframes lb-ai-msg-user-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lb-ai-msg.lb-ai-user {
+  animation: lb-ai-msg-user-in var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+  transform-origin: 50% 100%;
+}
+
+/* ---- AI: attachment peek. A frosted overlay rendered inside the
+   search bar, over the typed text; it appears when the first file is
+   attached, grows with the list, and collapses out when the last one
+   is removed (the lb-out class runs the exit keyframes, then Ai.tsx
+   unmounts the overlay on animation end). ---- */
+.lb-ai-bar-main { position: relative; flex: 1; min-width: 0; display: flex; }
+.lb-ai-bar-main m3e-search-bar { flex: 1; min-width: 0; }
+.lb-ai-att-peek {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: 4px 48px;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-lowest, #0f0f11) 78%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: lb-ai-peek-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+}
+.lb-ai-att-peek.lb-out {
+  animation: lb-ai-peek-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) both;
+}
+@keyframes lb-ai-peek-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes lb-ai-peek-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(8px); }
+}
+.lb-ai-att-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 70%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.lb-ai-att-thumb img { display: block; height: 100%; width: auto; max-width: 140px; object-fit: cover; }
+.lb-ai-att-x {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest, #45454a) 80%, transparent);
+  cursor: pointer;
+}
+.lb-ai-att-thumb .lb-ai-att-x { position: absolute; top: -6px; right: -6px; }
+
+/* ---- AI: conversation history. The history button sits in the top
+   left corner, clear of the nav rail; the conversations live in an
+   m3e-bottom-sheet centered at the bottom of the screen. ---- */
+.lb-ai-hist-btn {
+  position: absolute;
+  top: var(--md-sys-measurement-space100, 8px);
+  left: var(--md-sys-measurement-space150, 12px);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  cursor: pointer;
+}
+.lb-ai-hist-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 12%, transparent);
+}
+.lb-ai m3e-bottom-sheet { --m3e-bottom-sheet-max-width: 560px; }
+.lb-ai-hist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.lb-ai-hist-head {
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
+  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
+  font-weight: var(--md-sys-typescale-title-medium-font-weight, 500);
+  color: var(--md-sys-color-on-surface, #e6e1e9);
+}
+.lb-ai-hist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space50, 4px);
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+}
+.lb-ai-hist-row:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 10%, transparent);
+}
+.lb-ai-hist-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.lb-ai-hist-title {
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
+  color: var(--md-sys-color-on-surface, #e6e1e9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-ai-hist-date {
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-ai-hist-empty {
+  padding: var(--md-sys-measurement-space400, 32px) var(--md-sys-measurement-space150, 12px);
+  text-align: center;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
 }
 
 /* ---- Ad-blocking card (overflow menu): same floating placement and

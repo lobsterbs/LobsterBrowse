@@ -108,6 +108,17 @@ declare module "react" {
       "m3e-menu": M3eBase & { variant?: string };
       "m3e-menu-trigger": M3eBase & { for?: string };
       "m3e-menu-item": M3eBase & { disabled?: boolean | string };
+      "m3e-bottom-sheet": M3eBase & {
+        open?: boolean | string;
+        modal?: boolean | string;
+        handle?: boolean | string;
+        "handle-label"?: string;
+        detent?: string;
+        detents?: string;
+        hideable?: boolean | string;
+        show?: () => void;
+        hide?: () => void;
+      };
       "m3e-menu-item-checkbox": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
       "m3e-menu-item-radio": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
       "m3e-menu-item-group": M3eBase;

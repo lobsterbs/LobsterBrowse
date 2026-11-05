@@ -1298,6 +1298,12 @@ const AI_MODELS: &[&str] = &[
     (llama-4-scout, $0.27/$0.85 per M tokens in/out, 131k context,
     function calling + vision). */
     "@cf/meta/llama-4-scout-17b-16e-instruct",
+    /* Sub agent models (the spawn_agent tool delegates to these; the
+    client list is aiStore.ts SUB_AGENT_MODELS). An unlisted model
+    fails instantly at the proxy, which surfaced as the 75ms
+    "Sub agent done" report of 2026-11-05. */
+    "@cf/nvidia/nemotron-3-120b-a12b",
+    "@cf/google/gemma-4-26b-a4b-it",
 ];
 const AI_VISION_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const AI_RATE_MAX_PER_WINDOW: usize = 50;
@@ -5605,6 +5611,19 @@ mod ai_tests {
         assert_eq!(scout["max_tokens"], AI_MAX_TOKENS);
         assert!(scout.get("reasoning_effort").is_none());
         assert!(scout["tools"].is_array());
+    }
+
+    #[test]
+    fn ai_validate_accepts_sub_agent_models() {
+        for m in [
+            "@cf/nvidia/nemotron-3-120b-a12b",
+            "@cf/google/gemma-4-26b-a4b-it",
+        ] {
+            let req = serde_json::json!({ "model": m, "messages": [msg("user", "hi".into())] });
+            let (model, _messages, _thinking, _tools) =
+                ai_validate(&req).expect("sub agent model must be whitelisted");
+            assert_eq!(model, m);
+        }
     }
 
     #[test]
