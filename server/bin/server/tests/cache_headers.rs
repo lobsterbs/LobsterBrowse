@@ -45,7 +45,10 @@ async fn spa_tree_cache_control_headers() {
 
     /* index.html: revalidate on every load so deploys land. */
     let res = app.clone().oneshot(send("/")).await.unwrap();
-    assert_eq!(res.headers().get(header::CACHE_CONTROL).unwrap(), "no-cache");
+    assert_eq!(
+        res.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-cache"
+    );
     assert_eq!(res.status(), StatusCode::OK);
 
     /* Hashed asset: immutable. */
@@ -67,18 +70,17 @@ async fn spa_tree_cache_control_headers() {
 
     /* Missing asset: plain 404 (hashed names make this a stale shell),
      * not the SPA shell. */
-    let res = app
-        .clone()
-        .oneshot(send("/assets/nope.css"))
-        .await
-        .unwrap();
+    let res = app.clone().oneshot(send("/assets/nope.css")).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
     /* Missing non-asset path: same 404 the bare ServeDir produced before
      * w80 (the app never used path-based SPA routes), now revalidating. */
     let res = app.oneshot(send("/settings")).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
-    assert_eq!(res.headers().get(header::CACHE_CONTROL).unwrap(), "no-cache");
+    assert_eq!(
+        res.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-cache"
+    );
 
     std::fs::remove_dir_all(&tmp).ok();
 }
