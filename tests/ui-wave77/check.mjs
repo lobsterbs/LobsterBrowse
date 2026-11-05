@@ -1,22 +1,24 @@
 /* Regression check for the wave 77 UI batch: the gated suggestor
-   (SUGGEST_MIN_CHARS + buildSuggests ordering and sources), the
-   engine brand marks, and the ASCII-art background config helpers
-   (toneMap, bayerAt, charsFor, ASCII_PARAMS).
+   (SUGGEST_MIN_CHARS + buildSuggests ordering and sources) and the
+   engine brand marks. Wave 78: the ASCII-art background helper
+   assertions were replaced by source checks for the liquid-metal
+   ribbon background (the .tsx files carry JSX, which node cannot
+   import, so they are read from disk instead).
 
    Run from the repo root:
 
      node --experimental-strip-types tests/ui-wave77/check.mjs */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ENGINES } from "../../ui/src/settings.ts";
 import { buildSuggests, SUGGEST_MIN_CHARS } from "../../ui/src/suggest.ts";
 import { markFor, MARKED_ENGINES } from "../../ui/src/engineMarks.ts";
-import { ASCII_PARAMS, bayerAt, charsFor, toneMap } from "../../ui/src/asciiConfig.ts";
 
 /* ---- The suggestor stays shut until engines accept the request. ---- */
 assert.equal(SUGGEST_MIN_CHARS, 2, "engines accept completion requests from 2 chars");
 assert.deepEqual(buildSuggests("c", { history: ["cats.com"], engineName: "Brave", search: "s", remote: [{ text: "cats", src: "Brave" }], searchFor: () => "s" }), [], "one character must not open the menu");
-assert.deepEqual(buildSuggests("", { history: [], engineName: "Brave", search: "s", searchFor: () => "s" }), [], "empty input must not open the menu");
+assert.deepEqual(buildSuggests("", { history: [], engineName: "Brave", search: "s", remote: [], searchFor: () => "s" }), [], "empty input must not open the menu");
 /* Whitespace never fakes the gate: the count applies to the
    trimmed query, so padded single chars stay shut and padded two
    chars open. */
@@ -69,53 +71,25 @@ for (const [id, e] of Object.entries(ENGINES)) {
 }
 assert.deepEqual([...MARKED_ENGINES].sort(), ["brave", "duckduckgo", "google", "mojeek", "startpage"], "marked engine set");
 
-/* ---- ASCII background helpers. ---- */
-assert.equal(ASCII_PARAMS.renderMode, "dither", "the recipe's render mode");
-assert.equal(ASCII_PARAMS.cellSize, 13, "the recipe's cell size");
-assert.equal(ASCII_PARAMS.bgMode, "blur", "the recipe's background mode");
-assert.equal(ASCII_PARAMS.pfx.vignette.enabled, true, "vignette on");
-assert.equal(ASCII_PARAMS.pfx.bloom.enabled, true, "bloom on");
-assert.equal(ASCII_PARAMS.animStyle, "ripple", "the recipe's animation style");
-
-/* toneMap: identity curve end points, monotone interpolation. */
-const curve = ASCII_PARAMS.toneCurve;
-assert.equal(toneMap(0, curve), 0, "tone curve maps black to black");
-assert.equal(toneMap(1, curve), 1, "tone curve maps white to white");
-assert.equal(toneMap(0.5, curve), 0.5, "identity midpoint");
-let prev = -1;
-for (let v = 0; v <= 1.0001; v += 0.05) {
-  const y = toneMap(v, curve);
-  assert.ok(y >= prev, "tone curve stays monotone");
-  prev = y;
-}
-/* A real contrast curve: S-curve lifts midtones predictably. */
-const s = [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }];
-assert.ok(toneMap(0.5, s) === 0.6, "piecewise midpoint");
-assert.ok(Math.abs(toneMap(0.25, s) - 0.3) < 1e-9, "piecewise interpolation between points");
-assert.equal(toneMap(-0.5, s), 0, "clamped below the curve");
-assert.equal(toneMap(1.5, s), 1, "clamped above the curve");
-
-/* bayerAt: the standard 4x4 ordered-dither matrix, periodic in
-   both axes, values in 0..15. */
-assert.equal(bayerAt(0, 0), 0, "corner threshold");
-assert.equal(bayerAt(1, 0), 8);
-assert.equal(bayerAt(0, 1), 12);
-assert.equal(bayerAt(3, 3), 5);
-assert.equal(bayerAt(4, 4), 0, "period 4 in both axes");
-for (let y = 0; y < 8; y++) {
-  for (let x = 0; x < 8; x++) {
-    const b = bayerAt(x, y);
-    assert.ok(b >= 0 && b <= 15 && Number.isInteger(b), "bayer value in range");
-  }
-}
-
-/* charsFor: the standard ramp, customChars override, unknown set
-   falls back to standard. */
-const std = charsFor({ charSet: "standard", customChars: "" });
-assert.equal(std[0], " ", "the standard ramp starts at the blank");
-assert.equal(std[std.length - 1], "@", "the standard ramp ends at @");
-assert.deepEqual(charsFor({ charSet: "standard", customChars: "abc" }), ["a", "b", "c"], "customChars wins");
-assert.equal(charsFor({ charSet: "nonexistent", customChars: "" }).length, std.length, "unknown set falls back to the standard ramp");
-assert.ok(charsFor({ charSet: "blocks", customChars: "" }).length >= 4, "the blocks set exists");
+/* ---- Wave 78 background: the ASCII canvas is gone; the vendored
+   shader-metal component mounts non-interactively from App, and the
+   search bar carries one globe icon with a focus-gated suggestor. ---- */
+const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+const appSrc = read("../../ui/src/App.tsx");
+const homeSrc = read("../../ui/src/pages/Home.tsx");
+const metalSrc = read("../../ui/src/components/ui/shader-metal.tsx");
+assert.ok(metalSrc.includes("export function ShaderMetal"), "the vendored shader-metal component exists");
+assert.ok(metalSrc.includes("export function createShaderMetal"), "its engine factory is exported");
+/* The demo's shipped settings are the component defaults. */
+assert.ok(metalSrc.includes("DEFAULT_RIBBONS = 3"), "the default ribbon count is the demo's 3");
+assert.ok(metalSrc.includes("DEFAULT_SPEED = 0.3"), "the default speed is the demo's 0.3");
+assert.ok(metalSrc.includes("DEFAULT_IRIDESCENCE = 0.2"), "the default iridescence is the demo's 0.2");
+assert.ok(metalSrc.includes('chrome: "#F2F3F5"'), "chrome is the default metal");
+assert.ok(appSrc.includes("interactive={false}"), "App mounts the ribbon shader non-interactive");
+assert.ok(!appSrc.includes("AsciiBackground"), "the ASCII background is gone from App");
+assert.ok(appSrc.includes("lb-fx-bg"), "the portal layer uses the wave 78 class");
+assert.ok(homeSrc.includes('slot="search-icon"'), "the search bar carries the single globe icon");
+assert.ok(!homeSrc.includes('slot="closed-leading"') && !homeSrc.includes('slot="open-leading"'), "no duplicate leading icons in the search bar");
+assert.ok(homeSrc.includes('"beforetoggle"'), "the suggestor is gated until rows exist");
 
 console.log("ui-wave77 check: all assertions passed");

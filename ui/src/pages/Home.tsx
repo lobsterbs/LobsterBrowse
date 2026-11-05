@@ -98,10 +98,25 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
      React cannot set attributes on unknown custom elements
      declaratively, so an effect does it after each render. */
   const menuOpen = open && suggestions.length > 0;
+  /* Wave 78: the view also opens itself on plain input focus (and on
+     the first keystroke) before any row exists; its beforetoggle is
+     cancelable, so cancel the open whenever no suggestion would
+     render. The panel then appears only once real rows exist. */
+  const rowsRef = useRef(0);
+  rowsRef.current = suggestions.length;
   useEffect(() => {
     const view = viewRef.current;
     if (view) view.toggleAttribute("open", menuOpen);
   }, [menuOpen]);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const onBeforeToggle = (e: Event) => {
+      if ((e as { newState?: string }).newState === "open" && rowsRef.current === 0) e.preventDefault();
+    };
+    view.addEventListener("beforetoggle", onBeforeToggle);
+    return () => view.removeEventListener("beforetoggle", onBeforeToggle);
+  }, []);
 
   /* Hidden debug menu (beta): five quick wordmark clicks open it. */
   const wordmarkClicks = useRef<number[]>([]);
@@ -182,8 +197,11 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
-          <m3e-icon name="travel_explore" slot="closed-leading" aria-hidden={true} />
-          <m3e-icon name="travel_explore" slot="open-leading" aria-hidden={true} />
+          {/* Wave 78: one icon only. The view ships its own default
+              magnifier in the leading area; overriding the search-icon
+              slot replaces it, and the old duplicated leading slots
+              (closed + open) showed two icons in the closed state. */}
+          <m3e-icon name="travel_explore" slot="search-icon" aria-hidden={true} />
           <input
             slot="input"
             id="lb-search-input"

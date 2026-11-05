@@ -67,7 +67,7 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", target: "set-theme-color" },
-  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy ascii background animated", target: "set-fancy" },
+  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy background animated metal ribbons shader", target: "set-fancy" },
   { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
   { section: "cloak", label: "Cloak destination", terms: "cloak url site", target: "set-cloak-url" },
   { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", target: "set-cloak-url" },
@@ -466,7 +466,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
                 favicon hue unconditionally). */}
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
-            Replaces the plain background with the animated ASCII-art effect (a Canvas2D dither of the mascot photo, wave 77).
+            Replaces the plain background with the liquid-metal ribbon shader (the 21st.dev shader-metal component, non-interactive, wave 78).
             Off keeps the plain flat background.
           </p>
         </div>

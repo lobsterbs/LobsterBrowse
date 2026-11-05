@@ -24,7 +24,7 @@ import { parseNavTab } from "./frameNav";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
-import { AsciiBackground } from "./components/ui/ascii";
+import { ShaderMetal } from "./components/ui/shader-metal";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
@@ -865,12 +865,15 @@ export default function App() {
           layer, and it stays mounted in EVERY view so the frosted rail
           and dock always frost it instead of a flat surface (the
           in-flow rail has nothing else behind it in the browser view).
-          Wave 77: the starfield was replaced by the ASCII-art canvas.
-          Off = not rendered. */}
+          Wave 78: the ASCII-art canvas was replaced by the
+          liquid-metal ribbon shader (21st.dev shader-metal), mounted
+          non-interactive. LB is hard-pinned dark (m3e-theme
+          scheme="dark"), so the studio resolves dark instead of
+          sniffing the OS scheme. Off = not rendered. */}
       {settings.fancyBackground &&
         createPortal(
-          <div className="lb-ascii-bg" aria-hidden={true}>
-            <AsciiBackground />
+          <div className="lb-fx-bg" aria-hidden={true}>
+            <ShaderMetal interactive={false} theme="dark" />
           </div>,
           document.body
         )}

@@ -155,10 +155,10 @@ export type Settings = {
   autoHideChrome: boolean;
   /* #213: the toolbar pill tint from the active tab's favicon hue
      is always on (the Settings toggle was removed; dark scheme only). */
-  /* Enhanced UI: animated ASCII-art canvas background in every view
-     instead of the flat surface (wave 77: the old starfield was
-     replaced by the 21st.dev-style dither effect). On by default
-     (user request 2026-10-29). */
+  /* Enhanced UI: animated liquid-metal ribbon background in every
+     view instead of the flat surface (wave 78: the 21st.dev
+     shader-metal component replaced the wave 77 ASCII dither). On by
+     default (user request 2026-10-29). */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
