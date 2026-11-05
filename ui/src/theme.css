@@ -124,6 +124,13 @@ body.lb-fancy .lb-home m3e-search-bar {
    frost over the animated background. */
 body.lb-fancy .lb-home m3e-search-view {
   --m3e-search-view-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  /* Pill-clip the frosted host: backdrop-filter blurs the whole host
+     rectangle, and the rounded bar leaves blurred corner squares
+     outside the pill (the same corner-squares class the search-bar
+     rule above documents). Matching radius clips the blur to the
+     pill, closed and open alike; the open dropdown carries its own
+     frost in .lb-ac. */
+  border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
