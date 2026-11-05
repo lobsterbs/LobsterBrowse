@@ -1,11 +1,13 @@
 /* DevTools panel - console / network / diagnostics for the currently
    selected proxy tab. Each tab keeps its own state.
 
-   Proxied pages are served from the LobsterBrowse origin (/zl/),
-   rendered in a same-origin iframe. That gives the panel real access to the page:
-   JavaScript is executed with iframe.contentWindow.eval, and console /
-   network events arrive over the engine's control plane for every
-   proxied document.
+   Proxied pages ride the engine's split content origin, so the frame
+   is usually cross-origin to the app: iframe.contentWindow.eval then
+   throws SecurityError, and the console says so together with the
+   two working routes (the page's own F12 DevTools, or the debug-menu
+   Split content origin toggle). Same-origin frames still eval
+   directly. Console and network events arrive over the engine's
+   control plane for every proxied document either way.
 
    Built from real M3E components: m3e-card as the container,
    m3e-segmented-button for the section switch, m3e-textinput for the
@@ -350,8 +352,9 @@ function ZeoliteDownloads() {
 }
 
 /* Engine-side developer tools: Eruda (an embeddable console/network
-   panel) injected into the live proxied page - the iframe is
-   same-origin, so the script runs in the page JS context directly.
+   panel) injected into the live proxied page - same-origin frames
+   only: split-origin frames are cross-origin and refuse injection,
+   which the button then says plainly.
    Control rides the engine plane (zlSend). The tracing toggle and
    session recording were removed from this surface; zl:tracing /
    zl:recordStart / zl:recordStop stay available on the engine
@@ -361,7 +364,12 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   const injectEruda = async () => {
     const w = frame()?.contentWindow;
     if (!w) { setNote("No proxied page in this tab."); return; }
-    const d = w.document;
+    let d: Document | null = null;
+    try { d = w.document; } catch {
+      setNote("This page rides the split content origin, so the app cannot inject into it. Turn 'Split content origin' off in the debug menu and reload the tab, or use the page's own F12 DevTools.");
+      return;
+    }
+    if (!d) { setNote("No proxied document in this tab."); return; }
     if (d.querySelector("script[data-lb-eruda]")) {
       const eruda = (w as unknown as { eruda?: { toggle?: () => void } }).eruda;
       if (eruda && eruda.toggle) eruda.toggle();
@@ -456,6 +464,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       }));
     } catch (err) {
       const e = err as Error;
+      /* Split content origin: the frame is cross-origin, so the
+         browser blocks page eval from the app outright. Say what
+         works instead of dumping a bare SecurityError stack. */
+      const crossOrigin = e.name === "SecurityError";
       setDt((prev) => ({
         console: [
           ...prev.console,
@@ -463,7 +475,9 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           {
             id: nextEntryId(),
             kind: "error" as const,
-            text: (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
+            text: crossOrigin
+              ? "This page rides the split content origin, so the browser blocks the app from executing JavaScript in it. Either run the snippet in the page's own DevTools (F12 on that tab), or turn 'Split content origin' off in the debug menu (five quick Home wordmark clicks), reload the tab, and run it here. Engine zl: commands are unaffected."
+              : (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
             ts: Date.now(),
           },
         ].slice(-500),
