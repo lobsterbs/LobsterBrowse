@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
+import { buildSuggests, SUGGEST_MIN_CHARS, type Suggestion } from "../suggest";
+import { markFor } from "../engineMarks";
 import DebugMenu from "./DebugMenu";
 
 /* One suggest warning per engine: empty providers do not spam the log. */
@@ -16,84 +18,19 @@ type Props = {
   onClearHistory: () => void;
 };
 
-type Suggestion = { icon: string; text: string; url: string; src?: string };
-
-/* Suggestions: matching history entries, a direct URL when the input
-   looks like one, and the search fallback. Rendered by the custom
-   themed autocomplete (the m3e one never matched input or styling
-   reliably). */
-function buildSuggests(
-  input: string,
-  opts: { history: string[]; engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
-): Suggestion[] {
-  const q = input.trim();
-  if (!q) return [];
-  const out: Suggestion[] = [];
-  const seen = new Set<string>();
-  const push = (icon: string, text: string, url: string, src?: string) => {
-    if (!seen.has(url) && out.length < 8) {
-      seen.add(url);
-      out.push({ icon, text, url, src });
-    }
-  };
-  const ql = q.toLowerCase();
-  for (const h of opts.history) {
-    if (h.toLowerCase().includes(ql)) push("history", h, h);
+/* The row's leading icon (wave 77): the real brand mark of the
+   engine the suggestion actually came from when we have one,
+   otherwise the generic icon. */
+function SugMark({ s }: { s: Suggestion }) {
+  const mark = markFor(s.src);
+  if (mark) {
+    return (
+      <svg className="lb-engine-mark" viewBox="0 0 24 24" aria-hidden={true}>
+        <path d={mark} />
+      </svg>
+    );
   }
-  if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
-  /* Rank engine suggestions by relevance to the query: prefix hits
-     first, then substring matches, then word-start matches, then
-     the rest - the most probable completions lead the list. */
-  const rel = (t: string): number => {
-    const tl = t.toLowerCase();
-    if (tl.startsWith(ql)) return 0;
-    if (tl.includes(ql)) return 1;
-    if (tl.includes(" " + ql)) return 2;
-    return 3;
-  };
-  for (const s of [...(opts.remote ?? [])].sort((a, b) => rel(a.text) - rel(b.text))) {
-    push("search", s.text, opts.searchFor(s.text), s.src);
-  }
-  push("search", q + " · " + opts.engineName + " search", opts.search);
-  return out;
-}
-
-/* Damped-spring animation for the suggestion card (real spring
-   physics: stiffness 170 / damping 22 integrated per frame - CSS
-   easings are not springs). The card slides down out of the search
-   bar on open and springs back before it unmounts. */
-function useSpringCard(open: boolean): { visible: boolean; progress: number } {
-  const [state, setState] = useState({ visible: false, progress: 0 });
-  const s = useRef({ x: 0, v: 0 });
-  useEffect(() => {
-    if (open && !state.visible) setState({ visible: true, progress: s.current.x });
-    if (!open && state.visible && s.current.x <= 0.01) setState({ visible: false, progress: 0 });
-    let raf = 0;
-    let last = 0;
-    const target = open ? 1 : 0;
-    const step = (now: number) => {
-      const dt = last ? Math.min((now - last) / 1000, 0.05) : 0.016;
-      last = now;
-      const a = 170 * (target - s.current.x) - 22 * s.current.v;
-      s.current.v += a * dt;
-      s.current.x += s.current.v * dt;
-      if (!open && s.current.x < 0.01 && s.current.v < 0.05) {
-        s.current = { x: 0, v: 0 };
-        setState({ visible: false, progress: 0 });
-        return;
-      }
-      if (open && s.current.x > 0.999 && Math.abs(s.current.v) < 0.01) {
-        s.current = { x: 1, v: 0 };
-        setState({ visible: true, progress: 1 });
-        return;
-      }
-      setState({ visible: true, progress: s.current.x });
-      raf = requestAnimationFrame(step);
-    };
-    if (state.visible || open) raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [open]);
-  return state;
+  return <m3e-icon name={s.icon} aria-hidden={true} />;
 }
 
 export default function HomePage({ settings, history, incognito, onNavigate, onRemoveHistory, onClearHistory }: Props) {
@@ -101,42 +38,30 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  /* The clear (X) button: m3e-search-bar empties the slotted input
-     directly and fires a "clear" event; React's value tracker dedupes
-     the synthetic input event, so the controlled state never learned
-     the box was emptied (the X hid, the text stayed). Listen for the
-     component's own clear event instead. */
-  const searchBarRef = useRef<HTMLElement | null>(null);
+  /* The clear (X) button inside m3e-search-view empties the slotted
+     input directly and fires a "clear" event; React's value tracker
+     dedupes the synthetic input event, so the controlled state never
+     learned the box was emptied (the X hid, the text stayed). Listen
+     for the component's own clear event instead. */
+  const viewRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const bar = searchBarRef.current;
-    if (!bar) return;
+    const view = viewRef.current;
+    if (!view) return;
     const onClear = () => {
       setUrl("");
       setOpen(false);
       setIdx(-1);
     };
-    bar.addEventListener("clear", onClear);
-    return () => bar.removeEventListener("clear", onClear);
+    view.addEventListener("clear", onClear);
+    return () => view.removeEventListener("clear", onClear);
   }, []);
   /* Engine-queried completions, fetched through the server's /suggest
-     endpoint and merged below the local matches. */
+     endpoint. The request is gated on SUGGEST_MIN_CHARS: engines do
+     not accept completion requests below it. */
   const [remote, setRemote] = useState<{ text: string; src: string }[]>([]);
-  /* Hidden debug menu (beta): five quick wordmark clicks open it. */
-  const wordmarkClicks = useRef<number[]>([]);
-  const [dbgOpen, setDbgOpen] = useState(false);
-  const markWordmark = () => {
-    const now = Date.now();
-    const recent = wordmarkClicks.current.filter((t) => now - t < 2000);
-    recent.push(now);
-    wordmarkClicks.current = recent;
-    if (recent.length >= 5) {
-      wordmarkClicks.current = [];
-      setDbgOpen(true);
-    }
-  };
   useEffect(() => {
     const q = url.trim();
-    if (!q || q.length < 2 || looksLikeUrl(q) || !settings.suggestQueries) {
+    if (!q || q.length < SUGGEST_MIN_CHARS || looksLikeUrl(q) || !settings.suggestQueries) {
       setRemote([]);
       return;
     }
@@ -166,9 +91,31 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
     searchFor: (q: string) => searchUrl(settings, q),
   });
 
-  /* The card springs in and out; while it animates out, clicks pass
-     through (pointerEvents gated on progress below). */
-  const spring = useSpringCard(open && suggestions.length > 0);
+  /* Panel visibility (wave 77): no row renders and the view's panel
+     never opens until the query clears SUGGEST_MIN_CHARS
+     (buildSuggests returns [] below it), and only while the input
+     holds focus. The open attribute mirrors that onto the element;
+     React cannot set attributes on unknown custom elements
+     declaratively, so an effect does it after each render. */
+  const menuOpen = open && suggestions.length > 0;
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.toggleAttribute("open", menuOpen);
+  }, [menuOpen]);
+
+  /* Hidden debug menu (beta): five quick wordmark clicks open it. */
+  const wordmarkClicks = useRef<number[]>([]);
+  const [dbgOpen, setDbgOpen] = useState(false);
+  const markWordmark = () => {
+    const now = Date.now();
+    const recent = wordmarkClicks.current.filter((t) => now - t < 2000);
+    recent.push(now);
+    wordmarkClicks.current = recent;
+    if (recent.length >= 5) {
+      wordmarkClicks.current = [];
+      setDbgOpen(true);
+    }
+  };
 
   const commit = (target: string) => {
     onNavigate(target);
@@ -225,7 +172,7 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
         aria-label="LobsterBrowse"
         onClick={markWordmark}
         /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
-            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
+        style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
@@ -234,8 +181,9 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
                                                                            `}</pre>
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
-        <m3e-search-bar clearable {...{ ref: searchBarRef }}>
-          <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
+        <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
+          <m3e-icon name="travel_explore" slot="closed-leading" aria-hidden={true} />
+          <m3e-icon name="travel_explore" slot="open-leading" aria-hidden={true} />
           <input
             slot="input"
             id="lb-search-input"
@@ -256,39 +204,28 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
             placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
             autoComplete="off"
           />
-        </m3e-search-bar>
-        {spring.visible && suggestions.length > 0 && (
-          <div
-            className="lb-ac"
-            role="listbox"
-            aria-label="Suggestions"
-            style={{
-              opacity: spring.progress,
-              transform: "translateY(" + (1 - spring.progress) * -10 + "px)",
-              pointerEvents: spring.progress > 0.5 ? "auto" : "none",
-            }}
-          >
-            {suggestions.map((s, i) => (
-              <button
-                key={s.url + i}
-                type="button"
-                className={"lb-ac-item" + (i === idx ? " active" : "")}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(s);
-                }}
-                onMouseEnter={() => setIdx(i)}
-              >
-                <m3e-icon name={s.icon} aria-hidden={true} />
-                <span className="lb-ac-text">{s.text}</span>
-                {s.src && (
-                  <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {s.src}</span>
-                )}
-              </button>
-            ))}
-            <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
-          </div>
-        )}
+          {menuOpen && (
+            <div className="lb-ac" role="listbox" aria-label="Suggestions">
+              {suggestions.map((s, i) => (
+                <button
+                  key={s.url + i}
+                  type="button"
+                  className={"lb-ac-item" + (i === idx ? " active" : "")}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pick(s);
+                  }}
+                  onMouseEnter={() => setIdx(i)}
+                >
+                  <SugMark s={s} />
+                  <span className="lb-ac-text">{s.text}</span>
+                  {s.src && <span className="lb-ac-src">via {s.src}</span>}
+                </button>
+              ))}
+              <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
+            </div>
+          )}
+        </m3e-search-view>
       </div>
       {/* #93 recent sites: local history only (never recorded while
           incognito: the whole section hides there), hostname labels,

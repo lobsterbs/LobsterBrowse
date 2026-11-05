@@ -24,7 +24,7 @@ import { parseNavTab } from "./frameNav";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
-import { StarsBackground } from "./components/ui/stars";
+import { AsciiBackground } from "./components/ui/ascii";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
@@ -860,15 +860,17 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
-      {/* Enhanced UI setting (was Home-only): the starfield is portaled
-          to <body> so no view ancestor can trap the fixed layer, and it
-          stays mounted in EVERY view so the frosted rail and dock always
-          frost it instead of a flat surface (the in-flow rail has
-          nothing else behind it in the browser view). Off = not rendered. */}
+      {/* Enhanced UI setting (was Home-only): the animated background
+          is portaled to <body> so no view ancestor can trap the fixed
+          layer, and it stays mounted in EVERY view so the frosted rail
+          and dock always frost it instead of a flat surface (the
+          in-flow rail has nothing else behind it in the browser view).
+          Wave 77: the starfield was replaced by the ASCII-art canvas.
+          Off = not rendered. */}
       {settings.fancyBackground &&
         createPortal(
-          <div className="lb-stars-bg" aria-hidden={true}>
-            <StarsBackground />
+          <div className="lb-ascii-bg" aria-hidden={true}>
+            <AsciiBackground />
           </div>,
           document.body
         )}
