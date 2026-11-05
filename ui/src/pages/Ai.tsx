@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   AI_MODELS,
   aiSearch,
+  deleteChat,
+  listChats,
   loadModelId,
   mergeUsage,
   needsThinking,
@@ -11,9 +13,11 @@ import {
   SPAWN_AGENT_TOOL,
   streamChat,
   stripStreamTokens,
+  splitHarmony,
   SUB_AGENT_MODELS,
   WEB_SEARCH_TOOL,
   RateLimitError,
+  type AiChat,
   type AiModel,
   type AiMsg,
   type AiSub,
@@ -43,6 +47,10 @@ const QUOTA_MAX = 50;
 
 type Phase = "idle" | "searching" | "thinking" | "streaming" | "subagent";
 
+/* The bottom sheet's imperative API (show/hide), kept local so the
+   ref spread stays typed. */
+type M3eBottomSheet = HTMLElement & { show: () => void; hide: () => void };
+
 interface Attached {
   name: string;
   kind: "text" | "image";
@@ -61,6 +69,19 @@ function readAsDataUrl(f: File): Promise<string> {
     r.onerror = () => reject(r.error ?? new Error("file read failed"));
     r.readAsDataURL(f);
   });
+}
+
+/* The conversation title the AI "gives" once it starts to work: the
+   first meaningful line of its first answer (markdown decoration
+   stripped), falling back to the user's message. Shown in the
+   history sheet. */
+function aiTitle(userText: string, answer: string): string {
+  const line = answer
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l && !l.startsWith("```"));
+  const t = (line ?? userText).replace(/[*_`#>|]+/g, "").trim();
+  return (t || userText).slice(0, 48);
 }
 
 /* The notification service (M3E snackbar, same one App uses). AI
@@ -208,10 +229,19 @@ export default function AiPage() {
   /* Sub agent runs this turn: one shim row each, elapsed when done. */
   const [subs, setSubs] = useState<AiSub[]>([]);
   const [attached, setAttached] = useState<Attached[]>([]);
+  /* Conversation history: encrypted chats in IndexedDB, listed into
+     the bottom sheet; picking one loads it back into the page. */
+  const [histChats, setHistChats] = useState<AiChat[]>([]);
+  /* The attachment preview stays mounted while it fades out. */
+  const [peekMounted, setPeekMounted] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const sheetRef = useRef<M3eBottomSheet | null>(null);
+  /* The saved conversation's title (kept across turns so updates do
+     not retitle the chat). */
+  const titleRef = useRef("");
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
@@ -233,6 +263,12 @@ export default function AiPage() {
     if (nearBottom || phase !== "streaming") el.scrollTop = el.scrollHeight;
   }, [messages, phase]);
 
+  /* The attachment preview mounts with the first file and stays
+     mounted for its fade-out after the last one clears. */
+  useEffect(() => {
+    if (attached.length > 0) setPeekMounted(true);
+  }, [attached.length]);
+
   async function onFiles(list: FileList | null) {
     if (!list) return;
     const max = 5 - attached.length;
@@ -253,6 +289,52 @@ export default function AiPage() {
       }
     }
     if (out.length) setAttached((a) => [...a, ...out].slice(0, 5));
+  }
+
+  /* History: list the encrypted chats and raise the bottom sheet. */
+  async function openHistory() {
+    try {
+      const all = await listChats();
+      setHistChats(all.filter((c) => c.id != null));
+    } catch {
+      setHistChats([]);
+    }
+    sheetRef.current?.show();
+  }
+
+  function loadChat(c: AiChat) {
+    if (busy) return;
+    setMessages(c.messages);
+    setCurrentId(c.id ?? null);
+    titleRef.current = c.title;
+    setHelloGone(true);
+    sheetRef.current?.hide();
+  }
+
+  /* Delete with Undo: the record leaves IndexedDB immediately; Undo
+     re-saves the kept chat object (same id restores the row). */
+  function onDeleteChat(c: AiChat) {
+    const id = c.id;
+    if (id == null) return;
+    Promise.resolve(deleteChat(id)).then(
+      () => {
+        setHistChats((l) => l.filter((x) => x.id !== id));
+        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+          M3eSnackbar.open("Conversation deleted", "Undo", {
+            actionCallback: () => {
+              void saveChat(c).then(
+                () => {
+                  void openHistory();
+                },
+                () => toast("Conversation could not be restored.")
+              );
+            },
+            duration: 8000,
+          });
+        }
+      },
+      () => toast("Conversation could not be deleted.")
+    );
   }
 
   async function send(retry?: { text: string; files: Attached[] }) {
@@ -338,13 +420,17 @@ export default function AiPage() {
     let acc = "";
     let thinkAcc = "";
     let sources: AiSource[] | undefined;
+    /* The answer renders only the harmony final channel; analysis
+       text that leaked into content joins the thinking panel. */
     const flush = () =>
       setMessages((m) => {
         const copy = m.slice();
+        const h = splitHarmony(acc);
+        const thinkText = thinkAcc + (h.analysis ? (thinkAcc ? "\n" : "") + h.analysis : "");
         copy[copy.length - 1] = {
           ...copy[copy.length - 1],
-          text: acc,
-          thinking: thinkAcc || undefined,
+          text: h.final,
+          thinking: thinkText || undefined,
           sources,
         };
         return copy;
@@ -382,7 +468,8 @@ export default function AiPage() {
         if (finish !== "tool_calls" || !calls.length) break;
         /* The model invoked a tool: replay its calls. web_search runs
         the keyless Exa search; spawn_agent runs a full sub agent turn
-        whose text stays internal - the shim row is the only trace. */
+        whose text stays internal - the shim row inside the thinking
+        panel is the only trace. */
         apiMessages.push({ role: "assistant", content: "", tool_calls: calls });
         for (const call of calls) {
           if (call.function.name === "spawn_agent") {
@@ -397,7 +484,7 @@ export default function AiPage() {
             }
             if (!(SUB_AGENT_MODELS as readonly string[]).includes(subModel)) subModel = SUB_AGENT_MODELS[0];
             setPhase("subagent");
-            subRuns = [...subRuns, { task: task.slice(0, 100), ms: 0 }];
+            subRuns = [...subRuns, { task: task.slice(0, 100), ms: 0, status: "working" }];
             setSubs(subRuns);
             const subStart = Date.now();
             try {
@@ -408,6 +495,10 @@ export default function AiPage() {
                 content: r.answer || "the sub agent returned an empty answer",
               });
               usage = mergeUsage(usage, r.usage);
+              subRuns[subRuns.length - 1] = {
+                ...subRuns[subRuns.length - 1],
+                status: r.answer ? "done" : "failed",
+              };
             } catch (e) {
               if (ac.signal.aborted) throw e;
               apiMessages.push({
@@ -415,6 +506,10 @@ export default function AiPage() {
                 tool_call_id: call.id,
                 content: "sub agent failed: " + msg(e),
               });
+              subRuns[subRuns.length - 1] = {
+                ...subRuns[subRuns.length - 1],
+                status: "failed",
+              };
             } finally {
               const ms = Date.now() - subStart;
               subRuns = subRuns.map((x, i) => (i === subRuns.length - 1 ? { ...x, ms } : x));
@@ -493,14 +588,19 @@ export default function AiPage() {
       });
       /* Persist the turn; a storage failure never loses it from view. */
       if (ok) {
+        const h = splitHarmony(acc);
+        const thinkText = thinkAcc + (h.analysis ? (thinkAcc ? "\n" : "") + h.analysis : "");
+        const title =
+          before === 0 ? aiTitle(text, h.final) : titleRef.current || text.slice(0, 48);
+        titleRef.current = title;
         try {
           const all = [
             ...messages,
             userMsg,
             {
               role: "assistant" as const,
-              text: stripStreamTokens(acc),
-              thinking: thinkAcc ? stripStreamTokens(thinkAcc) : undefined,
+              text: h.final,
+              thinking: thinkText ? stripStreamTokens(thinkText) : undefined,
               model: turnModel.id,
               sources,
               ms: elapsed,
@@ -510,7 +610,7 @@ export default function AiPage() {
           ];
           const id = await saveChat({
             id: currentId ?? undefined,
-            title: text.slice(0, 48),
+            title,
             messages: all,
             updated: Date.now(),
           });
@@ -526,6 +626,14 @@ export default function AiPage() {
 
   return (
     <div className="lb-ai">
+      <button
+        type="button"
+        className="lb-ai-hist-btn"
+        aria-label="Conversation history"
+        onClick={() => void openHistory()}
+      >
+        <m3e-icon name="history" aria-hidden={true} />
+      </button>
       <div className="lb-ai-msgs" ref={scrollRef}>
         {!helloGone && (
           <div
@@ -540,7 +648,8 @@ export default function AiPage() {
         {messages.map((m, i) => {
           const last = i === messages.length - 1;
           /* Sub agent shim rows: the live state while the turn runs,
-             the recorded ones once the turn settles. */
+             the recorded ones once the turn settles. They render
+             inside the thinking panel, never in the output. */
           const subList = m.subs ? m.subs : last && busy ? subs : undefined;
           return (
             <div key={i} className={"lb-ai-msg lb-ai-" + m.role}>
@@ -563,7 +672,7 @@ export default function AiPage() {
                       phase === "searching"
                         ? "Searching"
                         : phase === "subagent"
-                          ? "Running sub agent"
+                          ? "Running sub agents"
                           : "Thinking"
                     }
                     doneLabel={m.thinking ? "Thought" : "Worked"}
@@ -589,6 +698,25 @@ export default function AiPage() {
                         </div>
                       </ToolRow>
                     )}
+                    {subList && subList.length > 0 && (
+                      <div className="lb-ai-subs">
+                        {subList.map((s, j) => {
+                          const st = s.status ?? (s.ms ? "done" : "working");
+                          return (
+                            <div key={j} className="lb-ai-sub">
+                              <span
+                                className={"lb-ai-tool-label" + (st === "working" ? " lb-ai-shimmer" : "")}
+                                role="status"
+                              >
+                                {st === "failed" ? "Sub agent failed" : st === "working" ? "Sub agent working" : "Sub agent done"}
+                              </span>
+                              <span className="lb-ai-sub-task">{s.task}</span>
+                              {s.ms > 0 && <span className="lb-ai-sub-ms">{formatElapsed(s.ms)}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </ToolRow>
                 )}
               {m.role === "user" && m.text && <div className="lb-ai-bubble">{m.text}</div>}
@@ -600,22 +728,6 @@ export default function AiPage() {
                   <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
                     Working
                   </span>
-                </div>
-              )}
-              {m.role === "assistant" && subList && subList.length > 0 && (
-                <div className="lb-ai-subs">
-                  {subList.map((s, j) => (
-                    <div key={j} className="lb-ai-sub">
-                      <span
-                        className={"lb-ai-tool-label" + (s.ms ? "" : " lb-ai-shimmer")}
-                        role="status"
-                      >
-                        {s.ms ? "Sub agent done" : "Sub agent working"}
-                      </span>
-                      <span className="lb-ai-sub-task">{s.task}</span>
-                      {s.ms > 0 && <span className="lb-ai-sub-ms">{formatElapsed(s.ms)}</span>}
-                    </div>
-                  ))}
                 </div>
               )}
               {m.role === "assistant" && !busy && (m.usage || m.ms != null) && (
@@ -633,23 +745,6 @@ export default function AiPage() {
         })}
       </div>
 
-      {attached.length > 0 && (
-        <div className="lb-ai-att">
-          {attached.map((f, i) => (
-            <span key={i} className="lb-ai-file-chip">
-              {f.name}
-              <button
-                className="lb-ai-file-x"
-                aria-label={"Remove " + f.name}
-                onClick={() => setAttached((a) => a.filter((_, j) => j !== i))}
-              >
-                &times;
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
       <div className="lb-ai-bar">
         <input
           ref={fileRef}
@@ -661,29 +756,56 @@ export default function AiPage() {
             e.target.value = "";
           }}
         />
-        <m3e-search-bar>
-          <m3e-icon-button slot="leading" aria-label="Attach files" onClick={() => fileRef.current?.click()}>
-            <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <input
-            slot="input"
-            ref={inputRef}
-            aria-label="Message the assistant"
-            placeholder="Ask Anything"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-          />
-        </m3e-search-bar>
+        <div className="lb-ai-bar-main">
+          <m3e-search-bar>
+            <m3e-icon-button slot="leading" aria-label="Attach files" onClick={() => fileRef.current?.click()}>
+              <m3e-icon name="add" aria-hidden={true} />
+            </m3e-icon-button>
+            <input
+              slot="input"
+              ref={inputRef}
+              aria-label="Message the assistant"
+              placeholder="Ask Anything"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+            />
+          </m3e-search-bar>
+          {peekMounted && (
+            <div
+              className={"lb-ai-att-peek" + (attached.length === 0 ? " lb-out" : "")}
+              onAnimationEnd={(e) => {
+                if (e.animationName === "lb-ai-peek-out") setPeekMounted(false);
+              }}
+            >
+              {attached.map((f, i) => (
+                <span key={i} className={f.kind === "image" ? "lb-ai-att-thumb" : "lb-ai-file-chip"}>
+                  {f.kind === "image" && f.dataUrl ? (
+                    <img src={f.dataUrl} alt={f.name} />
+                  ) : (
+                    f.name
+                  )}
+                  <button
+                    className="lb-ai-att-x"
+                    aria-label={"Remove " + f.name}
+                    onClick={() => setAttached((a) => a.filter((_, j) => j !== i))}
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         <m3e-button
           variant="tonal"
           {...{ class: "lb-ai-send" }}
-          disabled={!busy && !draft.trim() && attached.length === 0}
+          {...(busy || draft.trim() || attached.length ? {} : { disabled: true })}
           aria-label={busy ? "Stop" : "Send"}
           onClick={() => (busy ? abortRef.current?.abort() : void send())}
         >
@@ -701,6 +823,44 @@ export default function AiPage() {
           {quotaUsed}/{QUOTA_MAX}
         </span>
       </div>
+
+      <m3e-bottom-sheet {...{ ref: sheetRef }}>
+        <div className="lb-ai-hist">
+          <div className="lb-ai-hist-head" slot="header">Conversations</div>
+          {histChats.length === 0 && (
+            <div className="lb-ai-hist-empty">
+              No saved conversations yet. Chats are saved encrypted on this device.
+            </div>
+          )}
+          {histChats.map((c) => (
+            <div key={c.id} className="lb-ai-hist-row">
+              <div
+                className="lb-ai-hist-main"
+                role="button"
+                tabIndex={0}
+                onClick={() => loadChat(c)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    loadChat(c);
+                  }
+                }}
+              >
+                <span className="lb-ai-hist-title">{c.title || "Untitled"}</span>
+                <span className="lb-ai-hist-date">{new Date(c.updated).toLocaleString()}</span>
+              </div>
+              <m3e-menu-trigger for={"lb-ai-hist-menu-" + c.id}>
+                <m3e-icon-button aria-label={"Options for " + (c.title || "a conversation")}>
+                  <m3e-icon name="more_vert" aria-hidden={true} />
+                </m3e-icon-button>
+              </m3e-menu-trigger>
+              <m3e-menu id={"lb-ai-hist-menu-" + c.id}>
+                <m3e-menu-item onClick={() => onDeleteChat(c)}>Delete</m3e-menu-item>
+              </m3e-menu>
+            </div>
+          ))}
+        </div>
+      </m3e-bottom-sheet>
     </div>
   );
 }
