@@ -337,8 +337,6 @@ function compile(gl: WebGLRenderingContext, type: number, source: string) {
   return shader
 }
 
-/** Most pixels we'll shade per frame; past this the canvas renders softer. */
-const MAX_PIXELS = 2_400_000
 /** Where the key light rests when the pointer is away: up and to the left. */
 const REST_LIGHT = { x: -0.45, y: 0.55 }
 
@@ -454,7 +452,8 @@ export function createShaderMetal(
   }
   if (!initGl()) return null
 
-  // Ribbon edges are hard, so this one renders at device resolution (up to 2x).
+  // Ribbon edges are hard, so this renders at the full device
+  // resolution: no pixel budget and no DPR cap.
   // Returns true when the backing store changed.
   const resize = () => {
     const parent = canvas.parentElement
@@ -462,11 +461,7 @@ export function createShaderMetal(
     const w = parent.clientWidth
     const h = parent.clientHeight
     if (w <= 0 || h <= 0) return false
-    const ratio = Math.min(
-      window.devicePixelRatio || 1,
-      2,
-      Math.sqrt(MAX_PIXELS / (w * h))
-    )
+    const ratio = window.devicePixelRatio || 1
     const width = Math.max(1, Math.floor(w * ratio))
     const height = Math.max(1, Math.floor(h * ratio))
     canvas.style.width = `${w}px`

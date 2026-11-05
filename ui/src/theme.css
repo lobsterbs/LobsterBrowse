@@ -117,22 +117,27 @@ body.lb-fancy .lb-home m3e-search-bar {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Wave 77: the Home search surface is now m3e-search-view; frost
-   the whole view when its embedded bar is not an m3e-search-bar the
-   rule above can catch. The container-color token is a harmless
-   no-op unless the view defines it; the backdrop blur carries the
-   frost over the animated background. */
+/* Wave 77/79: the Home search surface is m3e-search-view. Its bar
+   lives inside the view's shadow tree, so the frost travels by token
+   inheritance: the bar container color (translucent surface 38%)
+   crosses the shadow boundary, and the host-level backdrop blur is
+   pill-clipped at 9999px (the closed host rect IS the bar rect) so
+   the blur no longer paints square corners around the rounded bar.
+   The contained results panel rides the same mix so the open
+   dropdown reads as glass too. */
 body.lb-fancy .lb-home m3e-search-view {
   --m3e-search-view-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  /* Pill-clip the frosted host: backdrop-filter blurs the whole host
-     rectangle, and the rounded bar leaves blurred corner squares
-     outside the pill (the same corner-squares class the search-bar
-     rule above documents). Matching radius clips the blur to the
-     pill, closed and open alike; the open dropdown carries its own
-     frost in .lb-ac. */
+  --m3e-search-view-contained-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+/* Wave 79: the docked view popover backdrop would tint the whole
+   page while suggestions show; the suggestor is a docked overlay,
+   not a modal, so the page behind stays untinted. */
+.lb-home m3e-search-view {
+  --m3e-search-view-docked-scrim-opacity: 0%;
 }
 /* Suggestion dropdown: same frosted treatment as the search bar. */
 body.lb-fancy .lb-ac {
@@ -168,10 +173,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
   max-width: 100%;
   box-sizing: border-box;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 48%, transparent);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
   border-radius: var(--m3e-shape-lg);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
@@ -464,11 +469,13 @@ body.lb-fancy .lb-home pre.lb-ascii {
   to { opacity: 1; }
 }
 .lb-sk m3e-skeleton { display: block; width: 100%; height: 100%; }
-/* The mock layout the skeleton shapes are painted over. */
-.lb-sk-page { display: flex; flex-direction: column; gap: 16px; max-width: 720px; margin: 56px auto; padding: 0 24px; }
-.lb-sk-head { width: 42%; height: 24px; border-radius: 8px; }
-.lb-sk-hero { width: 100%; height: 180px; border-radius: 12px; }
-.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; }
+/* The mock layout the skeleton shapes are painted over. Wave 79:
+   full-size, so the skeleton reads as the entire frame instead of a
+   small centered box. */
+.lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; }
+.lb-sk-head { width: 42%; height: 24px; border-radius: 8px; flex: 0 0 auto; }
+.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: 12px; }
+.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; }
 .lb-sk-short { width: 62%; }
 @media (prefers-reduced-motion: reduce) {
   .lb-sk { animation: none; }

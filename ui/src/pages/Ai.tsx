@@ -49,7 +49,7 @@ type Phase = "idle" | "searching" | "thinking" | "streaming" | "subagent";
 
 /* The bottom sheet's imperative API (show/hide), kept local so the
    ref spread stays typed. */
-type M3eBottomSheet = HTMLElement & { show: () => void; hide: () => void };
+type M3eBottomSheet = HTMLElement & { show: () => void; hide: () => void; open: boolean };
 
 interface Attached {
   name: string;
@@ -262,6 +262,32 @@ export default function AiPage() {
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
     if (nearBottom || phase !== "streaming") el.scrollTop = el.scrollHeight;
   }, [messages, phase]);
+
+  /* Wave 79: the history sheet is non-modal (the M3E bottom sheet
+     handles Escape only in modal mode and has no light dismiss), so
+     the page wires the dismiss itself: a pointer press outside the
+     sheet and the Escape key both close it. Capture-phase listeners
+     fire before popover promotion; the row menus live inside the
+     sheet's DOM, so their clicks and the sheet's own gestures never
+     count as outside. */
+  useEffect(() => {
+    const dismiss = (e: PointerEvent) => {
+      const sheet = sheetRef.current;
+      if (!sheet || !sheet.open) return;
+      if (e.composedPath().includes(sheet)) return;
+      sheet.hide();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const sheet = sheetRef.current;
+      if (e.key === "Escape" && sheet && sheet.open) sheet.hide();
+    };
+    document.addEventListener("pointerdown", dismiss, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, []);
 
   /* The attachment preview mounts with the first file and stays
      mounted for its fade-out after the last one clears. */
