@@ -2070,7 +2070,25 @@ FROM debian:bookworm-slim AS zl-builder
 # Cargo-side pin bumps d4ca407 -> 5073f316 (#620 changed wisp-core
 # and zeolite-server; dns/policy public API verified unchanged for
 # the LB calls; Cargo.lock regenerated with cargo generate-lockfile).
-ARG ZEOLITE_COMMIT=59f0c621d3411e6fc84930560e2576d1637299b2
+# Pin 159 (2026-11-05): dist 85a6f7d (build 41983152916) ships the
+# #637 giscus origin= virtualization: the giscus.app widget loader
+# names the page in origin= (backLink=, mapping=url term=) from the
+# LegacyUnforgeable cleaned location, so the strict-mode giscus.json
+# origins check refused the widget frame; virtualGiscusOrigin
+# rewrites a parameter whose URL names this deployment to the
+# referrer-derived page URL at the fetch seam (anchor preserved,
+# :443/:80 normalize, fail closed without a referrer). Regression
+# giscus-origin.test.ts, 13 cases. sw.js d02a3ee946ecaf61 ->
+# da868598848f1802 (822437 bytes); bootstrap.js 0c81efb9ba343dff
+# unchanged; rewriter_wasm_bg.wasm sha256-16 61929dfbd3076a4f
+# unchanged (app-side fix only; hash-check the served wasm
+# post-deploy; deploy with a cleared build cache). CI on 9e3dede:
+# rust/wasm/app/compat green; browser e2e 60 passed 6 failed, every
+# failure the documented #514/#545 wedge (the #96 NativeTransit
+# HUNG cascade and its page.goto 30s timeout fallout; no giscus
+# path is exercised by the e2e suite). Cargo-side pin stays
+# 5073f316 (no crates changed since; only app TS moved).
+ARG ZEOLITE_COMMIT=85a6f7d92eea7fdca0dcf569521f95126653c2c7
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2129,7 +2147,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d02a3ee946ecaf61 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=da868598848f1802 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
