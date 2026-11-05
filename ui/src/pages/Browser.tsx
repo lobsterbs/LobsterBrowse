@@ -462,6 +462,32 @@ export default function BrowserView(props: Props) {
      closure would otherwise read a stale render-time status. */
   const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
   statusRef.current = status;
+
+  /* Wave 77 skeleton: per-tab first-paint commitment. The black
+     skeleton overlay covers the content area while the active tab
+     loads a navigation that has not committed its first paint yet
+     (a fresh URL or a fresh tab); once the frame's load event fires
+     the tab is committed and further in-place asset loads of the
+     same site never bring the skeleton back. */
+  const [committed, setCommittedState] = useState<Record<number, boolean>>({});
+  const committedRef = useRef<Record<number, boolean>>({});
+  const setCommitted = (tabId: number, v: boolean) => {
+    if (committedRef.current[tabId] === v) return;
+    committedRef.current[tabId] = v;
+    setCommittedState((prev) => ({ ...prev, [tabId]: v }));
+  };
+  /* Reset the commitment exactly when a tab's loading flips to true
+     (a new navigation, including one started by the Home search or
+     a restored session). prevStatus mirrors the last seen status so
+     the watcher sees transitions, not levels. */
+  const prevStatus = useRef<Record<number, { loading: boolean; nav?: string }>>({});
+  useEffect(() => {
+    for (const [k, v] of Object.entries(status)) {
+      const id = Number(k);
+      if (v.loading && !prevStatus.current[id]?.loading) setCommitted(id, false);
+    }
+    prevStatus.current = status;
+  }, [status]);
   /* Engine-side loading overlay (zl:loadState): the page-settle probe
      only sees the frame's own resource timing; engine-mediated work
      the frame never observes (the initial document fetch before the
@@ -2409,6 +2435,9 @@ export default function BrowserView(props: Props) {
   }
 
   const st = status[active.id] ?? { loading: false };
+  /* Wave 77: the skeleton shows only for uncommitted navigations of
+     the active tab - never for a committed site's asset loads. */
+  const skeletonOn = st.loading && !committed[active.id];
   const activeDt = dtOf(active.id);
 
   const go = (value: string) => {
@@ -2558,6 +2587,10 @@ export default function BrowserView(props: Props) {
                   if (!ctxHooked.current.has(el)) {
                     ctxHooked.current.add(el);
                     el.addEventListener("load", () => {
+                      /* Wave 77: first paint committed - the skeleton
+                         goes away and stays away while this document
+                         loads its own assets in place. */
+                      setCommitted(t.id, true);
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                       hookFrameDevTools(el);
                     });
@@ -2597,6 +2630,29 @@ export default function BrowserView(props: Props) {
         >
           <m3e-loading-indicator variant="contained" aria-label="Loading page" />
         </div>
+
+        {/* Wave 77 skeleton: the black skeleton page covers the
+            content area while the active tab's navigation has not
+            committed its first paint. The m3e-skeleton paints pulse
+            shapes over each mock layout div's box (the slotted mock
+            itself stays hidden until loaded), and the overlay sits
+            below the loading indicator (z-index 5 vs 6) so the
+            morphing indicator stays visible on top. */}
+        {skeletonOn && (
+          <div className="lb-sk" aria-hidden={true}>
+            <m3e-skeleton animation="pulse">
+              <div className="lb-sk-page">
+                <div className="lb-sk-head" />
+                <div className="lb-sk-hero" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line lb-sk-short" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line lb-sk-short" />
+              </div>
+            </m3e-skeleton>
+          </div>
+        )}
 
         {/* Compaction 4: the in-page new-tab hero is gone. An empty
             tab expands and focuses the toolbar pill instead (see the
