@@ -92,4 +92,13 @@ assert.ok(homeSrc.includes('slot="search-icon"'), "the search bar carries the si
 assert.ok(!homeSrc.includes('slot="closed-leading"') && !homeSrc.includes('slot="open-leading"'), "no duplicate leading icons in the search bar");
 assert.ok(homeSrc.includes('"beforetoggle"'), "the suggestor is gated until rows exist");
 
+/* Wave 78 follow-up: the frosted search-view host must pill-clip
+   its backdrop blur, or it paints blurred square corners outside the
+   rounded bar. */
+const themeSrc = read("../../ui/src/theme.css");
+assert.ok(
+  /body\.lb-fancy \.lb-home m3e-search-view \{[^}]*border-radius: 9999px/s.test(themeSrc),
+  "the search-view frost rule pill-clips its backdrop blur"
+);
+
 console.log("ui-wave77 check: all assertions passed");
