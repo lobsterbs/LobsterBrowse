@@ -82,12 +82,13 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 /* Enhanced UI (stars): portaled to <body> by Home, so the fixed
    layer can never be trapped or resized by a view ancestor. Negative
    z-index covers the plain body background yet stays under the app.
-   The starfield component owns its own dark radial background and
+   The ASCII-art canvas paints an opaque background of its own and
    fills this layer at 100%. */
-.lb-stars-bg { position: fixed; inset: 0; z-index: -1; }
+.lb-ascii-bg { position: fixed; inset: 0; z-index: -1; }
+.lb-ascii-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* Frost needs a backdrop with content: two soft aurora blooms hug
    the left edge behind the rail so the blur reads as glass. */
-body.lb-fancy .lb-stars-bg::after {
+body.lb-fancy .lb-ascii-bg::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -111,6 +112,16 @@ body.lb-fancy .lb-home m3e-search-bar {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
+/* Wave 77: the Home search surface is now m3e-search-view; frost
+   the whole view when its embedded bar is not an m3e-search-bar the
+   rule above can catch. The container-color token is a harmless
+   no-op unless the view defines it; the backdrop blur carries the
+   frost over the ASCII background. */
+body.lb-fancy .lb-home m3e-search-view {
+  --m3e-search-view-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
 /* Suggestion dropdown: same frosted treatment as the search bar. */
 body.lb-fancy .lb-ac {
   /* Frosted glass drops the opaque dropdown outline; the ring and
@@ -124,9 +135,9 @@ body.lb-fancy .lb-ac {
 /* Frosted nav rail (#226, live-probed 2026-10-30): the frost chain
    works - a bright layer behind the rail shows through the blur -
    so the flat look was the backdrop, not an overwrite: the only
-   thing behind the rail was the near-black starfield, and blur over
-   a flat dark field is invisible. The tint drops to 38% so the
-   starfield and the left-edge aurora blooms read through the
+   thing behind the rail was the near-black ASCII canvas, and blur
+   over a flat dark field is invisible. The tint drops to 38% so the
+   dither texture and the left-edge aurora blooms read through the
    glass; the hairline edge and inset gloss match the search bar.
    The @m3e/web 2.8.2 rail shadow paints no background of its own
    (verified in dist nav-rail.js), so the container token stays a
@@ -229,17 +240,11 @@ body.lb-fancy .lb-home pre.lb-ascii {
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
 .lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
+/* Wave 77: the suggestion list now lives INSIDE the
+   m3e-search-view results panel (contained variant), so the panel
+   provides the surface, elevation and positioning; this list only
+   shapes its rows and its scrollbox. */
 .lb-ac {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 40;
-  background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline);
-  border-radius: var(--m3e-shape-md);
-  box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.22));
-  overflow: hidden;
   text-align: left;
   max-height: 320px;
   overflow-y: auto;
@@ -423,6 +428,39 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-loadchip { position: absolute; top: 0; left: 50%; z-index: 6; pointer-events: none; display: flex; justify-content: center; padding: var(--md-sys-measurement-space150, 12px) 0; opacity: 0; transform: translate(-50%, -100%); transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1), transform 240ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-loadchip-on { opacity: 1; transform: translate(-50%, 0); }
 .lb-loadchip m3e-loading-indicator { width: 56px; height: 56px; }
+/* Wave 77: the row's engine brand mark (the real logo SVG from
+   simple-icons) leads the suggestion text; the .lb-ac-item flex gap
+   provides the required space after it. */
+.lb-engine-mark { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
+.lb-ac-src { margin-left: auto; font-size: 11px; opacity: 0.65; flex-shrink: 0; }
+/* Wave 77: the black skeleton page (m3e-skeleton painting pulse
+   shapes over an invisible mock layout) that covers the content
+   area while a navigation's first paint has not committed - a new
+   URL, a new tab, a restored session - and never while a committed
+   site loads more of its own assets in place. Sits below the
+   loading indicator (z-index 5 vs 6). */
+.lb-sk {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  overflow: hidden;
+  animation: lb-sk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
+}
+@keyframes lb-sk-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lb-sk m3e-skeleton { display: block; width: 100%; height: 100%; }
+/* The mock layout the skeleton shapes are painted over. */
+.lb-sk-page { display: flex; flex-direction: column; gap: 16px; max-width: 720px; margin: 56px auto; padding: 0 24px; }
+.lb-sk-head { width: 42%; height: 24px; border-radius: 8px; }
+.lb-sk-hero { width: 100%; height: 180px; border-radius: 12px; }
+.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; }
+.lb-sk-short { width: 62%; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-sk { animation: none; }
+}
 .lb-skel { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150); width: 100%; }
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
