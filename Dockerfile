@@ -2109,7 +2109,22 @@ FROM debian:bookworm-slim AS zl-builder
 # cascade, the #514/#545 wedge; the pin 135/151-160 precedent,
 # docs/ci-torture-wedge.md; locally 66/66 on the same head).
 # Cargo-side pin stays 5073f316 (app TS only, no crates changed).
-ARG ZEOLITE_COMMIT=e0c67e625ab887b32dcc953a28068bf8102fb0ed
+# Pin 162 (2026-11-06): dist 3157fdb (build 42246542499) ships the
+# README ASCII banner in the DevTools console: the SW prints the
+# Zeolite ASCII art with a top-level console.info on every worker
+# evaluation (engine init), plain console only - deliberately NOT
+# routed through netLog/DIAG so it never rides into the embedder's
+# in-app console. The pinned "[Zeolite] runtime <version>" line is
+# unchanged; version.test.ts now also pins the two leading art
+# lines in the source (Zeolite 6f1279f). sw.js
+# 2e9e52d4f166c00f -> 2337cd1084d158a0 (824903 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on 6f1279f: rust/wasm/app/compat
+# green; browser e2e red with the documented passthrough-#96 wedge
+# signature (58/66, NativeTransit HUNG marks then the page.goto 30s
+# cascade, the #514/#545 wedge; the pin 135/151-161 precedent,
+# docs/ci-torture-wedge.md run 42246542499). Cargo-side pin stays
+# 5073f316 (app TS only, no crates changed).
+ARG ZEOLITE_COMMIT=3157fdb8fc288ede562e8b83a565693551eb6217
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2168,7 +2183,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2e9e52d4f166c00f ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2337cd1084d158a0 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
