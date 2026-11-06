@@ -37,4 +37,16 @@ const settings = readFileSync(new URL("../../ui/src/pages/Settings.tsx", import.
 assert.ok(settings.includes("<ExtManage />"), "Settings must mount the extensions management UI");
 assert.ok(settings.includes("set-manage-ext"), "the manage group needs a search-index target id");
 
+/* #560 regression: openExtPageWindow must accept the ROOTED page URL
+   the engine now answers (/options.html?zlExt=..&zlPageTok=..), the
+   legacy /zl-ext/<id>/<path> form, and reject everything else. */
+import { extPageUrlOk } from "../../ui/src/browser/extLaunch.ts";
+assert.equal(extPageUrlOk("/options.html?zlExt=abc123&zlPageTok=tok-1"), true);
+assert.equal(extPageUrlOk("/zl-ext/abc123/options.html?zlPageTok=tok-1"), true);
+assert.equal(extPageUrlOk("https://evil.example/options.html?zlExt=abc&zlPageTok=t"), false);
+assert.equal(extPageUrlOk("//evil.example/options.html?zlExt=abc&zlPageTok=t"), false);
+assert.equal(extPageUrlOk("/options.html"), false);
+assert.equal(extPageUrlOk("/options.html?zlExt=abc"), false);
+assert.equal(extPageUrlOk("/options.html?zlPageTok=t"), false);
+
 console.log("ext-launch: ok");
