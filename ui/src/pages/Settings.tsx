@@ -1,16 +1,8 @@
-/* Settings controls are registered with this lazy route, not Home. */
-import "@m3e/web/divider";
-import "@m3e/web/expansion-panel";
-import "@m3e/web/form-field";
-import "@m3e/web/heading";
-import "@m3e/web/list";
-import "@m3e/web/option";
-import "@m3e/web/segmented-button";
-import "@m3e/web/select";
-import "@m3e/web/switch";
-
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { exportSessionData } from "../store";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+/* Settings cards: the MD3E filled card component (user request
+   2026-11-06) owns the card surface for the settings groups, search
+   results, About and the extension entries. */
+import "@materialwebunofficial/md3e-web/components/md-card.js";
 import {
   ENGINES,
   type EngineId,
@@ -23,6 +15,7 @@ import { pushLog } from "../store";
 import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 import ExtManage from "../browser/ExtManage";
+import { extWarnings } from "../browser/browserShared";
 
 /* Cloaking popout: a fresh window whose address bar reads about:blank.
    The window inherits this origin, so the app and its service worker run
@@ -53,7 +46,6 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
-  onImportSession: (data: unknown) => "ok" | "invalid" | "incognito";
 };
 
 const SEEDS: Array<[string, string]> = [
@@ -73,18 +65,18 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
   { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
   { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
-    { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", target: "set-manage-ext" },
-{ section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
+  { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", target: "set-manage-ext" },
+  { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", target: "set-theme-color" },
-  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy starfield background animated", target: "set-fancy" },
+  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy background animated metal ribbons shader", target: "set-fancy" },
   { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
   { section: "cloak", label: "Cloak destination", terms: "cloak url site", target: "set-cloak-url" },
   { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", target: "set-cloak-url" },
   { section: "cloak", label: "Open in about:blank", terms: "popout window blank", target: "set-aboutblank" },
   { section: "advanced", label: "Proxy engine", terms: "zeolite scramjet engine", target: "set-proxy" },
   { section: "advanced", label: "Transport engine", terms: "libcurl epoxy tls transport", target: "set-transport" },
-  { section: "advanced", label: "Data", terms: "export import session delete cache", target: "set-data" },
+  { section: "advanced", label: "Data", terms: "delete cache data", target: "set-data" },
   { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
 ];
 
@@ -102,21 +94,14 @@ function Panel(props: { id: string; icon: string; title: string; open: boolean; 
 }
 
 function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; id?: string }) {
-  /* #116: the visible label names the switch and toggles it too. */
-  const labelId = useId();
   return (
     <m3e-list-item>
       <div className="lb-setting-row" id={props.id} tabIndex={props.id ? -1 : undefined}>
-        <span className="lb-setting-label" id={labelId} onClick={props.toggle}>
+        <span className="lb-setting-label">
           <m3e-icon name={props.icon} aria-hidden={true} />
           {props.label}
         </span>
-        <m3e-switch
-          aria-labelledby={labelId}
-          checked={props.on ? "" : undefined}
-          icons="selected"
-          onClick={props.toggle}
-        />
+        <m3e-switch checked={props.on ? "" : undefined} icons="selected" onClick={props.toggle} />
       </div>
     </m3e-list-item>
   );
@@ -160,41 +145,7 @@ function TextInput(props: {
   );
 }
 
-export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onImportSession }: Props) {
-  /* 0.7 Zirconium: session data backup, local file only. Export
-     serializes the persisted history and open tabs (the store
-     redacts secret-bearing URL values at that boundary); import
-     never trusts the file and reports through a snackbar. */
-  const importRef = useRef<HTMLInputElement>(null);
-  const exportData = () => {
-    const href = URL.createObjectURL(new Blob([JSON.stringify(exportSessionData(), null, 2)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = href;
-    a.download = "lobsterbrowse-session.json";
-    a.click();
-    /* Revoking synchronously can cancel the fetch the browser has
-       only queued, not started (the DevTools export discipline). */
-    setTimeout(() => URL.revokeObjectURL(href), 10000);
-  };
-  const importData = async (file: File) => {
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      /* not JSON: reported as an invalid file below */
-    }
-    const r = onImportSession(parsed);
-    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-      M3eSnackbar.open(
-        r === "ok"
-          ? "Session imported: history merged and tabs restored"
-          : r === "incognito"
-            ? "Exit incognito mode before importing a session"
-            : "That file is not a LobsterBrowse session export",
-        { duration: 4000 },
-      );
-    }
-  };
+export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     /* #90: only Search & browse starts expanded; the accordion
        keeps its multi-open behavior. */
@@ -267,25 +218,29 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   /* Extension import: one action, Import package (.xpi/.zip). The file
      bytes are handed to the engine worker, which owns the package
      parser and registration. */
-  const [extImport, setExtImport] = useState<{ status: string; busy: boolean }>({ status: "", busy: false });
+  /* Import results report through the snackbar (the inline status
+     line and the other transient status cards are gone). */
   const importZip = async (file: File) => {
-    setExtImport({ status: "Importing " + file.name + "...", busy: true });
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open("Importing " + file.name + "...", { duration: 3000 });
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
+    const warnings = extWarnings(rep);
     if (rep && rep.ok) {
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open("Installed " + String(rep.id) + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), { duration: 5000 });
+      }
       /* #230: the manage list in this panel re-lists when an install
          lands. */
       window.dispatchEvent(new CustomEvent("lb-ext-changed"));
+    } else {
+      const msg = rep && rep.error ? "Import failed: " + String(rep.error) : "Import failed: the Zeolite service worker could not be reached on this origin.";
+      pushLog("error", "extension import: " + msg);
+      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+        M3eSnackbar.open(msg, { duration: 7000 });
+      }
     }
-    setExtImport({
-      status:
-        rep && rep.ok
-          ? "Installed " + String(rep.id) + (Array.isArray(rep.warnings) && rep.warnings.length ? " (warnings: " + rep.warnings.join(", ") + ")" : "")
-          : rep && rep.error
-            ? "Import failed: " + String(rep.error)
-            : "Import failed: the Zeolite service worker could not be reached on this origin.",
-      busy: false,
-    });
   };
 
   /* About / Build: one authoritative source. The /build endpoint on
@@ -368,17 +323,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
           ) : (
             hits.map((h) => (
-              <button key={h.label} type="button" className="lb-set-result" onClick={() => jumpTo(h)}>
-                <span>{h.label}</span>
-                <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
-              </button>
+              <md-card key={"c-" + h.label} variant="filled" className="lb-set-result">
+                <button type="button" className="lb-set-result-btn" onClick={() => jumpTo(h)}>
+                  <span>{h.label}</span>
+                  <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
+                </button>
+              </md-card>
             ))
           )}
         </div>
       ) : (
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
@@ -389,7 +346,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             ))}
           </m3e-segmented-button>
           </div>
-        </div>
+        </md-card>
         <m3e-list>
           <Row id="set-search-suggest" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
@@ -407,21 +364,21 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <div className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
           <div className="lb-setting-label">Manage installed</div>
           {/* #230: the extension configuration UI moved here from the
               toolbar extension card; the toolbar card now launches the
               extension UI directly. */}
           <ExtManage />
-        </div>
-        <div className="lb-setting-group" id="set-amo" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
              the public API is not, so search and install run over the
              API instead of the store site. */}
           <AmoSearch />
-        </div>
-        <div className="lb-setting-group" id="set-import" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-import" tabIndex={-1}>
           <div className="lb-setting-label">Import locally</div>
           {/* Exactly one import action: our button triggers the picker;
              the input itself stays hidden. */}
@@ -446,20 +403,16 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             The engine validates the manifest and permission grants; a bad package only lands that
             extension in an error state.
           </p>
-          {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <div className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
-          {/* #102: a visible, associated label for the colour input. */}
-          <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
-            Theme color
-          </label>
+        <md-card variant="filled" className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
+          <div className="lb-setting-label">Theme color</div>
           <div className="lb-seed-row">
             <input
-              id="lb-theme-color"
               type="color"
+              aria-label="Theme color"
               value={settings.seed}
               onChange={(e) => onChange({ seed: e.target.value })}
               className="lb-color-input"
@@ -472,26 +425,28 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               ))}
             </m3e-chip-set>
           </div>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <md-card variant="filled" className="lb-setting-group">
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
-            <Row id="set-site-tint" label="Tint toolbar with the site color" icon="palette" on={settings.siteTint} toggle={() => onChange({ siteTint: !settings.siteTint })} />
+            {/* The toolbar site tint is always on now: its Settings
+                toggle was removed (the pill picks up the active site's
+                favicon hue unconditionally). */}
           </m3e-list>
           <p className="lb-muted" style={{ fontSize: 12 }}>
-            Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
+            Replaces the plain background with the liquid-metal ribbon shader (the 21st.dev shader-metal component, non-interactive, wave 78).
             Off keeps the plain flat background.
           </p>
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
         <m3e-list>
           <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
         </m3e-list>
-        <div className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
           <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
@@ -499,8 +454,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
-        </div>
-        <div className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
           <div className="lb-setting-label">Open in about:blank</div>
           <m3e-button onClick={openInAboutBlank}>
             <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
@@ -510,11 +465,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             it. The new window has no connection back to this one and starts from a fresh view of
             the app (settings sync there only after a reload).
           </p>
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <div className="lb-setting-group" id="set-proxy" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-proxy" tabIndex={-1}>
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
@@ -529,9 +484,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only. Applied on the next navigation.
           </p>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group" id="set-transport" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-transport" tabIndex={-1}>
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Transport engine">
@@ -546,37 +501,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
           </p>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group" id="set-data" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-data" tabIndex={-1}>
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
-            Export the persisted session (history and open tabs) to a local file,
-            import one back, clear the proxied page cache on this device, or
-            delete every stored history, session and setting.
+            Clear the proxied page cache on this device, or delete every
+            stored session and setting.
           </p>
           <div className="lb-seed-row">
-            <m3e-button onClick={exportData}>
-              <m3e-icon name="download" aria-hidden={true} /> Export session
-            </m3e-button>
-            <m3e-button onClick={() => importRef.current?.click()}>
-              <m3e-icon name="upload" aria-hidden={true} /> Import session
-            </m3e-button>
             <m3e-button onClick={() => setConfirmDelete(true)}>
               <m3e-icon name="delete" aria-hidden={true} /> Manage data
             </m3e-button>
           </div>
-          <input
-            hidden
-            ref={importRef}
-            type="file"
-            accept="application/json,.json"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void importData(f);
-            }}
-          />
           {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
               handling and alertdialog semantics (alert attribute). */}
           <m3e-dialog
@@ -618,26 +555,29 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               </m3e-button>
             </div>
           </m3e-dialog>
-        </div>
+        </md-card>
 
         <m3e-divider />
         {/* Diagnostic mode is always on (the toggle was removed on
             purpose): every failed resource, page console message and
             proxy intervention (CSP/SRI stripping) is logged in full to
             the app log and DevTools. */}
-        <div className="lb-setting-group" id="set-logs" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-logs" tabIndex={-1}>
           <div className="lb-setting-label">Logs</div>
           <m3e-button onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
           </m3e-button>
-        </div>
+        </md-card>
 
       </Panel>
       </m3e-accordion>
       )}
 
-      <div className="lb-setting-group lb-about">
+      <md-card variant="filled" className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>
+        {/* Clawd naps here, above the build pills (user request
+            2026-11-04). Vendored local asset, no external dependency. */}
+        <img className="lb-clawd" src="/clawd-sleep.gif" alt="Clawd sleeping" title="Shh. Clawd is sleeping." />
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
         <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
@@ -655,7 +595,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {!build && !buildError && (
           <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
         )}
-      </div>
+      </md-card>
     </section>
   );
 }

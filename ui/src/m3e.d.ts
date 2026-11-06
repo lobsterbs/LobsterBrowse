@@ -23,6 +23,7 @@ declare module "react" {
     interface IntrinsicElements {
       "m3e-theme": M3eBase & { color?: string; scheme?: string; motion?: string; "strong-focus"?: boolean; density?: string };
       "m3e-content-pane": M3eBase;
+      "md-card": M3eBase & { variant?: string };
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
@@ -31,7 +32,7 @@ declare module "react" {
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean; autofocus?: boolean };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
-      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string; size?: string };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean | string };
@@ -40,7 +41,6 @@ declare module "react" {
       "m3e-form-field": M3eBase & { variant?: string; "float-label"?: string };
       "m3e-chip-set": M3eBase & { vertical?: boolean };
       "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
-      "m3e-assist-chip": M3eBase & { variant?: string; disabled?: boolean };
       "m3e-list": M3eBase;
       "m3e-list-item": M3eBase;
       "m3e-nav-menu": M3eBase;
@@ -109,6 +109,17 @@ declare module "react" {
       "m3e-menu": M3eBase & { variant?: string };
       "m3e-menu-trigger": M3eBase & { for?: string };
       "m3e-menu-item": M3eBase & { disabled?: boolean | string };
+      "m3e-bottom-sheet": M3eBase & {
+        open?: boolean | string;
+        modal?: boolean | string;
+        handle?: boolean | string;
+        "handle-label"?: string;
+        detent?: string;
+        detents?: string;
+        hideable?: boolean | string;
+        show?: () => void;
+        hide?: () => void;
+      };
       "m3e-menu-item-checkbox": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
       "m3e-menu-item-radio": M3eBase & { checked?: boolean | string; disabled?: boolean | string };
       "m3e-menu-item-group": M3eBase;

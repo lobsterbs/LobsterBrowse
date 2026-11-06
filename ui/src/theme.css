@@ -56,11 +56,20 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 
 /* The proxy browser wants every pixel it can get. */
 /* Browser view fills the viewport: no scrolling, no chrome. */
-.lb-shell:has(.lb-browser-host:not([hidden])) { height: 100vh; overflow: hidden; }
-/* Home view: the hero fits one viewport, no page scroll. */
+.lb-shell:has(.lb-browser) { height: 100vh; overflow: hidden; }
 .lb-shell:has(.lb-home) { height: 100vh; overflow: hidden; }
-.app-content:has(.lb-browser-host:not([hidden])) { padding: 0; max-width: none; height: 100%; }
-.app-content:has(.lb-browser-host:not([hidden])) .lb-browser-host { max-width: none; height: 100%; }
+/* View shape keys off data-view on .app-content (set in App.tsx):
+   the Browse view stays mounted while the user visits other views
+   (tab keep-alive), so presence-based :has() selectors would fire
+   in the wrong views. */
+/* Browser view fills the viewport: no scrolling, no chrome - only
+   the proxied page inside its iframe ever scrolls. */
+.app-content[data-view="browser"] { padding: 0; max-width: none; height: 100%; overflow: hidden; }
+.app-content[data-view="browser"] .lb-view { max-width: none; height: 100%; }
+/* Home: the page itself never scrolls; its inner rows do (the
+   recent-sites row scrolls horizontally, the suggestion card
+   internally). */
+.app-content[data-view="home"] { overflow: hidden; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
@@ -70,16 +79,33 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
-/* Enhanced UI (stars): portaled to <body> by Home, so the fixed
+/* Enhanced UI: portaled to <body>, so the fixed
    layer can never be trapped or resized by a view ancestor. Negative
    z-index covers the plain body background yet stays under the app.
-   The starfield component owns its own dark radial background and
-   fills this layer at 100%. */
-.lb-stars-bg { position: fixed; inset: 0; z-index: -1; }
-/* Frosted glass under Enhanced UI: the Home search bar and the nav
-   rail get a translucent surface tint plus backdrop blur, so their
-   contents stay readable over the animated background. Scoped to the
-   body class App toggles with the setting; off = untouched chrome. */
+   Wave 78: the ASCII canvas is gone; the liquid-metal ribbon shader
+   paints on a transparent WebGL canvas, so the body surface shows
+   through behind the ribbons and their soft shadows. */
+.lb-fx-bg { position: fixed; inset: 0; z-index: -1; }
+/* The vendored shader-metal component ships shadcn/Tailwind class
+   names LB never loads, so replicate the layout those utilities
+   would provide: absolute fill, pointer-events none, overflow clip. */
+.lb-fx-bg [data-slot="shader-metal"] { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.lb-fx-bg [data-slot="shader-metal"] canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Frost needs a backdrop with content: two soft aurora blooms hug
+   the left edge behind the rail so the blur reads as glass. */
+body.lb-fancy .lb-fx-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(430px 640px at 0% 26%, color-mix(in srgb, var(--md-sys-color-primary, #d0bcff) 26%, transparent), transparent 70%),
+    radial-gradient(400px 580px at 0% 74%, color-mix(in srgb, var(--md-sys-color-tertiary, #efb8c8) 22%, transparent), transparent 70%);
+}
+/* Frosted glass under Enhanced UI: the Home search bar gets a
+   translucent surface tint plus backdrop blur so its contents stay
+   readable over the animated background. Scoped to the body class
+   App toggles with the setting; off = untouched chrome. */
 body.lb-fancy .lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host: backdrop-filter blurs the whole host
@@ -88,41 +114,58 @@ body.lb-fancy .lb-home m3e-search-bar {
      blurred backdrop to the pill shape. */
   border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Suggestion dropdown: same frosted treatment as the search bar. */
-body.lb-fancy .lb-ac {
-  /* Frosted glass drops the opaque dropdown outline; the ring and
-     inset gloss below carry the edge definition (2026-10-29). */
-  border-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+/* Wave 77/79: the Home search surface is m3e-search-view. Its bar
+   lives inside the view's shadow tree, so the frost travels by token
+   inheritance: the bar container color (translucent surface 38%)
+   crosses the shadow boundary, and the host-level backdrop blur is
+   pill-clipped at 9999px (the closed host rect IS the bar rect) so
+   the blur no longer paints square corners around the rounded bar.
+   The contained results panel rides the same mix so the open
+   dropdown reads as glass too. */
+body.lb-fancy .lb-home m3e-search-view {
+  --m3e-search-view-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  --m3e-search-view-contained-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
-/* The frosted rail needs something behind it to blur: the fancy
-   setting paints a soft colour field on the shell that the rail,
-   search bar and suggestion list blur through. */
-body.lb-fancy .lb-shell {
-  background:
-    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent), transparent 55%),
-    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--md-sys-color-tertiary, var(--md-sys-color-primary)) 30%, transparent), transparent 60%),
-    var(--md-sys-color-surface);
+/* Wave 79: the docked view popover backdrop would tint the whole
+   page while suggestions show; the suggestor is a docked overlay,
+   not a modal, so the page behind stays untinted. */
+.lb-home m3e-search-view {
+  --m3e-search-view-docked-scrim-opacity: 0%;
 }
-/* Frosted nav rail (#226, user refinement): frosted glass stays
-   ALWAYS on, and the rail keeps its reserved layout space (in
-   flow) so proxied page content never renders behind it. The
-   surface tint is 60% so the rail stays visibly darker than
-   adjacent bright pages and the nav icons keep contrast. The M3E
-   shadow .base carries an opaque surfaceContainer background
-   (inherited nav-bar styles), neutralized through the component's
-   own container token so the frosted host surface is what
-   shows. */
+/* Suggestion dropdown: no extra surface behind the suggestor rows
+   (user request 2026-11-06) - the search view panel is the only
+   surface; the old frosted grey field is gone. */
+body.lb-fancy .lb-ac {
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+/* Frosted nav rail (#226, live-probed 2026-10-30): the frost chain
+   works - a bright layer behind the rail shows through the blur -
+   so the flat look was the backdrop, not an overwrite: the ribbon
+   shader paints a mostly dark stage, and blur over a flat dark
+   field is invisible. The tint drops to 38% so the ribbons and the
+   left-edge aurora blooms read through the
+   glass; the hairline edge and inset gloss match the search bar.
+   The @m3e/web 2.8.2 rail shadow paints no background of its own
+   (verified in dist nav-rail.js), so the container token stays a
+   harmless no-op kept for component updates. */
 m3e-nav-rail {
   --m3e-nav-bar-container-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 60%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 38%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
-}
-/* ASCII wordmark: the same frosted glass as the rail and search bar,
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
+}/* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
    the fancy setting; the plain background keeps the bare pre. */
 body.lb-fancy .lb-home pre.lb-ascii {
@@ -130,9 +173,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
   max-width: 100%;
   box-sizing: border-box;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 48%, transparent);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
   border-radius: var(--m3e-shape-lg);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
@@ -157,6 +201,13 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-setting-group { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space50); }
 .lb-setting-sub { margin-top: var(--md-sys-measurement-space50); }
 .lb-seed-row { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; flex-wrap: wrap; }
+/* Theme color chips are buttons: the M3E chip host carries no cursor
+   affordance, so they did not read as clickable. */
+.lb-seed-row m3e-chip { cursor: pointer; }
+.lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
+/* Segmented setting controls (search/proxy engine) scroll sideways on
+   narrow screens instead of stretching the panel. */
+.lb-seg-wrap { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .lb-color-input { width: 40px; height: 32px; border: none; background: none; cursor: pointer; }
 .lb-text-input { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); margin: var(--md-sys-measurement-space125) 0; }
 /* LB #73: per-site rules are m3e chips now; the chip set owns layout. */
@@ -206,17 +257,11 @@ body.lb-fancy .lb-home pre.lb-ascii {
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
 .lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
+/* Wave 77: the suggestion list now lives INSIDE the
+   m3e-search-view results panel (contained variant), so the panel
+   provides the surface, elevation and positioning; this list only
+   shapes its rows and its scrollbox. */
 .lb-ac {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 40;
-  background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline);
-  border-radius: var(--m3e-shape-md);
-  box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.22));
-  overflow: hidden;
   text-align: left;
   max-height: 320px;
   overflow-y: auto;
@@ -288,8 +333,9 @@ body.lb-fancy .lb-home pre.lb-ascii {
   padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space100);
   background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
   border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
-  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* Same retract logic as the bottom dock: after the shared idle timer
    the strip slides up leaving a 16px sliver. The tabs themselves are
@@ -319,9 +365,9 @@ body.lb-fancy .lb-home pre.lb-ascii {
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease),
-    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring),
-    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring),
-    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tab:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
@@ -399,6 +445,40 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-loadchip { position: absolute; top: 0; left: 50%; z-index: 6; pointer-events: none; display: flex; justify-content: center; padding: var(--md-sys-measurement-space150, 12px) 0; opacity: 0; transform: translate(-50%, -100%); transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1), transform 240ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-loadchip-on { opacity: 1; transform: translate(-50%, 0); }
 .lb-loadchip m3e-loading-indicator { width: 56px; height: 56px; }
+/* Wave 77: the row's engine brand mark (the real logo SVG from
+   simple-icons) leads the suggestion text; the .lb-ac-item flex gap
+   provides the required space after it. */
+.lb-engine-mark { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
+/* Wave 77: the black skeleton page (m3e-skeleton painting pulse
+   shapes over an invisible mock layout) that covers the content
+   area while a navigation's first paint has not committed - a new
+   URL, a new tab, a restored session - and never while a committed
+   site loads more of its own assets in place. Sits below the
+   loading indicator (z-index 5 vs 6). */
+.lb-sk {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  overflow: hidden;
+  animation: lb-sk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease);
+}
+@keyframes lb-sk-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lb-sk m3e-skeleton { display: block; width: 100%; height: 100%; }
+/* The mock layout the skeleton shapes are painted over. Wave 79:
+   full-size, so the skeleton reads as the entire frame instead of a
+   small centered box. */
+.lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; }
+.lb-sk-head { width: 42%; height: 24px; border-radius: 8px; flex: 0 0 auto; }
+.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: 12px; }
+.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; }
+.lb-sk-short { width: 62%; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-sk { animation: none; }
+}
 .lb-skel { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150); width: 100%; }
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -426,28 +506,45 @@ body.lb-fancy .lb-home pre.lb-ascii {
 }
 .lb-dock-pill {
   transform: translateY(0);
-  transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring);
+  opacity: 1;
+  transition:
+    transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-/* The tucked pill is unmounted at render time (Browser.tsx), so
-   no tuck/focus transforms remain here; only the tabs-open slide
-   still animates the mounted pill. */
+/* #219: the tucked pill stays mounted and animates out of view
+   (inert/aria-hidden come from Browser.tsx). pointer-events none on
+   the dock keeps the hidden bar off the page; the grip re-enables
+   its own pointer events while tucked. */
 .lb-dock.tucked { pointer-events: none; }
+.lb-dock.tucked .lb-dock-pill {
+  transform: translateY(calc(100% + 24px));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    visibility 0s var(--md-sys-motion-duration-short-4, 200ms);
+}
 .lb-toolbar {
   display: block;
   pointer-events: auto;
   min-height: 44px;
   --m3e-toolbar-size: 44px;
   --m3e-toolbar-rounded-padding: 4px;
+  --m3e-toolbar-spacing: var(--md-sys-measurement-space100, 8px);
   /* Neutral frosted pill: overrides the component's container tokens
      (vibrant would paint it with primaryContainer, i.e. red). */
-  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
-  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 55%, transparent);
+  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
+  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
   opacity: 1;
   width: fit-content;
   max-width: calc(100vw - 16px);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 62%, transparent) !important;
-  backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent) !important;
+  /* Frosted glass, no outline: the toolbar reads as translucent
+     glass over the page it floats on. */
+  background: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: none !important;
   border-radius: 999px !important;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
 }.lb-set-search { margin: var(--md-sys-measurement-space100) 0 var(--md-sys-measurement-space150); }
@@ -474,6 +571,30 @@ body.lb-fancy .lb-home pre.lb-ascii {
   white-space: nowrap;
 }
 .lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
+/* Settings cards (user request 2026-11-06): md-card variant="filled"
+   owns the surface - the old hand-rolled borders and translucent
+   backgrounds are gone. */
+.lb-set-results md-card.lb-set-result { padding: 0; }
+.lb-set-result-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
+  background: none;
+  border: 0;
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+/* The card provides its own 16dp padding; the group keeps only a
+   small bottom rhythm so stacked cards breathe. */
+md-card.lb-setting-group { display: block; padding: 0 0 var(--md-sys-measurement-space50); }
+md-card .lb-ext-item { border: 0; background: none; }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-group:focus-visible,
 .lb-setting-row:focus-visible {
@@ -498,7 +619,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border-radius: var(--md-sys-shape-corner-full, 999px);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid transparent;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tb-pill.expanded { width: min(92vw, 440px);
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, rgba(255, 255, 255, 0.12));
@@ -568,7 +689,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border-radius: 0;
 }
 .lb-tb-ac {
-  animation: lb-card-in 180ms var(--m3e-spring);
+  animation: lb-card-in 180ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
   position: absolute;
   bottom: calc(100% + 10px);
   left: 0;
@@ -616,7 +737,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   display: flex;
   flex-direction: column;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
-  animation: lb-dt-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-dt-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 @keyframes lb-dt-in {
   from { opacity: 0; transform: translateX(16px); }
@@ -628,7 +749,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 /* #103: the tab panels are siblings of the switcher (bounded card layout, see DevTools.tsx) and flex to fill the card, so the page body inside keeps its bounded scroll area. */
 .lb-dt-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.lb-dt-panel[hidden] { display: none; }
 .lb-dt-pager { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--md-sys-measurement-space100); overflow: auto; }
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
@@ -704,6 +824,10 @@ body.lb-fancy .lb-home pre.lb-ascii {
   .lb-tab { max-width: 150px; }
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: var(--md-sys-measurement-space100); }
+  /* Settings on small screens: tighter panel padding and full-width
+     inputs keep the page usable without horizontal pan. */
+  .lb-panel-body { padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px); }
+  .lb-text-input { width: 100%; }
 }
 /* ---- #215: medium window band (601-839px) ----
    Between the phone band (<=600px) and desktop (>=840px) only the two
@@ -722,13 +846,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
    Additive layer: bigger shapes, springy motion, expressive type.
    Baseline tokens above stay untouched. */
 :root {
-  /* Single source for the spring easing. @m3e/web does not define
-     --m3e-spring. This curve matches the spatial-spring fallback that
-     @m3e/web's own DesignToken uses; the theme's
-     --md-sys-motion-spring-*-spatial tokens bundle a duration, so only
-     the curve is taken from them. Uses read var(--m3e-spring) with no
-     fallback, so a missing definition is visible, not hidden. */
-  --m3e-spring: cubic-bezier(0.27, 1.06, 0.18, 1.0);
+  --m3e-spring: cubic-bezier(0.27, 1.06, 0.18, 1.0); /* M3E spring-spatial control points (the --md-sys-motion-spring-*-spatial tokens bundle a duration, so the alias carries the curve only; the old homemade bounce is retired) */
   /* Shape hierarchy, aligned 1:1 with the M3E corner tokens:
      xl = extra-large 28 (hero floating surfaces), lg = large-increased
      20 (prominent cards/docks), md = large 16 (panels and pages),
@@ -875,7 +993,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   z-index: 45;
   border-radius: var(--m3e-shape-lg);
   overflow: hidden;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 /* The card's slotted rows need their own padding: the m3e-card
    surface has none, and unpadded rows (especially the two long
@@ -1028,14 +1146,14 @@ m3e-icon-button:active { transform: scale(0.88); }
   pointer-events: none;
   opacity: 0;
   transform: translateX(-50%) translateY(14px) scale(0.98);
-  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring);
+  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-card.open {
   visibility: visible;
   pointer-events: auto;
   opacity: 1;
   transform: translateX(-50%);
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-row {
   display: flex;
@@ -1057,9 +1175,9 @@ m3e-icon-button:active { transform: scale(0.88); }
   border-radius: var(--m3e-shape-sm);
   cursor: pointer;
   transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
-    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring),
-    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring),
-    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring);
+    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-tabs-tile:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
@@ -1159,7 +1277,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   width: 360px;
   max-width: calc(100vw - 32px);
   z-index: 45;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-dl-list {
   display: flex;
@@ -1185,7 +1303,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
 .lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
+  .lb-tabs-card, .lb-dl-card, .lb-ad-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
 }
 
@@ -1197,6 +1315,28 @@ m3e-icon-button:active { transform: scale(0.88); }
 m3e-snackbar {
   top: var(--md-sys-measurement-space200, 16px) !important;
   transform-origin: top !important;
+}
+
+/* XPI install prompt: fixed centered overlay. m3e-dialog is not wired
+   anywhere else in the app; a plain overlay card avoids guessing the
+   component's open/close API, reusing the site-card row paddings. */
+.lb-xpi-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+.lb-xpi-card {
+  width: min(400px, calc(100vw - 32px));
+  border-radius: var(--m3e-shape-lg);
+  overflow: hidden;
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-xpi-card { animation: none; }
 }
 
 /* Engine extension notifications (#50): bottom-right stack of note
@@ -1219,7 +1359,7 @@ m3e-snackbar {
   border-radius: var(--m3e-shape-lg, 16px);
   padding: var(--md-sys-measurement-space200, 16px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring);
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
 .lb-ext-note-title { font-weight: 600; font-size: 0.95rem; }
 .lb-ext-note-msg { opacity: 0.85; margin-top: var(--md-sys-measurement-space25, 2px); }
@@ -1289,10 +1429,12 @@ m3e-snackbar {
   .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
-  .app-content:has(.lb-browser-host:not([hidden])) { padding-bottom: var(--m3e-nav-bar-height, 64px); }
+  .app-content[data-view="browser"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
   .app-content {
     padding-bottom: calc(var(--m3e-nav-bar-height, 64px) + var(--md-sys-measurement-space300, 24px));
   }
+  /* AI view: keep the flush composer above the fixed bottom nav. */
+  .app-content[data-view="ai"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-devtools.lb-devtools-out,
@@ -1329,6 +1471,18 @@ m3e-snackbar {
 @keyframes lb-cmdk-in {
   from { opacity: 0; transform: translateY(var(--md-sys-measurement-space100, 8px)); }
 }
+.lb-cmdk-input {
+  margin: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space100, 8px);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  font-family: inherit;
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  background: var(--md-sys-color-surface-container-highest, #37393e);
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  border: none;
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px);
+  outline: none;
+}
+.lb-cmdk-input:focus { box-shadow: 0 0 0 1px var(--md-sys-color-primary, #a8c7fa); }
 .lb-cmdk-list {
   overflow-y: auto;
   padding: 0 var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px);
@@ -1403,40 +1557,14 @@ m3e-snackbar {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 40%, transparent);
 }
 
-/* #96: persistent incognito identity in the chrome. */
-.lb-incognito-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--md-sys-measurement-space100);
-  border-radius: 999px;
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  font-variation-settings: "wght" 500;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
-  background: color-mix(in srgb, var(--md-sys-color-primary-container, var(--md-sys-color-surface-container-high)) 55%, transparent);
-}
-body.lb-incognito .lb-toolbar {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent) !important;
+/* #96 (revised): incognito identity is the domino icon's color,
+   not a text badge (removed) and not a toolbar outline (the toolbar
+   carries no outline at all now). */
+body.lb-incognito .lb-incognito-ic {
+  color: var(--md-sys-color-primary);
 }
 
-/* #93: recent-sites chips on Home (local history only). */
-.lb-recent {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--md-sys-measurement-space75);
-  margin-top: var(--md-sys-measurement-space200);
-}
-/* #101: each recent site is an M3E assist chip plus its own remove
-   icon button, grouped by one m3e-chip-set (the set is inline-flex and
-   wraps). The pair span keeps the two controls together. */
-.lb-recent-chip {
-  display: inline-flex;
-  align-items: center;
-}
+
 
 /* #94: console empty state. */
 .lb-console-empty { padding: var(--md-sys-measurement-space200); }
@@ -1448,6 +1576,7 @@ body .lb-devtools,
 body .lb-ext-panel {
   background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 85%, transparent);
   backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
   border-color: color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
   border-radius: var(--m3e-shape-lg);
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
@@ -1485,20 +1614,6 @@ body .lb-ext-panel {
   .lb-tab-preview { width: 116px; }
   .lb-tab-preview iframe { width: 464px; }
 }
-
-/* #120: visually hidden, announced to assistive technology. */
-.lb-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* ---- #213: favicon-hue toolbar tint (dark scheme only) ----
    Browser.tsx sets --lb-site-hue (degrees) and the lb-site-tint class
    on the toolbar host when the active tab's favicon carries a usable
@@ -1523,3 +1638,473 @@ body .lb-ext-panel {
 .lb-empty-state m3e-icon { font-size: 40px; opacity: 0.65; }
 .lb-empty-headline { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); color: var(--md-sys-color-on-surface, #e4e2e6); }
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
+
+/* ---- AI mode (beta-only): view, messages, chatbar ---- */
+.app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); padding-bottom: 0; overflow: hidden; }
+.app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
+.lb-ai { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+
+.lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
+.lb-ai-quota-out { color: var(--md-sys-color-error, #f2b8b5); }
+/* Parent-company mark at text height, before the model name. */
+.lb-ai-mark { display: inline-flex; width: 19px; height: 14px; flex: none; }
+.lb-ai-mark svg { display: block; width: 100%; height: 100%; }
+.lb-ai-model-item { display: flex; flex-direction: column; line-height: 1.4; }
+.lb-ai-model-name { font-weight: 500; }
+.lb-ai-model-params { color: var(--md-sys-color-on-surface-variant, #cac4d0); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); font-weight: 700; }
+.lb-ai-model-ver { color: var(--md-sys-color-on-surface-variant, #cac4d0); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); font-weight: 400; }
+.lb-ai-model-note { color: var(--md-sys-color-on-surface-variant, #cac4d0); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); opacity: 0.8; }
+/* Model picker (21st.dev model-picker pattern on M3E tokens): pill
+   trigger + popover + checkmark. */
+.lb-ai-mp { position: relative; display: inline-flex; }
+.lb-ai-mp-btn { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); height: auto; padding: 4px 10px; border: none; border-radius: var(--md-sys-shape-corner-full, 9999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); color: var(--md-sys-color-on-surface, #e4e2e6); font: inherit; font-size: var(--md-sys-typescale-label-medium-font-size, 12px); cursor: pointer; }
+.lb-ai-mp-btn:hover { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 95%, transparent); }
+.lb-ai-mp-name { font-weight: 500; white-space: nowrap; }
+.lb-ai-mp-params { font-weight: 700; white-space: nowrap; }
+.lb-ai-mp-chev { width: 14px; height: 14px; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
+.lb-ai-mp-pop { position: absolute; top: auto; bottom: calc(100% + 6px); right: 0; z-index: 50; min-width: 300px; padding: var(--md-sys-measurement-space50, 4px); border-radius: var(--md-sys-shape-corner-medium, 12px); background: var(--md-sys-color-surface-container-high, #2b2b2f); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.lb-ai-mp-opt { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); width: 100%; padding: var(--md-sys-measurement-space100, 8px); border: none; border-radius: var(--md-sys-shape-corner-small, 8px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lb-ai-mp-opt:hover { background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); }
+.lb-ai-mp-check { display: inline-flex; color: var(--md-sys-color-primary, #7f9cf5); margin-left: auto; }
+
+.lb-ai-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150, 12px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px) 0; }
+.lb-ai-msg { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); }
+.lb-ai-user { align-items: flex-end; }
+.lb-ai-bubble { padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-large, 16px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
+.lb-ai-user .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 22%, transparent); border-end-end-radius: var(--md-sys-shape-corner-extra-small, 4px); }
+.lb-ai-assistant .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); border-end-start-radius: var(--md-sys-shape-corner-extra-small, 4px); }
+.lb-ai-think-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
+.lb-ai-sources { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); }
+.lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lb-ai-src:hover { text-decoration: underline; }
+.lb-ai-files { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); justify-content: flex-end; }
+/* (.lb-ai-att removed: the attachment preview lives inside the chatbar; see .lb-ai-att-peek.) */
+.lb-ai-file-chip { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-secondary, #b8c4d8) 16%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ai-file-x { border: none; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
+
+/* Chatbar: the plus button rides the search bar's leading slot. */
+.lb-ai-bar { display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; flex: none; }
+.lb-ai-bar m3e-search-bar { flex: 1; min-width: 0; }
+
+/* Under-bar row: model picker + server quota, centered under the
+   chatbar. The 8px gap above the row (to the chatbar) matches the
+   8px below it (to the screen edge). */
+.lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space100, 8px); flex: none; }
+.lb-ai-under .lb-ai-quota { margin-left: 0; }
+/* Frosted glass under Enhanced UI: same treatment as the Home bar
+   (tint + blur + ring + gloss), scoped to the setting's body class. */
+body.lb-fancy .lb-ai-bar m3e-search-bar {
+  --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+  /* Pill-clip the host so the blurred corners match the pill shape. */
+  border-radius: 9999px;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+}
+
+/* Tool row: the 21st.dev thinking-tool pattern on M3E tokens. The
+   summary line shimmers while the step runs, settles to a static
+   label, and expands a detail area under it. Shared by reasoning and
+   by tool calls such as the Exa web search. */
+.lb-ai-tool { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container, #211f26) 60%, transparent); }
+.lb-ai-tool-btn { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); border: none; background: none; color: var(--md-sys-color-on-surface-variant, #cac4d0); font: inherit; font-size: var(--md-sys-typescale-label-large-font-size, 14px); padding: 0; cursor: pointer; }
+.lb-ai-tool-btn:disabled { cursor: default; }
+.lb-ai-tool-chev { width: 14px; height: 14px; flex: none; transition: transform 150ms var(--md-sys-motion-easing-standard, ease-in-out); }
+.lb-ai-tool-chev-open { transform: rotate(90deg); }
+.lb-ai-tool-label { user-select: none; }
+/* Settled step duration: tabular seconds beside the done label. */
+.lb-ai-tool-dur { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
+.lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
+/* TextShimmer (21st.dev pattern) on M3E tokens: the text clips a
+   single gradient band that sweeps across it; every active step
+   (searching, thinking, sub agents, responding) uses it. */
+.lb-ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--md-sys-color-on-surface-variant, #cac4d0) 40%,
+    var(--md-sys-color-primary, #7f9cf5) 50%,
+    var(--md-sys-color-on-surface-variant, #cac4d0) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: lb-ai-shimmer 1.8s linear infinite;
+}
+@keyframes lb-ai-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+/* Assistant answers render markdown; the bubble drops pre-wrap so
+   .lb-md controls its own block spacing. */
+.lb-ai-bubble.lb-ai-answer { white-space: normal; }
+.lb-ai-answer .lb-md { font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); overflow-wrap: anywhere; }
+.lb-md > :first-child { margin-top: 0; }
+.lb-md > :last-child { margin-bottom: 0; }
+.lb-md p { margin: 0 0 var(--md-sys-measurement-space100, 8px); }
+.lb-md h1, .lb-md h2, .lb-md h3, .lb-md h4, .lb-md h5, .lb-md h6 { margin: var(--md-sys-measurement-space200, 16px) 0 var(--md-sys-measurement-space75, 6px); font-weight: 500; line-height: 1.3; }
+.lb-md h1 { font-size: var(--md-sys-typescale-headline-small-font-size, 24px); }
+.lb-md h2 { font-size: var(--md-sys-typescale-title-large-font-size, 22px); }
+.lb-md h3 { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); }
+.lb-md h4, .lb-md h5, .lb-md h6 { font-size: var(--md-sys-typescale-title-small-font-size, 14px); }
+.lb-md ul, .lb-md ol { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding-left: var(--md-sys-measurement-space200, 16px); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); }
+.lb-md li > ul, .lb-md li > ol { margin: var(--md-sys-measurement-space50, 4px) 0 0; }
+.lb-md a { color: var(--md-sys-color-primary, #7f9cf5); }
+.lb-md blockquote { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); border-left: 3px solid var(--md-sys-color-primary, #7f9cf5); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 45%, transparent); color: var(--md-sys-color-on-surface-variant, #cac4d0); }
+.lb-md blockquote > :last-child { margin-bottom: 0; }
+.lb-md code { font-family: ui-monospace, monospace; font-size: 0.875em; padding: 1px 5px; border-radius: var(--md-sys-shape-corner-small, 8px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); }
+.lb-md pre { margin: 0 0 var(--md-sys-measurement-space100, 8px); padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-large, 16px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 75%, transparent); overflow-x: auto; }
+.lb-md pre code { background: none; padding: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.5; }
+.lb-md table { border-collapse: separate; border-spacing: 0; margin: 0 0 var(--md-sys-measurement-space100, 8px); width: 100%; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); border: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); border-radius: var(--md-sys-shape-corner-medium, 12px); overflow: hidden; }
+.lb-md th, .lb-md td { padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); text-align: left; border-right: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); }
+.lb-md th:last-child, .lb-md td:last-child { border-right: none; }
+.lb-md tr:last-child td, .lb-md tbody > tr:last-child td { border-bottom: none; }
+.lb-md th { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); font-weight: 500; }
+.lb-md hr { border: none; border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline, #938f99) 35%, transparent); margin: var(--md-sys-measurement-space150, 12px) 0; }
+.lb-md img { max-width: 100%; border-radius: var(--md-sys-shape-corner-small, 8px); }
+
+/* Sub agent shim rows (spawn_agent): what the sub agent is doing and
+   its elapsed once done; sub agent text itself is never shown. */
+.lb-ai-subs { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); padding: 2px var(--md-sys-measurement-space100, 8px); }
+.lb-ai-sub { display: flex; align-items: baseline; gap: var(--md-sys-measurement-space100, 8px); min-width: 0; }
+.lb-ai-sub-task { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ai-sub-ms { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Settled-turn counters at the very end of an answer: total tokens
+   (main model plus every sub agent) and the wall-clock elapsed. */
+.lb-ai-meta { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space150, 12px); padding: 2px var(--md-sys-measurement-space100, 8px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
+
+/* Rail icon: the AI glyph is an inline SVG (the bundled ligature set
+   has gaps), sized like the sibling m3e icons. */
+.lb-ai-nav-ic { display: inline-flex; width: 24px; height: 24px; }
+.lb-ai-nav-ic svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.lb-ai-nav-ic svg path, .lb-ai-nav-ic svg g, .lb-ai-nav-ic svg circle, .lb-ai-nav-ic svg rect { fill: currentColor; }
+
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-ai-shimmer { animation: none; background: none; -webkit-background-clip: unset; background-clip: unset; -webkit-text-fill-color: currentColor; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
+}
+
+/* ---- AI page motion (2026-10-30): fills the teleport gaps on the AI
+   page with the same M3E motion tokens the rest of the site already
+   uses. Composite-only properties; the tool-row body is the
+   sanctioned accordion exception (grid 0fr -> 1fr). ---- */
+
+/* Provider marks are square 24x24 geometry (OpenAI, Qwen),
+   wider than a glyph is tall. */
+.lb-ai-mark { width: 14px; height: 14px; }
+
+/* Model-picker popover: stays mounted, fades + scales from the
+   trigger pill (bottom-right origin), 150ms decelerate; visibility
+   keeps the closed popover out of hit-testing and the a11y tree. */
+.lb-ai-mp-pop {
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  transform-origin: bottom right;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    visibility 0s var(--md-sys-motion-duration-short-3, 150ms);
+}
+.lb-ai-mp-pop.lb-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  transition: opacity var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out),
+    visibility 0s;
+}
+.lb-ai-mp-chev { transition: transform var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease-in-out); }
+.lb-ai-mp-btn[aria-expanded="true"] .lb-ai-mp-chev { transform: rotate(180deg); }
+
+/* Tool-row body: accordion expand, 200ms decelerate. The vertical
+   padding rides on the open state so the row can fully collapse. */
+.lb-ai-tool-body-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+.lb-ai-tool-body-wrap.lb-open { grid-template-rows: 1fr; }
+.lb-ai-tool-body-wrap > .lb-ai-tool-body { overflow: hidden; min-height: 0; padding: 0 0 0 var(--md-sys-measurement-space150, 12px); transition: padding var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+.lb-ai-tool-body-wrap.lb-open > .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
+
+/* Entrances: a new message fades + rises in, a file chip pops in;
+   both run once on mount, 200ms/150ms decelerate. */
+@keyframes lb-ai-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.lb-ai-msg { animation: lb-ai-msg-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+@keyframes lb-ai-chip-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+.lb-ai-file-chip { animation: lb-ai-chip-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
+
+/* Press feedback on the page's custom buttons (M3E components carry
+   their own): 100ms settle, 0.97 press scale. */
+.lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src {
+  transition: transform var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
+}
+.lb-ai-mp-btn:active, .lb-ai-tool-btn:active, .lb-ai-file-x:active, .lb-ai-src:active {
+  transform: scale(0.97);
+}
+
+/* Reduced motion: entrances off, transitions instant; the popover and
+   the accordion still work as instant state changes. */
+@media (prefers-reduced-motion: reduce) {
+  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello, .lb-ai-att-peek { animation: none; }
+  .lb-ai-hello.lb-out { animation: none; display: none; }
+  .lb-ai-att-peek.lb-out { display: none; }
+  .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
+  .lb-ai-mp-btn, .lb-ai-tool-btn, .lb-ai-file-x, .lb-ai-src { transition: none; }
+}
+
+
+/* ---- AI page: empty state + segmented send (2026-10-30) ---- */
+
+/* Empty state: centers in the message area while the chat is fresh,
+   with the same decelerate entrance as the messages. */
+.lb-ai-hello {
+  margin: auto;
+  text-align: center;
+  font-size: var(--md-sys-typescale-headline-small-font-size, 24px);
+  /* The Google Sans Flex axes the product look asks for: weight 760,
+     width 130, and the round corner axis; font-weight stays as the
+     fallback when the variable axes are unavailable. */
+  font-family: "Google Sans Flex Variable", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
+  font-variation-settings: "wght" 760, "wdth" 130, "opsz" 15, "slnt" 0, "ROND" 15;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface, #e4e2e6);
+  animation: lb-ai-msg-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+}
+
+/* First send: the heading sinks and fades out (accelerate); React
+   unmounts it on animationend. Reduced motion hides it instantly. */
+@keyframes lb-ai-hello-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(4px); }
+}
+.lb-ai-hello.lb-out {
+  animation: lb-ai-hello-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+  pointer-events: none;
+}
+
+/* Send/Stop: one m3e-button (tonal, icon slot + label) beside the
+   chatbar, pill-rounded to match the search bar's curve. While the
+   assistant works, the label and icon swap to Stop and pressing it
+   aborts the stream; m3e-button owns its own press and ripple. */
+.lb-ai-send {
+  flex: none;
+  /* Fused into the chatbox: the button stretches to the search
+     bar's full height and shares its pill rounding; the negative
+     margin cancels the bar's 8px gap so the two pills sit flush
+     against each other. */
+  align-self: stretch;
+  min-height: 0;
+  margin-left: calc(-1 * var(--md-sys-measurement-space100, 8px));
+  --m3e-button-shape-round: var(--md-sys-shape-corner-full, 9999px);
+  /* Same height as the chatbox: the button container follows the
+     search bar's container token, so the two pills read as one bar. */
+  --m3e-button-container-height: var(--m3e-search-bar-container-height, 56px);
+}
+
+/* ---- AI: user-message glide. The user row rises from just below its
+   final resting point with the same decelerate curve as the assistant
+   rows, so a sent prompt visibly glides to where its bubble appears
+   instead of popping into existence. ---- */
+@keyframes lb-ai-msg-user-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lb-ai-msg.lb-ai-user {
+  animation: lb-ai-msg-user-in var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+  transform-origin: 50% 100%;
+}
+
+/* ---- AI: attachment peek. A frosted overlay rendered inside the
+   search bar, over the typed text; it appears when the first file is
+   attached, grows with the list, and collapses out when the last one
+   is removed (the lb-out class runs the exit keyframes, then Ai.tsx
+   unmounts the overlay on animation end). ---- */
+.lb-ai-bar-main { position: relative; flex: 1; min-width: 0; display: flex; }
+.lb-ai-bar-main m3e-search-bar { flex: 1; min-width: 0; }
+.lb-ai-att-peek {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: 4px 48px;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-lowest, #0f0f11) 78%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: lb-ai-peek-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+}
+.lb-ai-att-peek.lb-out {
+  animation: lb-ai-peek-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) both;
+}
+@keyframes lb-ai-peek-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes lb-ai-peek-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(8px); }
+}
+.lb-ai-att-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 70%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.lb-ai-att-thumb img { display: block; height: 100%; width: auto; max-width: 140px; object-fit: cover; }
+.lb-ai-att-x {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest, #45454a) 80%, transparent);
+  cursor: pointer;
+}
+.lb-ai-att-thumb .lb-ai-att-x { position: absolute; top: -6px; right: -6px; }
+
+/* ---- AI: conversation history. The history button sits in the top
+   left corner, clear of the nav rail; the conversations live in an
+   m3e-bottom-sheet centered at the bottom of the screen. ---- */
+.lb-ai-hist-btn {
+  position: absolute;
+  top: var(--md-sys-measurement-space150, 12px);
+  right: var(--md-sys-measurement-space150, 12px);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  cursor: pointer;
+}
+.lb-ai-hist-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 12%, transparent);
+}
+.lb-ai m3e-bottom-sheet { --m3e-bottom-sheet-max-width: 560px; }
+.lb-ai-hist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.lb-ai-hist-head {
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
+  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
+  font-weight: var(--md-sys-typescale-title-medium-font-weight, 500);
+  color: var(--md-sys-color-on-surface, #e6e1e9);
+}
+.lb-ai-hist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space50, 4px);
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+}
+.lb-ai-hist-row:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 10%, transparent);
+}
+.lb-ai-hist-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.lb-ai-hist-title {
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
+  color: var(--md-sys-color-on-surface, #e6e1e9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-ai-hist-date {
+  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-ai-hist-empty {
+  padding: var(--md-sys-measurement-space400, 32px) var(--md-sys-measurement-space150, 12px);
+  text-align: center;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+}
+
+/* ---- Ad-blocking card (overflow menu): same floating placement and
+       in/out animations as the downloads card. ---- */
+.lb-ad-card {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  z-index: 45;
+  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+}
+.lb-ad-card.lb-out {
+  animation: lb-card-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
+}
+.lb-ad-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150);
+  box-sizing: border-box;
+}
+.lb-ad-count { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); }
+.lb-ad-count > m3e-icon { color: var(--md-sys-color-primary); }
+.lb-ad-num { font-size: 40px; font-variation-settings: "wght" 600; line-height: 1; color: var(--md-sys-color-primary); }
+.lb-ad-sub { margin: 0; font-size: 13px; }
+.lb-ad-hosts { display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
+.lb-ad-host { font-size: 12px; word-break: break-all; }
+.lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
+.lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
+.lb-ad-rowtitle { font-size: 13px; }
+
+/* ---- Clawd easter egg: the sleeping mascot in the Settings About
+       card, above the build chips. Pixel art: nearest-neighbour
+       upscaling keeps the edges crisp. ---- */
+.lb-clawd {
+  display: block;
+  width: 88px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  margin: 0 0 var(--md-sys-measurement-space100);
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+}

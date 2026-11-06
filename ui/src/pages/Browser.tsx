@@ -12,27 +12,6 @@
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
 
-/* M3E components specific to the lazily loaded browser workspace. */
-import "@m3e/web/badge";
-import "@m3e/web/breadcrumb";
-import "@m3e/web/card";
-import "@m3e/web/checkbox";
-import "@m3e/web/form-field";
-import "@m3e/web/heading";
-import "@m3e/web/menu";
-import "@m3e/web/option";
-import "@m3e/web/paginator";
-import "@m3e/web/progress-indicator";
-import "@m3e/web/select";
-import "@m3e/web/skeleton";
-import "@m3e/web/split-button";
-import "@m3e/web/switch";
-import "@m3e/web/tabs";
-import "@m3e/web/textarea-autosize";
-import "@m3e/web/toolbar";
-import "@m3e/web/tooltip";
-import "@m3e/web/tree";
-
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
 import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
@@ -63,6 +42,7 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
    in this page; the components are presentational. */
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
+import AdBlockCard from "../browser/AdBlockCard";
 import DownloadsCard from "../browser/DownloadsCard";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
@@ -73,7 +53,6 @@ import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
-import { displayAddressUrl } from "../browser/displayAddress";
 import { faviconBlob, faviconCandidates, faviconRoute } from "../browser/favicon";
 
 /* ---- DevTools capture (#106): the engine exposes no page console
@@ -92,29 +71,13 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     const cw = cw0 as Window & typeof globalThis & { __lbDtShim?: boolean };
     if (cw.__lbDtShim) return;
     cw.__lbDtShim = true;
-    /* #106 realm fix: this closure runs in the app realm, so every
-       postMessage it makes is stamped with the APP window as
-       ev.source, and the handler's strict frame match drops every
-       event. Mint the post function in the FRAME realm instead, so
-       the browser stamps the genuine frame window. A page CSP that
-       forbids eval keeps the parent-realm fallback (capture stays
-       unattributed, the pre-fix behavior). */
-    let post: (ev: { lb: string; data: Record<string, unknown> }) => void;
-    try {
-      const frameFn = (cw as unknown as { Function: typeof Function }).Function;
-      post = frameFn(
-        "ev",
-        "try{parent.postMessage({lb:'batch',data:{events:[ev]}},'*')}catch(e){}",
-      ) as typeof post;
-    } catch {
-      post = (ev) => {
-        try {
-          cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
-        } catch {
-          /* a torn-down frame cannot report; nothing to do */
-        }
-      };
-    }
+    const post = (ev: { lb: string; data: Record<string, unknown> }): void => {
+      try {
+        cw.parent.postMessage({ lb: "batch", data: { events: [ev] } }, "*");
+      } catch {
+        /* a torn-down frame cannot report; nothing to do */
+      }
+    };
     const fmt = (v: unknown): string => {
       if (typeof v === "string") return v;
       if (v instanceof Error) return v.stack || String(v);
@@ -157,6 +120,64 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     cw.addEventListener("unhandledrejection", (ev) => {
       post({ lb: "console", data: { level: "error", text: "Unhandled rejection: " + fmt((ev as PromiseRejectionEvent).reason), ts: Date.now() } });
     });
+    /* Network view: wrap the frame fetch/XHR after the engine's own
+       hooks (the bootstrap has wrapped them by load time), so what
+       DevTools sees is what the page actually calls. The URL is
+       recorded exactly as the page passed it: relative paths stay
+       readable, and resolving against the opaque engine location
+       would only add noise. */
+    const origFetch = cw.fetch.bind(cw);
+    const urlOf = (input: RequestInfo | URL): string => {
+      if (typeof input === "string") return input;
+      const u = (input as { url?: unknown }).url;
+      if (typeof u === "string") return u;
+      try {
+        return input.toString();
+      } catch {
+        return String(input);
+      }
+    };
+    cw.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const t0 = Date.now();
+      const url = urlOf(input);
+      const im = (input as { method?: unknown }).method;
+      const method = String(init?.method ?? (typeof im === "string" ? im : "GET")).toUpperCase();
+      return origFetch(input, init).then(
+        (r) => {
+          post({ lb: "net", data: { url, method, status: r.status, ok: r.ok, dur: Date.now() - t0, ts: Date.now() } });
+          return r;
+        },
+        (err) => {
+          post({ lb: "net", data: { url, method, error: fmt(err), dur: Date.now() - t0, ts: Date.now() } });
+          throw err;
+        },
+      );
+    }) as typeof fetch;
+    const xo = cw.XMLHttpRequest.prototype;
+    type XH = XMLHttpRequest & { __lbDt?: { method: string; url: string; t0: number } };
+    const origOpen = xo.open as unknown as (this: XH, method: string, url: string | URL, ...rest: unknown[]) => void;
+    xo.open = function (this: XH, method: string, url: string | URL, ...rest: unknown[]) {
+      try {
+        this.__lbDt = { method: String(method).toUpperCase(), url: String(url), t0: 0 };
+      } catch {
+        /* a sealed xhr just goes untracked */
+      }
+      return origOpen.call(this, method, url, ...rest);
+    } as typeof XMLHttpRequest.prototype.open;
+    const origSend = xo.send;
+    xo.send = function (this: XH, body?: Document | XMLHttpRequestBodyInit | null) {
+      const meta = this.__lbDt;
+      if (meta) {
+        meta.t0 = Date.now();
+        this.addEventListener("loadend", () => {
+          if (this.status === 0)
+            post({ lb: "net", data: { url: meta.url, method: meta.method, error: this.statusText || "network error", dur: Date.now() - meta.t0, ts: Date.now() } });
+          else
+            post({ lb: "net", data: { url: meta.url, method: meta.method, status: this.status, ok: this.status >= 200 && this.status < 300, dur: Date.now() - meta.t0, ts: Date.now() } });
+        });
+      }
+      return origSend.call(this, body);
+    };
   } catch {
     /* The capture surface must never break the page: any failure
        here just leaves that frame without DevTools data. */
@@ -282,7 +303,6 @@ type Props = {
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
   closeTab: (id: number) => void;
-  onHistory: (url: string) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
@@ -376,7 +396,8 @@ export default function BrowserView(props: Props) {
     const tb = toolbarRef.current;
     if (!tb) return;
     tb.classList.remove("lb-site-tint");
-    const src = settings.siteTint ? icons[active.id] : undefined;
+    /* Always on: the Settings toggle was removed. */
+    const src = icons[active.id];
     if (!src || !active.url) return;
     let dead = false;
     const img = new Image();
@@ -404,7 +425,7 @@ export default function BrowserView(props: Props) {
     return () => {
       dead = true;
     };
-  }, [active.id, active.url, icons, settings.siteTint]);
+  }, [active.id, active.url, icons]);
 
   const iconCache = useRef<Map<string, string>>(new Map());
   const iconUrls = useRef<Set<string>>(new Set());
@@ -426,8 +447,6 @@ export default function BrowserView(props: Props) {
   const lastEscape = useRef<Set<string>>(new Set());
   /* Tabs with an escape recovery in flight (#169). */
   const recovering = useRef<Set<number>>(new Set());
-  /* #139: per-tab escape-recovery timestamps for the 3-per-60 s cap. */
-  const escapeTimes = useRef<Map<number, number[]>>(new Map());
   /* #186: in-flight route mints per tab. The poll sync branch holds
      off while the frame still shows the pre-navigation page, so the
      stale frame URL cannot revert a Back/Go move mid-mint. */
@@ -442,6 +461,32 @@ export default function BrowserView(props: Props) {
      closure would otherwise read a stale render-time status. */
   const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
   statusRef.current = status;
+
+  /* Wave 77 skeleton: per-tab first-paint commitment. The black
+     skeleton overlay covers the content area while the active tab
+     loads a navigation that has not committed its first paint yet
+     (a fresh URL or a fresh tab); once the frame's load event fires
+     the tab is committed and further in-place asset loads of the
+     same site never bring the skeleton back. */
+  const [committed, setCommittedState] = useState<Record<number, boolean>>({});
+  const committedRef = useRef<Record<number, boolean>>({});
+  const setCommitted = (tabId: number, v: boolean) => {
+    if (committedRef.current[tabId] === v) return;
+    committedRef.current[tabId] = v;
+    setCommittedState((prev) => ({ ...prev, [tabId]: v }));
+  };
+  /* Reset the commitment exactly when a tab's loading flips to true
+     (a new navigation, including one started by the Home search or
+     a restored session). prevStatus mirrors the last seen status so
+     the watcher sees transitions, not levels. */
+  const prevStatus = useRef<Record<number, { loading: boolean; nav?: string }>>({});
+  useEffect(() => {
+    for (const [k, v] of Object.entries(status)) {
+      const id = Number(k);
+      if (v.loading && !prevStatus.current[id]?.loading) setCommitted(id, false);
+    }
+    prevStatus.current = status;
+  }, [status]);
   /* Engine-side loading overlay (zl:loadState): the page-settle probe
      only sees the frame's own resource timing; engine-mediated work
      the frame never observes (the initial document fetch before the
@@ -500,16 +545,31 @@ export default function BrowserView(props: Props) {
       clearInterval(iv);
     };
   }, [active?.id, active?.url]);
-  /* Loading-indicator settle probe: the old code flipped loading
-     off the moment readyState left "loading" while XHRs and
-     subresources were still fetching. Settled = document done
-     parsing AND the frame's resource-timing entry count held
-     steady for two consecutive poll ticks; a 45s ceiling keeps the
-     spinner from ever sticking. Unreachable frames settle at once. */
+  /* #216 activity tracker (the old settle probe): the indicator
+     must NOT go away while the site still loads components, and
+     it must REAPPEAR for new activity. "loading" = the document
+     parser is still running, or the frame's resource-timing
+     count moved this tick - ANY delta counts: single entries are
+     how slow proxy loads actually arrive, and the old burst-only
+     re-arm was exactly the mid-load hide the user reported.
+     "settled" = parsing done AND the count held steady for three
+     consecutive poll ticks (bounded idle), with the #172
+     long-quiet escape and the 45s ceiling (both now measured
+     from the last activity, not from navigation start).
+     Unobservable frames (no probe record, cross-origin throw)
+     read "settled": an armed tab must never stick the bar, and a
+     settled tab is never re-armed by what cannot be seen.
+     Long-poll pings re-arm the chip for one tick and the bounded
+     idle clears it again about 3.6s later: brief honest flashes,
+     never a stuck bar; persistent sockets never create resource
+     entries at all. */
   const settleRef = useRef<Record<number, { last: number; streak: number; t0: number }>>({});
-  const pageSettled = (tabId: number, f?: HTMLIFrameElement | null) => {
+  const pageState = (
+    tabId: number,
+    f?: HTMLIFrameElement | null
+  ): "loading" | "settled" => {
     const s = settleRef.current[tabId];
-    if (!s) return true;
+    if (!s) return "settled";
     let count = 0;
     let done = true;
     let blank = false;
@@ -519,28 +579,34 @@ export default function BrowserView(props: Props) {
       done = w?.document?.readyState !== "loading";
       blank = w?.location?.protocol === "about:";
     } catch {
-      return true;
+      return "settled";
     }
     /* The document has not started yet: genuinely loading; a slow
        upstream can sit blank for many ticks (never settle early). */
-    if (blank) return false;
+    if (blank) return "loading";
+    const armed = !!statusRef.current[tabId]?.loading;
     if (count !== s.last) {
       s.last = count;
       s.streak = 0;
-      /* #216: every activity refreshes the 45s ceiling: the bound
-         measures quiet time, not time since navigation, so a
-         legitimately slow load is never cut off mid-stream. */
+      /* Any new entry is visible activity (single images, XHRs,
+         one-at-a-time subresources through the slow proxy); the
+         old burst-only re-arm hid the chip mid-load and never
+         brought it back. Every activity also refreshes the 45s
+         ceiling: the bound measures quiet time, not time since
+         navigation, so a legitimately slow load is never cut
+         off mid-stream while it still moves. */
       s.t0 = Date.now();
-      return false;
+      return "loading";
     }
     s.streak += 1;
     /* #172: a document whose parser never finishes (eternal
        "loading") but with no subresource activity settles after a
        long quiet streak instead of holding the bar the full 45s. */
-    return (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
-  };
-  /* Tabs animating closed; the real close lands after the collapse. */
-  const [closingIds, setClosingIds] = useState<number[]>([]);
+    const settled =
+      (done && s.streak >= 3) || s.streak >= 8 || Date.now() - s.t0 > 45000;
+    /* Quiet ticks never re-arm a settled tab. */
+    return armed && !settled ? "loading" : "settled";
+  };  const [closingIds, setClosingIds] = useState<number[]>([]);
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
@@ -573,6 +639,17 @@ export default function BrowserView(props: Props) {
     return () => clearTimeout(t);
   }, [dlOpen]);
   const dlSeq = useRef(1);
+  /* ---- Ad-blocking card: mount-stay mirrors the downloads card. ---- */
+  const [adOpen, setAdOpen] = useState(false);
+  const [adMounted, setAdMounted] = useState(false);
+  useEffect(() => {
+    if (adOpen) {
+      setAdMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setAdMounted(false), 280);
+    return () => clearTimeout(t);
+  }, [adOpen]);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
   /* Per-document/per-window wiring for the new-tab interception. */
@@ -670,9 +747,7 @@ export default function BrowserView(props: Props) {
            dialog falls back to the capped in-memory Blob path below.
            A user dismissal is an honest cancel, not a failure. */
         const picker: SavePickerFn | undefined = (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
-        /* #141: never stream an .xpi to disk - the install prompt needs the
-           bytes in memory, a picker save would strand them in a file. */
-        if (res.body && typeof picker === "function" && !/\.xpi$/i.test(name)) {
+        if (res.body && typeof picker === "function") {
           try {
             const handle = await picker({ suggestedName: name.slice(0, 120) });
             writable = await handle.createWritable();
@@ -1155,7 +1230,6 @@ export default function BrowserView(props: Props) {
     }
     pushLog("info", "ext launch " + id);
   };
-
   /* Uninstall (#76): the manager owns removal (storage, caches,
      menus, alarms, background). The panel refreshes from the reply. */
   const uninstallExt = async (id: string) => {
@@ -1212,10 +1286,32 @@ export default function BrowserView(props: Props) {
      grip summons it. The transform lives on a plain wrapper div
      (.lb-dock-pill): applying it to the m3e-toolbar host did
      nothing (custom element host display), which left the bar
-     frozen in place covering page content. The tucked pill now
-     UNMOUNTS entirely (user request): hidden means not rendered,
-     the grip line alone stays as the reveal handle. */
+     frozen in place covering page content. #219: the tucked pill
+     now STAYS MOUNTED and transforms out of view, so tuck and
+     reveal both animate; inert/aria-hidden (effect below) keep the
+     hidden bar out of the tab order, and the grip line remains the
+     reveal handle. */
   const [dockTucked, setDockTucked] = useState(false);
+
+  const dockPillRef = useRef<HTMLDivElement | null>(null);
+  /* #219/#223: the dock pill stays mounted so its tuck/reveal
+     transform animates both directions. While it is visually
+     unavailable (tucked away, or slid out behind the open tab
+     switcher) it is inert and aria-hidden, and focus is bumped
+     out of it: no hidden control keeps a tab stop or hit target. */
+  useEffect(() => {
+    const el = dockPillRef.current;
+    if (!el) return;
+    if (dockTucked || tabsOpen) {
+      el.setAttribute("inert", "");
+      el.setAttribute("aria-hidden", "true");
+      const a = document.activeElement as HTMLElement | null;
+      if (a && el.contains(a)) a.blur();
+    } else {
+      el.removeAttribute("inert");
+      el.removeAttribute("aria-hidden");
+    }
+  }, [dockTucked, tabsOpen]);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
   const gripHoldRef = useRef<number | null>(null);
@@ -1299,6 +1395,12 @@ export default function BrowserView(props: Props) {
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
+  const addNet = (id: number, entry: { url: string; method: string; status: number; ok?: boolean; dur?: number; error?: string }) => {
+    setDtState((prev) => {
+      const base = prev[id] ?? emptyDt();
+      return { ...prev, [id]: { ...base, net: [...base.net, { id: nextEntryId(), ts: Date.now(), ...entry }] } };
+    });
+  };
 
   /* #203: split frames report icons through the validated bridge;
      same-origin polling reuses the same route/decode/fetch path. */
@@ -1465,7 +1567,7 @@ export default function BrowserView(props: Props) {
     seenDocs.current.delete(tab.id);
     iconJobs.current.get(tab.id)?.abort.abort();
     iconJobs.current.delete(tab.id);
-    setDt(tab.id, { console: [], fails: [], engineClientId: undefined, engineSource: undefined });
+    setDt(tab.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
 
     /* #186: the mint is in flight from here until the frame reaches
        this destination; the poll sync branch holds off against it. */
@@ -1477,8 +1579,8 @@ export default function BrowserView(props: Props) {
     const nid = "NAV-" + gen.toString(16).toUpperCase().padStart(4, "0").slice(-4);
     navId.current.set(tab.id, nid);
     const stack = push ? [...tab.stack.slice(0, tab.idx + 1), url] : tab.stack;
-    /* #122: an explicit idx wins - back/forward must move it before
-       the render-time snapshot in `tab` goes stale. */
+    /* #122/#181: an explicit idx wins - back/forward must move it
+       before the render-time snapshot in `tab` goes stale. */
     const idx = opts?.idx ?? (push ? stack.length - 1 : tab.idx);
     props.updateTab(tab.id, { url, stack, idx, title: "" });
     /* Navigating away collapses the pill back to name mode (an empty
@@ -1744,35 +1846,23 @@ export default function BrowserView(props: Props) {
           const loc = f.contentWindow!.location;
           const intended = new URL(loc.pathname + loc.search, t.url).href;
           if (!intended.startsWith("http")) return;
-          /* #139: key on the path only - query churn on the same
-             escaped URL must not multiply recoveries - and cap the
-             rate at 3 recoveries per tab per 60 s so a pathological
-             frame park cannot drive an unbounded re-drive loop. */
+          /* #139/#184 parity with main: key on the PATH only - query
+             churn on the same escaped URL must not multiply
+             recoveries - and the sync-side cleanup deletes the same
+             path form. */
           const key = t.id + "|" + loc.pathname;
-          const now = Date.now();
-          const stamps = (escapeTimes.current.get(t.id) ?? []).filter(
-            (ts) => now - ts < 60_000
-          );
-          if (lastEscape.current.has(key) || stamps.length >= 3) {
-            escapeTimes.current.set(t.id, stamps);
-            return;
-          }
-          stamps.push(now);
-          escapeTimes.current.set(t.id, stamps);
+          if (lastEscape.current.has(key)) return;
           lastEscape.current.add(key);
           recovering.current.add(t.id);
-          /* #139: drop the recovery if a newer navigation started
-             after the escape was detected; the re-drive must never
-             clobber a fresher load's frame assignment. */
-          const gen = navGen.current.get(t.id) ?? 0;
           pushLog(
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
           /* LB#53 (Zeolite#63): the re-drive rides the same opaque
              initial-route helper (handle first, legacy fallback). */
+          /* The frame handle is re-read in the callback: the captured
+             element can be gone by then (#171). */
           void initialRoute(t.id, intended).then((href) => {
-            if (navGen.current.get(t.id) !== gen) return;
             const fr = frames.current.get(t.id);
             if (fr) fr.src = href;
           });
@@ -1834,7 +1924,7 @@ export default function BrowserView(props: Props) {
           documentIds.current.delete(t.id);
           iconJobs.current.get(t.id)?.abort.abort();
           iconJobs.current.delete(t.id);
-          setDt(t.id, { console: [], fails: [], engineClientId: undefined, engineSource: undefined });
+          setDt(t.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
         }
       }
       if (real !== t.url) {
@@ -1853,7 +1943,6 @@ export default function BrowserView(props: Props) {
           patch = { url: real, idx: idx + 1 };
         } else {
           patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
-          if (!props.incognito) props.onHistory(real);
         }
         /* A polled URL change observes a navigation the frame
            already performed (pushState, an in-page link, or an
@@ -1875,8 +1964,8 @@ export default function BrowserView(props: Props) {
         /* The frame reached this URL for real: the per-path escape
            guard has done its job and can admit a later genuine escape
            to the same path again (#170); the recovery is complete.
-           #184: the guard key is the PATH (#139), not the full URL -
-           deleting id|real never matched the id|pathname key, so a
+           #184: the guard key is the PATH, not the full URL - the
+           old delete by id|real never matched the key form, so a
            recovered escape permanently poisoned that path against
            every later genuine escape on the same tab. */
         try {
@@ -1888,18 +1977,17 @@ export default function BrowserView(props: Props) {
       }
       const title = (doc.title || "").trim();
       if (title && title !== t.title) props.updateTab(t.id, { title });
-      if (pageSettled(t.id, f))
+      const ps = pageState(t.id, f);
+      if (ps === "settled")
         setStatus((prev) => {
           const cur = prev[t.id];
           return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
         });
-      else if (!statusRef.current[t.id]?.loading)
-        /* #216: any new activity after a settle re-arms the chip
-           (single resource entries included: slow proxy loads
-           arrive one at a time); it clears again on the next
-           settle, and the 45s ceiling still bounds the quiet. */
-        setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));
-      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
+      else if (ps === "loading" && !statusRef.current[t.id]?.loading)
+        /* #216: new document activity on a settled tab re-arms the
+           indicator (any new resource entry or the parser back at work);
+           the tracker's bounded idle above clears it again. */
+        setStatus((prev) => ({ ...prev, [t.id]: { loading: true, nav: prev[t.id]?.nav } }));      loadFavicon(t.id, real, doc.querySelector<HTMLLinkElement>("link[rel~='icon']")?.href ?? "", "app");
       /* Engine prefetch: hovering (or keyboard-focusing) a link in
          the proxied page warms the worker cache before the click. */
       if (settings.prefetchLinks && !wiredDocs.current.has(doc)) {
@@ -2029,7 +2117,6 @@ export default function BrowserView(props: Props) {
     dt,
     settings,
     incognito: props.incognito,
-    onHistory: props.onHistory,
     newTab: props.newTab,
     updateTab: props.updateTab,
   });
@@ -2038,7 +2125,6 @@ export default function BrowserView(props: Props) {
     dt,
     settings,
     incognito: props.incognito,
-    onHistory: props.onHistory,
     newTab: props.newTab,
     updateTab: props.updateTab,
   };
@@ -2053,7 +2139,6 @@ export default function BrowserView(props: Props) {
          from that origin; anything else is still not one of ours. */
       const zlco = zlContentOrigin();
       if (e.origin !== window.location.origin && (!zlco || e.origin !== zlco)) return;
-
       const data = e.data as { lb?: string; data?: Record<string, unknown> } | null;
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
@@ -2076,6 +2161,7 @@ export default function BrowserView(props: Props) {
       }
       if (tabId === null || !tab) return;
       const d = ev.data ?? {};
+      const dtBase = () => L.dt[tabId as number] ?? emptyDt();
       /* Maximum string lengths: a hostile or broken page must not be
          able to stuff megabytes into DevTools state. */
       const cap = (v: unknown, n: number) => String(v ?? "").slice(0, n);
@@ -2091,13 +2177,25 @@ export default function BrowserView(props: Props) {
            lands in the app log with the tab id. */
         pushLog(kind === "error" || kind === "warn" ? "error" : "info",
           "console[" + tabId + "] " + kind + ": " + sanitizeText(cap(d.text, 300)));
-        /* Functional patch: two events dispatched back to back (log
-           then error) both build their patch against live.current, which
-           only refreshes on the next render, so the second dtBase()-built
-           console array silently dropped the first entry. #106 */
-        setDt(tabId, (base) => ({
-          console: [...base.console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
-        }));
+        setDt(tabId, {
+          console: [...dtBase().console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
+        });
+      } else if (ev.lb === "net") {
+        setDt(tabId, {
+          net: [
+            ...dtBase().net,
+            {
+              id: nextEntryId(),
+              url: sanitizeUrl(cap(d.url, 2000)),
+              method: cap(d.method, 10) || "GET",
+              status: Number(d.status ?? 0),
+              ok: d.ok === undefined ? undefined : Boolean(d.ok),
+              dur: d.dur === undefined ? undefined : Number(d.dur),
+              error: d.error === undefined ? undefined : sanitizeText(cap(d.error, 500)),
+              ts: Number(d.ts ?? Date.now()),
+            },
+          ].slice(-500),
+        });
       } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
@@ -2149,9 +2247,10 @@ export default function BrowserView(props: Props) {
         if (lastNav.current.get(tabId) !== tab.url) return;
         const title = cap(d.title, 300);
         if (title) L.updateTab(tabId, { title });
-        if (pageSettled(tabId as number, frames.current.get(tabId as number)))
-          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
-        if (tab.url && !L.incognito) L.onHistory(tab.url);
+        if (
+          pageState(tabId as number, frames.current.get(tabId as number)) ===
+          "settled"
+        )
       } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
         if (!href) return;
@@ -2192,7 +2291,7 @@ export default function BrowserView(props: Props) {
           if (changedDocument) {
             iconJobs.current.get(tabId)?.abort.abort();
             iconJobs.current.delete(tabId);
-            setDt(tabId, { console: [], fails: [], engineClientId: clientId, engineSource: source });
+            setDt(tabId, { console: [], net: [], fails: [], engineClientId: clientId, engineSource: source });
           }
           try {
             const doc = frames.current.get(tabId)?.contentDocument;
@@ -2211,7 +2310,6 @@ export default function BrowserView(props: Props) {
             patch = { url: real, idx: idx + 1 };
           } else {
             patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
-            if (!L.incognito) L.onHistory(real);
           }
           /* Event-driven SPA sync observes a navigation the
              frame already performed; record it so the auto-load
@@ -2254,9 +2352,7 @@ export default function BrowserView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Display a readable destination for Google challenge URLs without
-     changing the actual tab URL or its history entry. */
-  const draft = active ? (drafts[active.id] ?? displayAddressUrl(active.url)) : "";
+  const draft = active ? (drafts[active.id] ?? active.url) : "";
   /* Query the search engine for completions of the current draft.
      Debounced 160ms; must run before the empty-tab early return so the
      hook order never changes between renders. */
@@ -2333,6 +2429,9 @@ export default function BrowserView(props: Props) {
   }
 
   const st = status[active.id] ?? { loading: false };
+  /* Wave 77: the skeleton shows only for uncommitted navigations of
+     the active tab - never for a committed site's asset loads. */
+  const skeletonOn = st.loading && !committed[active.id];
   const activeDt = dtOf(active.id);
 
   const go = (value: string) => {
@@ -2375,9 +2474,8 @@ export default function BrowserView(props: Props) {
       delete settleRef.current[id];
       lastNav.current.delete(id);
       navGen.current.delete(id);
-      escapeTimes.current.delete(id);
-      pendingNav.current.delete(id);
       navId.current.delete(id);
+      pendingNav.current.delete(id);
       blankPolls.current.delete(id);
       blankLogged.current.delete(id);
       lastDiag.current.delete(id);
@@ -2403,6 +2501,44 @@ export default function BrowserView(props: Props) {
       });
       props.closeTab(id);
     }, 240);
+  };
+
+  /* ---- Ad-blocking card: the site scope mirrors the lock popup's
+       host derivation (raw hostname first, www-stripped fallback),
+       and the switch reuses the per-site rules store the Settings
+       page owns (adblock can only disable per site; the global
+       setting still wins, so a global off disables the switch). ---- */
+  let adHost = "";
+  let adHostAlt = "";
+  try {
+    const u = new URL(active.url);
+    adHost = u.hostname;
+    adHostAlt = u.hostname.replace(/^www\./, "");
+  } catch {
+    /* not a URL yet */
+  }
+  const adRule =
+    rules.find((r) => r.domain === adHost || (!!adHostAlt && r.domain === adHostAlt));
+  const setSiteAdblock = (enabled: boolean) => {
+    const idx =
+      rules.findIndex((r) => r.domain === adHost || (!!adHostAlt && r.domain === adHostAlt));
+    if (enabled) {
+      /* Inherit: drop an explicit adblock:false, change nothing when
+         no rule exists. */
+      if (idx < 0) return;
+      props.onRulesChange(rules.map((r, i) => {
+        if (i !== idx) return r;
+        const copy = { ...r };
+        delete copy.adblock;
+        return copy;
+      }));
+      return;
+    }
+    if (idx >= 0) {
+      props.onRulesChange(rules.map((r, i) => i === idx ? { ...r, adblock: false } : r));
+    } else {
+      props.onRulesChange([...rules, { domain: adHostAlt || adHost, adblock: false }]);
+    }
   };
 
   /* ---- Lock popup: connection facts + cookies of the active site. ---- */
@@ -2445,6 +2581,10 @@ export default function BrowserView(props: Props) {
                   if (!ctxHooked.current.has(el)) {
                     ctxHooked.current.add(el);
                     el.addEventListener("load", () => {
+                      /* Wave 77: first paint committed - the skeleton
+                         goes away and stays away while this document
+                         loads its own assets in place. */
+                      setCommitted(t.id, true);
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                       hookFrameDevTools(el);
                     });
@@ -2462,14 +2602,7 @@ export default function BrowserView(props: Props) {
                  navguard instead. */
               /* Cross-origin frames can't be polled; the
                  load event is the only reliable "done" signal there. */
-              onLoad={() =>
-                setStatus((prev) => {
-                  const cur = prev[t.id];
-                  return cur && cur.loading ? { ...prev, [t.id]: { loading: false } } : prev;
-                })
-              }
-            />
-          </div>
+            />          </div>
         ))}
 
         {/* Top loading indicator (always mounted): the shape-morphing
@@ -2478,8 +2611,8 @@ export default function BrowserView(props: Props) {
             the site and glides back away once everything settles;
             the class toggle drives the CSS transition so both
             directions animate. st.loading flips off only after the
-            settle probe holds, and engineBusy tracks engine
-            in-flight work, so the indicator stays up while small
+            #216 activity tracker's bounded idle holds (and re-arms
+            on any new resource entry), and engineBusy tracks engine            in-flight work, so the indicator stays up while small
             resources are still loading after first paint. No
             backdrop: the view never goes dark and the site stays
             visible and interactive while it loads. */}
@@ -2491,6 +2624,29 @@ export default function BrowserView(props: Props) {
         >
           <m3e-loading-indicator variant="contained" aria-label="Loading page" />
         </div>
+
+        {/* Wave 77 skeleton: the black skeleton page covers the
+            content area while the active tab's navigation has not
+            committed its first paint. The m3e-skeleton paints pulse
+            shapes over each mock layout div's box (the slotted mock
+            itself stays hidden until loaded), and the overlay sits
+            below the loading indicator (z-index 5 vs 6) so the
+            morphing indicator stays visible on top. */}
+        {skeletonOn && (
+          <div className="lb-sk" aria-hidden={true}>
+            <m3e-skeleton animation="pulse">
+              <div className="lb-sk-page">
+                <div className="lb-sk-head" />
+                <div className="lb-sk-hero" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line lb-sk-short" />
+                <div className="lb-sk-line" />
+                <div className="lb-sk-line lb-sk-short" />
+              </div>
+            </m3e-skeleton>
+          </div>
+        )}
 
         {/* Compaction 4: the in-page new-tab hero is gone. An empty
             tab expands and focuses the toolbar pill instead (see the
@@ -2558,11 +2714,11 @@ export default function BrowserView(props: Props) {
             revealDock();
           }}
         />
-        {/* Tucked = fully unmounted, not translated: hidden means
-            not rendered (user request); the grip line alone stays
-            mounted as the reveal handle. */}
-        {!dockTucked && (
-        <div className="lb-dock-pill">
+        {/* #219: the pill stays mounted so the tuck/reveal
+            transform animates both ways; tucked, it transforms out
+            of view and goes inert (effect above). The grip line
+            alone remains the reveal handle. */}
+        <div className="lb-dock-pill" ref={dockPillRef}>
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar", ref: toolbarRef }}>
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
@@ -2598,52 +2754,27 @@ export default function BrowserView(props: Props) {
           </m3e-icon-button>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
           <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
-          {/* #211: Reload is an m3e-split-button. The leading segment is
-              the same reload as before (same load call, same tooltip,
-              same keyboard behavior); the trailing segment opens the
-              reload menu. 2.8.2 ships no text variant, so the pair rides
-              tonal. The menu trigger must sit inside the trailing icon
-              button: ActionElementBase listens on its parent element. */}
-          <m3e-split-button variant="tonal" size="small">
-            <m3e-button
-              slot="leading-button"
-              id="lb-reload-btn"
-              aria-label="Reload"
-              onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
-            >
-              <m3e-icon slot="icon" name="refresh" aria-hidden={true} />
-            </m3e-button>
-            <m3e-icon-button slot="trailing-button" id="lb-reload-menu-btn" aria-label="Reload options">
-              <m3e-icon name="arrow_drop_down" aria-hidden={true} />
-              <m3e-menu-trigger for="lb-reload-menu"></m3e-menu-trigger>
-            </m3e-icon-button>
-          </m3e-split-button>
+          {/* Reload: one plain icon button, visually identical to its
+              neighbours (the split-button look and its bypass menu
+              were removed; the engine's zl:reloadBypass stays on the
+              control plane). */}
+          <m3e-icon-button
+            id="lb-reload-btn"
+            aria-label="Reload"
+            onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+          >
+            <m3e-icon name="refresh" aria-hidden={true} />
+          </m3e-icon-button>
           <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
-          <m3e-menu id="lb-reload-menu" aria-label="Reload options">
-            {/* Zeolite zl:reloadBypass (#211): arm the one-shot page
-                cache bypass on the app-origin engine, then run the same
-                reload; the engine consumes the flag on the next page
-                fetch. "Clear this site's data and reload" stays out
-                until an engine control exists for it. */}
-            <m3e-menu-item
-              onClick={() => {
-                void zlSend({ type: "zl:reloadBypass" }, 8000);
-                if (active.url) load(active, active.url, { push: false });
-              }}
-            >
-              Reload and bypass cache
-            </m3e-menu-item>
-          </m3e-menu>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
           <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
             {tbSuggOpen && (
-              <div id="lb-tb-suggest" className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+              <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
                   <button
                     key={it.url}
-                    id={"lb-tb-opt-" + i}
                     type="button"
                     role="option"
                     aria-selected={i === tbSuggIdx}
@@ -2674,21 +2805,10 @@ export default function BrowserView(props: Props) {
               </>
             )}
             {tbExpanded || !active.url ? (
-              /* #102: this URL field stays a raw input on purpose. It is
-                 the compact editor that expands in place inside the
-                 center pill (AGENTS.md: toolbar URL editing remains
-                 inside the pill); an m3e-search-bar or m3e-form-field
-                 frame would break that layout. It is labelled by
-                 aria-label. */
               <input
                 ref={urlInputRef}
                 className="lb-url-input"
                 aria-label="URL or search"
-                role="combobox"
-                aria-expanded={tbSuggOpen}
-                aria-controls={tbSuggOpen ? "lb-tb-suggest" : undefined}
-                aria-autocomplete="list"
-                aria-activedescendant={tbSuggOpen && tbSugg[tbSuggIdx] ? "lb-tb-opt-" + tbSuggIdx : undefined}
                 placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                 value={draft}
                 spellCheck={false}
@@ -2742,16 +2862,8 @@ export default function BrowserView(props: Props) {
               </button>
             )}
           </span>
-          <m3e-icon-button
-            id="lb-devtools-btn"
-            aria-label="Developer tools"
-            toggle
-            selected={activeDt.open ? "" : undefined}
-            onClick={() => setDt(active.id, { open: !activeDt.open })}
-          >
-            <m3e-icon name="bug_report" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-devtools-btn" position="above">Developer tools</m3e-tooltip>
+          {/* Developer tools live in the three-dot overflow menu only
+              (the toolbar button was removed: no duplicated chrome). */}
           {/* Compaction 3: the diagnostics summary lives on the
               toolbar. The chip appears only when this tab captured
               load failures; it opens DevTools on the diagnostics
@@ -2798,20 +2910,7 @@ export default function BrowserView(props: Props) {
             <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
-          <m3e-icon-button
-            id="lb-ext-btn"
-            aria-label="Extensions"
-            toggle
-            selected={extPanelOpen ? "" : undefined}
-            onClick={() => {
-              const next = !extPanelOpen;
-              setExtPanelOpen(next);
-              if (next) loadExtensions();
-            }}
-          >
-            <m3e-icon name="extension" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-ext-btn" position="above">Extensions</m3e-tooltip>
+          {/* Extensions live in the three-dot overflow menu only. */}
           {/* Incognito toggle: a regular 40x40 icon button inside the
               toolbar, same slot as the other toggles. Toggling on
               suspends the normal session and opens one empty
@@ -2834,13 +2933,11 @@ export default function BrowserView(props: Props) {
             <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-incognito-pill" position="above">
-            {props.incognito
-              ? "Incognito on: history and session are not recorded. The proxy server still sees traffic."
-              : "Turn on incognito: stops history and session recording."}
+            {props.incognito ? "Turn off incognito" : "Turn on incognito"}
           </m3e-tooltip>
-          {/* #96: persistent incognito identity: the badge stays
-              visible in the chrome the whole time the mode is on. */}
-          {props.incognito && <span className="lb-incognito-badge">Incognito</span>}
+          {/* Incognito identity is the domino icon's color now
+              (theme.css: body.lb-incognito .lb-incognito-ic); the
+              text badge and the toolbar outline are gone. */}
           {/* #210: grouped overflow for the secondary toolbar actions.
               The menu trigger sits inside the icon button
               (ActionElementBase listens on its parent element). */}
@@ -2875,6 +2972,14 @@ export default function BrowserView(props: Props) {
             >
               Downloads
             </m3e-menu-item>
+            <m3e-menu-item
+              onClick={() => {
+                setAdOpen(true);
+                setTabsOpen(false);
+              }}
+            >
+              AdBlocking
+            </m3e-menu-item>
             <m3e-menu-item onClick={() => props.onOpenSettings()}>Settings</m3e-menu-item>
           </m3e-menu>
         </m3e-toolbar>
@@ -2896,6 +3001,19 @@ export default function BrowserView(props: Props) {
               onCancel={cancelDownload}
             />
           )}
+          {adMounted && (
+            <AdBlockCard
+              closing={!adOpen}
+              clientId={activeDt.engineClientId}
+              source={activeDt.engineSource}
+              host={adHost}
+              globalAdblock={settings.adblock}
+              siteAdblock={adRule?.adblock}
+              onSiteToggle={setSiteAdblock}
+              onOpenSettings={() => props.onOpenSettings()}
+              onClose={() => setAdOpen(false)}
+            />
+          )}
           {fileView && (
             <FileViewer
               name={fileView.name}
@@ -2905,7 +3023,6 @@ export default function BrowserView(props: Props) {
             />
           )}
         </div>
-        )}
       </div>
 
       {extPanelMounted && (
