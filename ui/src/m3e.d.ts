@@ -23,7 +23,7 @@ declare module "react" {
     interface IntrinsicElements {
       "m3e-theme": M3eBase & { color?: string; scheme?: string; motion?: string; "strong-focus"?: boolean; density?: string };
       "m3e-content-pane": M3eBase;
-      "md-card": M3eBase & { variant?: string };
+      "md-card": M3eBase & { variant?: string; tabIndex?: number; role?: string; title?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
