@@ -55,7 +55,6 @@ export default function App() {
   const [activeId, setActiveId] = useState<number>(0);
   /* #81: Ctrl+K command palette. */
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [history, setHistory] = useState<string[]>(() => store.loadHistory());
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
@@ -314,40 +313,6 @@ export default function App() {
     [tabs]
   );
 
-  const addHistory = useCallback((url: string) => {
-    if (incognito) return;
-    setHistory(store.addHistory(url));
-  }, [incognito]);
-
-  /* #93 recent sites: removal and clearing keep Home row and the
-     persisted history store in lockstep. */
-  /* #99: both removals are reversible, so they happen at once and the
-     snackbar offers Undo (entries go back to their old positions). */
-  const removeHistory = useCallback((url: string) => {
-    const index = store.loadHistory().indexOf(url);
-    setHistory(store.removeHistory(url));
-    if (index < 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-    let host = url;
-    try {
-      host = new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      /* keep the raw entry as the label */
-    }
-    M3eSnackbar.open("Removed " + host + " from recent sites", "Undo", {
-      duration: 6000,
-      actionCallback: () => setHistory(store.insertHistory(url, index)),
-    });
-  }, []);
-  const clearHistoryAll = useCallback(() => {
-    const before = store.loadHistory();
-    setHistory(store.clearHistory());
-    if (before.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-    M3eSnackbar.open("Cleared recent sites", "Undo", {
-      duration: 6000,
-      actionCallback: () => setHistory(store.restoreHistory(before)),
-    });
-  }, []);
-
   /* 0.7 Zirconium session import: history merges into the persisted
      store, imported tabs append with fresh ids (importSessionData
      minted fresh sess tokens). Refused entirely in incognito: the
@@ -358,7 +323,6 @@ export default function App() {
       if (incognito) return "incognito";
       const parsed = store.importSessionData(data);
       if (!parsed) return "invalid";
-      setHistory(parsed.history);
       const restored = parsed.tabs.map((t) => ({ ...t, id: tabSeq++ }));
       if (restored.length > 0) setTabs((prev) => [...prev, ...restored]);
       return "ok";
@@ -1017,14 +981,7 @@ export default function App() {
           <div className="app-content">
             <div key={view} className="lb-view">
               {view === "home" && (
-                <HomePage
-                  settings={settings}
-                  history={history}
-                  incognito={incognito}
-                  onNavigate={navigateTo}
-                  onRemoveHistory={removeHistory}
-                  onClearHistory={clearHistoryAll}
-                />
+                <HomePage settings={settings} onNavigate={navigateTo} />
               )}
               {view === "settings" && (
                 <Suspense fallback={<m3e-loading-indicator variant="contained" aria-label="Loading settings" />}>
@@ -1057,7 +1014,6 @@ export default function App() {
                   updateTab={updateTab}
                   newTab={newTab}
                   closeTab={closeTab}
-                  onHistory={addHistory}
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
