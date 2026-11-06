@@ -1,5 +1,5 @@
-/* On-device stores: browsing history, session tabs and a client-side
-   technical log ring buffer. All persisted in localStorage under
+/* On-device stores: session tabs and a client-side technical log ring
+   buffer. All persisted in localStorage under
    lobsterbrowse-* keys so "Delete all data" can wipe them. */
 
 import { wipeAiData } from "./ai/aiStore.ts";
@@ -22,7 +22,6 @@ export type Tab = {
 
 export type LogEntry = { ts: number; level: "info" | "warn" | "error"; msg: string };
 
-const HISTORY_KEY = "lobsterbrowse-history";
 const TABS_KEY = "lobsterbrowse-tabs";
 
 function readJson<T>(key: string, fallback: T): T {
@@ -47,48 +46,6 @@ function writeJson(key: string, value: unknown) {
   } catch {
     /* ignore */
   }
-}
-
-/* ---- History ---- */
-
-export function loadHistory(): string[] {
-  return readJson<string[]>(HISTORY_KEY, []);
-}
-
-export function addHistory(url: string): string[] {
-  const list = loadHistory().filter((u) => u !== url);
-  list.unshift(url);
-  const trimmed = list.slice(0, 200);
-  writeJson(HISTORY_KEY, trimmed);
-  return trimmed;
-}
-
-/* #93 Home recent sites: single-entry removal and full clear. */
-export function removeHistory(url: string): string[] {
-  const list = loadHistory().filter((u) => u !== url);
-  writeJson(HISTORY_KEY, list);
-  return list;
-}
-
-export function clearHistory(): string[] {
-  writeJson(HISTORY_KEY, []);
-  return [];
-}
-
-/* #99 undo: put one removed entry back at its old position. */
-export function insertHistory(url: string, index: number): string[] {
-  const list = loadHistory().filter((u) => u !== url);
-  list.splice(Math.min(Math.max(index, 0), list.length), 0, url);
-  const trimmed = list.slice(0, 200);
-  writeJson(HISTORY_KEY, trimmed);
-  return trimmed;
-}
-
-/* #99 undo: restore a cleared list, keeping anything visited since. */
-export function restoreHistory(urls: string[]): string[] {
-  const merged = Array.from(new Set([...loadHistory(), ...urls])).slice(0, 200);
-  writeJson(HISTORY_KEY, merged);
-  return merged;
 }
 
 /* ---- Session tabs (persisted so the browser view can restore on reload) ----

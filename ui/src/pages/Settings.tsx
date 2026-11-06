@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+/* Settings cards: the MD3E filled card component (user request
+   2026-11-06) owns the card surface for the settings groups, search
+   results, About and the extension entries. */
+import "@materialwebunofficial/md3e-web/components/md-card.js";
 import {
   ENGINES,
   type EngineId,
@@ -319,17 +323,19 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
           ) : (
             hits.map((h) => (
-              <button key={h.label} type="button" className="lb-set-result" onClick={() => jumpTo(h)}>
-                <span>{h.label}</span>
-                <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
-              </button>
+              <md-card key={"c-" + h.label} variant="filled" className="lb-set-result">
+                <button type="button" className="lb-set-result-btn" onClick={() => jumpTo(h)}>
+                  <span>{h.label}</span>
+                  <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
+                </button>
+              </md-card>
             ))
           )}
         </div>
       ) : (
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <div className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
@@ -340,7 +346,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             ))}
           </m3e-segmented-button>
           </div>
-        </div>
+        </md-card>
         <m3e-list>
           <Row id="set-search-suggest" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
         </m3e-list>
@@ -358,21 +364,21 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <div className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
           <div className="lb-setting-label">Manage installed</div>
           {/* #230: the extension configuration UI moved here from the
               toolbar extension card; the toolbar card now launches the
               extension UI directly. */}
           <ExtManage />
-        </div>
-        <div className="lb-setting-group" id="set-amo" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
              the public API is not, so search and install run over the
              API instead of the store site. */}
           <AmoSearch />
-        </div>
-        <div className="lb-setting-group" id="set-import" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-import" tabIndex={-1}>
           <div className="lb-setting-label">Import locally</div>
           {/* Exactly one import action: our button triggers the picker;
              the input itself stays hidden. */}
@@ -397,11 +403,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             The engine validates the manifest and permission grants; a bad package only lands that
             extension in an error state.
           </p>
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <div className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
           <div className="lb-setting-label">Theme color</div>
           <div className="lb-seed-row">
             <input
@@ -419,9 +425,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               ))}
             </m3e-chip-set>
           </div>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group">
+        <md-card variant="filled" className="lb-setting-group">
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
@@ -433,14 +439,14 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             Replaces the plain background with the liquid-metal ribbon shader (the 21st.dev shader-metal component, non-interactive, wave 78).
             Off keeps the plain flat background.
           </p>
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
         <m3e-list>
           <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
         </m3e-list>
-        <div className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
           <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
@@ -448,8 +454,8 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
-        </div>
-        <div className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
+        </md-card>
+        <md-card variant="filled" className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
           <div className="lb-setting-label">Open in about:blank</div>
           <m3e-button onClick={openInAboutBlank}>
             <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
@@ -459,11 +465,11 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             it. The new window has no connection back to this one and starts from a fresh view of
             the app (settings sync there only after a reload).
           </p>
-        </div>
+        </md-card>
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <div className="lb-setting-group" id="set-proxy" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-proxy" tabIndex={-1}>
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
@@ -478,9 +484,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only. Applied on the next navigation.
           </p>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group" id="set-transport" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-transport" tabIndex={-1}>
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Transport engine">
@@ -495,13 +501,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
             epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
           </p>
-        </div>
+        </md-card>
         <m3e-divider />
-        <div className="lb-setting-group" id="set-data" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-data" tabIndex={-1}>
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
             Clear the proxied page cache on this device, or delete every
-            stored history, session and setting.
+            stored session and setting.
           </p>
           <div className="lb-seed-row">
             <m3e-button onClick={() => setConfirmDelete(true)}>
@@ -549,25 +555,25 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
               </m3e-button>
             </div>
           </m3e-dialog>
-        </div>
+        </md-card>
 
         <m3e-divider />
         {/* Diagnostic mode is always on (the toggle was removed on
             purpose): every failed resource, page console message and
             proxy intervention (CSP/SRI stripping) is logged in full to
             the app log and DevTools. */}
-        <div className="lb-setting-group" id="set-logs" tabIndex={-1}>
+        <md-card variant="filled" className="lb-setting-group" id="set-logs" tabIndex={-1}>
           <div className="lb-setting-label">Logs</div>
           <m3e-button onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
           </m3e-button>
-        </div>
+        </md-card>
 
       </Panel>
       </m3e-accordion>
       )}
 
-      <div className="lb-setting-group lb-about">
+      <md-card variant="filled" className="lb-setting-group lb-about">
         <div className="lb-setting-label">About</div>
         {/* Clawd naps here, above the build pills (user request
             2026-11-04). Vendored local asset, no external dependency. */}
@@ -589,7 +595,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         {!build && !buildError && (
           <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
         )}
-      </div>
+      </md-card>
     </section>
   );
 }

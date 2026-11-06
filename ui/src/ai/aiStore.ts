@@ -56,8 +56,8 @@ const META_MARK =
 
 export const AI_MODELS: AiModel[] = [
   { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, vision: false, mark: OPENAI_MARK },
-  { id: "@cf/nvidia/nemotron-3-120b-a12b", name: "Nemotron 3", version: "NVIDIA", params: "120B-A12B", note: "256k context, reasoning, function calling", thinking: true, vision: false, mark: NVIDIA_MARK },
-  { id: "@cf/google/gemma-4-26b-a4b-it", name: "Gemma 4", version: "Google", params: "26B-A4B", note: "256k context, reasoning, function calling", thinking: true, vision: false, mark: GOOGLE_MARK },
+  { id: "@cf/nvidia/nemotron-3-120b-a12b", name: "Nemotron 3", version: "NVIDIA", params: "120B-A12B", note: "256k context, reasoning, function calling", thinking: true, vision: false, picker: false, mark: NVIDIA_MARK },
+  { id: "@cf/google/gemma-4-26b-a4b-it", name: "Gemma 4", version: "Google", params: "26B-A4B", note: "256k context, reasoning, function calling", thinking: true, vision: false, picker: false, mark: GOOGLE_MARK },
   { id: "@cf/meta/llama-4-scout-17b-16e-instruct", name: "Scout", version: "Llama 4", params: "17B", note: "vision backend: reads your images", thinking: false, vision: true, picker: false, mark: META_MARK },
 ];
 
@@ -680,6 +680,12 @@ export async function* streamChat(opts: {
     .sort((a, b) => a - b)
     .map((k) => calls[k])
     .filter((c): c is ToolCall => Boolean(c));
+  /* Cloudflare sometimes streams tool_calls without ids; a blank
+     tool_call_id fails the follow-up round provider-side. Synthesize
+     stable ids for any call that arrived without one. */
+  list.forEach((c, i) => {
+    if (!c.id) c.id = "call_" + i;
+  });
   if (list.length) yield { type: "tool_calls", calls: list };
   yield { type: "finish", reason: finish || "stop", usage };
 }

@@ -189,7 +189,7 @@ export default function ExtManage() {
       ) : (
         <div className="lb-ext-list">
           {list.map((e) => (
-            <div
+            <md-card variant="filled"
               key={e.id}
               className={"lb-ext-item" + (detail && detail.id === e.id ? " sel" : "")}
               title={shownError(e.lastError) ?? ""}
@@ -223,13 +223,13 @@ export default function ExtManage() {
                   <m3e-icon name="delete" aria-hidden={true} />
                 </m3e-icon-button>
               </span>
-            </div>
+            </md-card>
           ))}
         </div>
       )}
       {detailError && <p className="lb-ext-err">{detailError}</p>}
       {detail && (
-        <div className="lb-ext-detail">
+        <md-card variant="filled" className="lb-ext-detail">
           <div className="lb-ext-dhead">
             <span className="lb-ext-dtitle">
               <div className="lb-ext-ava" aria-hidden={true}>
@@ -272,7 +272,7 @@ export default function ExtManage() {
             </m3e-button>
           </div>
           {shownError(detail.lastError) && <p className="lb-ext-err">{shownError(detail.lastError)}</p>}
-        </div>
+        </md-card>
       )}
     </div>
   );

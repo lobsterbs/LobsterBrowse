@@ -10,12 +10,12 @@ export type Suggestion = { icon: string; text: string; url: string; src?: string
 
 /* Suggestion order (wave 77): relevance-ranked engine suggestions
    lead - the most probable completion is the first row - then the
-   direct search row, then matching history, then a URL row. The
+   direct search row, then a URL row. The
    engine relevance ranking itself: prefix hits, then substring
    matches, then word-start matches, then the rest. */
 export function buildSuggests(
   input: string,
-  opts: { history: string[]; engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
+  opts: { engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
 ): Suggestion[] {
   const q = input.trim();
   if (q.length < SUGGEST_MIN_CHARS) return [];
@@ -39,9 +39,6 @@ export function buildSuggests(
     push("search", s.text, opts.searchFor(s.text), s.src);
   }
   push("search", q + " · " + opts.engineName + " search", opts.search, opts.engineName);
-  for (const h of opts.history) {
-    if (h.toLowerCase().includes(ql)) push("history", h, h);
-  }
   if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
   return out;
 }

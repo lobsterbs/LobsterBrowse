@@ -139,15 +139,15 @@ body.lb-fancy .lb-home m3e-search-view {
 .lb-home m3e-search-view {
   --m3e-search-view-docked-scrim-opacity: 0%;
 }
-/* Suggestion dropdown: same frosted treatment as the search bar. */
+/* Suggestion dropdown: no extra surface behind the suggestor rows
+   (user request 2026-11-06) - the search view panel is the only
+   surface; the old frosted grey field is gone. */
 body.lb-fancy .lb-ac {
-  /* Frosted glass drops the opaque dropdown outline; the ring and
-     inset gloss below carry the edge definition (2026-10-29). */
+  background: transparent;
   border-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 /* Frosted nav rail (#226, live-probed 2026-10-30): the frost chain
    works - a bright layer behind the rail shows through the blur -
@@ -449,7 +449,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
    simple-icons) leads the suggestion text; the .lb-ac-item flex gap
    provides the required space after it. */
 .lb-engine-mark { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
-.lb-ac-src { margin-left: auto; font-size: 11px; opacity: 0.65; flex-shrink: 0; }
 /* Wave 77: the black skeleton page (m3e-skeleton painting pulse
    shapes over an invisible mock layout) that covers the content
    area while a navigation's first paint has not committed - a new
@@ -572,6 +571,31 @@ body.lb-fancy .lb-home pre.lb-ascii {
   white-space: nowrap;
 }
 .lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
+/* Settings cards (user request 2026-11-06): md-card variant="filled"
+   owns the surface - the old hand-rolled borders and translucent
+   backgrounds are gone. */
+md-card.lb-set-result { border: 0; background: none; }
+.lb-set-results md-card.lb-set-result { padding: 0; }
+.lb-set-result-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
+  background: none;
+  border: 0;
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+/* The card provides its own 16dp padding; the group keeps only a
+   small bottom rhythm so stacked cards breathe. */
+md-card.lb-setting-group { display: block; padding: 0 0 var(--md-sys-measurement-space50); }
+md-card .lb-ext-item { border: 0; background: none; }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-group:focus-visible,
 .lb-setting-row:focus-visible {
@@ -1541,80 +1565,7 @@ body.lb-incognito .lb-incognito-ic {
   color: var(--md-sys-color-primary);
 }
 
-/* #93: recent-sites chips on Home (local history only). */
-.lb-recent {
-  /* One horizontally scrollable row (Home never scrolls). The auto
-     margins keep the row centered while it fits and collapse to zero
-     once it scrolls (plain centering would clip the left edge). */
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--md-sys-measurement-space75);
-  margin-top: var(--md-sys-measurement-space200);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  padding-bottom: 2px;
-}
-.lb-recent > :first-child { margin-inline-start: auto; }
-.lb-recent > :last-child { margin-inline-end: auto; }
-.lb-recent-chip {
-  display: inline-flex;
-  align-items: stretch;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent);
-}
-body.lb-fancy .lb-recent-chip {
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border-color: color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
-}
-.lb-recent-open {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space50);
-  max-width: 180px;
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
-  border: none;
-  background: none;
-  font: inherit;
-  color: var(--md-sys-color-on-surface, inherit);
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lb-recent-open:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
-.lb-recent-open m3e-icon { font-size: 16px; flex-shrink: 0; }
-.lb-recent-x {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75);
-  border: none;
-  border-left: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent);
-  background: none;
-  color: var(--md-sys-color-on-surface-variant, inherit);
-  cursor: pointer;
-  font-size: 14px;
-}
-.lb-recent-x:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent); }
-.lb-recent-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space50);
-  padding: var(--md-sys-measurement-space50);
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: var(--md-sys-typescale-label-medium-font-size, 12px);
-  color: var(--md-sys-color-on-surface-variant);
-  cursor: pointer;
-  opacity: 0.75;
-}
-.lb-recent-clear:hover { opacity: 1; }
+
 
 /* #94: console empty state. */
 .lb-console-empty { padding: var(--md-sys-measurement-space200); }
@@ -2036,8 +1987,8 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
    m3e-bottom-sheet centered at the bottom of the screen. ---- */
 .lb-ai-hist-btn {
   position: absolute;
-  top: var(--md-sys-measurement-space100, 8px);
-  left: var(--md-sys-measurement-space150, 12px);
+  top: var(--md-sys-measurement-space150, 12px);
+  right: var(--md-sys-measurement-space150, 12px);
   z-index: 5;
   display: inline-flex;
   align-items: center;

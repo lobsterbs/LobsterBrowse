@@ -10,12 +10,7 @@ const suggestWarned = new Set<string>();
 
 type Props = {
   settings: Settings;
-  history: string[];
-  /* #93: incognito hides the recent-sites row entirely. */
-  incognito: boolean;
   onNavigate: (target: string) => void;
-  onRemoveHistory: (url: string) => void;
-  onClearHistory: () => void;
 };
 
 /* The row's leading icon (wave 77): the real brand mark of the
@@ -33,7 +28,7 @@ function SugMark({ s }: { s: Suggestion }) {
   return <m3e-icon name={s.icon} aria-hidden={true} />;
 }
 
-export default function HomePage({ settings, history, incognito, onNavigate, onRemoveHistory, onClearHistory }: Props) {
+export default function HomePage({ settings, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
@@ -84,7 +79,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   }, [url, settings.engine, settings.suggestQueries]);
 
   const suggestions = buildSuggests(url, {
-    history,
     engineName: ENGINES[settings.engine].name,
     search: searchUrl(settings, url),
     remote,
@@ -138,24 +132,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
     setOpen(false);
     setIdx(-1);
   };
-  /* #93: recent sites from the local history: unique hosts, newest
-     first, capped at six so the row stays one compact line. Labels
-     are bare hostnames: query strings and paths stay private. */
-  const recent: { url: string; host: string }[] = [];
-  {
-    const seenHosts = new Set<string>();
-    for (const u of history) {
-      let host = "";
-      try {
-        host = new URL(u).hostname.replace(/^www\./, "");
-      } catch {
-        continue;
-      }
-      if (!host || seenHosts.has(host) || recent.length >= 6) continue;
-      seenHosts.add(host);
-      recent.push({ url: u, host });
-    }
-  }
   const go = (q0: string) => {
     const q = q0.trim();
     if (!q) return;
@@ -237,7 +213,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
                 >
                   <SugMark s={s} />
                   <span className="lb-ac-text">{s.text}</span>
-                  {s.src && <span className="lb-ac-src">via {s.src}</span>}
                 </button>
               ))}
               <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
@@ -245,34 +220,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
           )}
         </m3e-search-view>
       </div>
-      {/* #93 recent sites: local history only (never recorded while
-          incognito: the whole section hides there), hostname labels,
-          one-tap reopen, per-entry remove and clear-all. */}
-      {!incognito && recent.length > 0 && (
-        <div className="lb-recent" aria-label="Recent sites">
-          {recent.map((r) => (
-            <span key={r.url} className="lb-recent-chip">
-              <button type="button" className="lb-recent-open" onClick={() => commit(r.url)} title={r.host}>
-                <m3e-icon name="history" aria-hidden={true} />
-                {r.host}
-              </button>
-              <button
-                type="button"
-                className="lb-recent-x"
-                aria-label={"Remove " + r.host + " from recent sites"}
-                onClick={() => onRemoveHistory(r.url)}
-              >
-                <m3e-icon name="close" aria-hidden={true} />
-              </button>
-            </span>
-          ))}
-          <button type="button" className="lb-recent-clear" onClick={() => onClearHistory()}>
-            <m3e-icon name="mop" aria-hidden={true} />
-            Clear
-          </button>
-        </div>
-      )}
-
     </section>
   );
 }

@@ -4,12 +4,10 @@ import {
   aiSearch,
   deleteChat,
   listChats,
-  loadModelId,
   mergeUsage,
   needsThinking,
   runSubAgent,
   saveChat,
-  saveModelId,
   SPAWN_AGENT_TOOL,
   streamChat,
   stripStreamTokens,
@@ -138,82 +136,6 @@ function Answer({ text, typing }: { text: string; typing: boolean }) {
   );
 }
 
-/* Model picker: the 21st.dev model-picker pattern (pill trigger +
-   popover + checkmark) hand-ported onto M3E tokens. Entries are the
-   models the server proxy actually serves; the mark is the model
-   provider's official logo at text height, and the parameter count
-   is the one bold element in the row. Selecting an entry is real:
-   it persists (loadModelId/saveModelId) and the next send uses it.
-   The popover stays mounted so its open/close transition can play
-   in both directions (theme.css .lb-ai-mp-pop / .lb-open). */
-function ModelPicker({ value, onChange }: { value: AiModel; onChange: (m: AiModel) => void }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  return (
-    <div className="lb-ai-mp" ref={wrapRef}>
-      <button
-        type="button"
-        className="lb-ai-mp-btn"
-        aria-label="Select model"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: value.mark }} />
-        <span className="lb-ai-mp-name">{value.name} {value.version}</span>
-        <span className="lb-ai-mp-params">{value.params}</span>
-        <svg className="lb-ai-mp-chev" viewBox="0 0 24 24" aria-hidden={true}>
-          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      <div
-        className={"lb-ai-mp-pop" + (open ? " lb-open" : "")}
-        role="dialog"
-        aria-label="Select a model"
-        aria-hidden={!open}
-      >
-        {AI_MODELS.filter((m) => m.picker !== false).map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className="lb-ai-mp-opt"
-            onClick={() => {
-              onChange(m);
-              setOpen(false);
-            }}
-          >
-            <span className="lb-ai-mark" aria-hidden={true} dangerouslySetInnerHTML={{ __html: m.mark }} />
-            <span className="lb-ai-model-item">
-              <span className="lb-ai-model-name">{m.name} <span className="lb-ai-model-ver">{m.version}</span></span>
-              <span className="lb-ai-model-params">{m.params}</span>
-              <span className="lb-ai-model-note">{m.note}</span>
-            </span>
-            {m.id === value.id && (
-              <span className="lb-ai-mp-check">
-                <m3e-icon name="check" aria-hidden={true} />
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function AiPage() {
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AiMsg[]>([]);
@@ -245,15 +167,11 @@ export default function AiPage() {
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
-  /* The selected model persists in localStorage; the picker changes
-  it and the next send uses it. */
-  const [model, setModel] = useState<AiModel>(
-    () => AI_MODELS.find((m) => m.id === loadModelId()) ?? AI_MODELS[0]
-  );
-  const pickModel = (m: AiModel) => {
-    setModel(m);
-    saveModelId(m.id);
-  };
+  /* The model picker is gone (user request 2026-11-06): GPT-OSS is
+     the fixed main agent; Nemotron and Gemma stay reachable to it
+     as sub agents (spawn_agent). A stored pick of a now-hidden
+     model migrates back to the default on load (loadModelId). */
+  const model: AiModel = AI_MODELS[0];
 
   /* Keep the newest message in view while it streams. */
   useEffect(() => {
@@ -841,7 +759,6 @@ export default function AiPage() {
       </div>
 
       <div className="lb-ai-under">
-        <ModelPicker value={model} onChange={pickModel} />
         <span
           className={"lb-ai-quota" + (quota !== null && quota <= 0 ? " lb-ai-quota-out" : "")}
           title={quota !== null ? quota + " of " + QUOTA_MAX + " messages left in the current 6 hour window" : undefined}

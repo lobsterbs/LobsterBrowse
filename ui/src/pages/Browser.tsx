@@ -303,7 +303,6 @@ type Props = {
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
   closeTab: (id: number) => void;
-  onHistory: (url: string) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
@@ -1944,7 +1943,6 @@ export default function BrowserView(props: Props) {
           patch = { url: real, idx: idx + 1 };
         } else {
           patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
-          if (!props.incognito) props.onHistory(real);
         }
         /* A polled URL change observes a navigation the frame
            already performed (pushState, an in-page link, or an
@@ -2119,7 +2117,6 @@ export default function BrowserView(props: Props) {
     dt,
     settings,
     incognito: props.incognito,
-    onHistory: props.onHistory,
     newTab: props.newTab,
     updateTab: props.updateTab,
   });
@@ -2128,7 +2125,6 @@ export default function BrowserView(props: Props) {
     dt,
     settings,
     incognito: props.incognito,
-    onHistory: props.onHistory,
     newTab: props.newTab,
     updateTab: props.updateTab,
   };
@@ -2255,7 +2251,6 @@ export default function BrowserView(props: Props) {
           pageState(tabId as number, frames.current.get(tabId as number)) ===
           "settled"
         )
-          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));        if (tab.url && !L.incognito) L.onHistory(tab.url);
       } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
         if (!href) return;
@@ -2315,7 +2310,6 @@ export default function BrowserView(props: Props) {
             patch = { url: real, idx: idx + 1 };
           } else {
             patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
-            if (!L.incognito) L.onHistory(real);
           }
           /* Event-driven SPA sync observes a navigation the
              frame already performed; record it so the auto-load
