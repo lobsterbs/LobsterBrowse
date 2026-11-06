@@ -2651,9 +2651,6 @@ export default function BrowserView(props: Props) {
                   >
                     <m3e-icon name="search" aria-hidden={true} />
                     <span className="lb-tb-ac-text">{it.text}</span>
-                    {it.src && (
-                      <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {it.src}</span>
-                    )}
                   </button>
                 ))}
               </div>
