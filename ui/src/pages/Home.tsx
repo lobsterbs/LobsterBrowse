@@ -247,7 +247,6 @@ export default function HomePage({ settings, onNavigate }: Props) {
                 >
                   <m3e-icon name={s.icon} aria-hidden={true} />
                   <span className="lb-ac-text">{s.text}</span>
-            )}
                 </button>
               ))}
             </div>
