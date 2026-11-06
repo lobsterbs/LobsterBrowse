@@ -574,6 +574,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
 /* Settings cards (user request 2026-11-06): md-card variant="filled"
    owns the surface - the old hand-rolled borders and translucent
    backgrounds are gone. */
+md-card.lb-set-result { border: 0; background: none; }
 .lb-set-results md-card.lb-set-result { padding: 0; }
 .lb-set-result-btn {
   display: flex;
