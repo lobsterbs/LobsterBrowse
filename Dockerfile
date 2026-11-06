@@ -2062,7 +2062,28 @@ FROM debian:bookworm-slim AS zl-builder
 # HUNG cascade and its page.goto 30s timeout fallout; no giscus
 # path is exercised by the e2e suite). Cargo-side pin stays
 # 5073f316 (no crates changed since; only app TS moved).
-ARG ZEOLITE_COMMIT=85a6f7d92eea7fdca0dcf569521f95126653c2c7
+# Pin 160 (2026-11-06): dist 416892e (build 42212991969) ships the
+# #633/#612/#634 wave (Zeolite main 0acaedb + the e5b0d06 e2e
+# contract): expired zlNavh tokens stripped at the query-handle
+# mint and resolved at nav-marker decode, closing the #618-class
+# stacking loop (Google sign-in capture: two zlNavh tokens nested
+# inside the percent-encoded continue param on a third top-level
+# token); markerPathDest rescues destination paths still carrying
+# the /__zl_nav__/<b64u> marker (the One Outlook MSAL 400 class,
+# login.microsoftonline.com HTTP.sys rejecting a 1175-char marker
+# as a site path); marker-route document requests 302 once to the
+# visible handle form and serve the target; the browser e2e
+# marker-route test pins the 302-to-handle contract (#28 SW
+# branch): one hop, committed URL free of the marker. sw.js
+# da868598848f1802 -> b5ebb1dd50f10c7a (823951 bytes);
+# bootstrap.js unchanged 0c81efb9ba343dff. CI on e5b0d065:
+# rust/wasm/app/compat green; browser e2e 66/66, torture wedged
+# 7/20, wedge signature seen, restart did not recover, every
+# failure a 30s goto/evaluate timeout on the ttfb=6000 torture
+# embedder (the documented #514/#545 wedge,
+# docs/ci-torture-wedge.md; the pin 135/151-159 precedent).
+# Cargo-side pin stays 5073f316 (app TS only, no crates changed).
+ARG ZEOLITE_COMMIT=416892e165c61ed52cfbc683e6c01acbc95889c2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2121,7 +2142,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=da868598848f1802 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b5ebb1dd50f10c7a ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
