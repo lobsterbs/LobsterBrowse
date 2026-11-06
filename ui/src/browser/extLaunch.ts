@@ -47,10 +47,24 @@ export async function openExtPageWindow(
     return rep && rep.error ? String(rep.error) : "the worker did not answer zl:openExtPage";
   }
   const p = typeof rep.url === "string" ? rep.url : "";
-  if (!p.startsWith("/zl-ext/")) {
+  if (!extPageUrlOk(p)) {
     placeholder.close();
     return "the worker returned no options page URL";
   }
   placeholder.location.assign(p);
   return null;
+}
+
+/* #560: the engine roots extension pages at the origin root
+   (/options.html?zlExt=<id>&zlPageTok=<tok>) because extension page
+   worlds dispatch their boot on location.pathname; the legacy
+   /zl-ext/<id>/<path> form is still served too. Accept both, and
+   nothing that is not one of them. */
+export function extPageUrlOk(p: string): boolean {
+  if (p.startsWith("/zl-ext/")) return true;
+  if (!p.startsWith("/") || p.startsWith("//")) return false;
+  const q = p.indexOf("?");
+  if (q < 0) return false;
+  const params = new URLSearchParams(p.slice(q + 1));
+  return params.get("zlExt") !== null && params.get("zlPageTok") !== null;
 }
