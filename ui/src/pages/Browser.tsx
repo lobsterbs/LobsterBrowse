@@ -2251,6 +2251,7 @@ export default function BrowserView(props: Props) {
           pageState(tabId as number, frames.current.get(tabId as number)) ===
           "settled"
         )
+          setStatus((prev) => ({ ...prev, [tabId as number]: { loading: false, nav: prev[tabId as number]?.nav } }));
       } else if (ev.lb === "navigate") {
         const href = cap(d.href, 2000);
         if (!href) return;
