@@ -2109,7 +2109,33 @@ FROM debian:bookworm-slim AS zl-builder
 # embedder (the documented #514/#545 wedge,
 # docs/ci-torture-wedge.md; the pin 135/151-159 precedent).
 # Cargo-side pin stays 5073f316 (app TS only, no crates changed).
-ARG ZEOLITE_COMMIT=416892e165c61ed52cfbc683e6c01acbc95889c2
+# Pin 161 (2026-11-06): dist e0c67e6 (build 42222084937) ships the
+# #639 wisp control-stream CLOSE guard: zeolite-server answers every
+# wisp handshake rejection with a CLOSE frame on stream 0 (0xc0
+# AuthBadCredentials, 0xc1 AuthBadSignature, 0xc2 AuthRequired,
+# InvalidInfo) and then closes the websocket, but the vendored
+# libcurl bundle's WispConnection guards unknown NONZERO streams
+# only, so the control-stream CLOSE reached close_stream(undefined)
+# and threw "Cannot set properties of undefined (setting 'open')"
+# inside on_ws_msg, wedging the shared connection in the bundle's
+# _wisp_connections cache: every later proxied socket reused it and
+# failed instantly (the Google sign-in ERR_FAILED storm, #633/#638).
+# installWispCloseGuard wraps the WebSocket ctor outermost (after
+# the #74 watcher and the #496 auth socket) and hides exactly the
+# inbound type-4 stream-0 CLOSE frames from the vendor listeners:
+# the auth wrapper still maps outcomes and fails closed, the server
+# websocket close event evicts the connection, and only the libcurl
+# engine on the configured wisp endpoints is armed. Pure classifier
+# isStreamZeroClose exported; 5 regression tests in
+# transport-select.test.ts (Zeolite e6731d6). sw.js
+# b5ebb1dd50f10c7a -> 2e9e52d4f166c00f (824727 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on e6731d6: rust/wasm/app/compat
+# green; browser e2e red with the documented passthrough-#96 wedge
+# signature (61/66, NativeTransit HUNG marks then the page.goto 30s
+# cascade, the #514/#545 wedge; the pin 135/151-160 precedent,
+# docs/ci-torture-wedge.md; locally 66/66 on the same head).
+# Cargo-side pin stays 5073f316 (app TS only, no crates changed).
+ARG ZEOLITE_COMMIT=e0c67e625ab887b32dcc953a28068bf8102fb0ed
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2168,7 +2194,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b5ebb1dd50f10c7a ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2e9e52d4f166c00f ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
