@@ -90,15 +90,9 @@ body.lb-fancy .lb-home m3e-search-bar {
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Suggestion dropdown: same frosted treatment as the search bar. */
-body.lb-fancy .lb-ac {
-  /* Frosted glass drops the opaque dropdown outline; the ring and
-     inset gloss below carry the edge definition (2026-10-29). */
-  border-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
-}
+/* Suggestion dropdown: no extra surface behind the suggestor rows
+   (user request 2026-11-06) - the dropdown keeps its normal solid
+   surface; the old frosted grey overlay is gone. */
 /* The frosted rail needs something behind it to blur: the fancy
    setting paints a soft colour field on the shell that the rail,
    search bar and suggestion list blur through. */
@@ -474,6 +468,31 @@ body.lb-fancy .lb-home pre.lb-ascii {
   white-space: nowrap;
 }
 .lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
+/* Settings cards (user request 2026-11-06): md-card variant="filled"
+   owns the surface - the old hand-rolled borders and translucent
+   backgrounds are gone. */
+md-card.lb-set-result { border: 0; background: none; }
+.lb-set-results md-card.lb-set-result { padding: 0; }
+.lb-set-result-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--md-sys-measurement-space100);
+  width: 100%;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
+  background: none;
+  border: 0;
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+/* The card provides its own 16dp padding; the group keeps only a
+   small bottom rhythm so stacked cards breathe. */
+md-card.lb-setting-group { display: block; padding: 0 0 var(--md-sys-measurement-space50); }
+md-card .lb-ext-item { border: 0; background: none; }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-group:focus-visible,
 .lb-setting-row:focus-visible {
@@ -1419,23 +1438,6 @@ m3e-snackbar {
 }
 body.lb-incognito .lb-toolbar {
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent) !important;
-}
-
-/* #93: recent-sites chips on Home (local history only). */
-.lb-recent {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--md-sys-measurement-space75);
-  margin-top: var(--md-sys-measurement-space200);
-}
-/* #101: each recent site is an M3E assist chip plus its own remove
-   icon button, grouped by one m3e-chip-set (the set is inline-flex and
-   wraps). The pair span keeps the two controls together. */
-.lb-recent-chip {
-  display: inline-flex;
-  align-items: center;
 }
 
 /* #94: console empty state. */

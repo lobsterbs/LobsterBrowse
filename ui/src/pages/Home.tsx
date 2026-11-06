@@ -7,23 +7,18 @@ const suggestWarned = new Set<string>();
 
 type Props = {
   settings: Settings;
-  history: string[];
-  /* #93: incognito hides the recent-sites row entirely. */
-  incognito: boolean;
   onNavigate: (target: string) => void;
-  onRemoveHistory: (url: string) => void;
-  onClearHistory: () => void;
 };
 
 type Suggestion = { icon: string; text: string; url: string; src?: string };
 
-/* Suggestions: matching history entries, a direct URL when the input
+/* Suggestions: engine completions, a direct URL when the input
    looks like one, and the search fallback. Rendered by the custom
    themed autocomplete (the m3e one never matched input or styling
    reliably). */
 function buildSuggests(
   input: string,
-  opts: { history: string[]; engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
+  opts: { engineName: string; search: string; remote?: { text: string; src: string }[]; searchFor: (q: string) => string }
 ): Suggestion[] {
   const q = input.trim();
   if (!q) return [];
@@ -36,9 +31,6 @@ function buildSuggests(
     }
   };
   const ql = q.toLowerCase();
-  for (const h of opts.history) {
-    if (h.toLowerCase().includes(ql)) push("history", h, h);
-  }
   if (looksLikeUrl(q)) push("language", q, normalizeUrl(q));
   /* Rank engine suggestions by relevance to the query: prefix hits
      first, then substring matches, then word-start matches, then
@@ -95,7 +87,7 @@ function useSpringCard(open: boolean): { visible: boolean; progress: number } {
   return state;
 }
 
-export default function HomePage({ settings, history, incognito, onNavigate, onRemoveHistory, onClearHistory }: Props) {
+export default function HomePage({ settings, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
@@ -133,7 +125,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
   }, [url, settings.engine, settings.suggestQueries]);
 
   const suggestions = buildSuggests(url, {
-    history,
     engineName: ENGINES[settings.engine].name,
     search: searchUrl(settings, url),
     remote,
@@ -151,24 +142,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
     setOpen(false);
     setIdx(-1);
   };
-  /* #93: recent sites from the local history: unique hosts, newest
-     first, capped at six so the row stays one compact line. Labels
-     are bare hostnames: query strings and paths stay private. */
-  const recent: { url: string; host: string }[] = [];
-  {
-    const seenHosts = new Set<string>();
-    for (const u of history) {
-      let host = "";
-      try {
-        host = new URL(u).hostname.replace(/^www\./, "");
-      } catch {
-        continue;
-      }
-      if (!host || seenHosts.has(host) || recent.length >= 6) continue;
-      seenHosts.add(host);
-      recent.push({ url: u, host });
-    }
-  }
   const go = (q0: string) => {
     const q = q0.trim();
     if (!q) return;
@@ -274,9 +247,7 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
                 >
                   <m3e-icon name={s.icon} aria-hidden={true} />
                   <span className="lb-ac-text">{s.text}</span>
-                  {s.src && (
-                    <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.65, flexShrink: 0 }}>via {s.src}</span>
-                  )}
+            )}
                 </button>
               ))}
             </div>
@@ -284,38 +255,6 @@ export default function HomePage({ settings, history, incognito, onNavigate, onR
           </div>
         )}
       </div>
-      {/* #93 recent sites: local history only (never recorded while
-          incognito: the whole section hides there), hostname labels,
-          one-tap reopen, per-entry remove and clear-all. */}
-      {/* #101: M3E chip set. An assist chip opens the site; the
-          trailing icon button removes that one entry. Assist chips
-          have no trailing slot, so the remove control sits beside the
-          chip inside the pair span. Clear-all is an M3E text button. */}
-      {!incognito && recent.length > 0 && (
-        <div className="lb-recent">
-          <m3e-chip-set aria-label="Recent sites">
-            {recent.map((r) => (
-              <span key={r.url} className="lb-recent-chip">
-                <m3e-assist-chip onClick={() => commit(r.url)}>
-                  <m3e-icon slot="icon" name="history" aria-hidden={true} />
-                  {r.host}
-                </m3e-assist-chip>
-                <m3e-icon-button
-                  size="extra-small"
-                  aria-label={"Remove " + r.host + " from recent sites"}
-                  onClick={() => onRemoveHistory(r.url)}
-                >
-                  <m3e-icon name="close" aria-hidden={true} />
-                </m3e-icon-button>
-              </span>
-            ))}
-          </m3e-chip-set>
-          <m3e-button variant="text" onClick={() => onClearHistory()}>
-            <m3e-icon name="mop" aria-hidden={true} /> Clear
-          </m3e-button>
-        </div>
-      )}
-
     </section>
   );
 }
