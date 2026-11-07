@@ -807,17 +807,19 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
-      {/* Enhanced UI setting (was Home-only): the animated background
-          is portaled to <body> so no view ancestor can trap the fixed
-          layer, and it stays mounted in EVERY view so the frosted rail
-          and dock always frost it instead of a flat surface (the
-          in-flow rail has nothing else behind it in the browser view).
-          Wave 78: the ASCII-art canvas was replaced by the
-          liquid-metal ribbon shader (21st.dev shader-metal), mounted
-          non-interactive. LB is hard-pinned dark (m3e-theme
+      {/* Enhanced UI setting: the animated background is portaled to
+          <body> so no view ancestor can trap the fixed layer. It now
+          renders on the home view ONLY (user request 2026-11-07):
+          previously it stayed mounted in every view, so the rail and
+          dock frosted the home-page shader on all pages instead of
+          their actual surroundings; now they frost what is really
+          adjacent to them. Wave 78: the ASCII-art canvas was replaced
+          by the liquid-metal ribbon shader (21st.dev shader-metal),
+          mounted non-interactive. LB is hard-pinned dark (m3e-theme
           scheme="dark"), so the studio resolves dark instead of
-          sniffing the OS scheme. Off = not rendered. */}
-      {settings.fancyBackground &&
+          sniffing the OS scheme. Off or away from home = not
+          rendered. */}
+      {settings.fancyBackground && view === "home" &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true}>
             <ShaderMetal interactive={false} theme="dark" />
