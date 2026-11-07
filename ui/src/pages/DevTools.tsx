@@ -1,32 +1,49 @@
-/* DevTools panel: diagnostics for the currently selected proxy tab.
-   Each tab keeps its own state.
+/* DevTools - console / network / diagnostics for the currently
+   selected proxy tab, in an @m3e/web bottom sheet. Each tab keeps its
+   own state.
 
-   #150: the hand-built Console and Network panels are gone. Eruda
-   (injected into the proxied page by the button below) is the page
-   console and network view, so LB carries no page-eval path of its
-   own anymore. This panel keeps the engine diagnostics: transport
-   stats, notable diag events, resource failures, the engine
-   download registry, Copy logs and the #228 Export diagnostics
-   artifact. Page console errors and resource failures still arrive
-   over the {lb:...} hook messages and feed both exports.
+   Redesign (user request 2026-11-07): the old floating card lives on
+   as DevToolsLegacy.tsx (not imported; kept for rollback). This
+   implementation hosts the panel in the m3e-bottom-sheet, the
+   sub-tool picker (Console / Network / Diagnostics) is a connected
+   m3e-button-group, and each section renders its mini surfaces as
+   m3e-card components: a card per concern, content above a divider
+   with inline action buttons under it.
 
-   Built from real M3E components: m3e-card as the container,
-   m3e-tabs for the section switch, m3e-form-field for the edit fields. */
+   Proxied pages ride the engine's split content origin, so the frame
+   is usually cross-origin to the app: iframe.contentWindow.eval then
+   throws SecurityError, and the console says so together with the
+   two working routes (the page's own F12 DevTools, or the debug-menu
+   Split content origin toggle). Same-origin frames still eval
+   directly. Console and network events arrive over the engine's
+   control plane for every proxied document either way. */
 
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { type Tab } from "../store";
+import M3eSelect from "../M3eSelect";
 import { zlContentQuery, zlSend } from "../zeolite";
+import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
   diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
-  type DiagnosticsSnapshot, type EngineSource, type ZlDiagEvent,
+  type DiagnosticsSnapshot, type DiagnosticsStatus, type EngineSource, type ZlDiagEvent,
 } from "../browser/diagnosticsScope";
-import { buildDiagnosticArtifact, doctorView, type DoctorView } from "../browser/exportArtifact";
 import { diagKdl } from "../kdl";
 
 export type ConsoleEntry = {
   id: number;
   kind: "input" | "result" | "error" | "log" | "info" | "warn" | "debug";
   text: string;
+  ts: number;
+};
+
+export type NetEntry = {
+  id: number;
+  url: string;
+  method: string;
+  status: number;
+  ok?: boolean;
+  dur?: number;
+  error?: string;
   ts: number;
 };
 
@@ -62,14 +79,28 @@ export function reasonText(code: string): string {
   return REASON_TEXT[code] ?? code;
 }
 
-/* #150: the Console/Network pages are gone (Eruda is the page
-   console now), so only diagnostics remains. Page console
-   errors/warns and resource failures stay captured for Copy logs. */
+/* Human labels for the engine's transport fallback reasons. Fallbacks
+   are expected routing decisions (every HTML document and CSS load is
+   one by design), not load failures. */
+const FALLBACK_TEXT: Record<string, string> = {
+  DOCUMENT_REWRITE_REQUIRED: "document needs the rewriter (normal)",
+  CSS_URL_REWRITE_REQUIRED: "CSS needs url() rewriting (normal)",
+};
+
+function fallbackText(code: string): string {
+  return FALLBACK_TEXT[code] ?? code;
+}
+
 export type DtState = {
   open: boolean;
-  page: "diagnostics";
+  page: "console" | "network" | "diagnostics";
   console: ConsoleEntry[];
+  net: NetEntry[];
   fails: ResFailEntry[];
+  levelFilter: string;
+  consoleFilter: string;
+  netFilter: string;
+  history: string[];
   engineClientId?: string;
   engineSource?: EngineSource;
 };
@@ -77,15 +108,36 @@ export type DtState = {
 export function emptyDt(): DtState {
   return {
     open: false,
-    page: "diagnostics",
+    page: "console",
     console: [],
+    net: [],
     fails: [],
+    levelFilter: "all",
+    consoleFilter: "",
+    netFilter: "",
+    history: [],
   };
 }
 
 let entryId = 1;
 export function nextEntryId(): number {
   return entryId++;
+}
+
+/* ---- Value formatting ---- */
+
+function formatValue(v: unknown): string {
+  if (v === null) return "null";
+  if (v === undefined) return "undefined";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "function") return "ƒ " + (v.name || "anonymous") + "()";
+  if (typeof v === "symbol") return v.toString();
+  try {
+    return JSON.stringify(v, null, 2) ?? "undefined";
+  } catch {
+    return String(v);
+  }
 }
 
 function ts(t: number): string {
@@ -122,18 +174,6 @@ async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
-/* Shared status line for Copy logs and the export artifact (#228). */
-function diagStatusLine(
-  snapshot: DiagnosticsSnapshot | null,
-  scope: ReturnType<typeof diagnosticsScope>,
-): string {
-  return snapshot
-    ? "Diagnostics collected."
-    : scope
-      ? "Awaiting diagnostics for this document."
-      : "Awaiting this document's engine identity.";
-}
-
 type Props = {
   tab: Tab;
   dt: DtState;
@@ -144,11 +184,13 @@ type Props = {
   /* Compatibility prop; session-wide logs remain in App Logs. */
   sess?: string;
   /* #76: false while the close animation plays (mount-stay in
-     Browser.tsx); the exit class mirrors the entry animation. */
+     Browser.tsx); the sheet hides imperatively. */
   open?: boolean;
 };
 
 const PAGES: Array<[DtState["page"], string, string]> = [
+  ["console", "Console", "terminal"],
+  ["network", "Network", "lan"],
   ["diagnostics", "Diagnostics", "bug_report"],
 ];
 
@@ -156,39 +198,57 @@ const PAGES: Array<[DtState["page"], string, string]> = [
 /* This document's retained request/diagnostic rings from its owning
    worker. Unattributed engine lifecycle events remain in Engine DevTools. */
 const zlNotable = (e: ZlDiagEvent) =>
-  e.severity === "error" || e.severity === "warning" || e.message.startsWith("redirect surfaced");
+  e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK";
 
-/* Copy logs and the #228 Export diagnostics artifact read the same
-   per-instance scoped snapshot. Sanitization happens before that
-   snapshot reaches state, the ref, or the artifact. */
+/* #220: explicit collection statuses replace the eternal "Awaiting..."
+   placeholders. A valid empty scoped log renders as a normal snapshot
+   with zero events; every collapsed null carries the reason it
+   collapsed, with reload guidance where a failed bootstrap handshake
+   would otherwise block collection forever. */
+const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
+  ok: "Diagnostics collected.",
+  starting: "Collecting diagnostics for this document...",
+  identity: "No engine identity for this document yet. Reload the page to retry the handshake.",
+  unavailable: "Diagnostics unavailable: the engine worker did not answer the scoped query. Retrying every 5 seconds; reload the page if this persists.",
+  rejected: "The engine worker refused the scoped diagnostics query for this document. Retrying every 5 seconds.",
+  unsupported: "This engine worker version does not support scoped diagnostics for this document.",
+  mismatch: "A different document answered the scoped query; retrying for this document every 5 seconds.",
+  restart: "The engine worker restarted while collecting; retrying.",
+  malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
+};
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
   clientId?: string;
   source?: EngineSource;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
+  statusRef: MutableRefObject<DiagnosticsStatus | null>;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(clientId, source);
-  /* Hide the preceding document before effect cleanup, including Export. */
+  /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
   useEffect(() => pollDocumentDiagnostics(
     diagnosticsScope(clientId, source), zlSend, zlContentQuery,
-    (next) => {
+    (next, why) => {
       snapshotRef.current = next;
       setSnapshot(next);
+      const s = why ?? (next ? "ok" : "unavailable");
+      statusRef.current = s;
+      setStatus(s);
     },
-  ), [clientId, source, snapshotRef]);
+  ), [clientId, source, snapshotRef, statusRef]);
 
-  if (!scope) return <p className="lb-muted">Awaiting this document&apos;s engine identity.</p>;
-  if (!current) return <p className="lb-muted">Awaiting diagnostics for this document.</p>;
+  if (!scope) {
+    return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
+  }
+  if (!current) {
+    return <p className="lb-muted">{DIAG_STATUS_TEXT[status ?? "starting"]}</p>;
+  }
   const { stats, events } = current;
   const notable = events.filter(zlNotable).slice(-25).reverse();
   return (
-    <div className="lb-net" style={{ marginBottom: "12px" }}>
-      <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-        Retained page requests for this document: {stats.native + stats.fallback}.
-        Child-frame requests and engine-wide lifecycle events are available in Engine DevTools.
-      </p>
+    <div className="lb-net">
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
         <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
@@ -221,7 +281,7 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef }: {
    its registry; the bytes themselves land in the browser's own download
    machinery). This section only mirrors the engine's registry and
    forwards cancels over the control plane: no parallel LB state.
-   Polled only while the Diagnostics page is open. */
+   Polled only while the Network page is open. */
 
 type ZlDownload = {
   id: string;
@@ -270,82 +330,53 @@ function ZeoliteDownloads() {
     /* The next poll tick (2 s) picks up the cancelled state. */
   };
   return (
-    <div className="lb-net" style={{ marginBottom: "12px" }}>
-      <div className="lb-diag-counts">
-        <span className="lb-diag-chip">Engine download registry: {dls.length}</span>
+    <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine download registry">
+      <div slot="header" className="lb-dt-card-head">
+        <span className="lb-dt-card-title">Engine download registry ({dls.length})</span>
       </div>
-      {dls.map((d) => (
-        <div key={d.id} className="lb-net-summary" style={{ alignItems: "center" }}>
-          <span className={"lb-net-status " + (d.status === "done" || d.status === "active" ? "lb-ok" : "lb-bad")}>
-            {d.status}
-          </span>
-          <span className="lb-net-url">{d.filename}</span>
-          <span className="lb-net-dur">
-            {fmtBytes(d.received)}
-            {d.size >= 0 ? " / " + fmtBytes(d.size) : ""}
-            {d.status === "active" ? " (" + fmtBytes(d.speed) + "/s)" : ""}
-          </span>
-          {d.status === "active" && (
-            <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void cancel(d.id)}>
-              Cancel
-            </m3e-button>
-          )}
-        </div>
-      ))}
-    </div>
+      <div slot="content" className="lb-dt-card-body lb-net">
+        {dls.map((d) => (
+          <div key={d.id} className="lb-net-summary" style={{ alignItems: "center" }}>
+            <span className={"lb-net-status " + (d.status === "done" || d.status === "active" ? "lb-ok" : "lb-bad")}>
+              {d.status}
+            </span>
+            <span className="lb-net-url">{d.filename}</span>
+            <span className="lb-net-dur">
+              {fmtBytes(d.received)}
+              {d.size >= 0 ? " / " + fmtBytes(d.size) : ""}
+              {d.status === "active" ? " (" + fmtBytes(d.speed) + "/s)" : ""}
+            </span>
+            {d.status === "active" && (
+              <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void cancel(d.id)}>
+                Cancel
+              </m3e-button>
+            )}
+          </div>
+        ))}
+      </div>
+    </m3e-card>
   );
 }
 
-/* Engine-side developer tools: the tracing toggle, deterministic
-   session recording, and Eruda (an embeddable console/network panel)
-   injected into the live proxied page - the iframe is same-origin,
-   so the script runs in the page JS context directly. All control
-   rides the engine plane (zlSend). */
+/* Engine-side developer tools: Eruda (an embeddable console/network
+   panel) injected into the live proxied page - same-origin frames
+   only: split-origin frames are cross-origin and refuse injection,
+   which the button then says plainly.
+   Control rides the engine plane (zlSend). The tracing toggle and
+   session recording were removed from this surface; zl:tracing /
+   zl:recordStart / zl:recordStop stay available on the engine
+   plane. */
 function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }) {
-  const [tracingOn, setTracingOn] = useState(false);
-  const [recId, setRecId] = useState("");
   const [note, setNote] = useState("");
-  useEffect(() => {
-    let dead = false;
-    void zlSend({ type: "zl:getTracing" }, 8000).then((r) => {
-      if (!dead && r && r.ok) setTracingOn(Boolean(r.enabled));
-    });
-    return () => { dead = true; };
-  }, []);
-  const toggleTracing = async () => {
-    const r = await zlSend({ type: "zl:tracing", enabled: !tracingOn }, 8000);
-    if (r && r.ok) setTracingOn(Boolean(r.enabled));
-  };
-  const startRec = async () => {
-    const id = "lb-" + Date.now();
-    const r = await zlSend({ type: "zl:recordStart", recId: id }, 8000);
-    if (r && r.ok) {
-      const rid = typeof r.record === "object" && r.record !== null && "id" in r.record ? String((r.record as { id?: unknown }).id) : id;
-      setRecId(rid);
-      setNote("Recording engine activity (tracing is forced on while recording).");
-    } else {
-      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
-    }
-  };
-  const stopRec = async () => {
-    const r = await zlSend({ type: "zl:recordStop" }, 15000);
-    if (r && r.ok) {
-      const blob = new Blob([JSON.stringify(r.record, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "zeolite-record.json";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setRecId("");
-      setNote("Recording saved as zeolite-record.json.");
-    } else {
-      setNote(String((r as { error?: unknown } | null)?.error ?? "engine refused the recording"));
-    }
-  };
   const injectEruda = async () => {
     const w = frame()?.contentWindow;
     if (!w) { setNote("No proxied page in this tab."); return; }
-    const d = w.document;
+    let d: Document | null = null;
+    try { d = w.document; } catch {
+      setNote("This page rides the split content origin, so the app cannot inject into it. Turn 'Split content origin' off in the debug menu and reload the tab, or use the page's own F12 DevTools.");
+      return;
+    }
+    if (!d) { setNote("No proxied document in this tab."); return; }
     if (d.querySelector("script[data-lb-eruda]")) {
       const eruda = (w as unknown as { eruda?: { toggle?: () => void } }).eruda;
       if (eruda && eruda.toggle) eruda.toggle();
@@ -368,28 +399,9 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   };
   return (
     <div className="lb-dt-toolbar" style={{ flexWrap: "wrap", rowGap: 8 }}>
-      <m3e-button onClick={() => void toggleTracing()}>
-        <m3e-icon name={tracingOn ? "pause_circle" : "play_circle"} aria-hidden={true} />
-        {tracingOn ? "Tracing on" : "Tracing off"}
-      </m3e-button>
-      {recId ? (
-        <m3e-button onClick={() => void stopRec()}>
-          <m3e-icon name="stop_circle" aria-hidden={true} />
-          Stop recording
-        </m3e-button>
-      ) : (
-        <m3e-button onClick={() => void startRec()}>
-          <m3e-icon name="radio_button_checked" aria-hidden={true} />
-          Record session
-        </m3e-button>
-      )}
       <m3e-button onClick={() => void injectEruda()}>
         <m3e-icon name="terminal" aria-hidden={true} />
         Eruda in page
-      </m3e-button>
-      <m3e-button onClick={() => window.open("/zlsw/devtools.html", "_blank", "noopener")}>
-        <m3e-icon name="memory" aria-hidden={true} />
-        Engine DevTools
       </m3e-button>
       {note && <span className="lb-muted">{note}</span>}
     </div>
@@ -397,26 +409,56 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
 }
 
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, open }: Props) {
+  const [cmd, setCmd] = useState("");
+  const [histIdx, setHistIdx] = useState(-1);
   const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
-  /* Server build chip (buildShort + engine SW sha from /build), read
-     once per mount so the KDL export can name the build that served
-     the capture. A failed fetch leaves the chip empty and the KDL
-     simply omits the build row. */
-  const [buildChip, setBuildChip] = useState("");
+  const consoleRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /* Live-props ref: the sheet's event listeners outlive renders. */
+  const live = useRef({ onClose, onOpenLogs });
+  live.current = { onClose, onOpenLogs };
+
+  const sheetRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
+  /* The bottom sheet owns its own open state (show/hide methods, per
+     the @m3e/web docs). React never writes the `open` attribute - a
+     half-synced attribute would wedge the sheet open or closed after
+     an internal dismissal. The component's `closing` event flows back
+     into React state instead. */
   useEffect(() => {
-    let gone = false;
-    void fetch("/build", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b) => {
-        const short = b && typeof b.buildShort === "string" ? b.buildShort : "";
-        const sha = b && typeof b.zlswSha === "string" ? b.zlswSha.slice(0, 16) : "";
-        if (!gone && (short || sha)) setBuildChip((short || "unknown") + (sha ? " sw " + sha : ""));
-      })
-      .catch(() => {});
-    return () => { gone = true; };
+    const el = sheetRef.current;
+    if (!el) return;
+    const onClosing = () => live.current.onClose();
+    el.addEventListener("closing", onClosing);
+    return () => el.removeEventListener("closing", onClosing);
   }, []);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    if (open) el.show();
+    else el.hide();
+  }, [open]);
+
+  /* Connected button-group selection: the group toggles its own
+     buttons, so reconcile `selected` from state after every page
+     change instead of trusting attribute diffing. */
+  const bgroupRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const g = bgroupRef.current;
+    if (!g) return;
+    g.querySelectorAll("m3e-button").forEach((b) => {
+      const btn = b as HTMLElement & { selected?: boolean };
+      btn.selected = btn.getAttribute("data-page") === dt.page;
+    });
+  }, [dt.page]);
+
+  useEffect(() => {
+    if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+  }, [dt.console.length]);
 
   const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
+  /* #220: the latest collection status, mirrored for copy/export. */
+  const diagStatusRef = useRef<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
   /* A mounted instance may be reused across tabs or document navigation. */
   snapshotRef.current = snapshotForScope(snapshotRef.current, scope);
@@ -424,68 +466,256 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the snapshot as KDL (user request
-     2026-10-29): header, stats, the event ring, #228 the request ring,
-     console errors and warnings, and resource failures. The clipboard
-     copy makes no control-plane round-trips, so its doctor row is the
-     honest unavailable note. */
+  /* Copy logs serializes the document diagnostics as KDL (user
+     request 2026-10-29): header, stats, console errors and warnings,
+     resource failures, and the full retained event ring. It is the
+     single export path since Export and Share to MCP were removed
+     (user request 2026-10-30). */
   const copyLogs = async () => {
     const snapshot = snapshotForScope(snapshotRef.current, scope);
-    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, diagStatusLine(snapshot, scope), buildChip));
+    const statusLine = snapshot
+      ? "Diagnostics collected."
+      : scope
+        ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"]
+        : "No engine identity for this document yet.";
+    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
   };
 
-  /* #228: one Export diagnostics action. Assembles a single artifact
-     - the scoped snapshot (stats, diag events AND the net-log request
-     ring) joined by traceId, the page-side capture, and one session
-     zl:doctor report - and downloads it as JSON. The doctor is
-     best-effort: an unavailable worker degrades to an honest note in
-     the artifact, it never blocks or fails the export. The engine
-     redacts secrets before storage; the artifact only carries
-     sanitized fields, and the host adds no credentials back. */
-  const [exportState, setExportState] = useState<"" | "busy" | "ok" | "fail">("");
-  const exportDiagnostics = async () => {
-    setExportState("busy");
-    const snapshot = snapshotForScope(snapshotRef.current, scope);
-    let doctor: DoctorView | null = null;
-    let doctorNote: string | undefined;
+  /* ---- Console: real JS eval in the proxied page context. ---- */
+  const runCode = (code: string) => {
+    const f = frame();
+    const w = f?.contentWindow;
+    /* Functional setDt in every branch, and one append per branch:
+       an async zl: reply (echo/emit) can land between this render
+       and the submit click, so a patch built from the render-time
+       dt.console would drop it; prev is always the fresh state. */
+    const entry = { id: nextEntryId(), kind: "input" as ConsoleEntry["kind"], text: code, ts: Date.now() };
+    if (!w) {
+      setDt((prev) => ({ console: [...prev.console, { id: nextEntryId(), kind: "error" as const, text: "No proxied page in this tab - navigate to a site first.", ts: Date.now() }].slice(-500) }));
+      return;
+    }
     try {
-      const r = await zlSend({ type: "zl:doctor" }, 8000);
-      if (r && r.ok === false && typeof r.error === "string") {
-        doctorNote = r.error;
-      } else if (r) {
-        doctor = doctorView(r);
-        if (!doctor) doctorNote = "doctor reply failed the shape check";
-      } else {
-        doctorNote = "the engine did not answer the doctor request";
-      }
+      const result: unknown = (w as unknown as { eval: (c: string) => unknown }).eval(code);
+      setDt((prev) => ({
+        console: [
+          ...prev.console,
+          entry,
+          { id: nextEntryId(), kind: "result" as const, text: formatValue(result), ts: Date.now() },
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     } catch (err) {
-      doctorNote = err instanceof Error ? err.message : String(err);
+      const e = err as Error;
+      /* Split content origin: the frame is cross-origin, so the
+         browser blocks page eval from the app outright. Say what
+         works instead of dumping a bare SecurityError stack. */
+      const crossOrigin = e.name === "SecurityError";
+      setDt((prev) => ({
+        console: [
+          ...prev.console,
+          entry,
+          {
+            id: nextEntryId(),
+            kind: "error" as const,
+            text: crossOrigin
+              ? "This page rides the split content origin, so the browser blocks the app from executing JavaScript in it. Either run the snippet in the page's own DevTools (F12 on that tab), or turn 'Split content origin' off in the debug menu (five quick Home wordmark clicks), reload the tab, and run it here. Engine zl: commands are unaffected."
+              : (e.name || "Error") + ": " + e.message + (e.stack ? "\n" + e.stack : ""),
+            ts: Date.now(),
+          },
+        ].slice(-500),
+        history: [...prev.history, code].slice(-100),
+      }));
     }
-    try {
-      const artifact = buildDiagnosticArtifact({
-        snapshot,
-        consoleEntries: dt.console,
-        fails: dt.fails,
-        statusLine: diagStatusLine(snapshot, scope),
-        buildChip,
-        doctor,
-        doctorNote,
-      });
-      const data = JSON.stringify(artifact, null, 2);
-      const href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = "lobsterbrowse-diagnostics-" + artifact.capturedAt.replace(/[:.]/g, "-") + ".json";
-      a.click();
-      window.setTimeout(() => URL.revokeObjectURL(href), 10000);
-      setExportState("ok");
-    } catch {
-      setExportState("fail");
-    }
-    window.setTimeout(() => setExportState(""), 2000);
   };
+
+  /* ---- Engine control-plane commands (zl:*), the useful half of the
+     removed Terminal page. No shell, no remote execution: every
+     command talks to the engine control plane and every reply passes
+     the diagnostics sanitizer before it enters console state. These
+     run in DevTools, not the page, so they never need a proxied frame.
+     Async replies append through the functional setDt patch so they
+     cannot race the render-time state snapshot. ---- */
+  const echo = (text: string) =>
+    setDt((prev) => ({
+      console: [...prev.console, { id: nextEntryId(), kind: "input" as const, text, ts: Date.now() }].slice(-500),
+      history: [...prev.history, text].slice(-100),
+    }));
+  const emit = (lines: string[], kind: ConsoleEntry["kind"] = "result") => {
+    if (!lines.length) return;
+    setDt((prev) => ({
+      console: [
+        ...prev.console,
+        ...lines.map((text) => ({ id: nextEntryId(), kind, text: sanitizeText(text), ts: Date.now() })),
+      ].slice(-500),
+    }));
+  };
+  const runZlCommand = (code: string): boolean => {
+    if (!code.startsWith("zl:")) return false;
+    void (async () => {
+      echo(code);
+      if (code === "zl:help") {
+        emit([
+          "zl:status    engine summary (extensions, downloads, transit)",
+          "zl:ping      engine round-trip latency",
+          "zl:transit   native vs rewrite-fallback routing counts",
+          "zl:netlog    latest transport fallback records",
+          "zl:ext [id]  extension list, or detail for one id",
+          "zl:downloads engine download registry",
+          "zl:storage   storage diagnostic (not exposed by the engine)",
+          "zl:workers   worker diagnostic (not exposed by the engine)",
+        ]);
+        return;
+      }
+      if (code === "zl:ping") {
+        const t0 = Date.now();
+        const res = await zlSend({ type: "zl:getDiag", since: 0 }, 8000);
+        emit([res ? "engine replied in " + (Date.now() - t0) + " ms" : "engine unreachable (no reply within 8 s)"]);
+        return;
+      }
+      if (code === "zl:status") {
+        const [ext, dl, nl] = await Promise.all([
+          zlSend({ type: "zl:listExt" }, 8000),
+          zlSend({ type: "zl:downloads" }, 8000),
+          zlSend({ type: "zl:getNetLog", since: 0 }, 8000),
+        ]);
+        const extList: unknown[] = Array.isArray(ext?.exts) ? ext.exts : [];
+        const dlList: unknown[] = Array.isArray(dl?.downloads) ? dl.downloads : [];
+        emit([
+          "extensions: " + (ext ? String(extList.length) : "engine unreachable"),
+          "downloads in registry: " + (dl ? String(dlList.length) : "engine unreachable"),
+          "transit: " + (nl?.stats ? "native " + String(nl.stats.native) + ", fallback " + String(nl.stats.fallback) : "engine unreachable"),
+        ]);
+        return;
+      }
+      if (code === "zl:transit" || code === "zl:netlog") {
+        const nl = await zlSend({ type: "zl:getNetLog", since: 0 }, 8000);
+        if (!nl?.stats) { emit(["engine unreachable"]); return; }
+        const st = nl.stats as { native: number; fallback: number; fallbacks?: { ts: number; url: string; reason: string }[] };
+        const lines = ["native transit: " + String(st.native) + "  rewrite fallbacks: " + String(st.fallback)];
+        if (code === "zl:netlog") {
+          const fb = st.fallbacks ?? [];
+          lines.push(fb.length ? "latest fallback records:" : "no fallback records");
+          for (const f of fb.slice(-10).reverse()) {
+            lines.push("  " + new Date(f.ts).toISOString().slice(11, 19) + "  " + sanitizeUrl(f.url) + "  (" + f.reason + ")");
+          }
+        }
+        emit(lines);
+        return;
+      }
+      if (code === "zl:ext" || code.startsWith("zl:ext ")) {
+        const id = code.slice(7).trim();
+        if (id) {
+          const res = await zlSend({ type: "zl:extInfo", id }, 8000);
+          let s: string;
+          try { s = JSON.stringify(res, null, 2) ?? "undefined"; } catch { s = String(res); }
+          emit(["extension " + id + ":", s]);
+        } else {
+          const res = await zlSend({ type: "zl:listExt" }, 8000);
+          const extList: { id?: string; name?: string; enabled?: boolean }[] = Array.isArray(res?.exts) ? res.exts : [];
+          if (!res) emit(["engine unreachable"]);
+          else if (!extList.length) emit(["no extensions installed"]);
+          else emit(extList.map((x) => "  " + String(x.id ?? "?") + "  " + String(x.name ?? "?") + (x.enabled === false ? "  (disabled)" : "")));
+        }
+        return;
+      }
+      if (code === "zl:downloads") {
+        const res = await zlSend({ type: "zl:downloads" }, 8000);
+        const dlList: { filename?: string; status?: string; received?: number }[] = Array.isArray(res?.downloads) ? res.downloads : [];
+        if (!res) emit(["engine unreachable"]);
+        else if (!dlList.length) emit(["download registry empty"]);
+        else emit(dlList.map((x) => "  " + String(x.filename ?? "?") + "  " + String(x.status ?? "?") + "  " + String(x.received ?? "?") + " bytes"));
+        return;
+      }
+      if (code === "zl:storage" || code === "zl:workers") {
+        emit([code + ": no such diagnostic surface in the engine control plane (honest no-op)"]);
+        return;
+      }
+      emit(["unknown command: " + code + " - try zl:help"], "error");
+    })();
+    return true;
+  };
+
+  const submit = () => {
+    const code = cmd.trim();
+    if (!code) return;
+    if (code === "clear") {
+      setCmd("");
+      setDt({ console: [] });
+      return;
+    }
+    setCmd("");
+    setHistIdx(-1);
+    /* Engine commands run here; everything else is page eval. */
+    if (runZlCommand(code)) return;
+    runCode(code);
+  };
+
+  const keyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    } else if (e.key === "ArrowUp" && !cmd.includes("\n")) {
+      e.preventDefault();
+      const h = dt.history;
+      const next = histIdx < 0 ? h.length - 1 : Math.max(0, histIdx - 1);
+      if (h[next] !== undefined) {
+        setCmd(h[next]);
+        setHistIdx(next);
+      }
+    } else if (e.key === "ArrowDown" && !cmd.includes("\n")) {
+      e.preventDefault();
+      const h = dt.history;
+      const next = histIdx + 1;
+      if (next >= h.length) {
+        setCmd("");
+        setHistIdx(-1);
+      } else {
+        setCmd(h[next]);
+        setHistIdx(next);
+      }
+    }
+  };
+
+  const levelOf = (k: ConsoleEntry["kind"]) =>
+    k === "error" ? "error" : k === "warn" ? "warn" : k === "info" ? "info" : k === "debug" ? "debug" : "log";
+
+  const consoleEntries = dt.console.filter((c) => {
+    if (dt.levelFilter !== "all" && levelOf(c.kind) !== dt.levelFilter) return false;
+    if (dt.consoleFilter && !c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase())) return false;
+    return true;
+  });
+
+  const netEntries = dt.net.filter((n) =>
+    dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
+  );
+
+  /* Network log pagination (m3e-paginator): the page event is the
+     component's only output, so mirror it into state like the M3eSelect
+     change wiring. Clamped at render so shrinking logs never leave a
+     page index past the end. */
+  const [netPage, setNetPage] = useState(0);
+  const [netPageSize, setNetPageSize] = useState(25);
+  const pagerRef = useRef<HTMLElement & { pageSize: number | "all" } | null>(null);
+  useEffect(() => {
+    const el = pagerRef.current;
+    if (!el) return;
+    const onPage = (e: Event) => {
+      const d = (e as CustomEvent<{ pageIndex?: number; pageSize?: number | "all" }>).detail;
+      if (typeof d?.pageIndex === "number") setNetPage(d.pageIndex);
+      if (typeof d?.pageSize === "number") setNetPageSize(d.pageSize);
+    };
+    el.addEventListener("page", onPage);
+    return () => el.removeEventListener("page", onPage);
+  }, []);
+  useEffect(() => {
+    setNetPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dt.netFilter]);
+  const netPages = Math.max(1, Math.ceil(netEntries.length / netPageSize));
+  const netPageClamped = Math.min(netPage, netPages - 1);
+  const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
 
   /* Failure counts by resource type for the diagnostics summary. */
   const failCounts = dt.fails.reduce<Record<string, number>>((acc, f) => {
@@ -493,148 +723,260 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     return acc;
   }, {});
 
-  /* Entry count per section, shown on the segment buttons like real
+  /* Entry count per section, shown on the picker buttons like real
      devtools do. */
   const pageCounts: Record<DtState["page"], number> = {
+    console: dt.console.length,
+    network: dt.net.length,
     diagnostics: dt.fails.length,
   };
 
   return (
-    <m3e-card
-      variant="elevated"
-      {...{
-        ref: (el: any) => {
-          if (el) {
-            el.classList.add("lb-devtools");
-            el.classList.toggle("lb-devtools-out", open === false);
-          }
-        },
-      }}
+    <m3e-bottom-sheet
+      handle=""
+      hideable=""
+      handle-label="Dismiss developer tools"
       aria-label="Developer tools"
+      {...{ class: "lb-dt-sheet", ref: sheetRef }}
     >
-      <div className="lb-devtools-head">
-        <span className="lb-devtools-title">
+      <div slot="header" className="lb-dt-sheet-head">
+        <span className="lb-dt-title">
           <m3e-icon name="bug_report" aria-hidden={true} /> DevTools - {tab.title || "tab"}
         </span>
-        <span className="lb-devtools-head-actions">
-          <m3e-icon-button aria-label="View app logs" onClick={onOpenLogs}>
+        <span className="lb-dt-head-actions">
+          <m3e-icon-button aria-label="View app logs" onClick={() => live.current.onOpenLogs()}>
             <m3e-icon name="history" aria-hidden={true} />
           </m3e-icon-button>
-          <m3e-icon-button aria-label="Close developer tools" onClick={onClose}>
+          <m3e-icon-button aria-label="Close developer tools" onClick={() => live.current.onClose()}>
             <m3e-icon name="close" aria-hidden={true} />
           </m3e-icon-button>
         </span>
       </div>
 
-      {/* #103: the section switch is m3e-tabs (real tablist/tab roles,
-          the component own roving focus, typeahead and ink bar). The
-          tab panels are sibling plain divs, not m3e-tab-panel
-          elements: m3e-tab-panel assigns itself to the m3e-tabs panel
-          slot at connect, so a sibling of the switcher is never
-          slotted and renders nothing. A plain div flexes inside this
-          bounded card; theme.css restores the [hidden] override the
-          custom element used to provide.
-          Panels stay mounted so each tab aria-controls keeps pointing
-          at a live element, but their content stays React-conditional
-          so the pollers (diagnostics, download registry) only run
-          while their page is open. */}
-      <m3e-tabs
-        {...{
-          ref: (el: any) => {
-            if (el) el.classList.add("lb-dt-tabs");
-          },
-        }}
-        aria-label="Developer tools sections"
-      >
-        {PAGES.map(([page, label, icon]) => (
-          <m3e-tab
-            key={page}
-            for={"lb-dt-panel-" + page}
-            selected={dt.page === page ? "" : undefined}
-            onClick={() => setDt({ page: page })}
-          >
-            <m3e-icon slot="icon" name={icon} aria-hidden={true} />
-            {label}
-            {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
-          </m3e-tab>
-        ))}
-      </m3e-tabs>
+      <div className="lb-dt-content">
+        {/* Sub-tool picker: one button per tool in a connected
+            m3e-button-group (single-select; the group manages the
+            press choreography, state reconciles `selected` above). */}
+        <m3e-button-group
+          variant="connected"
+          {...{ class: "lb-dt-bgroup", ref: bgroupRef }}
+          aria-label="Developer tools sections"
+        >
+          {PAGES.map(([page, label, icon]) => (
+            <m3e-button key={page} data-page={page} toggle="" onClick={() => setDt({ page })}>
+              <m3e-icon name={icon} aria-hidden={true} />
+              {label}
+              {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
+            </m3e-button>
+          ))}
+        </m3e-button-group>
 
-      <div id="lb-dt-panel-diagnostics" role="tabpanel" {...{ hidden: dt.page === "diagnostics" ? undefined : true, className: "lb-dt-panel" }}>
-      {dt.page === "diagnostics" && (
-        <div className="lb-dt-body">
-          <div className="lb-dt-toolbar">
-            <m3e-button onClick={() => void copyLogs()}>
-              <m3e-icon name="content_copy" aria-hidden={true} />
-              {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
-            </m3e-button>
-            <m3e-button disabled={exportState === "busy" ? true : undefined} onClick={() => void exportDiagnostics()}>
-              <m3e-icon name="download" aria-hidden={true} />
-              {exportState === "busy" ? "Exporting" : exportState === "ok" ? "Exported" : exportState === "fail" ? "Export failed" : "Export diagnostics"}
-            </m3e-button>
-            <m3e-button
-              onClick={() => window.open("https://github.com/lobsterbs/LobsterBrowse/issues/new", "_blank", "noopener")}
-            >
-              <m3e-icon name="bug_report" aria-hidden={true} />
-              Report
-            </m3e-button>
-          </div>
-          <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-            Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
-            are the rows marked FAIL; the page console and per-request network view live in Eruda
-            (button below). The engine transport section lists failures and abnormal events only:
-            rewrite-routed loads
-            (every HTML, CSS and JS load is routed through the rewriter by design) are counted,
-            not listed.
-          </p>
-          <ZeoliteEngineTools frame={frame} />
-          {/* #150: the downloads registry moved here from the removed
-              Network page; it is the only download Cancel surface. */}
-          <ZeoliteDownloads />
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} />
-          {dt.fails.length === 0 ? (
-            <div className="lb-net">
-              <p className="lb-muted">No resource failures captured.</p>
-            </div>
-          ) : (
-            <div className="lb-net">
-              <div className="lb-diag-counts">
-                {Object.entries(failCounts).map(([kind, n]) => (
-                  <span key={kind} className="lb-diag-chip">
-                    {n} × {kind}
-                  </span>
-                ))}
+        {dt.page === "console" && (
+          <>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Console output">
+              <div slot="content" className="lb-dt-card-body">
+                <div className="lb-console" ref={consoleRef}>
+                  {/* #94: quiet empty state; a filtered-to-nothing list says
+                      so instead of implying nothing was ever logged. */}
+                  {consoleEntries.length === 0 && (
+                    <p className="lb-muted lb-console-empty">
+                      {dt.console.length > 0 ? "No matching entries." : "Console output will appear here."}
+                    </p>
+                  )}
+                  {consoleEntries.map((c) => (
+                    <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
+                      <span className="lb-console-ts">{ts(c.ts)}</span>
+                      <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
+                      <span className="lb-console-text">{c.text}</span>
+                    </div>
+                  ))}
+                </div>
+                <m3e-divider />
+                <div className="lb-dt-toolbar">
+                  <M3eSelect
+                    label="Log level filter"
+                    value={dt.levelFilter}
+                    options={[
+                      ["all", "All levels"],
+                      ["log", "log"],
+                      ["info", "info"],
+                      ["warn", "warn"],
+                      ["error", "error"],
+                      ["debug", "debug"],
+                    ]}
+                    onChange={(v) => setDt({ levelFilter: v })}
+                  />
+                  <input
+                    className="lb-input"
+                    placeholder="Filter"
+                    aria-label="Filter console output"
+                    value={dt.consoleFilter}
+                    onChange={(e) => setDt({ consoleFilter: e.target.value })}
+                  />
+                  <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
+                    <m3e-icon name="mop" aria-hidden={true} />
+                  </m3e-icon-button>
+                  <m3e-icon-button
+                    aria-label="Copy console output"
+                    onClick={() => void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n"))}
+                  >
+                    <m3e-icon name="content_copy" aria-hidden={true} />
+                  </m3e-icon-button>
+                </div>
               </div>
-              {dt.fails.map((f) => (
-                <details key={f.id} className="lb-net-row">
-                  <summary className="lb-net-summary">
-                    <span className="lb-net-status lb-bad">FAIL</span>
-                    <span className="lb-net-method">{f.kind}</span>
-                    <span className="lb-net-url">{f.url || "unknown resource"}</span>
-                    {f.status !== undefined && f.status !== 0 && <span className="lb-net-dur">{f.status}</span>}
-                  </summary>
-                  <div className="lb-net-detail">
-                    <div>Resource type: {f.kind}</div>
-                    <div>Resource URL: {f.url || "unknown (element failed before a URL could be identified)"}</div>
-                    <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
-                    {/* Honest status: element-level load failures have no
-                        observable HTTP status; show unknown instead of a
-                        fabricated 0 that reads like a browser network
-                        error. */}
-                    <div>HTTP status: {f.status !== undefined ? f.status : "unknown"}</div>
-                    <div>Transport: Zeolite engine (/zl/)</div>
-                    {f.nav && <div>Navigation: {f.nav}</div>}
-                    {f.note && <div>Note: {f.note}</div>}
-                    <div>Time: {ts(f.ts)}</div>
-                  </div>
-                </details>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      </div>
+            </m3e-card>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Console input">
+              <div slot="content" className="lb-dt-card-body">
+                <div className="lb-console-input">
+                  {/* m3e-textarea-autosize grows the console input to fit
+                      multi-line expressions (Shift+Enter). */}
+                  <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
+                  <textarea
+                    ref={inputRef}
+                    id="lb-dt-console-in"
+                    className="lb-input lb-console-area"
+                    aria-label="Console input"
+                    value={cmd}
+                    rows={1}
+                    onChange={(e) => setCmd(e.target.value)}
+                    onKeyDown={keyDown}
+                  />
+                  <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
+                </div>
+              </div>
+            </m3e-card>
+          </>
+        )}
 
-    </m3e-card>
+        {dt.page === "network" && (
+          <>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Network requests">
+              <div slot="content" className="lb-dt-card-body">
+                <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
+                  Requests the page's JavaScript makes (fetch/XHR) plus element load failures, captured live
+                  from the frame. Headers, byte sizes and bodies are not exposed to the page context by the
+                  browser - this is a page-level view, not a network tap.
+                </p>
+                <div className="lb-net">
+                  {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
+                  {pagedNet.map((n) => (
+                    <details key={n.id} className="lb-net-row">
+                      <summary className="lb-net-summary">
+                        <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
+                          {n.error ? "ERR" : n.status}
+                        </span>
+                        <span className="lb-net-method">{n.method}</span>
+                        <span className="lb-net-url">{n.url}</span>
+                        {n.dur !== undefined && <span className="lb-net-dur">{n.dur} ms</span>}
+                      </summary>
+                      <div className="lb-net-detail">
+                        <div>URL: {n.url}</div>
+                        <div>Method: {n.method}</div>
+                        <div>Status: {n.error ? n.error : n.status}</div>
+                        {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
+                        <div>Time: {ts(n.ts)}</div>
+                        <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+                <m3e-divider />
+                <div className="lb-dt-toolbar">
+                  <input
+                    className="lb-input"
+                    placeholder="Filter by URL"
+                    aria-label="Filter network requests"
+                    value={dt.netFilter}
+                    onChange={(e) => setDt({ netFilter: e.target.value })}
+                  />
+                  <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
+                    <m3e-icon name="mop" aria-hidden={true} />
+                  </m3e-icon-button>
+                  {netEntries.length > netPageSize && (
+                    <m3e-paginator
+                      length={netEntries.length}
+                      page-size={netPageSize}
+                      page-sizes="25,50,100"
+                      aria-label="Network log pages"
+                      {...{ class: "lb-dt-pager", ref: pagerRef }}
+                    />
+                  )}
+                </div>
+              </div>
+            </m3e-card>
+            <ZeoliteDownloads />
+          </>
+        )}
+
+        {dt.page === "diagnostics" && (
+          <>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Resource failures">
+              <div slot="content" className="lb-dt-card-body">
+                <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
+                  Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
+                  are the rows marked FAIL; successful loads are in the Network section.
+                </p>
+                {dt.fails.length === 0 ? (
+                  <div className="lb-net">
+                    <p className="lb-muted">No resource failures captured.</p>
+                  </div>
+                ) : (
+                  <div className="lb-net">
+                    <div className="lb-diag-counts">
+                      {Object.entries(failCounts).map(([kind, n]) => (
+                        <span key={kind} className="lb-diag-chip">
+                          {n} × {kind}
+                        </span>
+                      ))}
+                    </div>
+                    {dt.fails.map((f) => (
+                      <details key={f.id} className="lb-net-row">
+                        <summary className="lb-net-summary">
+                          <span className="lb-net-status lb-bad">FAIL</span>
+                          <span className="lb-net-method">{f.kind}</span>
+                          <span className="lb-net-url">{f.url || "unknown resource"}</span>
+                          {f.status !== undefined && f.status !== 0 && <span className="lb-net-dur">{f.status}</span>}
+                        </summary>
+                        <div className="lb-net-detail">
+                          <div>Resource type: {f.kind}</div>
+                          <div>Resource URL: {f.url || "unknown (element failed before a URL could be identified)"}</div>
+                          <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
+                          {/* Honest status: element-level load failures have no
+                              observable HTTP status; show unknown instead of a
+                              fabricated 0 that reads like a browser network
+                              error. */}
+                          <div>HTTP status: {f.status !== undefined ? f.status : "unknown"}</div>
+                          <div>Transport: Zeolite engine (/zl/)</div>
+                          {f.nav && <div>Navigation: {f.nav}</div>}
+                          {f.note && <div>Note: {f.note}</div>}
+                          <div>Time: {ts(f.ts)}</div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                )}
+                <m3e-divider />
+                <div className="lb-dt-toolbar">
+                  <m3e-button onClick={() => void copyLogs()}>
+                    <m3e-icon name="content_copy" aria-hidden={true} />
+                    {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
+                  </m3e-button>
+                </div>
+              </div>
+            </m3e-card>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine diagnostics">
+              <div slot="content" className="lb-dt-card-body">
+                <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
+              </div>
+            </m3e-card>
+            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Page tools">
+              <div slot="content" className="lb-dt-card-body">
+                <ZeoliteEngineTools frame={frame} />
+              </div>
+            </m3e-card>
+          </>
+        )}
+      </div>
+    </m3e-bottom-sheet>
   );
 }
