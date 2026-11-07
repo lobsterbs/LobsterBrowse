@@ -2150,7 +2150,34 @@ FROM debian:bookworm-slim AS zl-builder
 # cascade, the #514/#545 wedge; the pin 135/151-161 precedent,
 # docs/ci-torture-wedge.md run 42246542499). Cargo-side pin stays
 # 5073f316 (app TS only, no crates changed).
-ARG ZEOLITE_COMMIT=3157fdb8fc288ede562e8b83a565693551eb6217
+# Pin 163 (2026-11-07): dist 02e58ac (build 42383331239) ships the
+# #633/#612/#640 engine fix wave (Zeolite main 728ed78 + docs-only
+# wedge records): the route shape survives idle kills (an absent
+# zl:config knob keeps the live value, the query-routes flag
+# persists in the route-config KDL and restores on worker
+# restart), Referer, initiator and widget page-URL derivation
+# recover from an expired NAVH whose MAC still verifies while
+# committed navigation decode stays live-only (#633), a navguard
+# NAV marker inside a NAVH handle tail decodes as the engine route
+# it names instead of composing <site>/__zl_nav__/<b64> upstream
+# while a marker-shaped tail that does not decode keeps the honest
+# composition (#612), and the Discourse embed.js embed_url=
+# parameter virtualizes to the real page URL via referrerPageUrl,
+# mirroring the #565 Disqus seam, failing closed without a
+# decodable referrer (#640). Also carries the unwired Rust
+# rewrite crates zeolite-cookies (#614) and zeolite-csp (#615):
+# no engine byte differs from 728ed78's app. sw.js
+# 2337cd1084d158a0 -> 0c9c92048b2a0aaa (826132 bytes);
+# bootstrap.js unchanged 0c81efb9ba343dff. CI on 14ca12f and
+# f1a073b: rust/wasm/app/compat green; browser red with the
+# documented wedge signatures on both runs (the torture cascade
+# pair plus img#uni on 42381860014, the #96 NativeTransit hang
+# cascade on 42383331239; docs/ci-torture-wedge.md; the pin
+# 135/151-162 precedent, operator approved 2026-11-07).
+# Cargo-side pin stays 5073f316 (no crates in the server tree
+# changed; cookies/csp are unwired siblings). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=02e58ac434479c55438a51676baeae708e148a2b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2209,7 +2236,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2337cd1084d158a0 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0c9c92048b2a0aaa ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
