@@ -1,6 +1,6 @@
 /* Regression check for the wave 77 UI batch: the gated suggestor
    (SUGGEST_MIN_CHARS + buildSuggests ordering and sources) and the
-   engine brand marks. Wave 78: the ASCII-art background helper
+   engine brand marks. Wave 79: the search-history row assertions are gone (history left the UI stack). Wave 78: the ASCII-art background helper
    assertions were replaced by source checks for the liquid-metal
    ribbon background (the .tsx files carry JSX, which node cannot
    import, so they are read from disk instead).
@@ -17,17 +17,16 @@ import { markFor, MARKED_ENGINES } from "../../ui/src/engineMarks.ts";
 
 /* ---- The suggestor stays shut until engines accept the request. ---- */
 assert.equal(SUGGEST_MIN_CHARS, 2, "engines accept completion requests from 2 chars");
-assert.deepEqual(buildSuggests("c", { history: ["cats.com"], engineName: "Brave", search: "s", remote: [{ text: "cats", src: "Brave" }], searchFor: () => "s" }), [], "one character must not open the menu");
-assert.deepEqual(buildSuggests("", { history: [], engineName: "Brave", search: "s", remote: [], searchFor: () => "s" }), [], "empty input must not open the menu");
+assert.deepEqual(buildSuggests("c", { engineName: "Brave", search: "s", remote: [{ text: "cats", src: "Brave" }], searchFor: () => "s" }), [], "one character must not open the menu");
+assert.deepEqual(buildSuggests("", { engineName: "Brave", search: "s", remote: [], searchFor: () => "s" }), [], "empty input must not open the menu");
 /* Whitespace never fakes the gate: the count applies to the
    trimmed query, so padded single chars stay shut and padded two
    chars open. */
-assert.deepEqual(buildSuggests("  c  ", { history: ["cats.com"], engineName: "Brave", search: "s", remote: [{ text: "cats", src: "Brave" }], searchFor: () => "s" }), [], "padded single char stays shut");
-assert.equal(buildSuggests(" ca", { history: [], engineName: "Brave", search: "s", remote: [], searchFor: () => "s" }).length, 1, "padded two chars open the menu");
+assert.deepEqual(buildSuggests("  c  ", { engineName: "Brave", search: "s", remote: [{ text: "cats", src: "Brave" }], searchFor: () => "s" }), [], "padded single char stays shut");
+assert.equal(buildSuggests(" ca", { engineName: "Brave", search: "s", remote: [], searchFor: () => "s" }).length, 1, "padded two chars open the menu");
 
 /* ---- Ordering: relevance-ranked engine suggestions lead. ---- */
 const opts = {
-  history: ["https://cats.example/old"],
   engineName: "Brave",
   search: "https://search.brave.com/search?q=cat",
   searchFor: (q) => "https://search.brave.com/search?q=" + encodeURIComponent(q),
@@ -47,7 +46,8 @@ assert.equal(rows[1].text, "wildcats", "substring rank preserves provider order"
 assert.equal(rows[2].text, "concatenate", "substring rank preserves provider order");
 assert.equal(rows[3].text, "cat · Brave search", "the direct search row follows the engine rows");
 assert.equal(rows[3].src, "Brave", "the direct search row carries the engine source");
-assert.equal(rows[4].text, "https://cats.example/old", "matching history follows the direct row");
+/* Wave 79 removed search history from the UI stack: buildSuggests takes no history field, so no history row can appear. */
+assert.equal(rows.length, 4, "engine rows plus the direct search row only");
 assert.ok(rows.every((r) => r.url.length > 0), "every row carries a URL");
 
 /* A URL query appends the URL row LAST, after the direct search. */
