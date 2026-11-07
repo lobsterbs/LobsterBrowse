@@ -398,13 +398,13 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
     }
   };
   return (
-    <div className="lb-dt-toolbar" style={{ flexWrap: "wrap", rowGap: 8 }}>
+    <>
       <m3e-button onClick={() => void injectEruda()}>
         <m3e-icon name="terminal" aria-hidden={true} />
         Eruda in page
       </m3e-button>
       {note && <span className="lb-muted">{note}</span>}
-    </div>
+    </>
   );
 }
 
@@ -910,6 +910,17 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
         {dt.page === "diagnostics" && (
           <>
+            {/* Actions first, then the logs (user request
+                2026-11-07): both buttons sit at the very top of the
+                Diagnostics page, padded by the sheet's own content
+                padding. */}
+            <div className="lb-dt-toolbar">
+              <m3e-button onClick={() => void copyLogs()}>
+                <m3e-icon name="content_copy" aria-hidden={true} />
+                {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
+              </m3e-button>
+              <ZeoliteEngineTools frame={frame} />
+            </div>
             <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Resource failures">
               <div slot="content" className="lb-dt-card-body">
                 <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
@@ -955,23 +966,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                     ))}
                   </div>
                 )}
-                <m3e-divider />
-                <div className="lb-dt-toolbar">
-                  <m3e-button onClick={() => void copyLogs()}>
-                    <m3e-icon name="content_copy" aria-hidden={true} />
-                    {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
-                  </m3e-button>
-                </div>
               </div>
             </m3e-card>
             <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine diagnostics">
               <div slot="content" className="lb-dt-card-body">
                 <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
-              </div>
-            </m3e-card>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Page tools">
-              <div slot="content" className="lb-dt-card-body">
-                <ZeoliteEngineTools frame={frame} />
               </div>
             </m3e-card>
           </>
