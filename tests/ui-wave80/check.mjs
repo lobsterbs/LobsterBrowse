@@ -113,6 +113,31 @@ const ok = (name, cond) => {
   ok("lock: md3e-web entry removed", !read("package-lock.json").includes("materialwebunofficial"));
 }
 
+/* --- Wave-80 follow-up (user report 2026-11-07): the settings panels
+   sat outside an m3e-accordion, so their surface tokens were empty
+   and the page rendered as one flat sheet; the nav rail must carry
+   no outline ring on the edge facing the content; the DevTools
+   Diagnostics page puts both actions at the very top, above the
+   log cards. --- */
+{
+  const theme = read("src/theme.css");
+  const pIdx = theme.indexOf(".lb-set-page m3e-expansion-panel {");
+  ok("settings: panel surface tokens defined", pIdx !== -1 && theme.slice(pIdx, pIdx + 300).includes("--m3e-expansion-panel-container-color"));
+  ok("settings: rhythm wrapper rule", theme.includes(".lb-set-page { display: flex"));
+  ok("settings: row labels evened inside panels", theme.includes(".lb-setp-body .lb-setting-label { margin: 0; }"));
+  const rIdx = theme.indexOf("m3e-nav-rail {");
+  ok("rail: outline ring removed", rIdx !== -1 && !theme.slice(rIdx, rIdx + 500).includes("0 0 0 1px"));
+  const sPage = read("src/pages/Settings.tsx");
+  ok("settings: page wrapper mounted", sPage.includes('className="lb-set-page"'));
+  const d = read("src/pages/DevTools.tsx");
+  const dpos = d.indexOf('dt.page === "diagnostics"');
+  const failCard = d.indexOf('aria-label="Resource failures"', dpos);
+  const topBtn = d.indexOf("void copyLogs()", dpos);
+  ok("devtools: diagnostics actions above the log cards", topBtn !== -1 && topBtn < failCard);
+  ok("devtools: page tools card folded into the actions row", !d.includes('aria-label="Page tools"'));
+  ok("devtools: eruda renders once", d.split("<ZeoliteEngineTools").length - 1 === 1);
+}
+
 if (failures > 0) {
   console.error(failures + " check(s) failed");
   process.exit(1);

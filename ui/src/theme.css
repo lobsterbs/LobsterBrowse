@@ -155,7 +155,7 @@ body.lb-fancy .lb-ac {
    shader paints a mostly dark stage, and blur over a flat dark
    field is invisible. The tint drops to 38% so the ribbons and the
    left-edge aurora blooms read through the
-   glass; the hairline edge and inset gloss match the search bar.
+   glass; the inset gloss matches the search bar; the outer hairline ring is gone (user request 2026-11-07: it read as a border edge on the side facing the content views).
    The @m3e/web 2.8.2 rail shadow paints no background of its own
    (verified in dist nav-rail.js), so the container token stays a
    harmless no-op kept for component updates. */
@@ -164,7 +164,7 @@ m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 38%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
 }/* ASCII wordmark: the same frosted glass as the rail and search bar,
    so the art stays readable over the animated gradient. Scoped to
    the fancy setting; the plain background keeps the bare pre. */
@@ -189,6 +189,33 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 .lb-set-anchor { scroll-margin-block: 96px; }
+/* The panels sit directly in the content pane, not inside an
+   m3e-accordion: the library defines the container color and
+   elevation only for panels slotted into an accordion, so outside
+   one the tokens are empty and the panels rendered transparent -
+   the whole page read as one flat sheet (user report 2026-11-07).
+   The values follow the app's filled-card language (m3e-card
+   variant="filled" defaults to surface-container-highest) so the
+   sub-cards read as the same card family as the search results and
+   the DevTools sheets; on the dark theme elevation shadows are
+   invisible, so the container color does the separating. */
+.lb-set-page m3e-expansion-panel {
+  --m3e-expansion-panel-container-color: var(--md-sys-color-surface-container-highest, #37393e);
+  --m3e-expansion-panel-elevation: var(--md-sys-elevation-level0, none);
+  --m3e-expansion-panel-open-elevation: var(--md-sys-elevation-level0, none);
+  --m3e-expansion-panel-shape: var(--m3e-shape-md);
+  --m3e-expansion-panel-open-shape: var(--m3e-shape-md);
+}
+/* Page rhythm: the pane's scroll container lives inside the
+   component's shadow root, so the page content carries its own
+   column rhythm. */
+.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-set-page > m3e-heading { margin: var(--md-sys-measurement-space150) 0 var(--md-sys-measurement-space50); }
+.lb-set-page > m3e-heading:first-child { margin-top: 0; }
+.lb-set-page .lb-set-search { margin: 0 0 var(--md-sys-measurement-space50); }
+/* Row labels: the vertical margins were built for the old flat list
+   and made the switch rows uneven inside the panels. */
+.lb-setp-body .lb-setting-label { margin: 0; }
 /* Zeolite-only options while ScramJet is the current engine: greyed
    out, values preserved. */
 .lb-zl-off { opacity: 0.55; }
