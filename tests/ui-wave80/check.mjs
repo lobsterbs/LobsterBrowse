@@ -138,6 +138,29 @@ const ok = (name, cond) => {
   ok("devtools: eruda renders once", d.split("<ZeoliteEngineTools").length - 1 === 1);
 }
 
+/* --- Settings follow-up (user request 2026-11-07): a sub option
+   whose entire payload is one control is an inline row card
+   (SetInline), not an expansion panel - one switch behind a chevron
+   is a wasted click. Multi-control or explanatory sub options keep
+   their panels. Every search-index target must exist on the page:
+   the redesign had dropped the panel anchor ids, so jumps to those
+   entries opened a panel but never scrolled. --- */
+{
+  const page = read("src/pages/Settings.tsx");
+  const inline = ["set-search-engine", "set-search-suggest", "set-adblock", "set-https", "set-cloak-enabled", "set-data", "set-logs"];
+  for (const t of inline) ok("settings: " + t + " is an inline card", page.includes('anchorId="' + t + '"'));
+  const gone = ["p-search-engine", "p-search-suggest", "p-adblock", "p-https", "p-cloak-enabled", "p-data", "p-logs"];
+  for (const p of gone) ok("settings: panel " + p + " removed", !page.includes('id="' + p + '"'));
+  const targets = [...page.matchAll(/target: "(set-[a-z-]+)"/g)].map((m) => m[1]);
+  ok("settings: search index targets parsed", targets.length >= 16);
+  for (const t of targets) {
+    ok("settings: jump target " + t + " exists on the page", page.includes('anchorId="' + t + '"') || page.includes('id="' + t + '"'));
+  }
+  const theme = read("src/theme.css");
+  ok("settings: inline card surface defined", theme.includes(".lb-set-inline {"));
+  ok("settings: inline cards join the jump focus ring", theme.includes(".lb-set-inline:focus-visible"));
+}
+
 if (failures > 0) {
   console.error(failures + " check(s) failed");
   process.exit(1);

@@ -6,7 +6,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
    example markup), and every toggle row uses the normal m3e-switch
    (no icon-on-switch variant). While ScramJet is the current proxy
    engine, every Zeolite-only option is greyed out. The previous
-   md-card components are gone; no option was lost. */
+   md-card components are gone; no option was lost.
+   Follow-up (user request 2026-11-07): a sub option whose entire
+   payload is one control renders as an inline row card, not an
+   expansion panel - one switch behind a chevron is a wasted click. */
 import {
   ENGINES,
   type EngineId,
@@ -66,28 +69,31 @@ const SECTION_TITLES: Record<string, string> = {
 };
 
 /* #198: settings search index. One entry per findable setting; the
-   targets are the id attributes set on the rows and panels below, and
+   targets are the id attributes set on the inline cards, rows and
+   panels below, and
    `panel` is the sub-card panel that owns the target (jumpTo opens
    it before scrolling). */
-type SetEntry = { section: string; label: string; terms?: string; panel: string; target: string };
+/* panel is optional: single-control sub options are inline row
+   cards that are always visible, so there is no panel to open. */
+type SetEntry = { section: string; label: string; terms?: string; panel?: string; target: string };
 const SETTING_INDEX: SetEntry[] = [
-  { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", panel: "p-search-engine", target: "set-search-engine" },
-  { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", panel: "p-search-suggest", target: "set-search-suggest" },
-  { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", panel: "p-adblock", target: "set-adblock" },
-  { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", panel: "p-https", target: "set-https" },
+  { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", target: "set-search-engine" },
+  { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
+  { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
+  { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
   { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", panel: "p-manage-ext", target: "set-manage-ext" },
   { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", panel: "p-amo", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", panel: "p-import", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", panel: "p-theme-color", target: "set-theme-color" },
   { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy background animated metal ribbons shader", panel: "p-fancy", target: "set-fancy" },
-  { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", panel: "p-cloak-enabled", target: "set-cloak-enabled" },
+  { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
   { section: "cloak", label: "Cloak destination", terms: "cloak url site", panel: "p-cloak-url", target: "set-cloak-url" },
   { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", panel: "p-cloak-url", target: "set-cloak-url" },
   { section: "cloak", label: "Open in about:blank", terms: "popout window blank", panel: "p-aboutblank", target: "set-aboutblank" },
   { section: "advanced", label: "Proxy engine", terms: "zeolite scramjet engine", panel: "p-proxy", target: "set-proxy" },
   { section: "advanced", label: "Transport engine", terms: "libcurl epoxy tls transport", panel: "p-transport", target: "set-transport" },
-  { section: "advanced", label: "Data", terms: "delete cache data", panel: "p-data", target: "set-data" },
-  { section: "advanced", label: "Logs", terms: "diagnostics history log", panel: "p-logs", target: "set-logs" },
+  { section: "advanced", label: "Data", terms: "delete cache data", target: "set-data" },
+  { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
 ];
 
 /* One settings sub-card = one expansion panel. The header carries the
@@ -114,6 +120,46 @@ function SetPanel(props: {
         {props.children}
       </div>
     </m3e-expansion-panel>
+  );
+}
+
+/* Single-control sub-card (user request 2026-11-07): a sub option
+   whose entire payload is one control renders as an inline row card,
+   not an expansion panel - one switch behind a chevron is a wasted
+   click. The headline and supporting text sit beside the control;
+   on/toggle render the switch, children any other single control.
+   Sub options with several controls or an explanatory body keep
+   their panels. */
+function SetInline(props: {
+  anchorId?: string;
+  label: string;
+  desc?: string;
+  on?: boolean;
+  toggle?: () => void;
+  disabled?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      className={"lb-set-inline" + (props.disabled ? " lb-zl-off" : "")}
+      id={props.anchorId}
+      tabIndex={props.anchorId ? -1 : undefined}
+      aria-disabled={props.disabled ? "true" : undefined}
+    >
+      <span className="lb-setting-text">
+        <span className="lb-setting-label">{props.label}</span>
+        {props.desc ? <span className="lb-setting-desc">{props.desc}</span> : null}
+      </span>
+      {props.on !== undefined ? (
+        <m3e-switch
+          checked={props.on ? "" : undefined}
+          disabled={props.disabled ? true : undefined}
+          onClick={props.disabled ? undefined : props.toggle}
+        />
+      ) : (
+        props.children
+      )}
+    </div>
   );
 }
 
@@ -178,9 +224,10 @@ function TextInput(props: {
 
 export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
-     several open at once; Search engine starts expanded (parity with
-     the old "Search & browse starts expanded" behavior). */
-  const [openP, setOpenP] = useState<Record<string, boolean>>({ "p-search-engine": true });
+     several open at once. All panels start closed; the single-control
+     sub options are inline row cards now, so nothing needs a head
+     start. */
+  const [openP, setOpenP] = useState<Record<string, boolean>>({});
   const toggleP = (id: string) => setOpenP((prev) => ({ ...prev, [id]: !prev[id] }));
 
   /* ScramJet is the current engine: every Zeolite-only option greyes
@@ -202,7 +249,8 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
       )
     : [];
   const jumpTo = (entry: SetEntry) => {
-    setOpenP((prev) => ({ ...prev, [entry.panel]: true }));
+    const panel = entry.panel;
+    if (panel) setOpenP((prev) => ({ ...prev, [panel]: true }));
     setQ("");
     /* Let the panel expand before scrolling. */
     setTimeout(() => {
@@ -354,12 +402,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
           ) : (
             <>
               <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.search}</m3e-heading>
-              <SetPanel
-                id="p-search-engine"
-                headline="Search engine"
-                sub="The engine the omnibox, Home and new tabs search with"
-                open={!!openP["p-search-engine"]}
-                toggle={() => toggleP("p-search-engine")}
+              <SetInline
+                anchorId="set-search-engine"
+                label="Search engine"
+                desc="The engine the omnibox, Home and new tabs search with"
               >
                 <div className="lb-seg-wrap">
                   <m3e-segmented-button aria-label="Search engine">
@@ -370,64 +416,44 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     ))}
                   </m3e-segmented-button>
                 </div>
-              </SetPanel>
-              <SetPanel
-                id="p-search-suggest"
-                headline="Engine search suggestions"
-                sub="Completions from the search engine while you type"
-                open={!!openP["p-search-suggest"]}
-                toggle={() => toggleP("p-search-suggest")}
-              >
-                <Row
-                  id="set-search-suggest"
-                  label="Engine search suggestions"
-                  on={settings.suggestQueries}
-                  toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
-                />
-              </SetPanel>
+              </SetInline>
+              <SetInline
+                anchorId="set-search-suggest"
+                label="Engine search suggestions"
+                desc="Completions from the search engine while you type"
+                on={settings.suggestQueries}
+                toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
+              />
 
               <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.privacy}</m3e-heading>
-              <SetPanel
-                id="p-adblock"
-                headline="Ad & tracker blocking"
-                sub="Block ads and trackers at the engine level"
-                open={!!openP["p-adblock"]}
-                toggle={() => toggleP("p-adblock")}
-              >
-                <Row
-                  id="set-adblock"
-                  label="Ad & tracker blocking"
-                  on={settings.adblock}
-                  toggle={() => onChange({ adblock: !settings.adblock })}
-                  disabled={zlOff}
-                />
-                {zlOff && zlNote}
-                <p className="lb-muted" style={{ fontSize: 12 }}>
-                  No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
-                </p>
-              </SetPanel>
-              <SetPanel
-                id="p-https"
-                headline="HTTPS upgrade"
-                sub="Rewrite http page links to https before they are fetched"
-                open={!!openP["p-https"]}
-                toggle={() => toggleP("p-https")}
-              >
-                <Row
-                  id="set-https"
-                  label="HTTPS upgrade"
-                  on={settings.httpsUpgrade}
-                  toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })}
-                  disabled={zlOff}
-                />
-                {zlOff && zlNote}
-              </SetPanel>
+              <SetInline
+                anchorId="set-adblock"
+                label="Ad & tracker blocking"
+                desc="Block ads and trackers at the engine level"
+                on={settings.adblock}
+                toggle={() => onChange({ adblock: !settings.adblock })}
+                disabled={zlOff}
+              />
+              {zlOff && zlNote}
+              <SetInline
+                anchorId="set-https"
+                label="HTTPS upgrade"
+                desc="Rewrite http page links to https before they are fetched"
+                on={settings.httpsUpgrade}
+                toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })}
+                disabled={zlOff}
+              />
+              {zlOff && zlNote}
+              <p className="lb-muted" style={{ fontSize: 12 }}>
+                No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
+              </p>
 
               <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.extensions}</m3e-heading>
               <SetPanel
                 id="p-manage-ext"
                 headline="Manage installed"
                 sub="Enable, disable, configure or remove installed add-ons"
+                anchorId="set-manage-ext"
                 open={!!openP["p-manage-ext"]}
                 toggle={() => toggleP("p-manage-ext")}
               >
@@ -443,6 +469,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-amo"
                 headline="Find and install add-ons"
                 sub="Search the Mozilla add-on catalog and install from it"
+                anchorId="set-amo"
                 open={!!openP["p-amo"]}
                 toggle={() => toggleP("p-amo")}
               >
@@ -458,6 +485,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-import"
                 headline="Import locally"
                 sub="Install a packed extension from a .xpi or .zip file"
+                anchorId="set-import"
                 open={!!openP["p-import"]}
                 toggle={() => toggleP("p-import")}
               >
@@ -492,6 +520,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-theme-color"
                 headline="Theme color"
                 sub="The seed color the whole UI palette derives from"
+                anchorId="set-theme-color"
                 open={!!openP["p-theme-color"]}
                 toggle={() => toggleP("p-theme-color")}
               >
@@ -532,24 +561,18 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               </SetPanel>
 
               <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.cloak}</m3e-heading>
-              <SetPanel
-                id="p-cloak-enabled"
-                headline="Cloak when the tab is hidden"
-                sub="Change the tab title and stage a harmless site while the tab is hidden"
-                open={!!openP["p-cloak-enabled"]}
-                toggle={() => toggleP("p-cloak-enabled")}
-              >
-                <Row
-                  id="set-cloak-enabled"
-                  label="Cloak when the tab is hidden"
-                  on={settings.cloakEnabled}
-                  toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })}
-                />
-              </SetPanel>
+              <SetInline
+                anchorId="set-cloak-enabled"
+                label="Cloak when the tab is hidden"
+                desc="Change the tab title and stage a harmless site while the tab is hidden"
+                on={settings.cloakEnabled}
+                toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })}
+              />
               <SetPanel
                 id="p-cloak-url"
                 headline="Cloak destination"
                 sub="Which site is staged and which title the tab shows while cloaked"
+                anchorId="set-cloak-url"
                 open={!!openP["p-cloak-url"]}
                 toggle={() => toggleP("p-cloak-url")}
               >
@@ -565,6 +588,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-aboutblank"
                 headline="Open in about:blank"
                 sub="Pop the app out into a window whose address bar reads about:blank"
+                anchorId="set-aboutblank"
                 open={!!openP["p-aboutblank"]}
                 toggle={() => toggleP("p-aboutblank")}
               >
@@ -583,6 +607,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-proxy"
                 headline="Proxy engine"
                 sub="Zeolite (rewriter proxy) or ScramJet (client-side rewrite)"
+                anchorId="set-proxy"
                 open={!!openP["p-proxy"]}
                 toggle={() => toggleP("p-proxy")}
               >
@@ -604,6 +629,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 id="p-transport"
                 headline="Transport engine"
                 sub="How the Zeolite engine terminates TLS upstream"
+                anchorId="set-transport"
                 open={!!openP["p-transport"]}
                 toggle={() => toggleP("p-transport")}
               >
@@ -622,18 +648,14 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
                 </p>
               </SetPanel>
-              <SetPanel
-                id="p-data"
-                headline="Data"
-                sub="Clear the proxied page cache, or delete every stored session and setting"
-                open={!!openP["p-data"]}
-                toggle={() => toggleP("p-data")}
+              <SetInline
+                anchorId="set-data"
+                label="Data"
+                desc="Clear the proxied page cache, or delete every stored session and setting"
               >
-                <div className="lb-seed-row">
-                  <m3e-button onClick={() => setConfirmDelete(true)}>
-                    <m3e-icon name="delete" aria-hidden={true} /> Manage data
-                  </m3e-button>
-                </div>
+                <m3e-button onClick={() => setConfirmDelete(true)}>
+                  <m3e-icon name="delete" aria-hidden={true} /> Manage data
+                </m3e-button>
                 {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
                     handling and alertdialog semantics (alert attribute). */}
                 <m3e-dialog
@@ -675,13 +697,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     </m3e-button>
                   </div>
                 </m3e-dialog>
-              </SetPanel>
-              <SetPanel
-                id="p-logs"
-                headline="Logs"
-                sub="App-level diagnostics and console history"
-                open={!!openP["p-logs"]}
-                toggle={() => toggleP("p-logs")}
+              </SetInline>
+              <SetInline
+                anchorId="set-logs"
+                label="Logs"
+                desc="App-level diagnostics and console history"
               >
                 {/* Diagnostic mode is always on (the toggle was removed on
                     purpose): every failed resource, page console message and
@@ -690,7 +710,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 <m3e-button onClick={onOpenLogs}>
                   <m3e-icon name="history" aria-hidden={true} /> Open Logs
                 </m3e-button>
-              </SetPanel>
+              </SetInline>
 
               <m3e-heading variant="title" size="small" level={3}>About</m3e-heading>
               <SetPanel
