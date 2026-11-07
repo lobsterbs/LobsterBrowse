@@ -139,15 +139,19 @@ body.lb-fancy .lb-home m3e-search-view {
 .lb-home m3e-search-view {
   --m3e-search-view-docked-scrim-opacity: 0%;
 }
-/* Suggestion dropdown: no extra surface behind the suggestor rows
-   (user request 2026-11-06) - the search view panel is the only
-   surface; the old frosted grey field is gone. */
+/* #231 (user request 2026-11-07): the open suggestion list reads as
+   frosted glass, consistent with the bar, rail and wordmark frost
+   chain. Supersedes the 2026-11-06 "no extra surface" change: the
+   frost rides the suggestor surface itself now - translucent
+   surface-container tint, panel-radius-clipped blur, hairline edge
+   plus inset highlight. lb-fancy off leaves this surface untouched. */
 body.lb-fancy .lb-ac {
-  background: transparent;
-  border-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
+  border: 0;
+  border-radius: var(--m3e-shape-lg, 16px);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 /* Frosted nav rail (#226, live-probed 2026-10-30): the frost chain
    works - a bright layer behind the rail shows through the blur -
@@ -735,14 +739,27 @@ body.lb-fancy .lb-home pre.lb-ascii {
   left: 0;
   right: 0;
   z-index: 40;
-  background: var(--md-sys-color-surface, #fef7ff);
-  border: 1px solid var(--md-sys-color-outline, #79747e);
+  /* #232: menu-class surface, not a solid sheet with a full-strength
+     outline; the hairline is outline-variant at low alpha. */
+  background: var(--md-sys-color-surface-container, #f3edf7);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant, #cac4d0) 35%, transparent);
   border-radius: var(--m3e-shape-md);
   box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.3));
   overflow: hidden;
   text-align: left;
   max-height: 300px;
   overflow-y: auto;
+}
+/* #232 (user request 2026-11-07): under Enhanced UI the toolbar
+   dropdown is frosted glass like the toolbar it pops out of -
+   translucent surface tint plus backdrop blur, hairline ring and
+   inset highlight matching the other lb-fancy glass surfaces. */
+body.lb-fancy .lb-tb-ac {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
+  border-color: transparent;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 .lb-tb-ac-item {
   display: flex;
@@ -1192,49 +1209,57 @@ m3e-icon-button:active { transform: scale(0.88); }
    tiles show blank frames, not pages). */
 .lb-tabs-sheet { --m3e-bottom-sheet-max-width: 720px; }
 .lb-tabs-sheet-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
+/* #233 (user request 2026-11-07): one tab per row - a full-width
+   horizontal mini-card (favicon, title, small preview, always-visible
+   close X). The list scrolls vertically; a dying card collapses
+   vertically so the cards below slide up smoothly. */
 .lb-tabs-row {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: var(--md-sys-measurement-space100);
   width: 100%;
-  max-height: 176px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  max-height: 50vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--md-sys-measurement-space50);
 }
-/* Tiles are m3e-cards now (filled active / outlined inactive): the
-   card owns surface, padding and shape; this keeps only the tile
-   geometry and the close-away motion. */
+/* Tiles are m3e-cards (filled active / outlined inactive): the card
+   owns surface, padding and shape; this keeps only the card geometry
+   and the close-away motion. height: auto -> 0 interpolates because
+   :root sets interpolate-size: allow-keywords (Chromium 129+); older
+   engines fall back to the instant snap, as documented there. */
 .lb-tabs-tile {
   flex: 0 0 auto;
-  width: 164px;
+  width: 100%;
   cursor: pointer;
   transition: opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
-    width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
-    margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
+    height var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
+    margin-top var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-tabs-tile-inner { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-/* The dying tile surrenders its layout footprint: width animates to 0
-   and a negative margin eats the row gap, so the surviving tiles
-   slide over smoothly inside the close window and the final unmount
+.lb-tabs-tile-inner { display: flex; flex-direction: row; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; min-width: 0; }
+/* The dying card surrenders its layout footprint: height animates to
+   0 and a negative margin eats the list gap, so the surviving cards
+   slide up smoothly inside the close window and the final unmount
    changes nothing (#29). */
 .lb-tabs-tile.closing {
   opacity: 0;
-  width: 0;
-  margin-right: calc(-1 * var(--md-sys-measurement-space100, 8px));
+  height: 0;
+  margin-top: calc(-1 * var(--md-sys-measurement-space100, 8px));
   overflow: hidden;
 }
+/* #233: a small preview thumbnail, not the old 148x88 tile hero. */
 .lb-tab-preview {
   position: relative;
-  width: 148px;
-  height: 88px;
+  width: 96px;
+  height: 57px;
   border-radius: var(--m3e-shape-xs);
   overflow: hidden;
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
+  flex-shrink: 0;
 }
 .lb-tab-preview iframe {
-  width: 592px;
-  height: 352px;
+  width: 384px;
+  height: 228px;
   border: 0;
   transform: scale(0.25);
   transform-origin: 0 0;
@@ -1245,31 +1270,25 @@ m3e-icon-button:active { transform: scale(0.88); }
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 88px;
+  height: 57px;
   opacity: 0.5;
 }
-.lb-tabs-tile-head {
-  display: flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space75);
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  min-width: 0;
-}
-.lb-tabs-tile-head .lb-tab-favicon { width: 16px; height: 16px; flex-shrink: 0; }
-.lb-tabs-tile-head .lb-tabs-title {
+.lb-tabs-tile-inner .lb-tab-favicon { width: 16px; height: 16px; flex-shrink: 0; }
+.lb-tabs-tile-inner .lb-tabs-title {
   flex: 1;
   min-width: 0;
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* #233: the close X is always visible, not hover-gated. */
 .lb-tabs-tile .lb-tab-close {
   font-size: 15px;
-  opacity: 0;
+  opacity: 0.8;
+  flex-shrink: 0;
   transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
 }
-.lb-tabs-tile:hover .lb-tab-close,
-.lb-tabs-tile.active .lb-tab-close { opacity: 0.8; }
 .lb-tabs-tile .lb-tab-close:hover { opacity: 1; }
 /* The toolbar slides fully away while the tab switcher is open; this
    rule must sit after the dock hover/reveal rules to win the cascade. */
@@ -1609,13 +1628,13 @@ body .lb-ext-panel {
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
 }
 
-/* #88/#91: the tile row already scrolls; snapping plus an edge mask
-   make the affordance read. Focus rings for keyboard use; the close
-   affordance is a real button now, so it gets a button reset. */
+/* #88/#91/#233: the card list scrolls vertically; snapping plus an
+   edge mask make the affordance read. Focus rings for keyboard use;
+   the close affordance is a real button, so it gets a button reset. */
 .lb-tabs-row {
-  scroll-snap-type: x proximity;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  scroll-snap-type: y proximity;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
 .lb-tabs-tile { scroll-snap-align: start; }
 .lb-tabs-tile:focus-visible {
@@ -1636,11 +1655,8 @@ body .lb-ext-panel {
   outline-offset: 1px;
   opacity: 1;
 }
-@media (max-width: 600px) {
-  .lb-tabs-tile { width: 132px; }
-  .lb-tab-preview { width: 116px; }
-  .lb-tab-preview iframe { width: 464px; }
-}
+/* #233: the cards are full-width rows now; nothing needs the old
+   132px narrow-screen tile shrink. */
 /* ---- #213: favicon-hue toolbar tint (dark scheme only) ----
    Browser.tsx sets --lb-site-hue (degrees) and the lb-site-tint class
    on the toolbar host when the active tab's favicon carries a usable
