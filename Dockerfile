@@ -2177,7 +2177,20 @@ FROM debian:bookworm-slim AS zl-builder
 # Cargo-side pin stays 5073f316 (no crates in the server tree
 # changed; cookies/csp are unwired siblings). Deploy with a
 # cleared Render build cache.
-ARG ZEOLITE_COMMIT=02e58ac434479c55438a51676baeae708e148a2b
+# Pin 164 (2026-11-07): dist 5881b90 (build 42422624039) ships the
+# #633 query-shape expired handle Referer recovery: the deployed
+# sign-in commits on the query shape (?zlNavh=), and an expired
+# committed query route lost the upstream Referer exactly like the
+# path shape the #633 seam wave already recovers. decodeQueryHandle
+# gains the {expired} opt-in (committed decode stays live-only) and
+# forwardedHeaders derives the Referer from the expired MAC-verified
+# token; tests cover opt-in recovery, the token-bound origin, tamper
+# fail-closed and the strip (Zeolite 26926b6c on main). sw.js
+# 0c9c92048b2a0aaa -> 42d69f0827cbb2f7 (831503 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on the pushed head: rust/wasm/app
+# green. Cargo-side pin stays 5073f316 (app TS only). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=5881b90fbc7cb2962ef112e609b7de54cb2fcf88
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2236,7 +2249,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0c9c92048b2a0aaa ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42d69f0827cbb2f7 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
