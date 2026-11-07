@@ -18,6 +18,7 @@ import {
 } from "../settings";
 import { zlSend } from "../zeolite";
 import { pushLog } from "../store";
+import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 import ExtManage from "../browser/ExtManage";
 import { extWarnings } from "../browser/browserShared";
@@ -407,15 +408,15 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 label="Search engine"
                 desc="The engine the omnibox, Home and new tabs search with"
               >
-                <div className="lb-seg-wrap">
-                  <m3e-segmented-button aria-label="Search engine">
-                    {(Object.keys(ENGINES) as EngineId[]).map((id) => (
-                      <m3e-button-segment key={id} checked={settings.engine === id ? "" : undefined} onClick={() => onChange({ engine: id })}>
-                        {ENGINES[id].name}
-                      </m3e-button-segment>
-                    ))}
-                  </m3e-segmented-button>
-                </div>
+                {/* #237: six long engine names cannot share one
+                    segmented row; a dropdown select is the M3E control
+                    for this cardinality. */}
+                <M3eSelect
+                  label="Search engine"
+                  value={settings.engine}
+                  options={(Object.keys(ENGINES) as EngineId[]).map((id) => [id, ENGINES[id].name])}
+                  onChange={(v) => onChange({ engine: v as EngineId })}
+                />
               </SetInline>
               <SetInline
                 anchorId="set-search-suggest"

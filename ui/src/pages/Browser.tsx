@@ -668,17 +668,10 @@ export default function BrowserView(props: Props) {
     return () => clearTimeout(t);
   }, [dlOpen]);
   const dlSeq = useRef(1);
-  /* ---- Ad-blocking card: mount-stay mirrors the downloads card. ---- */
+  /* ---- Ad-blocking sheet (#236): the sheet stays mounted and owns
+       its open state (show/hide plus the closing event), like the
+       extensions and tab switcher sheets. ---- */
   const [adOpen, setAdOpen] = useState(false);
-  const [adMounted, setAdMounted] = useState(false);
-  useEffect(() => {
-    if (adOpen) {
-      setAdMounted(true);
-      return;
-    }
-    const t = setTimeout(() => setAdMounted(false), 280);
-    return () => clearTimeout(t);
-  }, [adOpen]);
   /* Frame documents that already carry the download click capture. */
   const dlWired = useRef<WeakSet<Document>>(new WeakSet());
   /* Per-document/per-window wiring for the new-tab interception. */
@@ -3032,19 +3025,6 @@ export default function BrowserView(props: Props) {
               onCancel={cancelDownload}
             />
           )}
-          {adMounted && (
-            <AdBlockCard
-              closing={!adOpen}
-              clientId={activeDt.engineClientId}
-              source={activeDt.engineSource}
-              host={adHost}
-              globalAdblock={settings.adblock}
-              siteAdblock={adRule?.adblock}
-              onSiteToggle={setSiteAdblock}
-              onOpenSettings={() => props.onOpenSettings()}
-              onClose={() => setAdOpen(false)}
-            />
-          )}
           {fileView && (
             <FileViewer
               name={fileView.name}
@@ -3067,6 +3047,20 @@ export default function BrowserView(props: Props) {
         onLaunch={launchExt}
         onDelete={uninstallExt}
         onFindAddons={() => props.onOpenSettings()}
+      />
+
+      {/* #236: the ad-blocking sheet lives at the top level with the
+          other sheets; it stays mounted and opens via its open prop. */}
+      <AdBlockCard
+        open={adOpen}
+        clientId={activeDt.engineClientId}
+        source={activeDt.engineSource}
+        host={adHost}
+        globalAdblock={settings.adblock}
+        siteAdblock={adRule?.adblock}
+        onSiteToggle={setSiteAdblock}
+        onOpenSettings={() => props.onOpenSettings()}
+        onClose={() => setAdOpen(false)}
       />
 
       {/* #210: the hand-built overlay menu is gone; CtxMenu (above)

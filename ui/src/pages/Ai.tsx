@@ -284,7 +284,10 @@ export default function AiPage() {
   async function send(retry?: { text: string; files: Attached[] }) {
     const text = retry ? retry.text : draft.trim();
     const files = retry ? retry.files : attached;
-    if (!text || busy) return;
+    /* #235: an attachment alone is a valid turn - text files carry
+       their own content and images re-route to the vision model;
+       only a draft with no payload at all is a no-op. */
+    if ((!text && files.length === 0) || busy) return;
     const before = messages.length;
 
     const userMsg: AiMsg = { role: "user", text, files: files.map((f) => f.name) };
@@ -342,7 +345,11 @@ export default function AiPage() {
       "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Nemotron or Gemma) " +
       "that can search the web itself; its answer returns to you as the tool result. " +
       "Skip the tools when the answer needs no web lookup.";
-    const parts: ChatContent = [{ type: "text", text: withFiles }];
+    /* #235: image-only turns send parts with no text element; the
+       server accepts part arrays without a text part. */
+    const parts: ChatContent = withFiles
+      ? [{ type: "text", text: withFiles }]
+      : [];
     for (const f of files)
       if (f.kind === "image" && f.dataUrl) parts.push({ type: "image_url", image_url: { url: f.dataUrl } });
 

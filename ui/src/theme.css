@@ -611,8 +611,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   border: none !important;
   border-radius: 999px !important;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
-}.lb-set-search { margin: var(--md-sys-measurement-space100) 0 var(--md-sys-measurement-space150); }
-.lb-set-results { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
+}.lb-set-results { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
 /* Search result cards: m3e-card variant="filled" owns the surface;
    the full-width button inside carries the layout and focus. */
 .lb-set-result { --m3e-card-padding: 0; }
@@ -825,7 +824,11 @@ body.lb-fancy .lb-tb-ac {
 .lb-dt-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .lb-dt-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
 .lb-dt-content { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
-.lb-dt-bgroup { flex-wrap: wrap; }
+/* #239: the sub-tool picker is a bottom-bar style row; the active
+   sub-tool is the tonal rounded pill (variant), the inactive ones
+   are text buttons. */
+.lb-dt-nav { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50); }
+.lb-dt-nav-btn { flex: 0 1 auto; }
 .lb-dt-card { width: 100%; }
 .lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
 .lb-dt-card-title { font-variation-settings: "wght" 500; }
@@ -1349,7 +1352,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
 .lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-tabs-card, .lb-dl-card, .lb-ad-card, .lb-site-card { animation: none; }
+  .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
   .lb-tabs-tile, .lb-dock-pill { transition: none; }
 }
 
@@ -1961,23 +1964,27 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   transform-origin: 50% 100%;
 }
 
-/* ---- AI: attachment peek. A frosted overlay rendered inside the
-   search bar, over the typed text; it appears when the first file is
-   attached, grows with the list, and collapses out when the last one
-   is removed (the lb-out class runs the exit keyframes, then Ai.tsx
-   unmounts the overlay on animation end). ---- */
+/* ---- AI: attachment peek (#235): a frosted chip row floating ABOVE
+   the search bar - it never covers the typed text, so the input
+   stays visible, focusable and typeable while attachments exist. It
+   appears when the first file is attached, grows with the list, and
+   collapses out when the last one is removed (the lb-out class runs
+   the exit keyframes, then Ai.tsx unmounts the row on animation
+   end). ---- */
 .lb-ai-bar-main { position: relative; flex: 1; min-width: 0; display: flex; }
 .lb-ai-bar-main m3e-search-bar { flex: 1; min-width: 0; }
 .lb-ai-att-peek {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--md-sys-measurement-space50, 4px));
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
   gap: var(--md-sys-measurement-space50, 4px);
-  padding: 4px 48px;
-  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--md-sys-shape-corner-large, 16px);
   background: color-mix(in srgb, var(--md-sys-color-surface-container-lowest, #0f0f11) 78%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -2106,38 +2113,52 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   color: var(--md-sys-color-on-surface-variant, #cac4d0);
 }
 
-/* ---- Ad-blocking card (overflow menu): same floating placement and
-       in/out animations as the downloads card. ---- */
-.lb-ad-card {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 360px;
-  max-width: calc(100vw - 32px);
-  z-index: 45;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-.lb-ad-card.lb-out {
-  animation: lb-card-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
-}
+/* ---- Ad-blocking sheet (#236): the overflow card is a bottom sheet
+       matching the extensions and tab sheets. Hero row: the shield in
+       a tonal circle beside the count, so icon and number read as one
+       unit; blocked hosts sit on a surface tint; the footer button is
+       a full-width tonal button. ---- */
+.lb-ad-sheet { --m3e-bottom-sheet-max-width: 480px; }
+.lb-ad-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
 .lb-ad-body {
   display: flex;
   flex-direction: column;
-  gap: var(--md-sys-measurement-space100);
+  gap: var(--md-sys-measurement-space150);
   width: 100%;
   padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150);
   box-sizing: border-box;
 }
-.lb-ad-count { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); }
-.lb-ad-count > m3e-icon { color: var(--md-sys-color-primary); }
+.lb-ad-hero { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); }
+.lb-ad-hero-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: var(--md-sys-color-secondary-container, #4a4458);
+  color: var(--md-sys-color-on-secondary-container, #e5defb);
+}
+.lb-ad-hero-ic > m3e-icon { color: currentColor; }
+.lb-ad-hero-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lb-ad-num { font-size: 40px; font-variation-settings: "wght" 600; line-height: 1; color: var(--md-sys-color-primary); }
 .lb-ad-sub { margin: 0; font-size: 13px; }
-.lb-ad-hosts { display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
+.lb-ad-hosts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: var(--md-sys-measurement-space50);
+  border-radius: var(--md-sys-shape-corner-medium, 12px);
+  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
+}
 .lb-ad-host { font-size: 12px; word-break: break-all; }
 .lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
 .lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
 .lb-ad-rowtitle { font-size: 13px; }
+.lb-ad-foot { width: 100%; }
 
 /* ---- Clawd easter egg: the sleeping mascot in the Settings About
        card, above the build chips. Pixel art: nearest-neighbour
