@@ -89,12 +89,12 @@ export default function AdBlockCard(props: {
       aria-label="Ad blocking"
       {...{ class: "lb-ad-sheet", ref: sheetRef }}
     >
-      <div slot="header" className="lb-ad-head">
-        <span className="lb-site-ctitle">Ad blocking</span>
-        <m3e-icon-button aria-label="Close ad blocking" onClick={props.onClose}>
-          <m3e-icon name="close" aria-hidden={true} />
+      <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+        <m3e-icon-button slot="leading" aria-label="Back" onClick={props.onClose}>
+          <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
-      </div>
+        <span slot="title">Ad blocking</span>
+      </m3e-app-bar>
       <div className="lb-ad-body">
         {current ? (
           <>

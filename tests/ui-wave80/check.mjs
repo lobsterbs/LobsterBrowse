@@ -62,8 +62,11 @@ const ok = (name, cond) => {
 {
   const t = read("src/browser/TabSwitcherCard.tsx");
   ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal=""'));
-  ok("tabs: one card per tab", t.includes("m3e-card") && t.includes("lb-tabs-tile"));
-  ok("tabs: live preview kept", t.includes("lb-tab-preview"));
+  /* #85 (user directive): the card grid and the live preview window are
+     gone; one row per tab now: favicon in a frosted m3e-avatar, then the
+     title, then the close button. */
+  ok("tabs: one row per tab", t.includes("m3e-avatar") && t.includes("lb-tab-row"));
+  ok("tabs: preview window removed", !t.includes("lb-tab-preview"));
 }
 
 /* --- DevTools: bottom-sheet host, connected button-group picker,

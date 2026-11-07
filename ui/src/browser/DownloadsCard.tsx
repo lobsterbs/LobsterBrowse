@@ -31,12 +31,12 @@ export default function DownloadsCard(props: {
       aria-label="Downloads"
       {...{ class: props.closing ? "lb-dl-card lb-out" : "lb-dl-card" }}
     >
-      <div slot="header" className="lb-site-head">
-        <span className="lb-site-ctitle">Downloads ({props.downloads.length})</span>
-        <m3e-icon-button aria-label="Close downloads" onClick={props.onClose}>
-          <m3e-icon name="close" aria-hidden={true} />
+      <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+        <m3e-icon-button slot="leading" aria-label="Back" onClick={props.onClose}>
+          <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
-      </div>
+        <span slot="title">Downloads ({props.downloads.length})</span>
+      </m3e-app-bar>
       <div slot="content" className="lb-dl-list">
         {props.downloads.map((d) => (
           <div key={d.id} className="lb-dl-item">

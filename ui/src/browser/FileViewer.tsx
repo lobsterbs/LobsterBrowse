@@ -73,14 +73,14 @@ export default function FileViewer(props: { name: string; blob: Blob; kind: File
   return (
     <div className="lb-fv-overlay" onClick={props.onClose}>
       <m3e-card variant="elevated" {...{ class: "lb-fv-card" }} onClick={(e) => e.stopPropagation()}>
-        <div slot="header" className="lb-site-head">
-          <span className="lb-site-ctitle">
+        <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+          <m3e-icon-button slot="leading" aria-label="Back" onClick={props.onClose}>
+            <m3e-icon name="arrow_back" aria-hidden={true} />
+          </m3e-icon-button>
+          <span slot="title">
             {props.name} <span className="lb-muted">({fmtBytes(props.blob.size)}, {props.kind})</span>
           </span>
-          <m3e-icon-button aria-label="Close viewer" onClick={props.onClose}>
-            <m3e-icon name="close" aria-hidden={true} />
-          </m3e-icon-button>
-        </div>
+        </m3e-app-bar>
         <div slot="content" className="lb-fv-body">
           {props.kind === "pdf" && (
             <Suspense fallback={<p className="lb-muted">Loading PDF viewer...</p>}>

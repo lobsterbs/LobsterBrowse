@@ -445,7 +445,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 disabled={zlOff}
               />
               {zlOff && zlNote}
-              <p className="lb-muted" style={{ fontSize: 12 }}>
+              <p className="lb-muted">
                 No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
               </p>
 
@@ -508,7 +508,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
                   </m3e-button>
                 </label>
-                <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                <p className="lb-muted" style={{ marginTop: 4 }}>
                   Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
                   (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
                   The engine validates the manifest and permission grants; a bad package only lands that
@@ -555,7 +555,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   on={settings.fancyBackground}
                   toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
                 />
-                <p className="lb-muted" style={{ fontSize: 12 }}>
+                <p className="lb-muted">
                   Replaces the flat background with the liquid-metal ribbon shader (the 21st.dev shader-metal
                   component, non-interactive) on the Home view. Off keeps the plain flat background.
                 </p>
@@ -622,7 +622,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     </m3e-button-segment>
                   </m3e-segmented-button>
                 </div>
-                <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+                <p className="lb-muted" style={{ marginTop: 6 }}>
                   ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only and grey out above while ScramJet is the current engine. Applied on the next navigation.
                 </p>
               </SetPanel>
@@ -645,7 +645,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   </m3e-segmented-button>
                 </div>
                 {zlOff && zlNote}
-                <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+                <p className="lb-muted" style={{ marginTop: 6 }}>
                   epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
                 </p>
               </SetPanel>
@@ -734,13 +734,13 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
                 </div>
                 {buildError && (
-                  <p className="lb-muted" style={{ fontSize: 12 }}>
+                  <p className="lb-muted">
                     Build information unavailable on this deployment.
                     {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
                   </p>
                 )}
                 {!build && !buildError && (
-                  <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
+                  <p className="lb-muted">Loading build information...</p>
                 )}
               </SetPanel>
             </>

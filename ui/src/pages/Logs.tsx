@@ -72,12 +72,12 @@ export default function LogsPage({ onBack, sess }: { onBack: () => void; sess: s
 
   return (
     <section className="lb-view-content" aria-label="Logs">
-      <m3e-heading variant="title" size="medium" level={2}>
-        <m3e-icon-button aria-label="Back" onClick={onBack}>
+      <m3e-app-bar size="small" {...{ class: "lb-sheet-bar" }}>
+        <m3e-icon-button slot="leading" aria-label="Back" onClick={onBack}>
           <m3e-icon name="arrow_back" aria-hidden={true} />
-        </m3e-icon-button>{" "}
-        Logs
-      </m3e-heading>
+        </m3e-icon-button>
+        <span slot="title">Logs</span>
+      </m3e-app-bar>
       <p className="lb-muted">Client and engine proxy events. No sensitive request data is logged.</p>
 
       {/* Related log actions grouped in a real M3E button group. */}
