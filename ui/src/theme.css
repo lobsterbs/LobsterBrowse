@@ -206,6 +206,29 @@ body.lb-fancy .lb-home pre.lb-ascii {
   --m3e-expansion-panel-shape: var(--m3e-shape-md);
   --m3e-expansion-panel-open-shape: var(--m3e-shape-md);
 }
+/* Single-control sub-cards (user request 2026-11-07): a sub option
+   whose entire payload is one control is an inline row card, not an
+   expansion panel. Same filled-card surface family as the panels
+   above; the control sits beside the text and nothing hides behind
+   a chevron. flex-wrap drops wide controls (the engine segmented
+   button) under the text on narrow screens. */
+.lb-set-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
+  width: 100%;
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
+  background: var(--md-sys-color-surface-container-highest, #37393e);
+  border-radius: var(--md-sys-shape-corner-medium, 12px);
+}
+.lb-set-inline .lb-setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
+.lb-set-inline .lb-setting-label { margin: 0; }
+.lb-set-inline .lb-setting-desc {
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+  color: var(--md-sys-color-on-surface-variant);
+}
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
@@ -613,7 +636,8 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-row:focus-visible,
-.lb-set-anchor:focus-visible {
+.lb-set-anchor:focus-visible,
+.lb-set-inline:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 2px;
 }
