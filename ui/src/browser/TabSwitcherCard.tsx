@@ -1,5 +1,6 @@
-/* Tab switcher: a modal m3e-bottom-sheet with one card per tab (live
-   preview tile, favicon, title). The sheet stays mounted (its preview
+/* Tab switcher: a modal m3e-bottom-sheet with one horizontal mini-card
+   per tab, stacked vertically: favicon, title, small preview,
+   always-visible close X (#233). The sheet stays mounted (its preview
    iframes must stay alive or tiles show blank frames); open/close
    rides the sheet's own show()/hide() methods with the `closing` event
    flowing back into Browser state. Presentational: tab state and
@@ -102,6 +103,12 @@ export default function TabSwitcherCard(props: {
               }}
             >
               <div slot="content" className="lb-tabs-tile-inner">
+                {props.icons[t.id] ? (
+                  <img className="lb-tab-favicon" src={props.icons[t.id]} alt="" />
+                ) : (
+                  <m3e-icon name="public" aria-hidden={true} />
+                )}
+                <span className="lb-tabs-title">{tabLabel(t)}</span>
                 <div className="lb-tab-preview">
                   {t.url && everOpened ? (
                     /* #107: preview tiles load the content origin in split
@@ -119,28 +126,20 @@ export default function TabSwitcherCard(props: {
                     </div>
                   )}
                 </div>
-                <div className="lb-tabs-tile-head">
-                  {props.icons[t.id] ? (
-                    <img className="lb-tab-favicon" src={props.icons[t.id]} alt="" />
-                  ) : (
-                    <m3e-icon name="public" aria-hidden={true} />
-                  )}
-                  <span className="lb-tabs-title">{tabLabel(t)}</span>
-                  {/* #91: a real button so closing is independently
-                      keyboard-reachable; selection and closing stay
-                      separate actions. */}
-                  <button
-                    type="button"
-                    className="lb-tab-close"
-                    aria-label={"Close " + tabLabel(t)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onCloseTab(t.id);
-                    }}
-                  >
-                    <m3e-icon name="close" aria-hidden={true} />
-                  </button>
-                </div>
+                {/* #91: a real button so closing is independently
+                    keyboard-reachable; selection and closing stay
+                    separate actions. #233: the X is always visible. */}
+                <button
+                  type="button"
+                  className="lb-tab-close"
+                  aria-label={"Close " + tabLabel(t)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onCloseTab(t.id);
+                  }}
+                >
+                  <m3e-icon name="close" aria-hidden={true} />
+                </button>
               </div>
             </m3e-card>
           );
