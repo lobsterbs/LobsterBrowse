@@ -1187,17 +1187,8 @@ export default function BrowserView(props: Props) {
      page wins; otherwise the vendored worker at /zlsw/sw.js is
      registered and used as a control plane (no page control). */
   const [extPanelOpen, setExtPanelOpen] = useState(false);
-  /* #76: the extensions panel stays mounted through its exit
-     animation too. */
-  const [extPanelMounted, setExtPanelMounted] = useState(false);
-  useEffect(() => {
-    if (extPanelOpen) {
-      setExtPanelMounted(true);
-      return;
-    }
-    const t = setTimeout(() => setExtPanelMounted(false), 200);
-    return () => clearTimeout(t);
-  }, [extPanelOpen]);
+  /* #234: the extensions bottom sheet stays mounted; it owns its open
+     state (show/hide, the closing event), like the tab switcher. */
   /* #81 command palette decoupling: the palette lives in App, the
      extensions panel and the toolbar pill live here. Window events
      bridge the two without threading more props through Browser. */
@@ -3065,20 +3056,18 @@ export default function BrowserView(props: Props) {
         </div>
       </div>
 
-      {extPanelMounted && (
-        <ExtensionsPanel
-          open={extPanelOpen}
-          list={extList}
-          busy={extBusy}
-          error={extError}
-          launchError={extLaunchError}
-          onRefresh={() => loadExtensions()}
-          onClose={() => setExtPanelOpen(false)}
-          onLaunch={launchExt}
-          onDelete={uninstallExt}
-          onFindAddons={() => props.onOpenSettings()}
-        />
-      )}
+      <ExtensionsPanel
+        open={extPanelOpen}
+        list={extList}
+        busy={extBusy}
+        error={extError}
+        launchError={extLaunchError}
+        onRefresh={() => loadExtensions()}
+        onClose={() => setExtPanelOpen(false)}
+        onLaunch={launchExt}
+        onDelete={uninstallExt}
+        onFindAddons={() => props.onOpenSettings()}
+      />
 
       {/* #210: the hand-built overlay menu is gone; CtxMenu (above)
           renders the real m3e-menu surface anchored at the pointer. */}

@@ -1,18 +1,12 @@
-/* Extensions toolbar panel: floats bottom-right above the dock.
-   Uses surface tokens with fallbacks so it reads fine on both the
-   light and dark theme. */
-.lb-ext-panel {
-  position: fixed;
-  right: 16px;
-  bottom: 76px;
-  z-index: 60;
-  width: 320px;
-  max-width: calc(100vw - 32px);
-  background: var(--md-sys-color-surface-container-high, #2b2b2b);
-  color: var(--md-sys-color-on-surface, #e6e1e5);
-  border-radius: var(--m3e-shape-md, 16px);
-  padding: var(--md-sys-measurement-space100, 8px);
-  box-shadow: var(--md-sys-elevation-level3, 0 4px 16px rgba(0, 0, 0, 0.4));
+/* Extensions bottom sheet (#234): the old fixed-position corner
+   panel is gone; the m3e-bottom-sheet owns surface, scrim, entry and
+   exit. This file keeps the head, list and card metrics. */
+.lb-ext-sheet { --m3e-bottom-sheet-max-width: 480px; }
+.lb-ext-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-measurement-space50, 4px);
+  padding: 0 var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
 }
 .lb-ext-head {
   display: flex;
@@ -134,13 +128,7 @@
   padding: var(--md-sys-measurement-space50, 4px);
 }
 
-/* AMO add-on search (public AMO API v5): query row + result hits.
-   The panel can now grow past its old size; cap it to the viewport
-   and scroll inside. */
-.lb-ext-panel {
-  max-height: calc(100vh - 100px);
-  overflow-y: auto;
-}
+/* AMO add-on search (public AMO API v5): query row + result hits. */
 .lb-ext-search {
   display: flex;
   align-items: center;
@@ -231,11 +219,20 @@
   border-radius: var(--m3e-shape-xs, 8px);
 }
 
-/* ---- #76: panel entry/exit animation, per-row delete affordance,
-   detail action buttons. ---- */
-.lb-ext-panel {
-  animation: lb-pop-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1));
-  transform-origin: bottom right;
+/* ---- #234: the sheet owns entry/exit; these are the per-card
+   metrics. The item rules below stay: ExtManage.tsx and AmoSearch.tsx
+   reuse them inside Settings. ---- */
+.lb-ext-tile { cursor: pointer; width: 100%; }
+.lb-ext-tile-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space100, 8px);
+  width: 100%;
+  min-width: 0;
+}
+.lb-ext-tile-inner:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  border-radius: var(--m3e-shape-xs, 8px);
 }
 .lb-ext-item-actions {
   display: inline-flex;
