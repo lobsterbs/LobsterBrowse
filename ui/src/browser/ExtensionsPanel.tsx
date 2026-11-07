@@ -1,18 +1,17 @@
-/* Extensions toolbar card: the installed add-ons list as a launcher.
-   #230: pressing an extension launches its UI directly (its options
-   page); the configuration UI that used to render inside this card
-   moved to Settings > Extensions (browser/ExtManage.tsx, mounted by
-   pages/Settings.tsx). Search-and-install over the AMO API also lives
-   in Settings (browser/AmoSearch.tsx); the engine control-plane
-   queries and state stay in pages/Browser.tsx.
+/* Extensions bottom sheet (#234): the installed add-ons list as one
+   mini-card per extension - icon stand-in, then title; press launches
+   the extension UI directly (#230). Configuration stays in Settings
+   > Extensions (browser/ExtManage.tsx); search-and-install over the
+   AMO API lives in Settings too (browser/AmoSearch.tsx); the engine
+   control-plane queries and state stay in pages/Browser.tsx.
 
-   #76: the card animates in and out (Browser.tsx keeps it mounted
-   one animation longer and flips the exit class), and uninstall is
-   available from every surface: a trash affordance per row here plus
-   the Delete button in Settings, both asking first in a m3e-dialog
-   (#99). */
+   The sheet stays mounted and owns its open state (show/hide, the
+   closing event flowing back into Browser state), exactly like the
+   tab switcher. Uninstall is available from every surface: the
+   trash affordance per card here plus the Delete button in Settings,
+   both asking first in a m3e-dialog (#99). */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import EmptyState from "../components/ui/EmptyState";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
@@ -92,9 +91,37 @@ export default function ExtensionsPanel(props: {
     void el.show();
   }, [pendingDelete]);
 
+  /* #234: the bottom sheet owns its open state (show/hide, per the
+     @m3e/web docs). React never writes the open attribute; the
+     component's closing event (Escape, scrim dismissal, swipe-down)
+     flows back into React state instead, like the tab switcher. */
+  const sheetRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
+  const live = useRef(props);
+  live.current = props;
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const onClosing = () => live.current.onClose();
+    el.addEventListener("closing", onClosing);
+    return () => el.removeEventListener("closing", onClosing);
+  }, []);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    if (props.open) el.show();
+    else el.hide();
+  }, [props.open]);
+
   return (
-    <div className={"lb-ext-panel" + (props.open ? "" : " lb-out")} role="dialog" aria-label="Extensions">
-      <div className="lb-ext-head">
+    <m3e-bottom-sheet
+      modal=""
+      handle=""
+      hideable=""
+      handle-label="Dismiss extensions"
+      aria-label="Extensions"
+      {...{ class: "lb-ext-sheet", ref: sheetRef }}
+    >
+      <div slot="header" className="lb-ext-head">
         <span className="lb-ext-title">Extensions</span>
         <span>
           <m3e-icon-button aria-label="Refresh extensions" onClick={props.onRefresh}>
@@ -105,6 +132,7 @@ export default function ExtensionsPanel(props: {
           </m3e-icon-button>
         </span>
       </div>
+      <div className="lb-ext-sheet-body">
       <m3e-dialog {...{ ref: deleteDialogRef }} alert="">
         <span slot="header">Remove {pendingDelete?.name ?? "extension"}?</span>
         <p>Its stored data and caches are removed from the engine. This cannot be undone.</p>
@@ -148,32 +176,36 @@ export default function ExtensionsPanel(props: {
       ) : (
         <div className="lb-ext-list">
           {props.list.map((e) => (
-            <div
+            /* #234: one mini-card per extension - icon stand-in, then
+               title; press launches the extension UI directly (#230).
+               Version and state stay in Settings; the initials avatar
+               stays because the engine exposes no icon path. */
+            <m3e-card
               key={e.id}
-              className="lb-ext-item"
-              title={shownError(e.lastError) ?? ""}
-              role="button"
-              tabIndex={0}
-              onClick={() => props.onLaunch(e.id)}
-              onKeyDown={(ev) => {
-                /* #118: keys pressed on a nested control (Delete) belong
-                   to that control alone; Space must not scroll either. */
-                if (ev.target !== ev.currentTarget) return;
-                if (ev.key === "Enter" || ev.key === " ") {
-                  ev.preventDefault();
-                  props.onLaunch(e.id);
-                }
+              variant="outlined"
+              {...{
+                class: "lb-ext-tile",
+                role: "button",
+                tabIndex: 0,
+                title: shownError(e.lastError) ?? "",
+                "aria-label": "Open " + e.name,
+                onClick: () => props.onLaunch(e.id),
+                onKeyDown: (ev: KeyboardEvent) => {
+                  /* #118: keys pressed on a nested control (Delete) belong
+                     to that control alone; Space must not scroll either. */
+                  if (ev.target !== ev.currentTarget) return;
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    props.onLaunch(e.id);
+                  }
+                },
               }}
             >
-              <div className="lb-ext-ava" aria-hidden={true}>
+              <div slot="content" className="lb-ext-tile-inner">
+                <div className="lb-ext-ava" aria-hidden={true}>
                 {e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
               </div>
               <span className="lb-ext-name">{e.name}</span>
-              <span className="lb-ext-ver">{e.version}</span>
-              <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
-                {e.enabled ? e.state : "disabled"}
-              </span>
-              <span className="lb-ext-item-actions">
                 <m3e-icon-button
                   aria-label={"Delete " + e.name}
                   onClick={(ev) => {
@@ -183,8 +215,8 @@ export default function ExtensionsPanel(props: {
                 >
                   <m3e-icon name="delete" aria-hidden={true} />
                 </m3e-icon-button>
-              </span>
-            </div>
+              </div>
+            </m3e-card>
           ))}
         </div>
       )}
@@ -196,6 +228,7 @@ export default function ExtensionsPanel(props: {
           </m3e-button>
         </div>
       )}
-    </div>
+      </div>
+    </m3e-bottom-sheet>
   );
 }
