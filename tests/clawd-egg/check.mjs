@@ -18,7 +18,8 @@ const src = readFileSync(join(root, 'ui', 'src', 'pages', 'Settings.tsx'), 'utf8
 const img = src.indexOf('lb-clawd');
 assert.ok(img >= 0, 'Settings.tsx must reference the lb-clawd gif');
 assert.ok(src.includes('src="/clawd-sleep.gif"'), 'the gif must load from the local public asset');
-const about = src.indexOf('lb-about');
+/* Wave-80 redesign: the About group is now the p-about expansion panel; the old lb-about class anchor is gone. */
+const about = src.indexOf('id="p-about"');
 const build = src.indexOf('lb-build" title');
 assert.ok(about >= 0 && img > about, 'the gif must live inside the About group');
 assert.ok(build >= 0 && img < build, 'the gif must sit above the version line');
