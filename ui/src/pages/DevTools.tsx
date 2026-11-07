@@ -727,19 +727,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       aria-label="Developer tools"
       {...{ class: "lb-dt-sheet", ref: sheetRef }}
     >
-      <div slot="header" className="lb-dt-sheet-head">
-        <span className="lb-dt-title">
-          <m3e-icon name="bug_report" aria-hidden={true} /> DevTools - {tab.title || "tab"}
-        </span>
-        <span className="lb-dt-head-actions">
-          <m3e-icon-button aria-label="View app logs" onClick={() => live.current.onOpenLogs()}>
-            <m3e-icon name="history" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button aria-label="Close developer tools" onClick={() => live.current.onClose()}>
-            <m3e-icon name="close" aria-hidden={true} />
-          </m3e-icon-button>
-        </span>
-      </div>
+      <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+        <m3e-icon-button slot="leading" aria-label="Back" onClick={() => live.current.onClose()}>
+          <m3e-icon name="arrow_back" aria-hidden={true} />
+        </m3e-icon-button>
+        <span slot="title">DevTools - {tab.title || "tab"}</span>
+      </m3e-app-bar>
 
       <div className="lb-dt-content">
         {/* Sub-tool picker (#239, the bottom-bar pattern): one button

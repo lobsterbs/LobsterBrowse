@@ -141,11 +141,9 @@ body.lb-fancy .lb-home m3e-search-view {
 }
 /* #231 (user request 2026-11-07): the open suggestion list reads as
    frosted glass, consistent with the bar, rail and wordmark frost
-   chain. Supersedes the 2026-11-06 "no extra surface" change: the
-   frost rides the suggestor surface itself now - translucent
-   surface-container tint, panel-radius-clipped blur, hairline edge
-   plus inset highlight. lb-fancy off leaves this surface untouched. */
-body.lb-fancy .lb-ac {
+   chain. Wave 85: an overlay frosts regardless of the Enhanced UI
+   setting - it is always over other content. */
+.lb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
   border: 0;
   border-radius: var(--m3e-shape-lg, 16px);
@@ -209,6 +207,12 @@ body.lb-fancy .lb-home pre.lb-ascii {
   --m3e-expansion-panel-open-elevation: var(--md-sys-elevation-level0, none);
   --m3e-expansion-panel-shape: var(--m3e-shape-md);
   --m3e-expansion-panel-open-shape: var(--m3e-shape-md);
+  /* Wave 85 uniformity: the panel header and body align to the same
+     12px inline rhythm as the inline row cards, so both card shapes
+     read as one family with identical text margins. */
+  --m3e-expansion-header-padding-left: var(--md-sys-measurement-space150);
+  --m3e-expansion-header-padding-right: var(--md-sys-measurement-space150);
+  --m3e-expansion-panel-content-padding: 0 var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
 }
 /* Single-control sub-cards (user request 2026-11-07): a sub option
    whose entire payload is one control is an inline row card, not an
@@ -223,12 +227,17 @@ body.lb-fancy .lb-home pre.lb-ascii {
   flex-wrap: wrap;
   gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
   width: 100%;
+  /* Wave 85 uniformity: matches the 48px collapsed expansion-panel
+     header height, so inline rows and collapsed panels read as the
+     same card size. */
+  min-height: 48px;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
   background: var(--md-sys-color-surface-container-highest, #37393e);
   border-radius: var(--md-sys-shape-corner-medium, 12px);
+  box-sizing: border-box;
 }
 .lb-set-inline .lb-setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
-.lb-set-inline .lb-setting-label { margin: 0; }
+.lb-set-inline .lb-setting-label { margin: 0; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
 .lb-set-inline .lb-setting-desc {
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   color: var(--md-sys-color-on-surface-variant);
@@ -314,9 +323,9 @@ body.lb-fancy .lb-home pre.lb-ascii {
    rules, DevTools toolbar) it just must not collapse. */
 .lb-seed-row m3e-select,
 .lb-dt-toolbar m3e-select { flex: 0 1 auto; min-width: 130px; }
-/* 13px is a deliberate off-scale size: the M3 typescale has 12 (body-small)
-   and 14 (body-medium) only. Kept raw until a design call bumps it. */
-.lb-muted { opacity: 0.65; font-size: 13px; }
+/* Wave 85 typography: every text element rides the typescale tokens;
+   supporting text is body-small (12px), no off-scale sizes. */
+.lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-curl { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.75; }
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
@@ -447,7 +456,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
 .lb-tab-favicon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; object-fit: contain; }
 .lb-tab .lb-tab-close {
   border-radius: 50%;
-  font-size: 15px;
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
   opacity: 0;
   transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring);
 }
@@ -683,7 +692,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   text-align: left;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   font-variation-settings: "wght" 500;
   white-space: nowrap;
   overflow: hidden;
@@ -706,7 +715,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   -webkit-text-fill-color: var(--md-sys-color-on-surface, #ece6f0);
   caret-color: var(--md-sys-color-primary, #6750a4);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   outline: none;
 }
 .lb-url-input::placeholder {
@@ -749,11 +758,11 @@ body.lb-fancy .lb-home pre.lb-ascii {
   max-height: 300px;
   overflow-y: auto;
 }
-/* #232 (user request 2026-11-07): under Enhanced UI the toolbar
-   dropdown is frosted glass like the toolbar it pops out of -
-   translucent surface tint plus backdrop blur, hairline ring and
-   inset highlight matching the other lb-fancy glass surfaces. */
-body.lb-fancy .lb-tb-ac {
+/* #232 (user request 2026-11-07): the toolbar dropdown is frosted
+   glass like the surfaces it floats over - translucent surface tint
+   plus backdrop blur, hairline ring and inset highlight. Wave 85:
+   overlays frost regardless of the Enhanced UI setting. */
+.lb-tb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
   border-color: transparent;
   backdrop-filter: blur(24px) saturate(1.4);
@@ -770,7 +779,7 @@ body.lb-fancy .lb-tb-ac {
   border: none;
   color: var(--md-sys-color-on-surface, #1d1b20);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   cursor: pointer;
 }
 .lb-tb-ac-item:hover,
@@ -811,7 +820,7 @@ body.lb-fancy .lb-tb-ac {
 .lb-dt-pager { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-dt-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--md-sys-measurement-space100); overflow: auto; }
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
-.lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: 13px; overflow: auto; }
+.lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: auto; }
 .lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
 .lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
 
@@ -820,9 +829,6 @@ body.lb-fancy .lb-tb-ac {
    surfaces as m3e-cards (content above a divider, inline action
    buttons under it). The sheet body owns scrolling. */
 .lb-dt-sheet { --m3e-bottom-sheet-max-width: 720px; }
-.lb-dt-sheet-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
-.lb-dt-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.lb-dt-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
 .lb-dt-content { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 /* #239: the sub-tool picker is a bottom-bar style row; the active
    sub-tool is the tonal rounded pill (variant), the inactive ones
@@ -868,7 +874,7 @@ body.lb-fancy .lb-tb-ac {
 .lb-script-code { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--md-sys-typescale-label-small-font-size, 11px); }
 .lb-check { font-size: var(--md-sys-typescale-body-small-font-size, 12px); display: flex; align-items: center; gap: var(--md-sys-measurement-space50); }
 .lb-dt-script-run { display: flex; align-items: center; gap: var(--md-sys-measurement-space125); font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.85; flex-wrap: wrap; }
-.lb-inspect { font-size: 13px; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); overflow: auto; }
+.lb-inspect { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); overflow: auto; }
 .lb-script-list { margin: var(--md-sys-measurement-space50) 0; padding-left: var(--md-sys-measurement-space250); font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; max-height: 40%; overflow: auto; }
 
 /* Logs */
@@ -1075,11 +1081,12 @@ m3e-icon-button:active { transform: scale(0.88); }
 }
 /* The card's slotted rows need their own padding: the m3e-card
    surface has none, and unpadded rows (especially the two long
-   action buttons) previously escaped the card outline entirely. */
-.lb-site-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); box-sizing: border-box; }
-.lb-site-ctitle { font-variation-settings: "wght" 500; font-size: 13px; }
+   action buttons) previously escaped the card outline entirely.
+   Wave 85: the card headers are m3e-app-bar top bars now, so the old
+   lb-site-head/lb-site-ctitle rules are gone; title text sizes come
+   from the app-bar typescale. */
 .lb-site-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); width: 100%; padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150); box-sizing: border-box; }
-.lb-site-row { font-size: 13px; word-break: break-all; }
+.lb-site-row { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); word-break: break-all; }
 .lb-site-actions { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75); justify-content: flex-end; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200); box-sizing: border-box; }
 .lb-site-cookies {
   max-height: 130px;
@@ -1206,16 +1213,57 @@ m3e-icon-button:active { transform: scale(0.88); }
   cursor: pointer;
 }
 .lb-diag-tb-chip m3e-icon { font-size: 16px; }
+/* Real frosted glass (user request 2026-11-07): every surface that
+   floats over other content gets a translucent surface tint plus
+   backdrop blur and saturation. The m3e-bottom-sheet host paints its
+   own container background (verified in the @m3e/web 2.8.2 dist), so
+   the frost rides the host element directly and the sheet header
+   slot re-uses the same container token for the m3e-app-bar top bars
+   slotted into it. m3e-dialog cannot join the chain: its surface is
+   painted on a shadow-DOM ::before with no part or custom-property
+   path to a backdrop filter, so dialogs keep their solid surface. */
+m3e-bottom-sheet {
+  --m3e-bottom-sheet-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-low, #f7f2fa) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+/* Same frost for the other overlay families: menus (the host paints
+   the standard container color), the command palette, and the
+   floating elevated cards (downloads, file viewer). */
+m3e-menu {
+  --m3e-menu-container-color: color-mix(in srgb, var(--md-sys-color-surface-container, #f3edf7) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.lb-cmdk {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.lb-dl-card,
+.lb-fv-card {
+  --m3e-elevated-card-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-low, #f7f2fa) 78%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+/* Basic top bars (user request 2026-11-07): every top bar is an
+   m3e-app-bar with only a back button and a title. The bar paints a
+   transparent container: in bottom sheets the frosted sheet surface
+   shows through (the header slot would otherwise inherit the sheet
+   container token and double-paint), and on pages and cards the
+   surface behind the bar stays visible. */
+.lb-sheet-bar {
+  --m3e-app-bar-container-color: transparent;
+  --m3e-app-bar-container-elevation: none;
+  --m3e-app-bar-container-elevation-on-scroll: none;
+}
 /* Tab switcher (user request 2026-11-07): a modal m3e-bottom-sheet;
-   the sheet owns position, scrim and open/close motion. The sheet
-   stays mounted (preview iframes must stay alive between opens or
-   tiles show blank frames, not pages). */
+   the sheet owns position, scrim and open/close motion. One row per
+   tab: frosted avatar favicon, title, close X. */
 .lb-tabs-sheet { --m3e-bottom-sheet-max-width: 720px; }
-.lb-tabs-sheet-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
-/* #233 (user request 2026-11-07): one tab per row - a full-width
-   horizontal mini-card (favicon, title, small preview, always-visible
-   close X). The list scrolls vertically; a dying card collapses
-   vertically so the cards below slide up smoothly. */
+/* One tab per row (user request 2026-11-07): frosted avatar favicon,
+   site title, close X. The list scrolls vertically; a dying row
+   collapses vertically so the rows below slide up smoothly. */
 .lb-tabs-row {
   display: flex;
   flex-direction: column;
@@ -1226,73 +1274,70 @@ m3e-icon-button:active { transform: scale(0.88); }
   overflow-x: hidden;
   padding: var(--md-sys-measurement-space50);
 }
-/* Tiles are m3e-cards (filled active / outlined inactive): the card
-   owns surface, padding and shape; this keeps only the card geometry
-   and the close-away motion. height: auto -> 0 interpolates because
-   :root sets interpolate-size: allow-keywords (Chromium 129+); older
-   engines fall back to the instant snap, as documented there. */
-.lb-tabs-tile {
-  flex: 0 0 auto;
+/* Rows are plain buttons (not cards): the active tab reads as a
+   rounded tonal pill behind the whole row (the wave-84 active-marker
+   language), the inactive rows stay transparent until hovered. */
+.lb-tab-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--md-sys-measurement-space150);
   width: 100%;
+  min-height: 56px;
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full, 9999px);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
   cursor: pointer;
   transition: opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
     height var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
     margin-top var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-tabs-tile-inner { display: flex; flex-direction: row; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; min-width: 0; }
-/* The dying card surrenders its layout footprint: height animates to
-   0 and a negative margin eats the list gap, so the surviving cards
-   slide up smoothly inside the close window and the final unmount
-   changes nothing (#29). */
-.lb-tabs-tile.closing {
-  opacity: 0;
-  height: 0;
-  margin-top: calc(-1 * var(--md-sys-measurement-space100, 8px));
-  overflow: hidden;
+.lb-tab-row:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
 }
-/* #233: a small preview thumbnail, not the old 148x88 tile hero. */
-.lb-tab-preview {
-  position: relative;
-  width: 96px;
-  height: 57px;
-  border-radius: var(--m3e-shape-xs);
-  overflow: hidden;
-  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
+.lb-tab-row.active {
+  background: var(--md-sys-color-secondary-container, #e8def8);
+  color: var(--md-sys-color-on-secondary-container, #1d192b);
+}
+.lb-tab-row:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -2px;
+}
+/* The favicon sits inside a frosted m3e-avatar: translucent surface
+   tint plus backdrop blur, so the glass reads behind the icon. */
+.lb-tab-avatar {
+  --m3e-avatar-size: 40px;
+  --m3e-avatar-color: color-mix(in srgb, var(--md-sys-color-surface-container, #f3edf7) 55%, transparent);
+  --m3e-avatar-label-color: var(--md-sys-color-on-surface-variant, #49454f);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
   flex-shrink: 0;
 }
-.lb-tab-preview iframe {
-  width: 384px;
-  height: 228px;
-  border: 0;
-  transform: scale(0.25);
-  transform-origin: 0 0;
-  pointer-events: none;
-}
-.lb-tab-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 57px;
-  opacity: 0.5;
-}
-.lb-tabs-tile-inner .lb-tab-favicon { width: 16px; height: 16px; flex-shrink: 0; }
-.lb-tabs-tile-inner .lb-tabs-title {
+.lb-tab-avatar m3e-icon { font-size: 20px; }
+.lb-tab-row .lb-tabs-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+  font-size: var(--md-sys-typescale-body-large-font-size, 16px);
+  line-height: var(--md-sys-typescale-body-large-line-height, 24px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* #233: the close X is always visible, not hover-gated. */
-.lb-tabs-tile .lb-tab-close {
-  font-size: 15px;
-  opacity: 0.8;
-  flex-shrink: 0;
-  transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
+/* The dying row surrenders its layout footprint: height animates to
+   0 and a negative margin eats the list gap, so the surviving rows
+   slide up smoothly inside the close window (#29). */
+.lb-tab-row.closing {
+  opacity: 0;
+  height: 0;
+  min-height: 0;
+  margin-top: calc(-1 * var(--md-sys-measurement-space100, 8px));
+  overflow: hidden;
 }
-.lb-tabs-tile .lb-tab-close:hover { opacity: 1; }
 /* The toolbar slides fully away while the tab switcher is open; this
    rule must sit after the dock hover/reveal rules to win the cascade. */
 .lb-dock.tabs-open .lb-dock-pill { transform: translateY(calc(100% + 24px)); }
@@ -1344,7 +1389,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-dl-item > m3e-icon { flex-shrink: 0; }
 .lb-dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25); }
 .lb-dl-name {
-  font-size: 13px;
+  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1353,7 +1398,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
   .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
-  .lb-tabs-tile, .lb-dock-pill { transition: none; }
+  .lb-tab-row, .lb-dock-pill { transition: none; }
 }
 
 /* Copied-to-clipboard toast (Logs): M3E-styled transient snackbar. */
@@ -1410,7 +1455,7 @@ m3e-snackbar {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-ext-note-title { font-weight: 600; font-size: 0.95rem; }
+.lb-ext-note-title { font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-title-small-font-size, 14px); }
 .lb-ext-note-msg { opacity: 0.85; margin-top: var(--md-sys-measurement-space25, 2px); }
 .lb-ext-note-actions {
   display: flex;
@@ -1631,35 +1676,14 @@ body .lb-ext-panel {
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.3));
 }
 
-/* #88/#91/#233: the card list scrolls vertically; snapping plus an
-   edge mask make the affordance read. Focus rings for keyboard use;
-   the close affordance is a real button, so it gets a button reset. */
+/* #88/#91: the row list scrolls vertically; snapping plus an edge
+   mask make the affordance read. */
 .lb-tabs-row {
   scroll-snap-type: y proximity;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
-.lb-tabs-tile { scroll-snap-align: start; }
-.lb-tabs-tile:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
-}
-.lb-tabs-tile .lb-tab-close {
-  display: inline-flex;
-  align-items: center;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-}
-.lb-tabs-tile .lb-tab-close:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 1px;
-  opacity: 1;
-}
-/* #233: the cards are full-width rows now; nothing needs the old
-   132px narrow-screen tile shrink. */
+.lb-tab-row { scroll-snap-align: start; }
 /* ---- #213: favicon-hue toolbar tint (dark scheme only) ----
    Browser.tsx sets --lb-site-hue (degrees) and the lb-site-tint class
    on the toolbar host when the active tab's favicon carries a usable
@@ -1681,7 +1705,8 @@ body .lb-ext-panel {
   padding: var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space150, 12px);
   color: var(--md-sys-color-on-surface-variant, #cac4d0);
 }
-.lb-empty-state m3e-icon { font-size: 40px; opacity: 0.65; }
+/* #85: the glyph is sized through the icon component token, not a raw font-size. */
+.lb-empty-state m3e-icon { --m3e-icon-size: 40px; opacity: 0.65; }
 .lb-empty-headline { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); color: var(--md-sys-color-on-surface, #e4e2e6); }
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 
@@ -1737,9 +1762,10 @@ body .lb-ext-panel {
    8px below it (to the screen edge). */
 .lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space100, 8px); flex: none; }
 .lb-ai-under .lb-ai-quota { margin-left: 0; }
-/* Frosted glass under Enhanced UI: same treatment as the Home bar
-   (tint + blur + ring + gloss), scoped to the setting's body class. */
-body.lb-fancy .lb-ai-bar m3e-search-bar {
+/* Frosted glass: same treatment as the Home bar (tint + blur + ring
+   + gloss). Wave 85: the chat bar floats over the scrolling chat, so
+   it frosts regardless of the Enhanced UI setting. */
+.lb-ai-bar m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host so the blurred corners match the pill shape. */
   border-radius: 9999px;
@@ -2022,7 +2048,7 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
   line-height: 1;
   flex: none;
   color: var(--md-sys-color-on-surface-variant, #cac4d0);
@@ -2062,12 +2088,6 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
   max-height: 60vh;
   overflow-y: auto;
-}
-.lb-ai-hist-head {
-  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px);
-  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
-  font-weight: var(--md-sys-typescale-title-medium-font-weight, 500);
-  color: var(--md-sys-color-on-surface, #e6e1e9);
 }
 .lb-ai-hist-row {
   display: flex;
@@ -2119,7 +2139,6 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
        unit; blocked hosts sit on a surface tint; the footer button is
        a full-width tonal button. ---- */
 .lb-ad-sheet { --m3e-bottom-sheet-max-width: 480px; }
-.lb-ad-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
 .lb-ad-body {
   display: flex;
   flex-direction: column;
@@ -2142,8 +2161,8 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
 }
 .lb-ad-hero-ic > m3e-icon { color: currentColor; }
 .lb-ad-hero-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lb-ad-num { font-size: 40px; font-variation-settings: "wght" 600; line-height: 1; color: var(--md-sys-color-primary); }
-.lb-ad-sub { margin: 0; font-size: 13px; }
+.lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" 600; line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
+.lb-ad-sub { margin: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-ad-hosts {
   display: flex;
   flex-direction: column;
@@ -2154,10 +2173,10 @@ body.lb-fancy .lb-ai-bar m3e-search-bar {
   border-radius: var(--md-sys-shape-corner-medium, 12px);
   background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
 }
-.lb-ad-host { font-size: 12px; word-break: break-all; }
+.lb-ad-host { font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
 .lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
 .lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
-.lb-ad-rowtitle { font-size: 13px; }
+.lb-ad-rowtitle { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); }
 .lb-ad-foot { width: 100%; }
 
 /* ---- Clawd easter egg: the sleeping mascot in the Settings About

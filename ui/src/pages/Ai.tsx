@@ -775,8 +775,13 @@ export default function AiPage() {
       </div>
 
       <m3e-bottom-sheet {...{ ref: sheetRef }}>
+        <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+          <m3e-icon-button slot="leading" aria-label="Back" onClick={() => sheetRef.current?.hide()}>
+            <m3e-icon name="arrow_back" aria-hidden={true} />
+          </m3e-icon-button>
+          <span slot="title">Conversations</span>
+        </m3e-app-bar>
         <div className="lb-ai-hist">
-          <div className="lb-ai-hist-head" slot="header">Conversations</div>
           {histChats.length === 0 && (
             <div className="lb-ai-hist-empty">
               No saved conversations yet. Chats are saved encrypted on this device.

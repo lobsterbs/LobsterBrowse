@@ -121,17 +121,12 @@ export default function ExtensionsPanel(props: {
       aria-label="Extensions"
       {...{ class: "lb-ext-sheet", ref: sheetRef }}
     >
-      <div slot="header" className="lb-ext-head">
-        <span className="lb-ext-title">Extensions</span>
-        <span>
-          <m3e-icon-button aria-label="Refresh extensions" onClick={props.onRefresh}>
-            <m3e-icon name="refresh" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-icon-button aria-label="Close extensions" onClick={props.onClose}>
-            <m3e-icon name="close" aria-hidden={true} />
-          </m3e-icon-button>
-        </span>
-      </div>
+      <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
+        <m3e-icon-button slot="leading" aria-label="Back" onClick={props.onClose}>
+          <m3e-icon name="arrow_back" aria-hidden={true} />
+        </m3e-icon-button>
+        <span slot="title">Extensions</span>
+      </m3e-app-bar>
       <div className="lb-ext-sheet-body">
       <m3e-dialog {...{ ref: deleteDialogRef }} alert="">
         <span slot="header">Remove {pendingDelete?.name ?? "extension"}?</span>
