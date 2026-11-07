@@ -439,18 +439,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     else el.hide();
   }, [open]);
 
-  /* Connected button-group selection: the group toggles its own
-     buttons, so reconcile `selected` from state after every page
-     change instead of trusting attribute diffing. */
-  const bgroupRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const g = bgroupRef.current;
-    if (!g) return;
-    g.querySelectorAll("m3e-button").forEach((b) => {
-      const btn = b as HTMLElement & { selected?: boolean };
-      btn.selected = btn.getAttribute("data-page") === dt.page;
-    });
-  }, [dt.page]);
 
   useEffect(() => {
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
@@ -754,22 +742,30 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       </div>
 
       <div className="lb-dt-content">
-        {/* Sub-tool picker: one button per tool in a connected
-            m3e-button-group (single-select; the group manages the
-            press choreography, state reconciles `selected` above). */}
-        <m3e-button-group
-          variant="connected"
-          {...{ class: "lb-dt-bgroup", ref: bgroupRef }}
-          aria-label="Developer tools sections"
-        >
-          {PAGES.map(([page, label, icon]) => (
-            <m3e-button key={page} data-page={page} toggle="" onClick={() => setDt({ page })}>
-              <m3e-icon name={icon} aria-hidden={true} />
-              {label}
-              {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
-            </m3e-button>
-          ))}
-        </m3e-button-group>
+        {/* Sub-tool picker (#239, the bottom-bar pattern): one button
+            per sub-tool; the active one is a tonal rounded pill behind
+            its icon and label, the inactive ones are borderless text
+            buttons - the pill is the active indication, no text
+            marker. Plain buttons keep native Tab / Enter / Space. */}
+        <div className="lb-dt-nav" aria-label="Developer tools sections">
+          {PAGES.map(([page, label, icon]) => {
+            const on = dt.page === page;
+            return (
+              <m3e-button
+                key={page}
+                variant={on ? "tonal" : "text"}
+                shape="rounded"
+                aria-current={on ? "true" : undefined}
+                {...{ class: "lb-dt-nav-btn" }}
+                onClick={() => setDt({ page })}
+              >
+                <m3e-icon name={icon} aria-hidden={true} />
+                {label}
+                {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
+              </m3e-button>
+            );
+          })}
+        </div>
 
         {dt.page === "console" && (
           <>

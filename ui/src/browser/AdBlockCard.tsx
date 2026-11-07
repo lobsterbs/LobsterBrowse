@@ -1,10 +1,14 @@
-/* Ad-blocking card (overflow menu): a per-document ad/tracker block
-   counter fed by the scoped diagnostics ring (the same sanitized
-   source the DevTools diagnostics page reads), plus the site-scoped
-   block switch. The count poll lives here (presentational state
-   only); the rules themselves live in pages/Browser.tsx and the
-   Settings store. */
-import { useEffect, useState } from "react";
+/* Ad-blocking sheet (#236): the overflow card is now a modal
+   m3e-bottom-sheet matching the extensions and tab sheets. It shows a
+   per-document ad/tracker block counter fed by the scoped diagnostics
+   ring (the same sanitized source the DevTools diagnostics page
+   reads), plus the site-scoped block switch. The count poll lives
+   here (presentational state only) and only runs while the sheet is
+   open; the rules themselves live in pages/Browser.tsx and the
+   Settings store. The sheet stays mounted; open/close rides the
+   sheet's own show()/hide() methods with the closing event flowing
+   back into Browser state (the TabSwitcherCard pattern). */
+import { useEffect, useRef, useState } from "react";
 import { zlContentQuery, zlSend } from "../zeolite";
 import {
   blockedHostOf, diagnosticsScope, pollDocumentDiagnostics, snapshotForScope,
@@ -12,8 +16,8 @@ import {
 } from "./diagnosticsScope";
 
 export default function AdBlockCard(props: {
-  /* #76: true while the close animation plays. */
-  closing?: boolean;
+  /* #236: the sheet owns its open state; show/hide ride props.open. */
+  open: boolean;
   clientId?: string;
   source?: EngineSource;
   host: string;
@@ -28,15 +32,44 @@ export default function AdBlockCard(props: {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(props.clientId, props.source);
+
+  /* Live-props ref: the sheet's event listener outlives renders. */
+  const live = useRef(props);
+  live.current = props;
+  const sheetRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
+
+  /* The bottom sheet owns its open state (show/hide methods, per the
+     @m3e/web docs). React never writes the open attribute; the
+     component's closing event (Escape, scrim dismissal, swipe-down)
+     flows back into React state instead. */
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const onClosing = () => live.current.onClose();
+    el.addEventListener("closing", onClosing);
+    return () => el.removeEventListener("closing", onClosing);
+  }, []);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    if (props.open) el.show();
+    else el.hide();
+  }, [props.open]);
+
   /* Same scoped poll as the DevTools diagnostics page: zl:getNetLog
-     and zl:getDiag, sanitized and scope-checked before they land. */
-  useEffect(() => pollDocumentDiagnostics(
-    diagnosticsScope(props.clientId, props.source), zlSend, zlContentQuery,
-    (snap, st) => {
-      setSnapshot(snap);
-      setStatus(st ?? null);
-    },
-  ), [props.clientId, props.source]);
+     and zl:getDiag, sanitized and scope-checked before they land.
+     #236: the poll only runs while the sheet is open. */
+  useEffect(() => {
+    if (!props.open) return;
+    return pollDocumentDiagnostics(
+      diagnosticsScope(props.clientId, props.source), zlSend, zlContentQuery,
+      (snap, st) => {
+        setSnapshot(snap);
+        setStatus(st ?? null);
+      },
+    );
+  }, [props.open, props.clientId, props.source]);
+
   const current = snapshotForScope(snapshot, scope);
   const blocked = current ? current.events.filter((e) => e.category === "BLOCKED") : [];
   /* Hosts ranked by blocked-request count (top five). */
@@ -48,29 +81,39 @@ export default function AdBlockCard(props: {
   const top = [...byHost.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const effective = props.globalAdblock && props.siteAdblock !== false;
   return (
-    <m3e-card
-      variant="elevated"
+    <m3e-bottom-sheet
+      modal=""
+      handle=""
+      hideable=""
+      handle-label="Dismiss ad blocking"
       aria-label="Ad blocking"
-      {...{ class: props.closing ? "lb-ad-card lb-out" : "lb-ad-card" }}
+      {...{ class: "lb-ad-sheet", ref: sheetRef }}
     >
-      <div slot="header" className="lb-site-head">
+      <div slot="header" className="lb-ad-head">
         <span className="lb-site-ctitle">Ad blocking</span>
         <m3e-icon-button aria-label="Close ad blocking" onClick={props.onClose}>
           <m3e-icon name="close" aria-hidden={true} />
         </m3e-icon-button>
       </div>
-      <div slot="content" className="lb-ad-body">
+      <div className="lb-ad-body">
         {current ? (
           <>
-            <div className="lb-ad-count">
-              <m3e-icon name="shield" aria-hidden={true} />
-              <span className="lb-ad-num">{blocked.length}</span>
+            {/* #236: hero row - the shield sits in a tonal circle
+                beside the count, so icon and number read as one
+                unit. */}
+            <div className="lb-ad-hero">
+              <div className="lb-ad-hero-ic">
+                <m3e-icon name="shield" aria-hidden={true} />
+              </div>
+              <div className="lb-ad-hero-txt">
+                <span className="lb-ad-num">{blocked.length}</span>
+                <p className="lb-ad-sub">
+                  {blocked.length === 1
+                    ? "ad and tracker request blocked on this page"
+                    : "ad and tracker requests blocked on this page"}
+                </p>
+              </div>
             </div>
-            <p className="lb-ad-sub">
-              {blocked.length === 1
-                ? "ad and tracker request blocked on this page"
-                : "ad and tracker requests blocked on this page"}
-            </p>
             {top.length > 0 ? (
               <div className="lb-ad-hosts">
                 {top.map(([h, n]) => (
@@ -106,11 +149,13 @@ export default function AdBlockCard(props: {
             onClick={() => props.onSiteToggle(!effective)}
           />
         </div>
-        <m3e-button onClick={props.onOpenSettings}>
+        {/* #236: full-width tonal footer button, matching the sheet
+            pattern. */}
+        <m3e-button variant="tonal" {...{ class: "lb-ad-foot" }} onClick={props.onOpenSettings}>
           <m3e-icon name="settings" aria-hidden={true} />
           Configure in Settings
         </m3e-button>
       </div>
-    </m3e-card>
+    </m3e-bottom-sheet>
   );
 }
