@@ -55,6 +55,35 @@ import M3eSelect from "../M3eSelect";
 import { pollAction } from "../browser/pollRecovery";
 import { faviconBlob, faviconCandidates, faviconRoute } from "../browser/favicon";
 
+/* ---- Toolbar scroll tuck/reveal (user request 2026-11-07):
+   scrolling down inside the proxied page tucks the dock away, exactly
+   like the timed auto-retract; scrolling back up to the very top of
+   the page reveals it again without touching the toolbar. Frames are
+   same-origin by architecture, so the parent listens on the frame's
+   own window (capture phase: inner scrollers report too); a
+   per-window flag keeps the hook idempotent, the same guard pattern
+   hookFrameDevTools uses. Cross-origin frames (split mode) throw and
+   stay unwired: the timed retract still covers them. ---- */
+const hookFrameScroll = (tabId: number, frame: HTMLIFrameElement, onScroll: (y: number) => void): void => {
+  try {
+    const w0 = frame.contentWindow;
+    if (!w0) return;
+    const w = w0 as Window & typeof globalThis & { __lbScrollWired?: boolean };
+    if (w.__lbScrollWired) return;
+    w.__lbScrollWired = true;
+    const send = () => {
+      try {
+        onScroll(w.scrollY);
+      } catch {
+        /* torn-down frame */
+      }
+    };
+    w.addEventListener("scroll", send, true);
+  } catch {
+    /* cross-origin frame: no scroll signal, the timed retract applies */
+  }
+};
+
 /* ---- DevTools capture (#106): the engine exposes no page console
    or request surface to the embedder, so the Console and Network
    panels had no producers and stayed empty on every page. Frames are
@@ -1354,6 +1383,24 @@ export default function BrowserView(props: Props) {
     setDockTucked(false);
     hideSoon();
   };
+  /* Scroll tuck/reveal (user request 2026-11-07): a down-scroll in
+     the active page tucks the dock like the timed retract; scrolling
+     back to the very top reveals it. The live-ref indirection keeps
+     the per-frame hook stable across renders. */
+  const scrollYs = useRef<Map<number, number>>(new Map());
+  const frameScrollRef = useRef<((tabId: number, y: number) => void) | null>(null);
+  frameScrollRef.current = (tabId: number, y: number) => {
+    if (tabId !== active.id || !settings.autoHideChrome) return;
+    const prev = scrollYs.current.get(tabId) ?? 0;
+    scrollYs.current.set(tabId, y);
+    if (y > prev) {
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      setDockTucked(true);
+    } else if (y <= 1 && dockTucked) {
+      setDockTucked(false);
+      hideSoon();
+    }
+  };
   useEffect(() => {
     hideSoon();
     return () => {
@@ -2588,9 +2635,13 @@ export default function BrowserView(props: Props) {
                       setCommitted(t.id, true);
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                       hookFrameDevTools(el);
+                      scrollYs.current.delete(t.id);
+                      hookFrameScroll(t.id, el, (y) => frameScrollRef.current?.(t.id, y));
                     });
                     el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                     hookFrameDevTools(el);
+                    scrollYs.current.delete(t.id);
+                    hookFrameScroll(t.id, el, (y) => frameScrollRef.current?.(t.id, y));
                   }
                 } else frames.current.delete(t.id);
               }}
@@ -2679,10 +2730,10 @@ export default function BrowserView(props: Props) {
           hideSoon();
         }}
       >
-        {/* Tab switcher: its own surface while the toolbar slides
-            away (.lb-dock.tabs-open). Horizontal row of live preview
-            tiles (scriptless engine frames, scaled 0.25), not a list.
-            Extracted to browser/TabSwitcherCard; state stays here. */}
+        {/* Tab switcher: a modal m3e-bottom-sheet (user request
+            2026-11-07) with one preview card per tab (favicon, title,
+            live tile). Extracted to browser/TabSwitcherCard; state
+            stays here. */}
         <TabSwitcherCard
           tabs={tabs}
           activeId={active.id}
@@ -2961,15 +3012,6 @@ export default function BrowserView(props: Props) {
             >
               Extensions
             </m3e-menu-item-checkbox>
-            <m3e-menu-item
-              disabled={downloads.length === 0 ? "" : undefined}
-              onClick={() => {
-                setDlOpen(true);
-                setTabsOpen(false);
-              }}
-            >
-              Downloads
-            </m3e-menu-item>
             <m3e-menu-item
               onClick={() => {
                 setAdOpen(true);

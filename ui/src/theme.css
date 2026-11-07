@@ -181,9 +181,19 @@ body.lb-fancy .lb-home pre.lb-ascii {
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 
-/* Settings */
-.lb-panel-header { cursor: pointer; }
-.lb-panel-body { padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
+/* Settings (global redesign, user request 2026-11-07): the page is a
+   m3e-content-pane; every sub-card is an m3e-expansion-panel whose
+   header carries the headline and supporting text. */
+.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.lb-setp-headline { font-variation-settings: "wght" 500; }
+.lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
+.lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-set-anchor { scroll-margin-block: 96px; }
+/* Zeolite-only options while ScramJet is the current engine: greyed
+   out, values preserved. */
+.lb-zl-off { opacity: 0.55; }
+.lb-zl-guard { pointer-events: none; opacity: 0.45; }
+.lb-zl-note { margin: 0; }
 .lb-setting-row {
   display: flex;
   justify-content: space-between;
@@ -549,33 +559,15 @@ body.lb-fancy .lb-home pre.lb-ascii {
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
 }.lb-set-search { margin: var(--md-sys-measurement-space100) 0 var(--md-sys-measurement-space150); }
 .lb-set-results { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-.lb-set-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant, var(--md-sys-color-outline)) 45%, transparent);
-  border-radius: var(--m3e-shape-md, 12px);
-  background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 55%, transparent);
-  color: var(--md-sys-color-on-surface);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.lb-set-result:hover { border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent); }
-.lb-set-result:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+/* Search result cards: m3e-card variant="filled" owns the surface;
+   the full-width button inside carries the layout and focus. */
+.lb-set-result { --m3e-card-padding: 0; }
 .lb-set-result-section {
   font-size: var(--md-sys-typescale-label-small-font-size, 11px);
   color: var(--md-sys-color-on-surface-variant);
   white-space: nowrap;
 }
 .lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
-/* Settings cards (user request 2026-11-06): md-card variant="filled"
-   owns the surface - the old hand-rolled borders and translucent
-   backgrounds are gone. */
-md-card.lb-set-result { border: 0; background: none; }
-.lb-set-results md-card.lb-set-result { padding: 0; }
 .lb-set-result-btn {
   display: flex;
   align-items: center;
@@ -592,13 +584,9 @@ md-card.lb-set-result { border: 0; background: none; }
 }
 .lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
 .lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
-/* The card provides its own 16dp padding; the group keeps only a
-   small bottom rhythm so stacked cards breathe. */
-md-card.lb-setting-group { display: block; padding: 0 0 var(--md-sys-measurement-space50); }
-md-card .lb-ext-item { border: 0; background: none; }
 /* #198 search jump targets take focus: keep the focus ring visible. */
-.lb-setting-group:focus-visible,
-.lb-setting-row:focus-visible {
+.lb-setting-row:focus-visible,
+.lb-set-anchor:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 2px;
 }
@@ -724,7 +712,10 @@ md-card .lb-ext-item { border: 0; background: none; }
 }
 .lb-tb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* DevTools panel */
+/* DevToolsLegacy panel (rollback copy, user request 2026-11-07):
+   styles for the UNIMPORTED legacy floating card
+   (pages/DevToolsLegacy.tsx), kept so a rollback is a one-file swap.
+   The live DevTools is the bottom sheet below. */
 .lb-devtools {
   position: absolute;
   top: var(--md-sys-measurement-space100);
@@ -756,6 +747,22 @@ md-card .lb-ext-item { border: 0; background: none; }
 .lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: 13px; overflow: auto; }
 .lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
 .lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
+
+/* DevTools bottom sheet (user request 2026-11-07): the live DevTools
+   mounts in an m3e-bottom-sheet; each section renders its mini
+   surfaces as m3e-cards (content above a divider, inline action
+   buttons under it). The sheet body owns scrolling. */
+.lb-dt-sheet { --m3e-bottom-sheet-max-width: 720px; }
+.lb-dt-sheet-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
+.lb-dt-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-dt-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
+.lb-dt-content { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-dt-bgroup { flex-wrap: wrap; }
+.lb-dt-card { width: 100%; }
+.lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
+.lb-dt-card-title { font-variation-settings: "wght" 500; }
+.lb-dt-card-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
+.lb-dt-card .lb-console, .lb-dt-card .lb-net { max-height: 38vh; }
 
 .lb-console { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-console-line { display: flex; gap: var(--md-sys-measurement-space100); padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space75); align-items: baseline; }
@@ -825,9 +832,8 @@ md-card .lb-ext-item { border: 0; background: none; }
   .lb-tab { max-width: 150px; }
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: var(--md-sys-measurement-space100); }
-  /* Settings on small screens: tighter panel padding and full-width
-     inputs keep the page usable without horizontal pan. */
-  .lb-panel-body { padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px); }
+  /* Settings on small screens: full-width inputs keep the page usable
+     without horizontal pan. */
   .lb-text-input { width: 100%; }
 }
 /* ---- #215: medium window band (601-839px) ----
@@ -1129,33 +1135,12 @@ m3e-icon-button:active { transform: scale(0.88); }
   cursor: pointer;
 }
 .lb-diag-tb-chip m3e-icon { font-size: 16px; }
-/* Tab switcher card (v2): a horizontal row of live preview tiles.
-   While it is open the toolbar slides away (.lb-dock.tabs-open) and
-   the card takes the dock place at the bottom of the screen. */
-.lb-tabs-card {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(640px, calc(100vw - 24px));
-  z-index: 45;
-  border-radius: var(--m3e-shape-lg);
-  /* Always mounted (preview iframes must stay alive between opens or
-     tiles show blank frames, not pages); visibility + pointer-events
-     gate interaction while closed. */
-  visibility: hidden;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateX(-50%) translateY(14px) scale(0.98);
-  transition: opacity var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-.lb-tabs-card.open {
-  visibility: visible;
-  pointer-events: auto;
-  opacity: 1;
-  transform: translateX(-50%);
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
+/* Tab switcher (user request 2026-11-07): a modal m3e-bottom-sheet;
+   the sheet owns position, scrim and open/close motion. The sheet
+   stays mounted (preview iframes must stay alive between opens or
+   tiles show blank frames, not pages). */
+.lb-tabs-sheet { --m3e-bottom-sheet-max-width: 720px; }
+.lb-tabs-sheet-head { display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100); }
 .lb-tabs-row {
   display: flex;
   flex-direction: row;
@@ -1166,36 +1151,25 @@ m3e-icon-button:active { transform: scale(0.88); }
   overflow-y: hidden;
   padding: var(--md-sys-measurement-space50);
 }
+/* Tiles are m3e-cards now (filled active / outlined inactive): the
+   card owns surface, padding and shape; this keeps only the tile
+   geometry and the close-away motion. */
 .lb-tabs-tile {
   flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--md-sys-measurement-space50);
   width: 164px;
-  padding: var(--md-sys-measurement-space50);
-  border-radius: var(--m3e-shape-sm);
   cursor: pointer;
-  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
+  transition: opacity var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease),
     width var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
-    padding var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
     margin-right var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-tabs-tile:hover {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
-}
-.lb-tabs-tile.active {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
-}
-/* The dying tile also surrenders its layout footprint: width and
-   padding animate to 0 and a negative margin eats the row gap, so the
-   surviving tiles slide over smoothly inside the 240ms close window
-   and the final unmount changes nothing (#29). */
+.lb-tabs-tile-inner { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
+/* The dying tile surrenders its layout footprint: width animates to 0
+   and a negative margin eats the row gap, so the surviving tiles
+   slide over smoothly inside the close window and the final unmount
+   changes nothing (#29). */
 .lb-tabs-tile.closing {
   opacity: 0;
-  transform: scale(0.92);
   width: 0;
-  padding-left: 0;
-  padding-right: 0;
   margin-right: calc(-1 * var(--md-sys-measurement-space100, 8px));
   overflow: hidden;
 }
@@ -1230,6 +1204,7 @@ m3e-icon-button:active { transform: scale(0.88); }
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   min-width: 0;
 }
+.lb-tabs-tile-head .lb-tab-favicon { width: 16px; height: 16px; flex-shrink: 0; }
 .lb-tabs-tile-head .lb-tabs-title {
   flex: 1;
   min-width: 0;

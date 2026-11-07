@@ -189,10 +189,9 @@ export default function ExtManage() {
       ) : (
         <div className="lb-ext-list">
           {list.map((e) => (
-            <md-card variant="filled"
+            <m3e-card variant="filled"
               key={e.id}
-              className={"lb-ext-item" + (detail && detail.id === e.id ? " sel" : "")}
-              title={shownError(e.lastError) ?? ""}
+              {...{ class: "lb-ext-item" + (detail && detail.id === e.id ? " sel" : ""), title: shownError(e.lastError) ?? "" }}
               role="button"
               tabIndex={0}
               onClick={() => void openDetail(e.id)}
@@ -223,13 +222,13 @@ export default function ExtManage() {
                   <m3e-icon name="delete" aria-hidden={true} />
                 </m3e-icon-button>
               </span>
-            </md-card>
+            </m3e-card>
           ))}
         </div>
       )}
       {detailError && <p className="lb-ext-err">{detailError}</p>}
       {detail && (
-        <md-card variant="filled" className="lb-ext-detail">
+        <m3e-card variant="filled" {...{ class: "lb-ext-detail" }}>
           <div className="lb-ext-dhead">
             <span className="lb-ext-dtitle">
               <div className="lb-ext-ava" aria-hidden={true}>
@@ -272,7 +271,7 @@ export default function ExtManage() {
             </m3e-button>
           </div>
           {shownError(detail.lastError) && <p className="lb-ext-err">{shownError(detail.lastError)}</p>}
-        </md-card>
+        </m3e-card>
       )}
     </div>
   );
