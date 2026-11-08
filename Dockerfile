@@ -2141,8 +2141,12 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /bundle
-RUN curl -fsSL "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.tar.gz" \
- | tar xz --strip-components=1
+# GitHub archive 503/504 truncations killed pin builds; the pipe to
+# tar also silently disables curl --retry (stdout is not rewindable), so
+# fetch to a file first, retry, then extract.
+RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /zlsrc.tar.gz "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.tar.gz" \
+ && tar xzf /zlsrc.tar.gz --strip-components=1 && rm -f /zlsrc.tar.gz
 # The libcurl transport (TLS termination for the wisp hop): pulled
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
