@@ -721,6 +721,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   return (
     <m3e-bottom-sheet
+      detents="fit"
       handle=""
       hideable=""
       handle-label="Dismiss developer tools"

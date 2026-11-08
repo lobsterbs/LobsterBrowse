@@ -774,7 +774,7 @@ export default function AiPage() {
         </span>
       </div>
 
-      <m3e-bottom-sheet {...{ ref: sheetRef }}>
+      <m3e-bottom-sheet detents="fit" {...{ ref: sheetRef }}>
         <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
           <m3e-icon-button slot="leading" aria-label="Back" onClick={() => sheetRef.current?.hide()}>
             <m3e-icon name="arrow_back" aria-hidden={true} />

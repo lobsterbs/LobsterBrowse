@@ -1232,6 +1232,12 @@ border-radius: var(--m3e-shape-lg);
    path to a backdrop filter, so dialogs keep their solid surface. */m3e-bottom-sheet {
   --m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);
   --m3e-bottom-sheet-max-width: 560px;
+  /* Wave 88 fix: the component clamps its JS-computed height to
+     innerHeight minus this top-space token. Keep the JS clamp
+     equal to the CSS max-height so a tall sheet stays anchored
+     to the viewport bottom instead of floating above it. */
+  --m3e-bottom-sheet-compact-top-space: calc(100dvh - min(76dvh, 780px));
+  --m3e-bottom-sheet-top-space: calc(100dvh - min(76dvh, 780px));
   max-height: min(76dvh, 780px);
   backdrop-filter: blur(28px) saturate(180%) brightness(.66);
   -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(.66);

@@ -47,6 +47,7 @@ export default function TabSwitcherCard(props: {
   if (props.tabs.length === 0) return null;
   return (
     <m3e-bottom-sheet
+      detents="fit"
       modal=""
       handle=""
       hideable=""

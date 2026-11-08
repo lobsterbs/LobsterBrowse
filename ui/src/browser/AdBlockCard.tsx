@@ -82,6 +82,7 @@ export default function AdBlockCard(props: {
   const effective = props.globalAdblock && props.siteAdblock !== false;
   return (
     <m3e-bottom-sheet
+      detents="fit"
       modal=""
       handle=""
       hideable=""
