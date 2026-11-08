@@ -536,6 +536,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   <m3e-chip-set>
                     {SEEDS.map(([hex, name]) => (
                       <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
+                        {/* Wave 89: a colored swatch in the chip's icon slot
+                           (the plain m3e-chip exposes no avatar slot) so
+                           every seed option shows its color (user report
+                           2026-11-08). */}
+                        <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
                         {name}
                       </m3e-chip>
                     ))}
