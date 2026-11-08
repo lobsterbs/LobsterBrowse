@@ -45,6 +45,16 @@ ok(theme.includes("--m3e-bottom-sheet-max-width: 560px;"), "sheet max width is t
 ok(theme.includes("max-height: min(76dvh, 780px);"), "sheet max height is the spec min(76dvh, 780px)");
 ok(theme.includes("backdrop-filter: blur(28px) saturate(180%) brightness(.66);"), "sheet blur is the spec chain");
 ok(!theme.includes("--m3e-bottom-sheet-max-width: 720px;") && !theme.includes("--m3e-bottom-sheet-max-width: 480px;"), "per-sheet width overrides are gone");
+/* Sheet fit: the JS max clamp equals the CSS max height, and every
+   app sheet opens at the fit detent so the post-open recompute
+   corrects the pre-popover NaN pin (the library measures the
+   content while the popover is still display: none). */
+ok(theme.includes("--m3e-bottom-sheet-compact-top-space: calc(100dvh - min(76dvh, 780px));"), "sheet JS clamp equals the CSS max height");
+ok(theme.includes("--m3e-bottom-sheet-top-space: calc(100dvh - min(76dvh, 780px));"), "sheet short-viewport clamp matches");
+for (const f of ["browser/AdBlockCard.tsx", "browser/ExtensionsPanel.tsx", "browser/TabSwitcherCard.tsx", "pages/Ai.tsx", "pages/DevTools.tsx"]) {
+  ok(read("src/" + f).includes('detents="fit"'), "fit detent on " + f);
+}
+ok(!read("src/extensions.css").includes("--m3e-bottom-sheet-max-width: 480px;"), "extensions sheet follows the global 560px width");
 /* Shared glass tokens and fallbacks. */
 ok(theme.includes("--lb-glass-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);"), "card tint is the spec 62%");
 ok(theme.includes("--lb-glass-blur: blur(18px) saturate(160%);"), "card blur is the spec chain");

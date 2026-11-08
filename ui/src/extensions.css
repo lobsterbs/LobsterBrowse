@@ -1,7 +1,6 @@
 /* Extensions bottom sheet (#234): the old fixed-position corner
    panel is gone; the m3e-bottom-sheet owns surface, scrim, entry and
    exit. This file keeps the head, list and card metrics. */
-.lb-ext-sheet { --m3e-bottom-sheet-max-width: 480px; }
 .lb-ext-sheet-body {
   display: flex;
   flex-direction: column;

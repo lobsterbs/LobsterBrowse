@@ -114,6 +114,7 @@ export default function ExtensionsPanel(props: {
 
   return (
     <m3e-bottom-sheet
+      detents="fit"
       modal=""
       handle=""
       hideable=""
