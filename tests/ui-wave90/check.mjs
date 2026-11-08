@@ -49,12 +49,12 @@ ok(extPanel.includes("onError={"), "the icon img handles load failure");
 ok(extPanel.includes("iconRefreshedRef.current = true;"), "the error path refreshes the list once per mount");
 ok(/useEffect\(\(\) => \{\s*setBadIcons\(\{\}\);\s*\}, \[props\.list\]\);/.test(extPanel), "a fresh list clears the failed marks");
 
-/* 4. DevTools card transparency (#243). */
-/* The override rule is matched exactly: an earlier plain .lb-dt-card
-   rule (width) would fool a selector-first search. */
-const dt90 = theme.indexOf("Wave 90 (issue #243)");
-const dtWin = dt90 >= 0 ? theme.slice(dt90, dt90 + 500) : "";
-ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: transparent;"), "DevTools cards paint no container tint");
+/* 4. DevTools card glass (#243; wave 91 moved the contract from a
+   fully transparent container, which was invisible as glass over the
+   uniform sheet frost, to the light glass lift token). */
+const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
+const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 600) : "";
+ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the light glass lift");
 const frostShared = block(theme, ".lb-dt-card,");
 ok(frostShared.includes("border-radius: 20px;") && frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "the shared frost rule keeps the halo and the settings tint");
 ok(frostShared.indexOf(".lb-set-result") >= 0, "settings search results keep their tint");

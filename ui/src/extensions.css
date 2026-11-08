@@ -255,3 +255,9 @@
 }
 .lb-ext-optbtn,
 .lb-ext-delbtn { width: 100%; }
+
+/* Wave 91 (#244): reduced-motion users get the detail card without
+   the pop entrance (theme.css covers the other animation families). */
+@media (prefers-reduced-motion: reduce) {
+  .lb-ext-detail { animation: none; }
+}

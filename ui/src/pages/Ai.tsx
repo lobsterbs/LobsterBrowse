@@ -101,6 +101,7 @@ function toast(text: string, retry?: () => void): void {
 function useTypewriter(target: string, active: boolean): string {
   const [shown, setShown] = useState(target);
   const posRef = useRef(0);
+  const lastEmitRef = useRef(0);
   const targetRef = useRef(target);
   targetRef.current = target;
   useEffect(() => {
@@ -115,7 +116,16 @@ function useTypewriter(target: string, active: boolean): string {
       if (posRef.current < t.length) {
         const backlog = t.length - posRef.current;
         posRef.current += Math.max(1, Math.ceil(backlog / 8));
-        setShown(t.slice(0, posRef.current));
+        /* Wave 91 (#244): the typewriter emits at most ~30 updates
+           per second. A setShown every frame drove a full Markdown
+           parse + sanitize per frame during streams; text at 30fps
+           reads the same as 60fps and the backlog drain still keeps
+           the rendered prefix from lagging the stream. */
+        const now = performance.now();
+        if (now - lastEmitRef.current >= 32) {
+          lastEmitRef.current = now;
+          setShown(t.slice(0, posRef.current));
+        }
       }
       raf = requestAnimationFrame(step);
     };
