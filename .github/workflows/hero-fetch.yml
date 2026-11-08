@@ -1,0 +1,47 @@
+name: Hero image fetch (wave 92 one-shot)
+on:
+  push:
+    paths:
+      - .github/workflows/hero-fetch.yml
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beta/zeolite-nativetransit
+          fetch-depth: 0
+      - name: Download and commit the home hero image
+        run: |
+          set -euo pipefail
+          url='https://wallpapercat.com/w/full/4/9/2/2158688-2560x1440-desktop-hd-half-life-wallpaper-photo.jpg'
+          ok=0
+          for i in 1 2 3 4 5; do
+            if curl -sL --fail --max-time 120 \
+              -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
+              -e 'https://wallpapercat.com/' \
+              -o ui/public/lb-hero.jpg "$url"; then ok=1; break; fi
+            echo "download attempt $i failed, retrying"
+            sleep 5
+          done
+          [ "$ok" = 1 ] || { echo 'download failed after retries'; exit 1; }
+          size=$(wc -c < ui/public/lb-hero.jpg)
+          [ "$size" -gt 50000 ] || { echo "image suspiciously small: $size bytes"; exit 1; }
+          magic=$(head -c 3 ui/public/lb-hero.jpg | od -An -tx1 | tr -d ' \n')
+          [ "$magic" = ffd8ff ] || { echo "not a jpeg: $magic"; exit 1; }
+          sha=$(sha256sum ui/public/lb-hero.jpg | cut -d' ' -f1)
+          echo "HERO_SIZE=$size"
+          echo "HERO_SHA256=$sha"
+          git config user.name 'lobsterbs'
+          git config user.email 'lobsterbs@users.noreply.github.com'
+          git add ui/public/lb-hero.jpg
+          if git diff --cached --quiet; then echo 'image unchanged, nothing to commit'; exit 0; fi
+          git commit -m "chore(ui): home hero image, wave 92 (#245): $size bytes, sha256 $sha"
+          for i in 1 2 3; do
+            if git push origin HEAD:refs/heads/beta/zeolite-nativetransit; then exit 0; fi
+            git fetch origin beta/zeolite-nativetransit
+            git rebase FETCH_HEAD
+          done
+          echo 'push failed after retries'; exit 1
