@@ -1296,6 +1296,10 @@ m3e-menu {
   --lb-glass-sheet-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 52%, transparent);
   --lb-glass-blur: blur(18px) saturate(160%);
   --lb-glass-ring: 1px solid rgb(255 255 255 / .08);
+  /* Wave 91 (#243): in-sheet sub-cards lift lighter than the sheet
+     surface; a transparent or same-tint card over the uniform frost
+     reads as a flat grey panel, not glass. */
+  --lb-glass-lift: color-mix(in srgb, #ffffff 7%, transparent);
 }
 /* Opaque Material fallback: browsers without backdrop-filter
    support get solid surface containers. */
@@ -1303,6 +1307,7 @@ m3e-menu {
   :root {
     --lb-glass-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
     --lb-glass-sheet-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2b2f);
     --lb-glass-blur: none;
   }
   m3e-bottom-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -1312,6 +1317,7 @@ m3e-menu {
   :root {
     --lb-glass-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
     --lb-glass-sheet-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2b2f);
     --lb-glass-blur: none;
   }
   m3e-bottom-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -1331,15 +1337,19 @@ m3e-menu {
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
-/* Wave 90 (issue #243): the DevTools cards sit on the sheet frost
-   and stay fully transparent - the 62% card tint stacked on the
-   52% sheet tint read as an opaque grey box. Settings search
-   results keep their tint, so the override is scoped to .lb-dt-card. */
+/* Wave 91 (issue #243, reopened): the DevTools cards sit on the
+   uniform sheet frost, so a fully transparent card was invisible
+   as glass (user report: cards still not frosted). In-sheet
+   sub-cards instead lift lighter than the sheet surface - a 7%
+   white glass fill plus an inset top highlight reads as a glass
+   panel over the frost. Settings search results keep their tint. */
 .lb-dt-card {
-  --m3e-card-container-color: transparent;
+  --m3e-card-container-color: var(--lb-glass-lift);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 .lb-ext-tile {
-  --m3e-card-container-color: var(--lb-glass-tint);
+  /* Wave 91 (#243): in-sheet tiles lift like the other sub-cards. */
+  --m3e-card-container-color: var(--lb-glass-lift);
   --m3e-card-shape: 20px;
   /* Wave 89: the host carries the card shape so the frost halo is
      rounded, not square (user report 2026-11-08). */
@@ -1356,7 +1366,8 @@ m3e-menu {
   box-sizing: border-box;
   border-radius: 20px;
   border: var(--lb-glass-ring);
-  background: var(--lb-glass-tint);
+  /* Wave 91 (#243): the in-sheet row lifts over the sheet frost. */
+  background: var(--lb-glass-lift);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
