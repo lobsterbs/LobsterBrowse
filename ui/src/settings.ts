@@ -155,10 +155,10 @@ export type Settings = {
   autoHideChrome: boolean;
   /* #213: the toolbar pill tint from the active tab's favicon hue
      is always on (the Settings toggle was removed; dark scheme only). */
-  /* Enhanced UI: animated liquid-metal ribbon background in every
-     view instead of the flat surface (wave 78: the 21st.dev
-     shader-metal component replaced the wave 77 ASCII dither). On by
-     default (user request 2026-10-29). */
+  /* Enhanced UI: photographic hero background on the home view
+     instead of the flat surface (wave 92, issue #245: the wave 78
+     liquid-metal shader was removed fully and replaced by the hero
+     image). On by default. */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";

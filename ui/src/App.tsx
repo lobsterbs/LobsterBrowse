@@ -24,7 +24,6 @@ import { parseNavTab } from "./frameNav";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
-import { ShaderMetal } from "./components/ui/shader-metal";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
@@ -807,23 +806,17 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
-      {/* Enhanced UI setting: the animated background is portaled to
-          <body> so no view ancestor can trap the fixed layer. It now
+      {/* Enhanced UI setting: the home hero background is portaled to
+          <body> so no view ancestor can trap the fixed layer. It
           renders on the home view ONLY (user request 2026-11-07):
-          previously it stayed mounted in every view, so the rail and
-          dock frosted the home-page shader on all pages instead of
-          their actual surroundings; now they frost what is really
-          adjacent to them. Wave 78: the ASCII-art canvas was replaced
-          by the liquid-metal ribbon shader (21st.dev shader-metal),
-          mounted non-interactive. LB is hard-pinned dark (m3e-theme
-          scheme="dark"), so the studio resolves dark instead of
-          sniffing the OS scheme. Off or away from home = not
-          rendered. */}
+          the rail and dock frost what is really adjacent to them.
+          Wave 92 (issue #245): the liquid-metal ribbon shader was
+          removed fully and replaced by the static photographic hero
+          image (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule
+          in theme.css). Off or away from home = not rendered. */}
       {settings.fancyBackground && view === "home" &&
         createPortal(
-          <div className="lb-fx-bg" aria-hidden={true}>
-            <ShaderMetal interactive={false} theme="dark" />
-          </div>,
+          <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
         )}
       <div className="lb-shell">
