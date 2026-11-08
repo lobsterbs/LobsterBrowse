@@ -69,6 +69,19 @@ export default function ExtensionsPanel(props: {
      m3e-dialog (the Settings pattern). Escape, the scrim and Cancel
      all close with no removal. */
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  /* Issue #242: the engine icon route is a page token that expires
+     after 5 minutes, and an img subresource from a page the worker
+     does not control bypasses it entirely - both 404 and paint the
+     browser's broken-image glyph. Extensions whose icon failed fall
+     back to the initials avatar instead, and one list refresh per
+     mount re-mints the tokens (the sheet-open refresh already does
+     this on every open). A fresh list clears the failed marks so a
+     working icon is retried. */
+  const [badIcons, setBadIcons] = useState<Record<string, true>>({});
+  const iconRefreshedRef = useRef(false);
+  useEffect(() => {
+    setBadIcons({});
+  }, [props.list]);
   const pendingRef = useRef(pendingDelete);
   pendingRef.current = pendingDelete;
   const onDeleteRef = useRef(props.onDelete);
@@ -204,9 +217,21 @@ export default function ExtensionsPanel(props: {
               <div slot="content" className="lb-ext-tile-inner">
                 <div className="lb-ext-ava" aria-hidden={true}>
                 {/* Wave 89: the real icon when the engine reports one,
-                   initials otherwise (user report 2026-11-08). */}
-                {e.iconPath ? (
-                  <img className="lb-ext-ava-img" src={e.iconPath} alt="" />
+                   initials otherwise. Wave 90 (issue #242): a failed
+                   load falls back to initials, never a broken glyph. */}
+                {e.iconPath && !badIcons[e.id] ? (
+                  <img
+                    className="lb-ext-ava-img"
+                    src={e.iconPath}
+                    alt=""
+                    onError={() => {
+                      setBadIcons((m) => ({ ...m, [e.id]: true }));
+                      if (!iconRefreshedRef.current) {
+                        iconRefreshedRef.current = true;
+                        props.onRefresh();
+                      }
+                    }}
+                  />
                 ) : (
                   e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"
                 )}

@@ -68,7 +68,10 @@ ok(ascii.includes("border-radius: 20px;"), "wordmark is rounded like the sheet c
 /* 5. Ad sheet. */
 ok(block(theme, ".lb-ad-body {").includes("padding: 0 0 var(--md-sys-measurement-space150);"), "ad body carries no inline padding");
 const adHero = block(theme, ".lb-ad-hero {");
-ok(adHero.includes("flex-direction: column;") && adHero.includes("align-items: flex-start;"), "shield circle sits above the count");
+/* Wave 90 (issue #241) refined the alignment: the column layout is
+   unchanged (shield above the count) but the hero is now centered
+   (align-items: center), no longer flex-start. */
+ok(adHero.includes("flex-direction: column;") && adHero.includes("align-items: center;"), "shield circle sits above the count");
 
 /* 6. Overflow menu. */
 ok(block(theme, "#lb-overflow-menu m3e-menu-item {").includes("--m3e-menu-item-padding-start:"), "plain overflow items indent to the checkbox start line");
@@ -76,7 +79,10 @@ ok(block(theme, "#lb-overflow-menu m3e-menu-item {").includes("--m3e-menu-item-p
 /* 7. Extensions. */
 ok(block(theme, ".lb-ext-tile {").includes("border-radius: 20px;"), "extension tile frost halo is rounded");
 ok(extPanel.includes("iconPath?: string | null;"), "ExtInfo carries the engine icon route");
-ok(extPanel.includes("{e.iconPath ? ("), "tile renders the real icon with a fallback");
+/* Wave 90 (issue #242) added the badIcons guard in front of the
+   same conditional: the real icon renders only while it has not
+   failed, and the initials remain the fallback. */
+ok(extPanel.includes("{e.iconPath && !badIcons[e.id] ? ("), "tile renders the real icon with a fallback");
 ok(extPanel.includes("lb-ext-ava-img"), "tile icon image is classed for sizing");
 ok(block(extCss, ".lb-ext-ava-img {").includes("border-radius: 50%;"), "tile icon is circle-cropped");
 
