@@ -30,6 +30,7 @@ import {
   type UaPresetId,
 } from "../settings";
 import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentQuery, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { loadDebugOverrides } from "../debug";
 import { dominantHue } from "../siteTint";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
@@ -1555,6 +1556,17 @@ export default function BrowserView(props: Props) {
       return zlContentHref(href && href.startsWith("/") && !href.startsWith("//") ? href : routeUrl(url));
     };
     const co = zlContentOrigin();
+    /* Split debug override off: the frame commits on the app origin, so
+       the handle must be minted by the app worker. A content bridge token
+       MACs against the content worker's route key (#205); the app worker
+       cannot decode it, the route falls through to passthrough, and the
+       tab strands on the shell. Mint app-side, same as the branch below. */
+    if (co && loadDebugOverrides().split === false) {
+      return zlWaitActive()
+        .then(() => zlNavHandle(url, 3000).catch(() => null))
+        .then((h) => h ?? zlNavHandle(url, 3000).catch(() => null))
+        .then((h) => h ?? routeUrl(url));
+    }
     if (co) {
       return contentRoute();
     }
