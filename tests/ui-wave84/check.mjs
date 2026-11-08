@@ -24,7 +24,7 @@ ok(theme.includes(".lb-ai-att-peek"), "#235 peek style present");
 ok(!/\.lb-ai-att-peek[^}]*inset:\s*0/.test(theme), "#235 peek no longer overlays the input");
 ok(theme.includes("bottom: calc(100% + var(--md-sys-measurement-space50, 4px))"), "#235 peek floats above the bar");
 ok(!theme.includes(".lb-ad-card"), "#236 ad card css retired");
-ok(theme.includes(".lb-ad-sheet"), "#236 sheet css present");
+ok(theme.includes(".lb-ad-body"), "#236 sheet body css present (the sheet surface is the global wave-88 sheet rule)");
 ok(theme.includes(".lb-ad-hero"), "#236 hero row css present");
 ok(theme.includes(".lb-ad-foot { width: 100%; }"), "#236 footer css present");
 ok(!theme.includes(".lb-dt-bgroup"), "#239 button-group css retired");

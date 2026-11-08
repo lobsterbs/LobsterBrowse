@@ -104,9 +104,8 @@ body.lb-fancy .lb-fx-bg::after {
 }
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
-   readable over the animated background. Scoped to the body class
-   App toggles with the setting; off = untouched chrome. */
-body.lb-fancy .lb-home m3e-search-bar {
+   readable over the animated background. Wave 88: unconditional - every surface is glass (user request 2026-11-08). */
+.lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host: backdrop-filter blurs the whole host
      rectangle, and the fully rounded bar leaves blurred corner
@@ -123,11 +122,9 @@ body.lb-fancy .lb-home m3e-search-bar {
    crosses the shadow boundary, and the host-level backdrop blur is
    pill-clipped at 9999px (the closed host rect IS the bar rect) so
    the blur no longer paints square corners around the rounded bar.
-   The contained results panel rides the same mix so the open
-   dropdown reads as glass too. */
-body.lb-fancy .lb-home m3e-search-view {
-  --m3e-search-view-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  --m3e-search-view-contained-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
+   Wave 88: the popover surface paints nothing - the .lb-ac glass card is
+   the suggestion surface (user request 2026-11-08). */
+.lb-home m3e-search-view {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
@@ -138,6 +135,12 @@ body.lb-fancy .lb-home m3e-search-view {
    not a modal, so the page behind stays untinted. */
 .lb-home m3e-search-view {
   --m3e-search-view-docked-scrim-opacity: 0%;
+  /* Wave 88 (user request 2026-11-08): the popover surface paints
+     nothing - the .lb-ac glass card is the suggestion surface, so
+     no grey panel sits under the suggestor. */
+  --m3e-search-view-container-color: transparent;
+  --m3e-search-view-contained-container-color: transparent;
+  --m3e-search-view-docked-scrim-color: transparent;
 }
 /* #231 (user request 2026-11-07): the open suggestion list reads as
    frosted glass, consistent with the bar, rail and wordmark frost
@@ -168,9 +171,8 @@ m3e-nav-rail {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
 }/* ASCII wordmark: the same frosted glass as the rail and search bar,
-   so the art stays readable over the animated gradient. Scoped to
-   the fancy setting; the plain background keeps the bare pre. */
-body.lb-fancy .lb-home pre.lb-ascii {
+   so the art stays readable over the animated gradient. Wave 88: the wordmark glass is unconditional (user request 2026-11-08). */
+.lb-home pre.lb-ascii {
   display: inline-block;
   max-width: 100%;
   box-sizing: border-box;
@@ -202,17 +204,21 @@ body.lb-fancy .lb-home pre.lb-ascii {
    the DevTools sheets; on the dark theme elevation shadows are
    invisible, so the container color does the separating. */
 .lb-set-page m3e-expansion-panel {
-  --m3e-expansion-panel-container-color: var(--md-sys-color-surface-container-highest, #37393e);
+--m3e-expansion-panel-container-color: var(--lb-glass-tint);
   --m3e-expansion-panel-elevation: var(--md-sys-elevation-level0, none);
   --m3e-expansion-panel-open-elevation: var(--md-sys-elevation-level0, none);
-  --m3e-expansion-panel-shape: var(--m3e-shape-md);
-  --m3e-expansion-panel-open-shape: var(--m3e-shape-md);
+--m3e-expansion-panel-shape: 20px;
+--m3e-expansion-panel-open-shape: 20px;
   /* Wave 85 uniformity: the panel header and body align to the same
      12px inline rhythm as the inline row cards, so both card shapes
      read as one family with identical text margins. */
   --m3e-expansion-header-padding-left: var(--md-sys-measurement-space150);
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space150);
   --m3e-expansion-panel-content-padding: 0 var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
+  /* Wave 88: the panel surface is frosted glass like every other
+     card (user request 2026-11-08). */
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
 }
 /* Single-control sub-cards (user request 2026-11-07): a sub option
    whose entire payload is one control is an inline row card, not an
@@ -232,14 +238,18 @@ body.lb-fancy .lb-home pre.lb-ascii {
      same card size. */
   min-height: 48px;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
-  background: var(--md-sys-color-surface-container-highest, #37393e);
-  border-radius: var(--md-sys-shape-corner-medium, 12px);
+background: var(--lb-glass-tint);
+border-radius: 20px;
   box-sizing: border-box;
+  border: var(--lb-glass-ring);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
 .lb-set-inline .lb-setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
 .lb-set-inline .lb-setting-label { margin: 0; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
 .lb-set-inline .lb-setting-desc {
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var(--md-sys-typescale-body-medium-line-height, 20px);
   color: var(--md-sys-color-on-surface-variant);
 }
 /* Page rhythm: the pane's scroll container lives inside the
@@ -357,12 +367,6 @@ body.lb-fancy .lb-home pre.lb-ascii {
   background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
 }
 .lb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-ac-hint {
-  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space225);
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  opacity: 0.55;
-  border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent);
-}
 /* Suggest card: the JS spring in Home.tsx (useSpringCard) drives the
    card's opacity/translateY - CSS never animates the card. Items
    keep their size on hover: the M3E icon's expressive hover bounce
@@ -828,8 +832,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
    mounts in an m3e-bottom-sheet; each section renders its mini
    surfaces as m3e-cards (content above a divider, inline action
    buttons under it). The sheet body owns scrolling. */
-.lb-dt-sheet { --m3e-bottom-sheet-max-width: 720px; }
-.lb-dt-content { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-dt-content {gap: 18px; }
 /* #239: the sub-tool picker is a bottom-bar style row; the active
    sub-tool is the tonal rounded pill (variant), the inactive ones
    are text buttons. */
@@ -885,8 +888,11 @@ body.lb-fancy .lb-home pre.lb-ascii {
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   max-height: 320px;
   overflow: auto;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: var(--m3e-shape-sm);
+border: var(--lb-glass-ring);
+border-radius: 20px;
+  background: var(--lb-glass-tint);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
   padding: var(--md-sys-measurement-space100);
 }
 .lb-log-line { padding: var(--md-sys-measurement-space25) 0; word-break: break-word; }
@@ -1019,9 +1025,11 @@ m3e-icon-button:active { transform: scale(0.88); }
   left: 0;
   right: 0;
   z-index: 40;
-  background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline);
-  border-radius: var(--m3e-shape-md);
+background: var(--lb-glass-tint);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+border: var(--lb-glass-ring);
+border-radius: var(--m3e-shape-lg);
   box-shadow: var(--md-sys-elevation-level5, 0 12px 32px rgba(0, 0, 0, 0.22));
   overflow: hidden;
   text-align: left;
@@ -1221,11 +1229,12 @@ m3e-icon-button:active { transform: scale(0.88); }
    slot re-uses the same container token for the m3e-app-bar top bars
    slotted into it. m3e-dialog cannot join the chain: its surface is
    painted on a shadow-DOM ::before with no part or custom-property
-   path to a backdrop filter, so dialogs keep their solid surface. */
-m3e-bottom-sheet {
-  --m3e-bottom-sheet-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-low, #f7f2fa) 74%, transparent);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+   path to a backdrop filter, so dialogs keep their solid surface. */m3e-bottom-sheet {
+  --m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);
+  --m3e-bottom-sheet-max-width: 560px;
+  max-height: min(76dvh, 780px);
+  backdrop-filter: blur(28px) saturate(180%) brightness(.66);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(.66);
 }
 /* Same frost for the other overlay families: menus (the host paints
    the standard container color), the command palette, and the
@@ -1246,6 +1255,101 @@ m3e-menu {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
+/* ---- Wave 88: frosted glass everywhere (user request 2026-11-08).
+   Every surface that used to paint an opaque grey or black container
+   now reads as glass: a translucent surface tint over a blurred
+   backdrop, a hairline ring and an inset highlight. Shared tokens
+   drive the look so the fallback paths swap in an opaque Material
+   surface in one place. */
+:root {
+  --lb-glass-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
+  --lb-glass-sheet-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 52%, transparent);
+  --lb-glass-blur: blur(18px) saturate(160%);
+  --lb-glass-ring: 1px solid rgb(255 255 255 / .08);
+}
+/* Opaque Material fallback: browsers without backdrop-filter
+   support get solid surface containers. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --lb-glass-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-sheet-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-blur: none;
+  }
+  m3e-bottom-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+/* Same opaque fallback for users who prefer reduced transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --lb-glass-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-sheet-tint: var(--md-sys-color-surface-container-high, #2b2b2f);
+    --lb-glass-blur: none;
+  }
+  m3e-bottom-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+/* In-sheet m3e-cards (DevTools sections, settings search results,
+   extension tiles): the container token goes translucent and the
+   host carries the blur - the same host-paints-frost chain as the
+   sheets. 20px radius per the settings-card spec. */
+.lb-dt-card,
+.lb-set-result {
+  --m3e-card-container-color: var(--lb-glass-tint);
+  --m3e-card-shape: 20px;
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+}
+.lb-ext-tile {
+  --m3e-card-container-color: var(--lb-glass-tint);
+  --m3e-card-shape: 20px;
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+}
+/* Extension list: one glass card per row, 18px apart (spec). */
+.lb-ext-list { display: flex; flex-direction: column; gap: 18px; }
+/* The ad sheet toggle row is a spec setting-row card. */
+.lb-ad-row {
+  padding: 12px 16px;
+  min-height: 64px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  border: var(--lb-glass-ring);
+  background: var(--lb-glass-tint);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+}
+/* The remaining plain overlay surfaces join the chain: the XPI
+   install prompt, the site info card, extension notification
+   notes and the snackbar. */
+.lb-xpi-card,
+.lb-site-card {
+  background: var(--lb-glass-tint);
+  border: var(--lb-glass-ring);
+  border-radius: 20px;
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+}
+.lb-ext-note {
+  background: var(--lb-glass-tint);
+  border: var(--lb-glass-ring);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+}
+m3e-snackbar {
+  --m3e-snackbar-container-color: color-mix(in srgb, var(--md-sys-color-inverse-surface, #322f35) 78%, transparent);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+}
+/* Narrow screens: tighter sub-card padding, one size step down on
+   setting titles and descriptions (the user settings-card spec;
+   these are the only raw 13px/15px sizes in the stylesheet). */
+@media (max-width: 640px) {
+  .lb-tab-row,
+  .lb-ad-hosts,
+  .lb-ad-row { padding: 10px 12px; }
+  .lb-set-inline .lb-setting-label { font-size: 15px; }
+  .lb-set-inline .lb-setting-desc { font-size: 13px; }
+}
+
 /* Basic top bars (user request 2026-11-07): every top bar is an
    m3e-app-bar with only a back button and a title. The bar paints a
    transparent container: in bottom sheets the frosted sheet surface
@@ -1260,19 +1364,18 @@ m3e-menu {
 /* Tab switcher (user request 2026-11-07): a modal m3e-bottom-sheet;
    the sheet owns position, scrim and open/close motion. One row per
    tab: frosted avatar favicon, title, close X. */
-.lb-tabs-sheet { --m3e-bottom-sheet-max-width: 720px; }
 /* One tab per row (user request 2026-11-07): frosted avatar favicon,
    site title, close X. The list scrolls vertically; a dying row
    collapses vertically so the rows below slide up smoothly. */
 .lb-tabs-row {
   display: flex;
   flex-direction: column;
-  gap: var(--md-sys-measurement-space100);
+gap: 18px;
   width: 100%;
   max-height: 50vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--md-sys-measurement-space50);
+padding: var(--md-sys-measurement-space50) 16px 16px;
 }
 /* Rows are plain buttons (not cards): the active tab reads as a
    rounded tonal pill behind the whole row (the wave-84 active-marker
@@ -1283,12 +1386,14 @@ m3e-menu {
   align-items: center;
   gap: var(--md-sys-measurement-space150);
   width: 100%;
-  min-height: 56px;
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
+min-height: 64px;
+padding: 12px 16px;
   box-sizing: border-box;
-  border: 0;
-  border-radius: var(--md-sys-shape-corner-full, 9999px);
-  background: transparent;
+border: var(--lb-glass-ring);
+border-radius: 20px;
+background: var(--lb-glass-tint);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
   color: inherit;
   font-family: inherit;
   text-align: left;
@@ -1301,7 +1406,7 @@ m3e-menu {
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
 }
 .lb-tab-row.active {
-  background: var(--md-sys-color-secondary-container, #e8def8);
+background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 85%, transparent);
   color: var(--md-sys-color-on-secondary-container, #1d192b);
 }
 .lb-tab-row:focus-visible {
@@ -1570,7 +1675,9 @@ m3e-snackbar {
   padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
   font-family: inherit;
   font-size: var(--md-sys-typescale-body-large-font-size, 16px);
-  background: var(--md-sys-color-surface-container-highest, #37393e);
+background: var(--lb-glass-tint);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
   color: var(--md-sys-color-on-surface, #e4e2e6);
   border: none;
   border-radius: var(--md-sys-shape-corner-extra-large, 28px);
@@ -2080,11 +2187,10 @@ body .lb-ext-panel {
 .lb-ai-hist-btn:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 12%, transparent);
 }
-.lb-ai m3e-bottom-sheet { --m3e-bottom-sheet-max-width: 560px; }
 .lb-ai-hist {
   display: flex;
   flex-direction: column;
-  gap: var(--md-sys-measurement-space50, 4px);
+gap: 18px;
   padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
   max-height: 60vh;
   overflow-y: auto;
@@ -2093,7 +2199,11 @@ body .lb-ext-panel {
   display: flex;
   align-items: center;
   gap: var(--md-sys-measurement-space50, 4px);
-  border-radius: var(--md-sys-shape-corner-full, 9999px);
+border-radius: 20px;
+  background: var(--lb-glass-tint);
+  border: var(--lb-glass-ring);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
 }
 .lb-ai-hist-row:hover {
   background: color-mix(in srgb, var(--md-sys-color-on-surface-variant, #cac4d0) 10%, transparent);
@@ -2138,11 +2248,10 @@ body .lb-ext-panel {
        a tonal circle beside the count, so icon and number read as one
        unit; blocked hosts sit on a surface tint; the footer button is
        a full-width tonal button. ---- */
-.lb-ad-sheet { --m3e-bottom-sheet-max-width: 480px; }
 .lb-ad-body {
   display: flex;
   flex-direction: column;
-  gap: var(--md-sys-measurement-space150);
+gap: 18px;
   width: 100%;
   padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150);
   box-sizing: border-box;
@@ -2169,9 +2278,12 @@ body .lb-ext-panel {
   gap: 2px;
   max-height: 140px;
   overflow-y: auto;
-  padding: var(--md-sys-measurement-space50);
-  border-radius: var(--md-sys-shape-corner-medium, 12px);
-  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface));
+padding: 12px 16px;
+border-radius: 20px;
+  border: var(--lb-glass-ring);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+background: var(--lb-glass-tint);
 }
 .lb-ad-host { font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
 .lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }

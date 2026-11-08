@@ -215,7 +215,6 @@ export default function HomePage({ settings, onNavigate }: Props) {
                   <span className="lb-ac-text">{s.text}</span>
                 </button>
               ))}
-              <div className="lb-ac-hint">Enter to open · Up/Down to browse · Esc to dismiss</div>
             </div>
           )}
         </m3e-search-view>

@@ -22,7 +22,7 @@ const theme = read("src/theme.css");
 /* Frost: every overlay family rides a translucent container color plus
    a backdrop filter, unscoped (not only under Enhanced UI). */
 ok(theme.includes("m3e-bottom-sheet {"), "sheet frost rule exists");
-ok(theme.includes("--m3e-bottom-sheet-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-low, #f7f2fa) 74%, transparent);"), "sheet container color is translucent");
+ok(theme.includes("--m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);"), "sheet container color is translucent");
 ok(theme.includes("m3e-menu {"), "menu frost rule exists");
 ok(theme.includes(".lb-cmdk {") && theme.includes("background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 74%, transparent);"), "command palette is frosted");
 ok(theme.includes(".lb-dl-card,\n.lb-fv-card {"), "floating elevated cards are frosted");
@@ -48,8 +48,12 @@ ok(!theme.includes("lb-tab-preview"), "preview rules gone");
 ok(theme.includes(".lb-tab-row, .lb-dock-pill { transition: none; }"), "reduced-motion covers rows");
 
 /* Typography: no off-scale raw sizes remain in the stylesheet. */
-ok(!theme.includes("font-size: 13px;"), "no raw 13px left");
-ok(!theme.includes("font-size: 15px;"), "no raw 15px left");
+/* Wave 88: the only raw 13px/15px sizes are the narrow-screen steps
+   inside the Wave 88 glass section (the user settings-card spec). */
+const w88 = theme.indexOf("Narrow screens: tighter sub-card padding");
+ok(w88 !== -1, "narrow glass block exists");
+ok(!theme.slice(0, w88).includes("font-size: 13px;") && theme.slice(w88).indexOf("font-size: 13px;") === theme.slice(w88).lastIndexOf("font-size: 13px;"), "raw 13px only in the narrow glass block");
+ok(!theme.slice(0, w88).includes("font-size: 15px;") && theme.slice(w88).indexOf("font-size: 15px;") === theme.slice(w88).lastIndexOf("font-size: 15px;"), "raw 15px only in the narrow glass block");
 ok(!theme.includes("font-size: 40px;"), "no raw 40px left");
 ok(!theme.includes("font-size: 0.95rem;"), "no raw 0.95rem left");
 ok(theme.includes(".lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }"), "muted text uses body-small token");
