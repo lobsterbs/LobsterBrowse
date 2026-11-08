@@ -179,6 +179,15 @@ export function zlWaitActive(timeoutMs = 10000): Promise<void> {
         navigator.serviceWorker.ready,
         new Promise((resolve) => setTimeout(resolve, timeoutMs)),
       ]);
+      /* "Active" is not "controls this page": until clients.claim()
+         lands, a frame src assigned now bypasses the worker and the
+         server SPA fallback renders the app shell inside the pane
+         (LB inside LB on the first split-off navigation). Poll until
+         the page is actually controlled, bounded by the same gate. */
+      const t0 = Date.now();
+      while (!navigator.serviceWorker.controller && Date.now() - t0 < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
     })();
   }
   return zlActiveWait;
