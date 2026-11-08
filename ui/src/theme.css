@@ -1331,6 +1331,13 @@ m3e-menu {
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
+/* Wave 90 (issue #243): the DevTools cards sit on the sheet frost
+   and stay fully transparent - the 62% card tint stacked on the
+   52% sheet tint read as an opaque grey box. Settings search
+   results keep their tint, so the override is scoped to .lb-dt-card. */
+.lb-dt-card {
+  --m3e-card-container-color: transparent;
+}
 .lb-ext-tile {
   --m3e-card-container-color: var(--lb-glass-tint);
   --m3e-card-shape: 20px;
@@ -1470,6 +1477,17 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   flex-shrink: 0;
 }
 .lb-tab-avatar m3e-icon { font-size: 20px; }
+/* Wave 90 (issue #240): the avatar's internal ::slotted(img) rule
+   paints the favicon at 100%/100% cover, which hides the frosted
+   glass ring entirely. A document rule outranks ::slotted() for
+   slotted light-DOM elements, so the favicon sits inside the frost
+   at the same 20px as the fallback icon. */
+.lb-tab-avatar img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 50%;
+}
 .lb-tab-row .lb-tabs-title {
   flex: 1;
   min-width: 0;
@@ -2306,9 +2324,9 @@ border-radius: 20px;
   box-sizing: border-box;
 }
 /* Wave 89: the shield circle sits above the count (user choice
-   2026-11-08), so the hero text starts at the same left line as the
-   hosts card instead of 60px right of it. */
-.lb-ad-hero { display: flex; flex-direction: column; align-items: flex-start; gap: var(--md-sys-measurement-space100); }
+   2026-11-08). Wave 90 (issue #241): the whole hero column is
+   horizontally centered inside the sheet instead of left-aligned. */
+.lb-ad-hero { display: flex; flex-direction: column; align-items: center; gap: var(--md-sys-measurement-space100); }
 .lb-ad-hero-ic {
   display: flex;
   align-items: center;
@@ -2321,7 +2339,7 @@ border-radius: 20px;
   color: var(--md-sys-color-on-secondary-container, #e5defb);
 }
 .lb-ad-hero-ic > m3e-icon { color: currentColor; }
-.lb-ad-hero-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lb-ad-hero-txt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; min-width: 0; }
 .lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" 600; line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
 .lb-ad-sub { margin: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-ad-hosts {
