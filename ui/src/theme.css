@@ -170,19 +170,21 @@ m3e-nav-rail {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
-}/* ASCII wordmark: the same frosted glass as the rail and search bar,
-   so the art stays readable over the animated gradient. Wave 88: the wordmark glass is unconditional (user request 2026-11-08). */
+}/* ASCII wordmark: Wave 89 - the banner follows the exact sheet frost
+   spec (52% surface-container-high tint behind blur(28px)
+   saturate(180%) brightness(.66) plus the shared glass ring), so the
+   art reads as real frosted glass, not a grey box (user report
+   2026-11-08). Wave 88: the wordmark glass is unconditional. */
 .lb-home pre.lb-ascii {
   display: inline-block;
   max-width: 100%;
   box-sizing: border-box;
   padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 48%, transparent);
-  backdrop-filter: blur(32px) saturate(1.6);
-  -webkit-backdrop-filter: blur(32px) saturate(1.6);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 30%, transparent);
-  border-radius: var(--m3e-shape-lg);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  background: var(--lb-glass-sheet-tint);
+  backdrop-filter: blur(28px) saturate(180%) brightness(.66);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(.66);
+  border: var(--lb-glass-ring);
+  border-radius: 20px;
 }
 
 /* Settings (global redesign, user request 2026-11-07): the page is a
@@ -216,7 +218,10 @@ m3e-nav-rail {
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space150);
   --m3e-expansion-panel-content-padding: 0 var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
   /* Wave 88: the panel surface is frosted glass like every other
-     card (user request 2026-11-08). */
+     card (user request 2026-11-08). Wave 89: the host carries the
+     panel shape so the frost halo is rounded, not a square grey
+     outline (user report 2026-11-08). */
+  border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
@@ -288,6 +293,16 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    affordance, so they did not read as clickable. */
 .lb-seed-row m3e-chip { cursor: pointer; }
 .lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
+/* Wave 89: each seed chip carries a colored swatch in the chip's
+   icon slot (the plain m3e-chip exposes no avatar slot), so the
+   option shows its color instead of text only (user report
+   2026-11-08). */
+.lb-seed-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+}
 /* Segmented setting controls (search/proxy engine) scroll sideways on
    narrow screens instead of stretching the panel. */
 .lb-seg-wrap { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -836,7 +851,9 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* #239: the sub-tool picker is a bottom-bar style row; the active
    sub-tool is the tonal rounded pill (variant), the inactive ones
    are text buttons. */
-.lb-dt-nav { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50); }
+/* Wave 89: the sub-tool picker centers under the sheet (user report
+   2026-11-08). */
+.lb-dt-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--md-sys-measurement-space50); }
 .lb-dt-nav-btn { flex: 0 1 auto; }
 .lb-dt-card { width: 100%; }
 .lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
@@ -1250,6 +1267,13 @@ m3e-menu {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
+/* Wave 89: plain items in the toolbar overflow menu indent to the
+   same start line as the checkbox items - the checkbox graphic
+   shifts checked labels 4px left of plain ones (user report
+   2026-11-08). */
+#lb-overflow-menu m3e-menu-item {
+  --m3e-menu-item-padding-start: var(--md-sys-measurement-space100);
+}
 .lb-cmdk {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 74%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
@@ -1300,12 +1324,19 @@ m3e-menu {
 .lb-set-result {
   --m3e-card-container-color: var(--lb-glass-tint);
   --m3e-card-shape: 20px;
+  /* Wave 89: the frost halo rides the host, so the host carries the
+     card shape too - a square host painted a square grey outline
+     behind the rounded card (user report 2026-11-08). */
+  border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
 .lb-ext-tile {
   --m3e-card-container-color: var(--lb-glass-tint);
   --m3e-card-shape: 20px;
+  /* Wave 89: the host carries the card shape so the frost halo is
+     rounded, not square (user report 2026-11-08). */
+  border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
@@ -1376,12 +1407,17 @@ m3e-snackbar {
 .lb-tabs-row {
   display: flex;
   flex-direction: column;
-gap: 18px;
+  gap: 18px;
   width: 100%;
   max-height: 50vh;
   overflow-y: auto;
   overflow-x: hidden;
-padding: var(--md-sys-measurement-space50) 16px 16px;
+  box-sizing: border-box;
+  /* Wave 89: no inline padding of its own - the sheet body already
+     pads 16px inline, so the rows align with every other sheet card
+     instead of running 16px past the sheet's right edge (user report
+     2026-11-08). */
+  padding: var(--md-sys-measurement-space50) 0 16px;
 }
 /* Rows are plain buttons (not cards): the active tab reads as a
    rounded tonal pill behind the whole row (the wave-84 active-marker
@@ -1422,6 +1458,10 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
 /* The favicon sits inside a frosted m3e-avatar: translucent surface
    tint plus backdrop blur, so the glass reads behind the icon. */
 .lb-tab-avatar {
+  /* Wave 89: the frost rides the host element, so the host needs the
+     avatar's circular shape too - a square host boxed the favicon in
+     a frosted square (user report 2026-11-08). */
+  border-radius: 9999px;
   --m3e-avatar-size: 40px;
   --m3e-avatar-color: color-mix(in srgb, var(--md-sys-color-surface-container, #f3edf7) 55%, transparent);
   --m3e-avatar-label-color: var(--md-sys-color-on-surface-variant, #49454f);
@@ -2250,19 +2290,25 @@ border-radius: 20px;
 }
 
 /* ---- Ad-blocking sheet (#236): the overflow card is a bottom sheet
-       matching the extensions and tab sheets. Hero row: the shield in
-       a tonal circle beside the count, so icon and number read as one
-       unit; blocked hosts sit on a surface tint; the footer button is
+       matching the extensions and tab sheets. Hero column: the shield in
+       a tonal circle above the count, so the hero text aligns with
+       the hosts card; blocked hosts sit on a surface tint; the footer button is
        a full-width tonal button. ---- */
 .lb-ad-body {
   display: flex;
   flex-direction: column;
-gap: 18px;
+  gap: 18px;
   width: 100%;
-  padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150);
+  /* Wave 89: no inline padding of its own - the sheet body already
+     pads 16px inline, so the hero and the hosts card share the same
+     left line (user report 2026-11-08). */
+  padding: 0 0 var(--md-sys-measurement-space150);
   box-sizing: border-box;
 }
-.lb-ad-hero { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); }
+/* Wave 89: the shield circle sits above the count (user choice
+   2026-11-08), so the hero text starts at the same left line as the
+   hosts card instead of 60px right of it. */
+.lb-ad-hero { display: flex; flex-direction: column; align-items: flex-start; gap: var(--md-sys-measurement-space100); }
 .lb-ad-hero-ic {
   display: flex;
   align-items: center;

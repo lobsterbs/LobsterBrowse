@@ -59,7 +59,7 @@ export default function TabSwitcherCard(props: {
         <m3e-icon-button slot="leading" aria-label="Back" onClick={props.onClose}>
           <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
-        <span slot="title">Tabs ({props.tabs.length})</span>
+        <span slot="title">Tabs</span>
       </m3e-app-bar>
       <div className="lb-tabs-row">
         {props.tabs.map((t) => {

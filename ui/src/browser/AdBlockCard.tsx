@@ -99,9 +99,9 @@ export default function AdBlockCard(props: {
       <div className="lb-ad-body">
         {current ? (
           <>
-            {/* #236: hero row - the shield sits in a tonal circle
-                beside the count, so icon and number read as one
-                unit. */}
+            {/* #236: hero column - the shield sits in a tonal circle
+                above the count (user choice 2026-11-08), so the hero
+                text aligns with the hosts card. */}
             <div className="lb-ad-hero">
               <div className="lb-ad-hero-ic">
                 <m3e-icon name="shield" aria-hidden={true} />

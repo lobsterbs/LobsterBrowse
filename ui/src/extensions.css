@@ -173,8 +173,9 @@
 /* Extension identity badge: a plain div with the add-on's initials.
    m3e-avatar ignores external width/height (the component owns its
    box, the same quirk class as the rail), so the avatar never
-   rendered inside these 28px rows. Real extension icons need an
-   engine-provided iconPath (zl:listExt) - honest gap, not faked. */
+   rendered inside these 28px rows. Wave 89: the engine-reported
+   iconPath (zl:listExt) renders as the real icon; initials stay as
+   the fallback. */
 .lb-ext-ava {
   flex-shrink: 0;
   width: 28px;
@@ -188,6 +189,14 @@
   background: color-mix(in srgb, var(--md-sys-color-primary, #cfbfe0) 30%, transparent);
   color: var(--md-sys-color-on-surface, #e6e1e5);
   user-select: none;
+}
+/* Wave 89: the real extension icon inside the badge - circle-cropped
+   like the badge itself, contained so nothing distorts. */
+.lb-ext-ava-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: contain;
 }
 
 /* Skeleton rows while zl:listExt resolves (#64): the real-row metrics

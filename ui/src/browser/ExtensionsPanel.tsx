@@ -28,6 +28,9 @@ export type ExtInfo = {
   version: string;
   state: string;
   enabled: boolean;
+  /* Wave 89: the engine reports the extension's icon route
+     (zl:listExt iconPath); absent on older engine pins. */
+  iconPath?: string | null;
   lastError: string | null;
 };
 
@@ -172,10 +175,11 @@ export default function ExtensionsPanel(props: {
       ) : (
         <div className="lb-ext-list">
           {props.list.map((e) => (
-            /* #234: one mini-card per extension - icon stand-in, then
+            /* #234: one mini-card per extension - icon, then
                title; press launches the extension UI directly (#230).
-               Version and state stay in Settings; the initials avatar
-               stays because the engine exposes no icon path. */
+               Version and state stay in Settings; the avatar shows the
+               engine-reported icon when zl:listExt carries one (wave
+               89), initials otherwise. */
             <m3e-card
               key={e.id}
               variant="outlined"
@@ -199,7 +203,13 @@ export default function ExtensionsPanel(props: {
             >
               <div slot="content" className="lb-ext-tile-inner">
                 <div className="lb-ext-ava" aria-hidden={true}>
-                {e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
+                {/* Wave 89: the real icon when the engine reports one,
+                   initials otherwise (user report 2026-11-08). */}
+                {e.iconPath ? (
+                  <img className="lb-ext-ava-img" src={e.iconPath} alt="" />
+                ) : (
+                  e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"
+                )}
               </div>
               <span className="lb-ext-name">{e.name}</span>
                 <m3e-icon-button
