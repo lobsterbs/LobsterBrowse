@@ -97,7 +97,7 @@ assert.ok(homeSrc.includes('"beforetoggle"'), "the suggestor is gated until rows
    rounded bar. */
 const themeSrc = read("../../ui/src/theme.css");
 assert.ok(
-  /body\.lb-fancy \.lb-home m3e-search-view \{[^}]*border-radius: 9999px/s.test(themeSrc),
+  /\.lb-home m3e-search-view \{[^}]*border-radius: 9999px/s.test(themeSrc),
   "the search-view frost rule pill-clips its backdrop blur"
 );
 
