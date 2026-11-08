@@ -86,7 +86,7 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", panel: "p-amo", target: "set-amo" },
   { section: "extensions", label: "Import locally", terms: "xpi zip package", panel: "p-import", target: "set-import" },
   { section: "appearance", label: "Theme color", terms: "seed palette color colour", panel: "p-theme-color", target: "set-theme-color" },
-  { section: "appearance", label: "Enhanced UI (animated background)", terms: "fancy background animated metal ribbons shader", panel: "p-fancy", target: "set-fancy" },
+  { section: "appearance", label: "Enhanced UI (hero background image)", terms: "fancy background hero image photo wallpaper", panel: "p-fancy", target: "set-fancy" },
   { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
   { section: "cloak", label: "Cloak destination", terms: "cloak url site", panel: "p-cloak-url", target: "set-cloak-url" },
   { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", panel: "p-cloak-url", target: "set-cloak-url" },
@@ -549,20 +549,20 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               </SetPanel>
               <SetPanel
                 id="p-fancy"
-                headline="Enhanced UI (animated background)"
-                sub="The liquid-metal ribbon background on the Home view"
+                headline="Enhanced UI (hero background image)"
+                sub="The photographic hero background on the Home view"
                 open={!!openP["p-fancy"]}
                 toggle={() => toggleP("p-fancy")}
               >
                 <Row
                   id="set-fancy"
-                  label="Enhanced UI (animated background)"
+                  label="Enhanced UI (hero background image)"
                   on={settings.fancyBackground}
                   toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
                 />
                 <p className="lb-muted">
-                  Replaces the flat background with the liquid-metal ribbon shader (the 21st.dev shader-metal
-                  component, non-interactive) on the Home view. Off keeps the plain flat background.
+                  Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
+                  wave 92 #245) on the Home view. Off keeps the plain flat background.
                 </p>
               </SetPanel>
 

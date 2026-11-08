@@ -1,9 +1,10 @@
 /* Regression check for the wave 77 UI batch: the gated suggestor
    (SUGGEST_MIN_CHARS + buildSuggests ordering and sources) and the
-   engine brand marks. Wave 79: the search-history row assertions are gone (history left the UI stack). Wave 78: the ASCII-art background helper
-   assertions were replaced by source checks for the liquid-metal
-   ribbon background (the .tsx files carry JSX, which node cannot
-   import, so they are read from disk instead).
+   engine brand marks. Wave 79: the search-history row assertions are gone (history left the UI stack). Wave 78/92: the ASCII-art background helper
+   assertions were replaced by source checks for the background
+   layer, now the photographic hero image (the .tsx files carry
+   JSX, which node cannot import, so they are read from disk
+   instead).
 
    Run from the repo root:
 
@@ -71,21 +72,14 @@ for (const [id, e] of Object.entries(ENGINES)) {
 }
 assert.deepEqual([...MARKED_ENGINES].sort(), ["brave", "duckduckgo", "google", "mojeek", "startpage"], "marked engine set");
 
-/* ---- Wave 78 background: the ASCII canvas is gone; the vendored
-   shader-metal component mounts non-interactively from App, and the
-   search bar carries one globe icon with a focus-gated suggestor. ---- */
+/* ---- Wave 78/92 background: the ASCII canvas and the wave 78
+   liquid-metal shader are both gone; the home hero is the static
+   photographic image (issue #245), and the search bar carries one
+   globe icon with a focus-gated suggestor. ---- */
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const appSrc = read("../../ui/src/App.tsx");
 const homeSrc = read("../../ui/src/pages/Home.tsx");
-const metalSrc = read("../../ui/src/components/ui/shader-metal.tsx");
-assert.ok(metalSrc.includes("export function ShaderMetal"), "the vendored shader-metal component exists");
-assert.ok(metalSrc.includes("export function createShaderMetal"), "its engine factory is exported");
-/* The demo's shipped settings are the component defaults. */
-assert.ok(metalSrc.includes("DEFAULT_RIBBONS = 3"), "the default ribbon count is the demo's 3");
-assert.ok(metalSrc.includes("DEFAULT_SPEED = 0.3"), "the default speed is the demo's 0.3");
-assert.ok(metalSrc.includes("DEFAULT_IRIDESCENCE = 0.2"), "the default iridescence is the demo's 0.2");
-assert.ok(metalSrc.includes('chrome: "#F2F3F5"'), "chrome is the default metal");
-assert.ok(appSrc.includes("interactive={false}"), "App mounts the ribbon shader non-interactive");
+assert.ok(!appSrc.includes("ShaderMetal"), "the shader-metal component is fully removed from App (wave 92)");
 assert.ok(!appSrc.includes("AsciiBackground"), "the ASCII background is gone from App");
 assert.ok(appSrc.includes("lb-fx-bg"), "the portal layer uses the wave 78 class");
 assert.ok(homeSrc.includes('slot="search-icon"'), "the search bar carries the single globe icon");
