@@ -2136,7 +2136,24 @@ FROM debian:bookworm-slim AS zl-builder
 # unchanged 0c81efb9ba343dff. CI on the pushed head: rust/wasm/app
 # green. Cargo-side pin stays 5073f316 (app TS only). Deploy with a
 # cleared Render build cache.
-ARG ZEOLITE_COMMIT=5881b90fbc7cb2962ef112e609b7de54cb2fcf88
+# Pin 165 (2026-11-08): dist 1dda795 (build 42481264827) fixes the
+# seam wasm bare-origin redaction trap (#633): redact_url_userinfo
+# indexed bytes[k] at k == len after the host when the value was a
+# bare origin (an Origin or access-control-allow-origin header of
+# exactly https://accounts.google.com), so every wasm redactSecrets
+# call over the sign-in page's CORS subresource headers trapped with
+# RuntimeError: unreachable and the AccountsSignInUi JS bundle and
+# the Google Sans woff2 failed, leaving the sign-in page unstyled
+# (the placeholder painting over the typed email) and broken before
+# MI613e; the scanner now terminates and redactSecrets,
+# planCspTranslation and planEngineCsp degrade to their TS fallback
+# bodies on any trap (Zeolite a4b450a on main). sw.js
+# 42d69f0827cbb2f7 -> f7a032a10c7a93fc (841377 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff; seam_wasm_bg.wasm rebuilt (blob
+# 26c66c12). CI on a4b450a: rust/wasm/app/compat green. Cargo-side
+# pin stays 5073f316 (config and seam-wasm crates are engine-side
+# only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=1dda79505efb417e8cd6778b53656784222e425b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2199,7 +2216,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=42d69f0827cbb2f7 ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f7a032a10c7a93fc ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
@@ -2217,4 +2234,3 @@ RUN useradd --system --uid 10001 --no-create-home appuser \
  && chown -R appuser:appuser /app
 USER appuser
 ENTRYPOINT ["/app/lobster-server"]
-
