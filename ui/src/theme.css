@@ -178,6 +178,11 @@ m3e-nav-rail {
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 .lb-set-anchor { scroll-margin-block: 96px; }
+/* Wave 96 (user request 2026-11-09): Settings renders over the home
+   hero image. The content pane paints an opaque surface by default,
+   which would fully cover the fx layer, so the pane goes transparent
+   and the glass cards frost the photo directly. */
+.lb-set-pane { --m3e-content-pane-container-color: transparent; }
 /* The panels sit directly in the content pane, not inside an
    m3e-accordion: the library defines the container color and
    elevation only for panels slotted into an accordion, so outside
@@ -1907,8 +1912,8 @@ body .lb-ext-panel {
 .lb-ai-msg { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); }
 .lb-ai-user { align-items: flex-end; }
 .lb-ai-bubble { padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space150, 12px); border-radius: var(--md-sys-shape-corner-large, 16px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
-.lb-ai-user .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 22%, transparent); border-end-end-radius: var(--md-sys-shape-corner-extra-small, 4px); }
-.lb-ai-assistant .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); border-end-start-radius: var(--md-sys-shape-corner-extra-small, 4px); }
+.lb-ai-user .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 22%, transparent); border-end-end-radius: var(--md-sys-shape-corner-extra-small, 4px); backdrop-filter: var(--lb-glass-blur); -webkit-backdrop-filter: var(--lb-glass-blur); border: var(--lb-glass-ring); }
+.lb-ai-assistant .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); border-end-start-radius: var(--md-sys-shape-corner-extra-small, 4px); backdrop-filter: var(--lb-glass-blur); -webkit-backdrop-filter: var(--lb-glass-blur); border: var(--lb-glass-ring); }
 .lb-ai-think-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
 .lb-ai-sources { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); }
 .lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -1943,7 +1948,7 @@ body .lb-ext-panel {
    summary line shimmers while the step runs, settles to a static
    label, and expands a detail area under it. Shared by reasoning and
    by tool calls such as the Exa web search. */
-.lb-ai-tool { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container, #211f26) 60%, transparent); }
+.lb-ai-tool { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50, 4px); padding: var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space100, 8px); border-radius: var(--md-sys-shape-corner-medium, 12px); background: color-mix(in srgb, var(--md-sys-color-surface-container, #211f26) 60%, transparent); backdrop-filter: var(--lb-glass-blur); -webkit-backdrop-filter: var(--lb-glass-blur); border: var(--lb-glass-ring); }
 .lb-ai-tool-btn { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); border: none; background: none; color: var(--md-sys-color-on-surface-variant, #cac4d0); font: inherit; font-size: var(--md-sys-typescale-label-large-font-size, 14px); padding: 0; cursor: pointer; }
 .lb-ai-tool-btn:disabled { cursor: default; }
 .lb-ai-tool-chev { width: 14px; height: 14px; flex: none; transition: transform 150ms var(--md-sys-motion-easing-standard, ease-in-out); }
@@ -2059,7 +2064,7 @@ body .lb-ext-panel {
 .lb-ai-tool-body-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
 .lb-ai-tool-body-wrap.lb-open { grid-template-rows: 1fr; }
 .lb-ai-tool-body-wrap > .lb-ai-tool-body { overflow: hidden; min-height: 0; padding: 0 0 0 var(--md-sys-measurement-space150, 12px); transition: padding var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); }
-.lb-ai-tool-body-wrap.lb-open > .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); }
+.lb-ai-tool-body-wrap.lb-open > .lb-ai-tool-body { padding: var(--md-sys-measurement-space50, 4px) 0 var(--md-sys-measurement-space50, 4px) var(--md-sys-measurement-space150, 12px); max-height: 175px; overflow-y: auto; }
 
 /* Entrances: a new message fades + rises in, a file chip pops in;
    both run once on mount, 200ms/150ms decelerate. */
@@ -2086,7 +2091,7 @@ body .lb-ext-panel {
 /* Reduced motion: entrances off, transitions instant; the popover and
    the accordion still work as instant state changes. */
 @media (prefers-reduced-motion: reduce) {
-  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello, .lb-ai-att-peek { animation: none; }
+  .lb-ai-msg, .lb-ai-file-chip, .lb-ai-hello, .lb-ai-att-peek, .lb-ai-error { animation: none; }
   .lb-ai-hello.lb-out { animation: none; display: none; }
   .lb-ai-att-peek.lb-out { display: none; }
   .lb-ai-mp-pop, .lb-ai-mp-chev, .lb-ai-tool-body-wrap, .lb-ai-tool-body,
@@ -2367,3 +2372,30 @@ background: var(--lb-glass-tint);
   margin: 0 0 var(--md-sys-measurement-space100);
   border-radius: var(--md-sys-shape-corner-small, 8px);
 }
+
+/* AgentChat (21st.dev) error part, wave 96: a failed turn renders
+   as an inline error card in the conversation (with Try again),
+   so the failure stays in context instead of a transient toast. */
+.lb-ai-error {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-error, #f2b8b5) 30%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-error, #f2b8b5) 10%, transparent);
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+  padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
+  animation: lb-ai-msg-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
+}
+.lb-ai-error-title { font-variation-settings: "wght" 500; }
+.lb-ai-error-msg { margin-top: 2px; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface-variant, #cac4d0); overflow-wrap: anywhere; }
+.lb-ai-error-retry {
+  margin-top: var(--md-sys-measurement-space100, 8px);
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
+  color: var(--md-sys-color-primary, #7f9cf5);
+  cursor: pointer;
+}
+.lb-ai-error-retry:hover { text-decoration: underline; }
