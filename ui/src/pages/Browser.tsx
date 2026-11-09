@@ -492,6 +492,20 @@ export default function BrowserView(props: Props) {
   const statusRef = useRef<Record<number, { loading: boolean; nav?: string }>>({});
   statusRef.current = status;
 
+  /* #247: origin comparator for minor-nav classification. A parse
+     failure fails closed to cross-origin, so the skeleton shows. */
+  const sameOrigin = (a: string, b: string): boolean => {
+    try {
+      return !!a && !!b && new URL(a).origin === new URL(b).origin;
+    } catch {
+      return false;
+    }
+  };
+  /* #247: tabs whose current loading flip is minor (a same-origin
+     navigation, or in-place activity after a committed first paint).
+     Minor flips keep the commitment, so the black skeleton stays off
+     and only the top loading indicator moves. */
+  const minorNav = useRef<Set<number>>(new Set());
   /* Wave 77 skeleton: per-tab first-paint commitment. The black
      skeleton overlay covers the content area while the active tab
      loads a navigation that has not committed its first paint yet
@@ -513,7 +527,11 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     for (const [k, v] of Object.entries(status)) {
       const id = Number(k);
-      if (v.loading && !prevStatus.current[id]?.loading) setCommitted(id, false);
+      /* #247: a committed tab keeps its commitment through minor
+         work (same-origin navigations, in-place reloads, asset
+         activity); only a fresh surface (a fresh tab or a
+         cross-origin navigation) brings the skeleton back. */
+      if (v.loading && !prevStatus.current[id]?.loading && !minorNav.current.has(id)) setCommitted(id, false);
     }
     prevStatus.current = status;
   }, [status]);
@@ -1625,6 +1643,11 @@ export default function BrowserView(props: Props) {
     /* #122/#181: an explicit idx wins - back/forward must move it
        before the render-time snapshot in `tab` goes stale. */
     const idx = opts?.idx ?? (push ? stack.length - 1 : tab.idx);
+    /* #247: classify before the flip: a same-origin destination
+       keeps the committed page visible (indicator only); anything
+       else re-arms the skeleton for a fresh surface. */
+    if (sameOrigin(tab.url, url)) minorNav.current.add(tab.id);
+    else minorNav.current.delete(tab.id);
     props.updateTab(tab.id, { url, stack, idx, title: "" });
     /* Navigating away collapses the pill back to name mode (an empty
      * tab keeps it expanded via the empty-tab effect). */
@@ -1997,6 +2020,11 @@ export default function BrowserView(props: Props) {
            its verification-error page. Same record the recover
            branch keeps. */
         lastNav.current.set(t.id, real);
+        /* #247: page-initiated navigation (in-page link, pushState,
+           engine challenge hop): same-origin keeps the committed
+           page visible; cross-origin re-arms the skeleton. */
+        if (sameOrigin(t.url, real)) minorNav.current.add(t.id);
+        else minorNav.current.delete(t.id);
         props.updateTab(t.id, patch);
         pushLog("info", "url sync " + sanitizeUrl(real));
         /* The polled change is a navigation the frame performed on
@@ -2629,6 +2657,10 @@ export default function BrowserView(props: Props) {
                          goes away and stays away while this document
                          loads its own assets in place. */
                       setCommitted(t.id, true);
+                      /* #247: first paint committed: every later flip
+                         on this document is in-place minor work (asset
+                         waves, activity re-arms), never a fresh surface. */
+                      minorNav.current.add(t.id);
                       el.contentDocument?.addEventListener("contextmenu", onFrameCtx, true);
                       hookFrameDevTools(el);
                       scrollYs.current.delete(t.id);
