@@ -2,8 +2,8 @@
    for the beta UI redesign - the DevTools and tab-switcher bottom
    sheets, the Settings expansion-panel redesign (no option lost), the
    Downloads overflow-menu removal, the scroll-tuck toolbar, the
-   home-only animated background, and the single-provider (@m3e/web)
-   consolidation. Plain fs checks; no app imports, so it runs anywhere
+   hero background (home, AI and Settings since wave 96), and the
+   single-provider (@m3e/web) consolidation. Plain fs checks; no app imports, so it runs anywhere
    node runs. */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 
@@ -95,10 +95,12 @@ const ok = (name, cond) => {
   ok("devtools: legacy copy imported nowhere", stray === 0);
 }
 
-/* --- App: the animated background renders on the home view only. --- */
+/* --- App: the hero background renders on home, AI and Settings
+     (user request 2026-11-09; wave 96 superseded the 2026-11-07
+     home-only shape). --- */
 {
   const a = read("src/App.tsx");
-  ok("app: fx background home-only", a.includes('settings.fancyBackground && view === "home"'));
+  ok("app: fx background on home, AI and Settings", a.includes('settings.fancyBackground && (view === "home" || view === "ai" || view === "settings")'));
 }
 
 /* --- m3e.d.ts: the md-card intrinsic is gone and the live elements

@@ -550,7 +550,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               <SetPanel
                 id="p-fancy"
                 headline="Enhanced UI (hero background image)"
-                sub="The photographic hero background on the Home view"
+                sub="The photographic hero background on Home, AI and Settings"
                 open={!!openP["p-fancy"]}
                 toggle={() => toggleP("p-fancy")}
               >
@@ -562,7 +562,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 />
                 <p className="lb-muted">
                   Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
-                  wave 92 #245) on the Home view. Off keeps the plain flat background.
+                  wave 92 #245; extended to AI and Settings in wave 96) on all three views. Off keeps the plain flat background.
                 </p>
               </SetPanel>
 
