@@ -158,6 +158,10 @@ export default function AiPage() {
   const [helloGone, setHelloGone] = useState(false);
   /* Remaining server quota; null until the first send answers. */
   const [quota, setQuota] = useState<number | null>(null);
+  /* AgentChat (21st.dev) error part: a failed turn renders as an
+     inline error card in the conversation with a Try again action,
+     not a transient snackbar. */
+  const [error, setError] = useState<{ title: string; message: string; retry?: () => void } | null>(null);
   /* Sub agent runs this turn: one shim row each, elapsed when done. */
   const [subs, setSubs] = useState<AiSub[]>([]);
   const [attached, setAttached] = useState<Attached[]>([]);
@@ -298,6 +302,7 @@ export default function AiPage() {
        their own content and images re-route to the vision model;
        only a draft with no payload at all is a no-op. */
     if ((!text && files.length === 0) || busy) return;
+    setError(null);
     const before = messages.length;
 
     const userMsg: AiMsg = { role: "user", text, files: files.map((f) => f.name) };
@@ -517,16 +522,21 @@ export default function AiPage() {
         if (acc || thinkAcc) ok = true;
         else setMessages((m) => m.slice(0, before));
       } else {
-        /* Roll the failed turn back so the notification's Try again
-           action replays it cleanly. */
+        /* Roll the failed turn back and show the failure as an inline
+           error card (the AgentChat error part): it stays in context
+           and its Try again replays the turn. Rate limits carry no
+           retry button. */
         setMessages((m) => m.slice(0, before));
         const rl = e instanceof RateLimitError;
-        toast(
-          rl ? msg(e) : "AI error: " + msg(e),
-          rl ? undefined : () => {
-            void send({ text, files });
-          }
-        );
+        setError({
+          title: rl ? "Rate limit reached" : "The request failed",
+          message: msg(e),
+          retry: rl
+            ? undefined
+            : () => {
+                void send({ text, files });
+              },
+        });
       }
     } finally {
       endThink();
@@ -704,6 +714,25 @@ export default function AiPage() {
             </div>
           );
         })}
+        {error && (
+          <div className="lb-ai-error" role="alert">
+            <div className="lb-ai-error-title">{error.title}</div>
+            <div className="lb-ai-error-msg">{error.message}</div>
+            {error.retry && (
+              <button
+                type="button"
+                className="lb-ai-error-retry"
+                onClick={() => {
+                  const retry = error.retry;
+                  setError(null);
+                  retry?.();
+                }}
+              >
+                Try again
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="lb-ai-bar">
