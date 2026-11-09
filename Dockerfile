@@ -2153,7 +2153,26 @@ FROM debian:bookworm-slim AS zl-builder
 # 26c66c12). CI on a4b450a: rust/wasm/app/compat green. Cargo-side
 # pin stays 5073f316 (config and seam-wasm crates are engine-side
 # only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=1dda79505efb417e8cd6778b53656784222e425b
+# Pin 166 (2026-11-09): dist c04e4e9 (build 42612351784) deploys
+# the ERR_FAILED orchestration catch (#633): pre-pipeline SW
+# rejections (boot gates, handle decoding, virtual-context
+# resolution) died as bare Response.error() fetches with no netlog
+# row and surfaced client-side as ERR_FAILED storms on
+# play.google.com/log; respondWith now catches the orchestration
+# promise, answers an honest 502 and pushes a DIAG row ("request
+# orchestration failed before the engine pipeline") (Zeolite
+# a54c97a on main). The bundle also carries the #553 popup facade
+# slices (2dcc870, 030e19b), the #523 CSS __MSG__ substitution,
+# the #544 ws/rtc marker fix (148c8f5) and the popups-before-torture
+# CI reorder (50bdd3c). sw.js f7a032a10c7a93fc -> d066a19cbee1969a
+# (859280 bytes); bootstrap.js 0c81efb9ba343dff -> 0ddd6edd9485c8ab
+# (51030 bytes). CI on 50bdd3c: rust/wasm/app/compat green; the two
+# duplicate browser jobs overlapped on the runner and closed red on
+# the documented rotating wedge (one red at the main e2e battery,
+# its byte-identical twin green there and red at the torture
+# battery; docs/ci-torture-wedge.md). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=c04e4e971472f66e42a0a2bb9fb5181b1e8c1ea7
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2216,7 +2235,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f7a032a10c7a93fc ZEOLITE_BOOTSTRAP_SHA=0c81efb9ba343dff SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d066a19cbee1969a ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
