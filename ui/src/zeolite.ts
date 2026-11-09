@@ -1,4 +1,4 @@
-successfully downloaded text file (SHA: f5fe4dc7f7482e8c07111e0c25db97800ef61116)/* Zeolite service worker plumbing shared by the UI surfaces (the
+/* Zeolite service worker plumbing shared by the UI surfaces (the
    Browser extensions panel and the Settings extensions importer).
 
    The engine bundle is vendored into /zlsw at build time and served
@@ -8,6 +8,8 @@ successfully downloaded text file (SHA: f5fe4dc7f7482e8c07111e0c25db97800ef61116
    intercepted, and /zl-ext/, /zl-cs/ asset serving needs the wide
    scope. With no controller on the page (Home, Settings,
    plain tabs) this module is the control plane client. */
+
+import { loadDebugOverrides } from "./debug";
 
 async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
@@ -101,14 +103,27 @@ function zlSendTo(
   return new Promise<Record<string, any> | null>((resolve) => {
     const ch = new MessageChannel();
     let settled = false;
+    let timer = 0;
+    /* #221: one idempotent terminal path: clear the timer, drop the
+       port callback and close BOTH ports (close detaches onmessage),
+       then resolve. Safe to call twice. */
     const finish = (v: Record<string, any> | null) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(timer);
+      try { ch.port1.close(); } catch { /* already closed */ }
+      try { ch.port2.close(); } catch { /* detached by transfer */ }
       resolve(v);
     };
     ch.port1.onmessage = (ev) => finish(ev.data as Record<string, any>);
-    setTimeout(() => finish(null), timeoutMs);
-    swc.postMessage(msg, [ch.port2]);
+    /* Install the timer BEFORE dispatch: a synchronous reply or a
+       synchronous dispatch failure can no longer strand it. */
+    timer = window.setTimeout(() => finish(null), timeoutMs);
+    try {
+      swc.postMessage(msg, [ch.port2]);
+    } catch {
+      finish(null);
+    }
   });
 }
 
@@ -164,6 +179,15 @@ export function zlWaitActive(timeoutMs = 10000): Promise<void> {
         navigator.serviceWorker.ready,
         new Promise((resolve) => setTimeout(resolve, timeoutMs)),
       ]);
+      /* "Active" is not "controls this page": until clients.claim()
+         lands, a frame src assigned now bypasses the worker and the
+         server SPA fallback renders the app shell inside the pane
+         (LB inside LB on the first split-off navigation). Poll until
+         the page is actually controlled, bounded by the same gate. */
+      const t0 = Date.now();
+      while (!navigator.serviceWorker.controller && Date.now() - t0 < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
     })();
   }
   return zlActiveWait;
@@ -203,7 +227,17 @@ function u8ToB64(u: Uint8Array): string {
   return btoa(s);
 }
 
-const relayControllers = new Map<number, AbortController>();
+/* #218: relay state is scoped to the registration channel (the
+   MessagePort), never globally by rid: each worker instance starts
+   its own rid sequence, and a global rid map let one channel's
+   cancel abort another channel's same-numbered fetch. */
+type RelayChannel = {
+  controllers: Map<number, AbortController>;
+  creditSinks: Map<number, (bytes: number) => void>;
+  /* #511: page-WebSocket conns ride the same per-channel scope (#218):
+     a rid from one registration can never route into another's socket. */
+  wsConns: Map<number, WebSocket>;
+};
 
 /* Zeolite #470 producer half: the engine's relay transport grants
    byte credits (upfront after zl:fetchRelay, then per drained chunk)
@@ -213,11 +247,11 @@ const relayControllers = new Map<number, AbortController>();
    the FIRST grant: a legacy engine never grants, and it must keep
    streaming exactly as before (no stall). */
 const RELAY_CREDIT_FRAME = 256 * 1024;
-const relayCreditSinks = new Map<number, (bytes: number) => void>();
 
 async function zlRelayFetch(
   m: { rid: number; dest: string; method: string; headers: Array<[string, string]>; body?: unknown },
   port: MessagePort,
+  chan: RelayChannel,
 ): Promise<void> {
   const rid = m.rid;
   /* Zeolite #145: the engine can abort a relayed fetch (page
@@ -225,7 +259,7 @@ async function zlRelayFetch(
      /zlrelay connection, which drops the server-side upstream request
      mid-flight instead of streaming it to nobody. */
   const ac = new AbortController();
-  relayControllers.set(rid, ac);
+  chan.controllers.set(rid, ac);
   /* #470: the credit sink must be live BEFORE the first await: the
      engine posts its upfront grant as soon as zl:fetchRelay lands,
      which can precede the /zlrelay response. */
@@ -239,7 +273,7 @@ async function zlRelayFetch(
     wake = null;
     if (w) w();
   };
-  relayCreditSinks.set(rid, sink);
+  chan.creditSinks.set(rid, sink);
   const waitForCredit = () =>
     new Promise<void>((res) => {
       const onAbort = () => {
@@ -338,8 +372,8 @@ async function zlRelayFetch(
   } finally {
     /* Only drop our own controller/sink: a reused rid must not remove
        the entry of a newer fetch, or its cancel would become a no-op. */
-    if (relayCreditSinks.get(rid) === sink) relayCreditSinks.delete(rid);
-    if (relayControllers.get(rid) === ac) relayControllers.delete(rid);
+    if (chan.creditSinks.get(rid) === sink) chan.creditSinks.delete(rid);
+    if (chan.controllers.get(rid) === ac) chan.controllers.delete(rid);
   }
 }
 
@@ -347,9 +381,9 @@ async function zlRelayFetch(
    WebSockets onto the registered relay port; each opens one /zlws
    browser socket here (JSON text frames control, binary frames carry
    binary data, so page text can never collide with control frames).
-   The engine treats a lost frame stream as an honest close. */
-const wsConns = new Map<number, WebSocket>();
-
+   The engine treats a lost frame stream as an honest close. The conn
+   map is per-channel (#218): two live registrations can never route
+   one channel's rid into another's socket. */
 interface ZlWsRelayMsg {
   rid: number;
   url: string;
@@ -365,7 +399,7 @@ function zlWsPost(port: MessagePort, msg: Record<string, unknown>): void {
   }
 }
 
-function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort): void {
+function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort, chan: RelayChannel): void {
   let ws: WebSocket;
   try {
     ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/zlws");
@@ -385,7 +419,7 @@ function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort): void {
         }),
       );
     } catch {
-      wsConns.delete(m.rid);
+      chan.wsConns.delete(m.rid);
       zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: "zlws send failed" });
     }
   };
@@ -408,41 +442,47 @@ function zlWsRelayOpen(m: ZlWsRelayMsg, port: MessagePort): void {
     } else if (msg.op === "data") {
       zlWsPost(port, { type: "zl:wsData", rid: m.rid, data: typeof msg.text === "string" ? msg.text : "" });
     } else if (msg.op === "close") {
-      wsConns.delete(m.rid);
+      chan.wsConns.delete(m.rid);
       zlWsPost(port, { type: "zl:wsClose", rid: m.rid, code: Number(msg.code) || 1006, reason: typeof msg.reason === "string" ? msg.reason : "" });
     } else if (msg.op === "fail") {
-      wsConns.delete(m.rid);
+      chan.wsConns.delete(m.rid);
       zlWsPost(port, { type: "zl:wsError", rid: m.rid, error: typeof msg.message === "string" ? msg.message : "upstream refused" });
     }
   };
   ws.onclose = () => {
-    if (wsConns.get(m.rid) === ws) {
-      wsConns.delete(m.rid);
+    if (chan.wsConns.get(m.rid) === ws) {
+      chan.wsConns.delete(m.rid);
       zlWsPost(port, { type: "zl:wsClose", rid: m.rid, code: 1006, reason: "" });
     }
   };
   ws.onerror = () => {
     /* the onclose arm reports the channel death exactly once */
   };
-  wsConns.set(m.rid, ws);
+  chan.wsConns.set(m.rid, ws);
 }
+
 export function zlRelayInit(): void {
   void zlWorker().then((sw) => {
     if (!sw) return;
     const ch = new MessageChannel();
+    /* #218: the channel object is the relay state's whole scope:
+       cancel and credit frames route only inside the port they
+       arrived on, so two live registrations (a worker restart
+       overlap) can never collide on rid. */
+    const chan: RelayChannel = { controllers: new Map(), creditSinks: new Map(), wsConns: new Map() };
     ch.port1.onmessage = (ev) => {
       const m = ev.data as { type?: string; rid?: number };
       if (m && m.type === "zl:fetchRelay" && typeof m.rid === "number") {
-        void zlRelayFetch(ev.data, ch.port1);
+        void zlRelayFetch(ev.data, ch.port1, chan);
       } else if (m && m.type === "zl:relayCancel" && typeof m.rid === "number") {
-        relayControllers.get(m.rid)?.abort();
+        chan.controllers.get(m.rid)?.abort();
       } else if (m && m.type === "zl:relayCredit" && typeof m.rid === "number") {
         /* #470: grant frames from the engine; bytes are advisory. */
-        relayCreditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
+        chan.creditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
       } else if (m && m.type === "zl:wsRelay" && typeof m.rid === "number") {
-        zlWsRelayOpen(ev.data as ZlWsRelayMsg, ch.port1);
+        zlWsRelayOpen(ev.data as ZlWsRelayMsg, ch.port1, chan);
       } else if (m && m.type === "zl:wsSend" && typeof m.rid === "number") {
-        const ws = wsConns.get(m.rid);
+        const ws = chan.wsConns.get(m.rid);
         if (ws) {
           try {
             if ((m as { bin?: unknown }).bin === true) {
@@ -459,9 +499,9 @@ export function zlRelayInit(): void {
           }
         }
       } else if (m && m.type === "zl:wsClose" && typeof m.rid === "number") {
-        const ws = wsConns.get(m.rid);
+        const ws = chan.wsConns.get(m.rid);
         if (ws) {
-          wsConns.delete(m.rid);
+          chan.wsConns.delete(m.rid);
           /* #511 close parity: send the close envelope before closing so
              /zlws echoes {op:"close"} and the engine close event fires
              on handshake completion, not on its fallback timer. */
@@ -498,8 +538,8 @@ export function zlRelayInit(): void {
        page hook never posted nav/ready: favicon, diagnostics and
        the spinner clear all failed closed. The shell is a host-side
        sender (the #41 gate keeps pages from forging this), and the
-       value matches this worker's own origin, the only origin that
-       can embed these frames. The existing zlRelayInit heal paths
+       value matches the app origin, the only origin that can
+       embed these frames. The existing zlRelayInit heal paths
        (controllerchange, the 15s keep-alive and zl:relayLost)
        re-send it after a worker restart. */
     sw.postMessage({ type: "zl:embedderOrigin", origin: window.location.origin });
@@ -579,6 +619,10 @@ export function zlContentReady(): Promise<void> {
    content origin for frame sources, so proxied documents never
    render on the app origin. Non-relative hrefs pass through. */
 export function zlContentHref(href: string): string {
+  /* Debug override: split === false keeps frames on the app origin
+     (the pre-split architecture; the app worker then owns them).
+     Existing tabs keep their origin until their next navigation. */
+  if (loadDebugOverrides().split === false) return href;
   const co = contentOrigin;
   return co && href.startsWith("/") ? co + href : href;
 }
@@ -590,6 +634,13 @@ export function zlContentHref(href: string): string {
    drop stays detectable. Resolves false when no content origin is
    provisioned or the ack never lands; never throws. */
 let contentFrameWin: Window | null = null;
+let contentRegState: "none" | "ready" | "failed" = "none";
+/* #222: explicit handshake state for diagnostics. "failed" means
+   the boot page answered ok:false or the 30s bound expired: content
+   queries stay unavailable instead of faking a ready channel. */
+export function zlContentRegState(): "none" | "ready" | "failed" {
+  return contentRegState;
+}
 
 export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boolean> {
   await zlContentReady();
@@ -674,23 +725,32 @@ export function zlContentRegister(co: string): void {
   f.setAttribute("data-lb-zlreg", "1");
   f.style.display = "none";
   contentReady = new Promise<void>((resolve) => {
+    let deadline = 0;
+    /* #222: every terminal path funnels through done(), which clears
+       the deadline and listener exactly once. Failure (ok:false or
+       the 30s bound) leaves contentFrameWin null so queries stay
+       unavailable, and records an explicit state. */
+    const done = (ok: boolean) => {
+      window.clearTimeout(deadline);
+      window.removeEventListener("message", onMsg);
+      contentRegState = ok ? "ready" : "failed";
+      if (ok) contentFrameWin = f.contentWindow;
+      resolve();
+    };
     const onMsg = (ev: MessageEvent) => {
       if (ev.origin !== co) return;
+      if (ev.source !== f.contentWindow) return;
       const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
       if (!d || d.zlReg !== true) return;
-      window.removeEventListener("message", onMsg);
+      if (d.ok !== true) { done(false); return; }
       /* #107 phase 2: introduce the app to the boot page; its worker
          stores the embedder origin so proxied frames can sync URL and
          title (the boot page re-registers it on its relayLost heal). */
       try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
-      contentFrameWin = f.contentWindow;
-      resolve();
+      done(true);
     };
     window.addEventListener("message", onMsg);
-    window.setTimeout(() => {
-      window.removeEventListener("message", onMsg);
-      resolve();
-    }, 30000);
+    deadline = window.setTimeout(() => done(false), 30000);
   });
   f.src = co + "/zlsw-register";
   document.body.appendChild(f);
