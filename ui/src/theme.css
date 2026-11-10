@@ -39,6 +39,9 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .app-content {
   flex: 1;
   width: 100%;
+  /* Issue #251: include the padding in the width so the column
+     cannot poke 48px past the viewport and clip its right edge. */
+  box-sizing: border-box;
   max-width: 1100px;
   margin: 0 auto;
   padding: var(--md-sys-measurement-space300) var(--md-sys-measurement-space300) var(--md-sys-measurement-space600);

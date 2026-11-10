@@ -40,6 +40,12 @@ assert.ok(b.includes("tabActiveAt.current.set(tab.id, Date.now());"), "navigatio
 assert.ok(b.includes("tabActiveAt.current.delete(id);"), "tab close cleans the idle map");
 assert.ok(b.includes("sleeping.current.delete(id);"), "tab close cleans the sleeping set");
 
+/* Wave 100: the content column must include its own padding
+   (issue #251): content-box made .app-content poke 48px past the
+   viewport and clip the right edge of every view. */
+const theme = read("../../ui/src/theme.css");
+assert.ok(/\.app-content \{[^}]*box-sizing: border-box;/.test(theme), "the app content column is border-box so padding cannot overflow the viewport");
+
 /* The ci ui job runs this check. */
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
 
