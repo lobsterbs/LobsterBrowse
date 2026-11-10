@@ -203,6 +203,22 @@ function u8ToB64(u: Uint8Array): string {
   return btoa(s);
 }
 
+/* Zeolite #556 relay follow-up: a File body is the engine's OPFS
+   replay spool - it crosses the relay port by structured clone and
+   rides the endpoint's JSON envelope as base64. The 32 MiB route
+   budget minus the 4/3 base64 inflation caps a spooled upload at
+   23 MiB; over that the refusal is pre-dispatch and honest
+   (delivery: definitely-not-delivered), never a corrupted bodyless
+   POST. */
+const RELAY_FILE_MAX_BYTES = 23 * 1024 * 1024;
+class RelayFileTooBigError extends Error {}
+const relayFileBody = async (b: Blob): Promise<string> => {
+  if (b.size > RELAY_FILE_MAX_BYTES) {
+    throw new RelayFileTooBigError("relay: file body over the route budget (23 MiB)");
+  }
+  return u8ToB64(new Uint8Array(await b.arrayBuffer()));
+};
+
 const relayControllers = new Map<number, AbortController>();
 
 /* Zeolite #470 producer half: the engine's relay transport grants
@@ -265,7 +281,9 @@ async function zlRelayFetch(
         ? m.body
         : m.body instanceof ArrayBuffer
           ? u8ToB64(new Uint8Array(m.body))
-          : undefined;
+          : m.body instanceof Blob
+            ? await relayFileBody(m.body)
+            : undefined;
     const relayBody = JSON.stringify({
       dest: m.dest,
       method: m.method,
@@ -334,7 +352,10 @@ async function zlRelayFetch(
     }
     port.postMessage({ type: "zl:relayEnd", rid });
   } catch (e) {
-    fail(e instanceof Error ? e.message : String(e));
+    fail(
+      e instanceof RelayFileTooBigError ? e.message : e instanceof Error ? e.message : String(e),
+      e instanceof RelayFileTooBigError ? "definitely-not-delivered" : undefined,
+    );
   } finally {
     /* Only drop our own controller/sink: a reused rid must not remove
        the entry of a newer fetch, or its cancel would become a no-op. */
