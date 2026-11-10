@@ -100,7 +100,7 @@ const ok = (name, cond) => {
      home-only shape). --- */
 {
   const a = read("src/App.tsx");
-  ok("app: fx background on home, AI and Settings", a.includes('settings.fancyBackground && (view === "home" || view === "ai" || view === "settings")'));
+  ok("app: fx background on home and AI (#261)", a.includes('settings.fancyBackground && (view === "home" || view === "ai")'));
 }
 
 /* --- m3e.d.ts: the md-card intrinsic is gone and the live elements

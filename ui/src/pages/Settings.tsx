@@ -272,19 +272,29 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      proxy engine returns to Zeolite. */
   const zlOff = settings.proxyEngine === "scramjet";
   const zlNote = (
-    <p className="lb-muted lb-zl-note">
-      Zeolite engine only - inactive while ScramJet is the current engine (Advanced &gt; Proxy engine).
-    </p>
+    <div className="lb-zl-banner" role="note">
+      <m3e-icon name="info" aria-hidden={true} />
+      <span>
+        Zeolite engine only - inactive while ScramJet is the current engine (Advanced &gt; Proxy engine).
+      </span>
+    </div>
   );
 
   /* #198: searchable Settings - all local, no persistence change. */
   const [q, setQ] = useState("");
+  const [chipSection, setChipSection] = useState("all");
+  const handleQuery = (v: string) => {
+    setQ(v);
+    setChipSection("all");
+  };
   const needle = q.trim().toLowerCase();
   const hits = needle
     ? SETTING_INDEX.filter((e) =>
         (e.label + " " + (e.terms ?? "") + " " + SECTION_TITLES[e.section]).toLowerCase().includes(needle),
       )
     : [];
+  const resultSections = ["all", ...Array.from(new Set(hits.map((h) => h.section)))];
+  const shownHits = chipSection === "all" ? hits : hits.filter((h) => h.section === chipSection);
   const jumpTo = (entry: SetEntry) => {
     const panel = entry.panel;
     if (panel) setOpenP((prev) => ({ ...prev, [panel]: true }));
@@ -422,14 +432,27 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               a flat result list; picking a result expands the owning
               panel, clears the query and scrolls the row into view. */}
           <div className="lb-set-search">
-            <TextInput label="Search settings" value={q} onChange={setQ} />
+            <TextInput label="Search settings" value={q} onChange={handleQuery} />
           </div>
           {q.trim() ? (
             <div className="lb-set-results">
-              {hits.length === 0 ? (
+              {resultSections.length > 1 && (
+                <m3e-chip-set {...{ class: "lb-set-chips" }}>
+                  {resultSections.map((s2) => (
+                      <m3e-chip
+                        key={"f-" + s2}
+                        selected={chipSection === s2 ? "" : undefined}
+                        onClick={() => setChipSection(chipSection === s2 ? "all" : s2)}
+                      >
+                        {s2 === "all" ? "All" : SECTION_TITLES[s2]}
+                      </m3e-chip>
+                  ))}
+                </m3e-chip-set>
+              )}
+              {shownHits.length === 0 ? (
                 <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
               ) : (
-                hits.map((h) => (
+                shownHits.map((h) => (
                   <m3e-card key={"c-" + h.label} variant="filled" {...{ class: "lb-set-result" }}>
                     <button type="button" className="lb-set-result-btn" onClick={() => jumpTo(h)}>
                       <span>{h.label}</span>
@@ -464,6 +487,56 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 on={settings.suggestQueries}
                 toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
               />
+
+              <SectionHead section="appearance" />
+              <SetPanel
+                id="p-theme-color"
+                headline="Theme color"
+                sub="The seed color the whole UI palette derives from"
+                anchorId="set-theme-color"
+                open={!!openP["p-theme-color"]}
+                toggle={() => toggleP("p-theme-color")}
+              >
+                <div className="lb-seed-row">
+                  <input
+                    type="color"
+                    aria-label="Theme color"
+                    value={settings.seed}
+                    onChange={(e) => onChange({ seed: e.target.value })}
+                    className="lb-color-input"
+                  />
+                  <m3e-chip-set>
+                    {SEEDS.map(([hex, name]) => (
+                      <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
+                        {/* Wave 89: a colored swatch in the chip's icon slot
+                           (the plain m3e-chip exposes no avatar slot) so
+                           every seed option shows its color (user report
+                           2026-11-08). */}
+                        <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
+                        {name}
+                      </m3e-chip>
+                    ))}
+                  </m3e-chip-set>
+                </div>
+              </SetPanel>
+              <SetPanel
+                id="p-fancy"
+                headline="Enhanced UI (hero background image)"
+                sub="The photographic hero background on Home and AI"
+                open={!!openP["p-fancy"]}
+                toggle={() => toggleP("p-fancy")}
+              >
+                <Row
+                  id="set-fancy"
+                  label="Enhanced UI (hero background image)"
+                  on={settings.fancyBackground}
+                  toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
+                />
+                <p className="lb-muted">
+                  Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
+                  wave 92 #245; extended to AI and Settings in wave 96; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
+                </p>
+              </SetPanel>
 
               <SectionHead section="privacy" />
               <SetInline
@@ -552,56 +625,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
                   The engine validates the manifest and permission grants; a bad package only lands that
                   extension in an error state.
-                </p>
-              </SetPanel>
-
-              <SectionHead section="appearance" />
-              <SetPanel
-                id="p-theme-color"
-                headline="Theme color"
-                sub="The seed color the whole UI palette derives from"
-                anchorId="set-theme-color"
-                open={!!openP["p-theme-color"]}
-                toggle={() => toggleP("p-theme-color")}
-              >
-                <div className="lb-seed-row">
-                  <input
-                    type="color"
-                    aria-label="Theme color"
-                    value={settings.seed}
-                    onChange={(e) => onChange({ seed: e.target.value })}
-                    className="lb-color-input"
-                  />
-                  <m3e-chip-set>
-                    {SEEDS.map(([hex, name]) => (
-                      <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
-                        {/* Wave 89: a colored swatch in the chip's icon slot
-                           (the plain m3e-chip exposes no avatar slot) so
-                           every seed option shows its color (user report
-                           2026-11-08). */}
-                        <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
-                        {name}
-                      </m3e-chip>
-                    ))}
-                  </m3e-chip-set>
-                </div>
-              </SetPanel>
-              <SetPanel
-                id="p-fancy"
-                headline="Enhanced UI (hero background image)"
-                sub="The photographic hero background on Home, AI and Settings"
-                open={!!openP["p-fancy"]}
-                toggle={() => toggleP("p-fancy")}
-              >
-                <Row
-                  id="set-fancy"
-                  label="Enhanced UI (hero background image)"
-                  on={settings.fancyBackground}
-                  toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
-                />
-                <p className="lb-muted">
-                  Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
-                  wave 92 #245; extended to AI and Settings in wave 96) on all three views. Off keeps the plain flat background.
                 </p>
               </SetPanel>
 
@@ -737,6 +760,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                       onClick={() => {
                         onDeleteAll();
                         deleteDialogRef.current?.hide();
+                        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                          M3eSnackbar.open("All data deleted on this device", { duration: 3000 });
+                        }
                       }}
                     >
                       Delete all data

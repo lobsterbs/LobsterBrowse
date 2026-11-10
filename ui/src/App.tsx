@@ -865,14 +865,14 @@ export default function App() {
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
       {/* Enhanced UI setting: the home hero background is portaled to
           <body> so no view ancestor can trap the fixed layer. It
-          renders on home, AI and Settings (user request
-          2026-11-09; home-only was the 2026-11-07 shape): the rail
-          and dock frost what is really adjacent to them.
+          renders on home and AI (#261 removed Settings: a work
+          surface wants a quiet background): the rail and dock
+          frost what is really adjacent to them.
           Wave 92 (issue #245): the liquid-metal ribbon shader was
           removed fully and replaced by the static photographic hero
           image (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule
           in theme.css). Away from those views = not rendered. */}
-      {settings.fancyBackground && (view === "home" || view === "ai" || view === "settings") &&
+      {settings.fancyBackground && (view === "home" || view === "ai") &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
