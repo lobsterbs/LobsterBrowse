@@ -46,6 +46,11 @@ assert.ok(b.includes("sleeping.current.delete(id);"), "tab close cleans the slee
 const theme = read("../../ui/src/theme.css");
 assert.ok(/\.app-content \{[^}]*box-sizing: border-box;/.test(theme), "the app content column is border-box so padding cannot overflow the viewport");
 
+/* Wave 100b: mobile bottom nav items must stretch, not clip
+   (#254), and Settings descriptions must wrap on phones (#255). */
+assert.ok(theme.includes(".lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }"), "mobile bottom nav items stretch across the bar");
+assert.ok(/@media \(max-width: 600px\)[\s\S]*?\.lb-setting-desc, \.lb-setp-sub \{ white-space: normal; \}/.test(theme), "settings descriptions wrap on small screens");
+
 /* The ci ui job runs this check. */
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
 
