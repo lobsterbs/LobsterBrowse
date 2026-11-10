@@ -558,6 +558,22 @@ export function zlWispInit(url: string): void {
   });
 }
 
+/* #642: arm the engine's wisp password-auth client (Zeolite #496)
+   on BOTH workers from the access-gated /wispauth endpoint. The
+   credentials are memory-only in the worker (a restart drops them;
+   the app re-arms on boot and controllerchange) and are never
+   logged. */
+export type ZlWispAuthCreds = { endpoint: string; username: string; password: string };
+
+export async function zlWispAuthArm(creds: ZlWispAuthCreds): Promise<void> {
+  const msg = {
+    type: "zl:wispAuth" as const,
+    wispAuth: { op: "set" as const, ...creds },
+  };
+  void zlSend(msg, 8000);
+  void zlContentQuery(msg, 8000);
+}
+
 /* #107: the provisioned content origin for proxied documents
    (ZL_CONTENT_ORIGIN on the server, announced by /build). Empty
    until the operator provisions a second hostname for this service;

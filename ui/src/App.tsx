@@ -19,7 +19,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
-import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
 import { parseNavTab } from "./frameNav";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
@@ -169,6 +169,15 @@ export default function App() {
      value into a long retry loop. The ref starts true so a push
      before /build resolves never disables the always-on injector. */
   const queryRoutesRef = useRef(true);
+  /* #642: trusted-egress credential arming + the access-password
+     gate. The ref holds the armed credentials so controllerchange
+     can re-arm after a worker restart (the engine keeps them
+     memory-only). */
+  const wispAuthRef = useRef<{ endpoint: string; username: string; password: string } | null>(null);
+  const [accessGateOpen, setAccessGateOpen] = useState(false);
+  const [accessErr, setAccessErr] = useState("");
+  const accessGateRef = useRef<(HTMLElement & { show: () => Promise<void>; returnValue: string }) | null>(null);
+  const accessPwRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     zlRelayInit();
     let wispUrl = "";
@@ -185,6 +194,26 @@ export default function App() {
            provisions it; when present, remember it and register the
            engine worker on that origin. */
         queryRoutesRef.current = b && b.zlQueryRoutes === true;
+        /* #642: arm the trusted-egress wisp credentials when the
+           deployment provisions them. A 403 means the access
+           password gate is up and this visitor has not passed it;
+           the small dialog offers the one-time unlock. */
+        if (b && b.wispAuth === true) {
+          void fetch("/wispauth", { cache: "no-store" })
+            .then(async (r) => {
+              if (r.status === 403) {
+                setAccessGateOpen(true);
+                return null;
+              }
+              return r.ok ? ((await r.json()) as { endpoint: string; username: string; password: string }) : null;
+            })
+            .then((c) => {
+              if (!c || !c.endpoint) return;
+              wispAuthRef.current = c;
+              void zlWispAuthArm(c);
+            })
+            .catch(() => {});
+        }
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         zlAnnounceContentOrigin(co);
         if (co) zlContentRegister(co);
@@ -206,6 +235,9 @@ export default function App() {
     const re = () => {
       zlRelayInit();
       if (wispUrl) zlWispInit(wispUrl);
+      /* #642: a worker restart drops the memory-only wisp
+         credentials; re-arm with the same creds. */
+      if (wispAuthRef.current) void zlWispAuthArm(wispAuthRef.current);
     };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
     /* The relay channel lives in service-worker memory. An idle worker
@@ -804,6 +836,31 @@ export default function App() {
     },
   ];
 
+  /* #642: show the access gate once the 403 landed. */
+  useEffect(() => {
+    if (!accessGateOpen) return;
+    const el = accessGateRef.current;
+    if (el) void el.show();
+  }, [accessGateOpen]);
+
+  const submitAccessPassword = async () => {
+    const pw = accessPwRef.current?.value ?? "";
+    try {
+      const r = await fetch("/access", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (r.ok) {
+        location.reload();
+        return;
+      }
+      setAccessErr("Wrong password.");
+    } catch {
+      setAccessErr("Network error.");
+    }
+  };
+
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
       {/* Enhanced UI setting: the home hero background is portaled to
@@ -955,6 +1012,31 @@ export default function App() {
       </div>
       {/* #81: rendered at the root so Ctrl+K works in every view. */}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
+      {/* #642: access-password gate for the trusted-egress
+          credential arming. A correct password sets the lb_access
+          cookie and reloads so the boot arming retry runs. */}
+      {accessGateOpen && (
+        <m3e-dialog {...{ ref: accessGateRef }} alert="">
+          <span slot="header">Access password</span>
+          <p>
+            This deployment gates its trusted-egress wisp credentials behind an access password.
+          </p>
+          <input
+            ref={accessPwRef}
+            type="password"
+            aria-label="Access password"
+            style={{ width: "100%", boxSizing: "border-box", marginTop: "8px" }}
+          />
+          {accessErr ? (
+            <p style={{ color: "var(--md-sys-color-error, #f2b8b5)", margin: "4px 0 0" }}>{accessErr}</p>
+          ) : null}
+          <div slot="actions">
+            <m3e-button variant="filled" onClick={() => void submitAccessPassword()}>
+              Unlock
+            </m3e-button>
+          </div>
+        </m3e-dialog>
+      )}
     </m3e-theme>
   );
 }
