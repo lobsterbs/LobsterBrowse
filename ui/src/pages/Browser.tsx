@@ -506,6 +506,24 @@ export default function BrowserView(props: Props) {
      Minor flips keep the commitment, so the black skeleton stays off
      and only the top loading indicator moves. */
   const minorNav = useRef<Set<number>>(new Set());
+
+  /* #249 idle tab unloading: every tab keeps one same-origin engine
+     iframe mounted in the single tab renderer process, so background
+     tabs hold their whole document trees in RAM (wave-96 probe: 3
+     heavy subframes grew renderer RSS from 257 MB to 1709 MB while
+     the JS heap stayed flat at 15 MB). After this deadline a
+     background tab frame unloads to about:blank; returning
+     re-navigates it as a fresh surface with the skeleton. */
+  const IDLE_UNLOAD_MS = 5 * 60 * 1000;
+  /* #249: the about:blank unload load event is not a first paint. */
+  const sleeping = useRef<Set<number>>(new Set());
+  /* #249: last activity time per tab; drives idle unloading. */
+  const tabActiveAt = useRef<Map<number, number>>(new Map());
+  /* #249: render-stable reads for the unload ticker below. */
+  const activeIdRef = useRef<number>(0);
+  activeIdRef.current = active?.id ?? 0;
+  const tabsRef = useRef<Tab[]>(tabs);
+  tabsRef.current = tabs;
   /* Wave 77 skeleton: per-tab first-paint commitment. The black
      skeleton overlay covers the content area while the active tab
      loads a navigation that has not committed its first paint yet
@@ -1622,6 +1640,8 @@ export default function BrowserView(props: Props) {
   const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
     lastNav.current.set(tab.id, url);
+    /* #249: a navigating tab is active work; reset its idle deadline. */
+    tabActiveAt.current.set(tab.id, Date.now());
     const priorClient = documentIds.current.get(tab.id)?.clientId;
     if (priorClient) retireClient(tab.id, priorClient);
     documentIds.current.delete(tab.id);
@@ -1705,7 +1725,9 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     const t = active;
     if (!t || !t.url) return;
-    if (lastNav.current.get(t.id) === t.url) return;
+    /* #249: an idle-unloaded frame sits at about:blank; a matching
+       lastNav must not suppress the re-navigation. */
+    if (lastNav.current.get(t.id) === t.url && !blankFrame(t.id)) return;
     /* An escape recovery is in flight for this tab: the recovered
        target is already loading; a settings/rules change re-running
        this effect must not re-drive the escaped-from URL (#169). */
@@ -1713,6 +1735,52 @@ export default function BrowserView(props: Props) {
     load(t, t.url, { push: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id, active?.url, settings, rules]);
+
+  /* #249: detect a frame parked at about:blank by the idle unloader
+     (or a restored tab whose frame remounted empty). */
+  const blankFrame = (id: number): boolean => {
+    const f = frames.current.get(id);
+    if (!f) return false;
+    try { return f.contentWindow ? f.contentWindow.location.href === "about:blank" : true; } catch { return false; }
+  };
+
+  /* #249: the active tab always gets a fresh idle deadline. */
+  useEffect(() => {
+    if (active?.id) tabActiveAt.current.set(active.id, Date.now());
+  }, [active?.id]);
+
+  /* #249 idle unload ticker: free background tab documents from the
+     shared renderer process. A tab unloads only when it is not the
+     active tab, has been idle past IDLE_UNLOAD_MS, is not mid-load,
+     and holds no playing media. */
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const now = Date.now();
+      for (const t of tabsRef.current) {
+        if (t.id === activeIdRef.current || !t.url) continue;
+        const f = frames.current.get(t.id);
+        if (!f) continue;
+        if (now - (tabActiveAt.current.get(t.id) ?? now) < IDLE_UNLOAD_MS) continue;
+        if (statusRef.current[t.id]?.loading || pendingNav.current.has(t.id)) continue;
+        let playing = false;
+        try {
+          for (const m of f.contentDocument?.querySelectorAll("video, audio") ?? []) {
+            const el = m as HTMLMediaElement;
+            if (!el.paused && !el.ended) { playing = true; break; }
+          }
+        } catch { continue; }
+        if (playing) { tabActiveAt.current.set(t.id, now); continue; }
+        sleeping.current.add(t.id);
+        minorNav.current.delete(t.id);
+        setCommitted(t.id, false);
+        documentIds.current.delete(t.id);
+        seenDocs.current.delete(t.id);
+        pushLog("info", "idle tab unload [" + t.id + "] " + t.url);
+        try { f.src = "about:blank"; } catch { sleeping.current.delete(t.id); }
+      }
+    }, 30000);
+    return () => clearInterval(iv);
+  }, []);
 
   /* ---- Same-origin poll: real URL, title and favicon of the active
      frame, read directly from the frame document. JS-driven URL
@@ -1997,8 +2065,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. A→B→C + back stays A→B→C at
-           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
+           move the index, do not append. AâBâC + back stays AâBâC at
+           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
@@ -2556,6 +2624,8 @@ export default function BrowserView(props: Props) {
         if (k.startsWith(id + "|")) lastEscape.current.delete(k);
       }
       recovering.current.delete(id);
+      tabActiveAt.current.delete(id);
+      sleeping.current.delete(id);
       const drop = <T extends Record<number, unknown>>(prev: T): T => {
         if (!(id in prev)) return prev;
         const n = { ...prev };
@@ -2653,6 +2723,10 @@ export default function BrowserView(props: Props) {
                   if (!ctxHooked.current.has(el)) {
                     ctxHooked.current.add(el);
                     el.addEventListener("load", () => {
+                      /* #249: the idle-unload navigation to about:blank
+                         fires load here; it is not a first paint and
+                         must not commit the tab. */
+                      if (sleeping.current.has(t.id)) { sleeping.current.delete(t.id); return; }
                       /* Wave 77: first paint committed - the skeleton
                          goes away and stays away while this document
                          loads its own assets in place. */
