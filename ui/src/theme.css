@@ -278,6 +278,20 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-set-section-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" 700; }
 .lb-set-section-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
+/* Wave 101b (#257): one orchestrated entrance for the redesigned
+   page: the title block leads, the section tiles follow on the
+   emphasized curve. Transform + opacity only, so it stays on the
+   compositor; reduced-motion users get the plain page. */
+.lb-set-title, .lb-set-section-head {
+  animation: lb-set-in var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)) backwards;
+}
+.lb-set-section-head { animation-delay: var(--md-sys-motion-duration-short-4, 200ms); }
+@keyframes lb-set-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-set-title, .lb-set-section-head { animation: none; }
+}
 /* Row labels: the vertical margins were built for the old flat list
    and made the switch rows uneven inside the panels. */
 .lb-setp-body .lb-setting-label { margin: 0; }
@@ -307,6 +321,11 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    affordance, so they did not read as clickable. */
 .lb-seed-row m3e-chip { cursor: pointer; }
 .lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
+/* Wave 89: each seed chip carries a colored swatch in the chip's/* #257: hover-only affordance, gated to fine pointers (touch fires
+   hover on tap). */
+@media (hover: hover) and (pointer: fine) {
+  .lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
+}
 /* Wave 89: each seed chip carries a colored swatch in the chip's
    icon slot (the plain m3e-chip exposes no avatar slot), so the
    option shows its color instead of text only (user report
@@ -679,6 +698,9 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 }
 .lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
 .lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+/* #257: press feedback on the result rows. */
+.lb-set-result-btn { transition: transform 120ms var(--md-sys-motion-easing-standard, ease); }
+.lb-set-result-btn:active { transform: scale(0.98); }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-row:focus-visible,
 .lb-set-anchor:focus-visible,
