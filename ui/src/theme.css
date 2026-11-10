@@ -1700,6 +1700,13 @@ m3e-snackbar {
   }
   /* AI view: keep the flush composer above the fixed bottom nav. */
   .app-content[data-view="ai"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
+  /* Issue #254: the bar centers fixed 112px items, so four of them
+     clip 29px off both edges on a 390px phone. Stretch the slotted
+     items across the bar instead (verified live by injection). */
+  .lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }
+  /* Issue #255: panel headers inherit nowrap from the m3e shadow
+     header; let the descriptions wrap on phones. */
+  .lb-setting-desc, .lb-setp-sub { white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-devtools.lb-devtools-out,
