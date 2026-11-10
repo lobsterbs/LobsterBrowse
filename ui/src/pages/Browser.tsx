@@ -2065,8 +2065,8 @@ export default function BrowserView(props: Props) {
         /* History semantics: a URL change seen by polling is NOT always
            a new navigation. If the page used history.back()/forward()
            (popstate), the polled URL matches an adjacent stack entry:
-           move the index, do not append. AâBâC + back stays AâBâC at
-           index 1, never AâBâCâB. Only a genuinely new URL (pushState,
+           move the index, do not append. A→B→C + back stays A→B→C at
+           index 1, never A→B→C→B. Only a genuinely new URL (pushState,
            replaceState to a different path) pushes a fresh entry. */
         const stack = t.stack;
         const idx = t.idx;
