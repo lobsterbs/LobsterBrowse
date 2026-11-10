@@ -22,7 +22,7 @@ assert.equal(heroBytes[2], 0xff, "hero magic byte 2 is ff");
 assert.ok(!existsSync(new URL("../../ui/src/components/ui/shader-metal.tsx", import.meta.url)), "shader-metal.tsx is deleted");
 const appSrc = read("../../ui/src/App.tsx");
 assert.ok(!appSrc.includes("ShaderMetal"), "App no longer mounts the shader component");
-assert.ok(appSrc.includes('settings.fancyBackground && (view === "home" || view === "ai" || view === "settings")'), "the hero layer stays gated on the fancy setting, on Home, AI and Settings (wave 96)");
+assert.ok(appSrc.includes('settings.fancyBackground && (view === "home" || view === "ai")'), "the hero layer stays gated on the fancy setting, on Home and AI (#261)");
 assert.ok(appSrc.includes("lb-fx-bg"), "the fx background layer class is unchanged");
 
 /* The CSS paints the image; no shader or aurora remnants. */
@@ -35,7 +35,7 @@ assert.ok(!themeSrc.includes("lb-fx-bg::after"), "the aurora bloom overlay is go
 /* Settings copy describes the photographic hero. */
 const settingsPageSrc = read("../../ui/src/pages/Settings.tsx");
 assert.equal(settingsPageSrc.split("Enhanced UI (hero background image)").length - 1, 3, "all three Settings labels describe the hero image");
-assert.ok(settingsPageSrc.includes("The photographic hero background on Home, AI and Settings"), "the panel sub describes the hero (wave 96)");
+assert.ok(settingsPageSrc.includes("The photographic hero background on Home and AI"), "the panel sub describes the hero (wave 96)");
 assert.ok(!settingsPageSrc.includes("liquid-metal"), "no liquid-metal copy remains in Settings");
 assert.ok(read("../../ui/src/settings.ts").includes("photographic hero background"), "the settings comment describes the hero");
 
