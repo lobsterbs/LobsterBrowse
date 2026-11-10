@@ -2993,6 +2993,150 @@ async fn zlsw_register() -> Response {
         .unwrap()
 }
 
+/* LB #642: app-level access password + trusted-egress credential
+arming. LB_ACCESS_PASSWORD (optional) gates GET /wispauth, which
+hands the deployment's wisp credentials (ZL_WISP_AUTH_URL /
+ZL_WISP_USER / ZL_WISP_PASSWORD) to the app shell so it can arm the
+engine's zl:wispAuth host control (Zeolite #496). The cookie token
+is a password-derived digest over an expiry stamp: no server-side
+session store, and a deploy does not invalidate it. Honest limits:
+the credential is readable by any visitor who passes the gate, and
+the gate is constant-time compare plus a short failure delay, not
+a brute-force-proof KDF. */
+fn access_password() -> Option<String> {
+    std::env::var("LB_ACCESS_PASSWORD")
+        .ok()
+        .filter(|p| !p.is_empty())
+}
+
+fn wisp_auth_env() -> Option<(String, String, String)> {
+    let endpoint = std::env::var("ZL_WISP_AUTH_URL").ok()?;
+    if endpoint.is_empty() {
+        return None;
+    }
+    let username = std::env::var("ZL_WISP_USER").unwrap_or_else(|_| "user".into());
+    let password = std::env::var("ZL_WISP_PASSWORD").unwrap_or_default();
+    Some((endpoint, username, password))
+}
+
+fn access_digest(password: &str, exp: u64) -> String {
+    use sha2::{Digest, Sha256};
+    let key = Sha256::digest(format!("lb-access-v1|{password}").as_bytes());
+    let mut h = Sha256::new();
+    h.update(key);
+    h.update(exp.to_string().as_bytes());
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn ct_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut d = 0u8;
+    for (x, y) in a.bytes().zip(b.bytes()) {
+        d |= x ^ y;
+    }
+    d == 0
+}
+
+fn access_cookie_ok(headers: &axum::http::HeaderMap, password: &str) -> bool {
+    let now = now_secs();
+    headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|c| {
+            c.split(';')
+                .find_map(|p| p.trim().strip_prefix("lb_access="))
+        })
+        .is_some_and(|tok| {
+            let (mac, exp) = match tok.rsplit_once('.') {
+                Some((m, e)) => (m, e),
+                None => return false,
+            };
+            let exp: u64 = match exp.parse() {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            now < exp && ct_eq(mac, &access_digest(password, exp))
+        })
+}
+
+async fn access_endpoint(
+    State(state): State<Arc<AppState>>,
+    _headers: axum::http::HeaderMap,
+    body: String,
+) -> Response {
+    let Some(password) = access_password() else {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"error\":\"no access password configured\"}",
+        )
+            .into_response();
+    };
+    let supplied = scan_json_str(&body, "password").unwrap_or_default();
+    if !ct_eq(&supplied, &password) {
+        push_log_sess(&state, None, "warn", "access password rejected");
+        /* A short delay keeps online guessing slow without punishing
+        the honest user. */
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        return (
+            StatusCode::FORBIDDEN,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"error\":\"wrong access password\"}",
+        )
+            .into_response();
+    }
+    /* 30 days; the cookie outlives deploys because the token is
+    password-derived, not server-session-derived. */
+    let ttl = 30 * 24 * 3600u64;
+    let exp = now_secs() + ttl;
+    let token = format!("{}.{}", access_digest(&password, exp), exp);
+    let cookie = format!("lb_access={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={ttl}");
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/json"),
+            (header::SET_COOKIE, cookie.as_str()),
+        ],
+        "{\"ok\":true}",
+    )
+        .into_response()
+}
+
+async fn wispauth_endpoint(headers: axum::http::HeaderMap) -> Response {
+    let Some((endpoint, username, password)) = wisp_auth_env() else {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"error\":\"wisp auth not configured on this deployment\"}",
+        )
+            .into_response();
+    };
+    if let Some(p) = access_password() {
+        if !access_cookie_ok(&headers, &p) {
+            return (
+                StatusCode::FORBIDDEN,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"access password required\"}",
+            )
+                .into_response();
+        }
+    }
+    let body = format!(
+        "{{\"endpoint\":\"{}\",\"username\":\"{}\",\"password\":\"{}\"}}",
+        json_escape(&endpoint),
+        json_escape(&username),
+        json_escape(&password),
+    );
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response()
+}
+
 async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     let build = std::env::var("RENDER_GIT_COMMIT")
         .or_else(|_| std::env::var("LB_BUILD_ID"))
@@ -3056,9 +3200,11 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         std::env::var("ZL_QUERY_ROUTES").as_deref(),
         Ok("0") | Ok("false") | Ok("FALSE") | Ok("no")
     );
+    let lb_access = access_password().is_some();
+    let wisp_auth = wisp_auth_env().is_some();
     let lb_version = format!("{} Tungsten", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"lbAccess\":{},\"wispAuth\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
@@ -3067,6 +3213,8 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         json_escape(&sj_wisp),
         json_escape(&content_origin),
         zl_query_routes,
+        lb_access,
+        wisp_auth,
         json_escape(&build),
         json_escape(&build_short),
     );
@@ -3502,6 +3650,8 @@ async fn main() {
         .route("/logs", get(logs_endpoint))
         .route("/cert", get(cert_endpoint))
         .route("/build", get(build_endpoint))
+        .route("/access", post(access_endpoint))
+        .route("/wispauth", get(wispauth_endpoint))
         // #107: SW registration page for the provisioned content
         // origin (see zlsw_register).
         .route("/zlsw-register", get(zlsw_register))
@@ -4149,5 +4299,91 @@ mod log_writer_tests {
         let mut sorted = positions.clone();
         sorted.sort_unstable();
         assert_eq!(positions, sorted, "drain must be FIFO");
+    }
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::*;
+
+    #[test]
+    fn token_roundtrip_verifies_within_ttl() {
+        let pw = "correct horse";
+        let exp = now_secs() + 3600;
+        let tok = format!("{}.{}", access_digest(pw, exp), exp);
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(&format!("lb_access={tok}")).unwrap(),
+        );
+        assert!(access_cookie_ok(&headers, pw));
+    }
+
+    #[test]
+    fn expired_token_is_rejected() {
+        let pw = "correct horse";
+        let exp = now_secs() - 1;
+        let tok = format!("{}.{}", access_digest(pw, exp), exp);
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(&format!("lb_access={tok}")).unwrap(),
+        );
+        assert!(!access_cookie_ok(&headers, pw));
+    }
+
+    #[test]
+    fn tampered_mac_is_rejected() {
+        let pw = "correct horse";
+        let exp = now_secs() + 3600;
+        let mac = access_digest(pw, exp);
+        let mut bytes = mac.into_bytes();
+        bytes[0] = if bytes[0] == b'0' { b'1' } else { b'0' };
+        let flipped = String::from_utf8(bytes).unwrap();
+        let tok = format!("{flipped}.{exp}");
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(&format!("lb_access={tok}")).unwrap(),
+        );
+        assert!(!access_cookie_ok(&headers, pw));
+    }
+
+    #[test]
+    fn other_password_token_is_rejected() {
+        let exp = now_secs() + 3600;
+        let tok = format!("{}.{}", access_digest("other", exp), exp);
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(&format!("lb_access={tok}")).unwrap(),
+        );
+        assert!(!access_cookie_ok(&headers, "correct horse"));
+    }
+
+    #[test]
+    fn malformed_and_missing_cookies_fail_closed() {
+        let pw = "pw";
+        let mut headers = axum::http::HeaderMap::new();
+        assert!(!access_cookie_ok(&headers, pw));
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("lb_access=garbage"),
+        );
+        assert!(!access_cookie_ok(&headers, pw));
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("lb_access=abc.notanumber"),
+        );
+        assert!(!access_cookie_ok(&headers, pw));
+    }
+
+    #[test]
+    fn ct_eq_differs_only_on_content() {
+        assert!(ct_eq("abc", "abc"));
+        assert!(!ct_eq("abc", "abd"));
+        assert!(!ct_eq("abc", "ab"));
+        assert!(!ct_eq("", "a"));
+        assert!(ct_eq("", ""));
     }
 }
