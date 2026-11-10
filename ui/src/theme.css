@@ -242,6 +242,11 @@ border-radius: 20px;
   -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
+/* Wave 101 (#256): the destructive Data row tints toward the
+   error container instead of the neutral glass. */
+.lb-set-inline.lb-set-danger {
+  background: color-mix(in srgb, var(--md-sys-color-error-container) 42%, transparent);
+}
 .lb-set-inline .lb-setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
 .lb-set-inline .lb-setting-label { margin: 0; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
 .lb-set-inline .lb-setting-desc {
@@ -255,6 +260,24 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-set-page > m3e-heading { margin: var(--md-sys-measurement-space150) 0 var(--md-sys-measurement-space50); }
 .lb-set-page > m3e-heading:first-child { margin-top: 0; }
 .lb-set-page .lb-set-search { margin: 0 0 var(--md-sys-measurement-space50); }
+/* Wave 101 (#256) redesign: the page title carries a supporting
+   line and every group reads as one M3 section: an icon tile on
+   primary-container (corner-large shape), a title heading and a
+   body-small supporting line. All color stays on tokens. */
+.lb-set-title { display: flex; flex-direction: column; gap: 2px; }
+.lb-set-title-sub { margin: 0; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface-variant); }
+.lb-set-section-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space150) 0 0; }
+.lb-set-section-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none;
+  border-radius: var(--md-sys-shape-corner-large, 16px);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.lb-set-section-icon m3e-icon { font-size: 20px; }
+.lb-set-section-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" 700; }
+.lb-set-section-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 /* Row labels: the vertical margins were built for the old flat list
    and made the switch rows uneven inside the panels. */
 .lb-setp-body .lb-setting-label { margin: 0; }
@@ -1180,14 +1203,14 @@ border-radius: var(--m3e-shape-lg);
   gap: var(--md-sys-measurement-space100);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
   border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 60%, transparent);
+  background: var(--md-sys-color-tertiary-container);
+  border: none;
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   line-height: 1.6;
 }
-.lb-build-chip .lb-build-name { color: var(--md-sys-color-on-surface-variant); }
+.lb-build-chip .lb-build-name { color: color-mix(in srgb, var(--md-sys-color-on-tertiary-container) 72%, transparent); }
 .lb-build-chip .lb-build-val {
-  color: var(--md-sys-color-on-surface);
+  color: var(--md-sys-color-on-tertiary-container);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 

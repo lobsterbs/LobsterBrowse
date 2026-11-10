@@ -54,10 +54,15 @@ type Props = {
   onDeleteAll: () => void;
 };
 
+/* Wave 101 (#256): the default seed was the indigo-violet default
+   every generated interface ships. The default is now derived from
+   the product (a lobster red-orange); the old baseline stays as
+   "Violet" for anyone attached to it. */
 const SEEDS: Array<[string, string]> = [
-  ["#6750A4", "Baseline"],
+  ["#BC4B2A", "Lobster"],
   ["#006A6A", "Teal"],
   ["#4F5B92", "Slate"],
+  ["#6750A4", "Violet"],
 ];
 
 const SECTION_TITLES: Record<string, string> = {
@@ -67,7 +72,37 @@ const SECTION_TITLES: Record<string, string> = {
   appearance: "Appearance",
   cloak: "Auto Cloak",
   advanced: "Advanced",
+  about: "About",
 };
+
+/* Wave 101 (#256): each section reads as one M3 group: an icon tile
+   on primary-container, a title heading and a supporting line. */
+const SECTION_META: Record<string, { icon: string; sub: string }> = {
+  search: { icon: "search", sub: "Engine and omnibox behavior" },
+  privacy: { icon: "shield", sub: "Blocking and connection upgrades" },
+  extensions: { icon: "extension", sub: "Add-ons from the catalog or local files" },
+  appearance: { icon: "palette", sub: "Seed color and hero background" },
+  cloak: { icon: "visibility_off", sub: "Hide the tab while you are away" },
+  advanced: { icon: "tune", sub: "Engines, data and diagnostics" },
+  about: { icon: "info", sub: "Versions compiled into this build" },
+};
+
+function SectionHead(props: { section: string }) {
+  const meta = SECTION_META[props.section];
+  return (
+    <div className="lb-set-section-head">
+      {meta && (
+        <span className="lb-set-section-icon" aria-hidden={true}>
+          <m3e-icon name={meta.icon} />
+        </span>
+      )}
+      <span className="lb-set-section-text">
+        <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES[props.section]}</m3e-heading>
+        {meta && <span className="lb-set-section-sub">{meta.sub}</span>}
+      </span>
+    </div>
+  );
+}
 
 /* #198: settings search index. One entry per findable setting; the
    targets are the id attributes set on the inline cards, rows and
@@ -138,11 +173,12 @@ function SetInline(props: {
   on?: boolean;
   toggle?: () => void;
   disabled?: boolean;
+  danger?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div
-      className={"lb-set-inline" + (props.disabled ? " lb-zl-off" : "")}
+      className={"lb-set-inline" + (props.danger ? " lb-set-danger" : "") + (props.disabled ? " lb-zl-off" : "")}
       id={props.anchorId}
       tabIndex={props.anchorId ? -1 : undefined}
       aria-disabled={props.disabled ? "true" : undefined}
@@ -377,7 +413,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             container sits inside the component's shadow root, so
             the column spacing must live on the page content. */}
         <div className="lb-set-page">
-          <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
+          <div className="lb-set-title">
+            <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
+            <p className="lb-set-title-sub">Everything stays on this device. Changes apply immediately.</p>
+          </div>
 
           {/* #198: search-first Settings. A query swaps the panels for
               a flat result list; picking a result expands the owning
@@ -402,7 +441,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             </div>
           ) : (
             <>
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.search}</m3e-heading>
+              <SectionHead section="search" />
               <SetInline
                 anchorId="set-search-engine"
                 label="Search engine"
@@ -426,7 +465,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
               />
 
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.privacy}</m3e-heading>
+              <SectionHead section="privacy" />
               <SetInline
                 anchorId="set-adblock"
                 label="Ad & tracker blocking"
@@ -449,7 +488,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
               </p>
 
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.extensions}</m3e-heading>
+              <SectionHead section="extensions" />
               <SetPanel
                 id="p-manage-ext"
                 headline="Manage installed"
@@ -516,7 +555,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </p>
               </SetPanel>
 
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.appearance}</m3e-heading>
+              <SectionHead section="appearance" />
               <SetPanel
                 id="p-theme-color"
                 headline="Theme color"
@@ -566,7 +605,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </p>
               </SetPanel>
 
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.cloak}</m3e-heading>
+              <SectionHead section="cloak" />
               <SetInline
                 anchorId="set-cloak-enabled"
                 label="Cloak when the tab is hidden"
@@ -608,7 +647,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </p>
               </SetPanel>
 
-              <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES.advanced}</m3e-heading>
+              <SectionHead section="advanced" />
               <SetPanel
                 id="p-proxy"
                 headline="Proxy engine"
@@ -656,6 +695,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               </SetPanel>
               <SetInline
                 anchorId="set-data"
+                danger
                 label="Data"
                 desc="Clear the proxied page cache, or delete every stored session and setting"
               >
@@ -718,7 +758,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </m3e-button>
               </SetInline>
 
-              <m3e-heading variant="title" size="small" level={3}>About</m3e-heading>
+              <SectionHead section="about" />
               <SetPanel
                 id="p-about"
                 headline="About"

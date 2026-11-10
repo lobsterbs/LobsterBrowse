@@ -165,7 +165,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  seed: "#6750A4",
+  seed: "#BC4B2A",
   engine: "brave",
   proxyEngine: "zeolite",
   adblock: true,
@@ -207,7 +207,9 @@ export function loadSettings(): Settings {
           ? (parsed.engine as EngineId)
           : DEFAULT_SETTINGS.engine,
       /* The Lobster scheme was removed: migrate stored picks to Baseline. */
-      seed: !parsed.seed || parsed.seed === "#E8552F" ? DEFAULT_SETTINGS.seed : parsed.seed,
+      /* Wave 101 (#256): the stored old default migrates to the new
+     product seed; a deliberately picked color is kept. */
+      seed: !parsed.seed || parsed.seed === "#E8552F" || parsed.seed === "#6750A4" ? DEFAULT_SETTINGS.seed : parsed.seed,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
       autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
