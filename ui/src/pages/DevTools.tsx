@@ -305,6 +305,27 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   const [tracingOn, setTracingOn] = useState(false);
   const [recId, setRecId] = useState("");
   const [note, setNote] = useState("");
+  /* Eruda availability (user request 2026-11-11): the tool greys out
+     and stops responding when /eruda.js cannot be fetched. HEAD
+     first; a static layer that refuses HEAD falls back to a one-byte
+     ranged GET. */
+  const [erudaReady, setErudaReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let dead = false;
+    const probe = async (): Promise<boolean> => {
+      try {
+        const h = await fetch("/eruda.js", { method: "HEAD", cache: "no-store" });
+        if (h.ok) return true;
+      } catch { /* fall through to the ranged GET */ }
+      try {
+        const g = await fetch("/eruda.js", { cache: "no-store", headers: { Range: "bytes=0-0" } });
+        if (g.body) { try { void g.body.cancel(); } catch { /* ignore */ } }
+        return g.ok;
+      } catch { return false; }
+    };
+    void probe().then((ok) => { if (!dead) setErudaReady(ok); });
+    return () => { dead = true; };
+  }, []);
   useEffect(() => {
     let dead = false;
     void zlSend({ type: "zl:getTracing" }, 8000).then((r) => {
@@ -383,9 +404,13 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
           Record session
         </m3e-button>
       )}
-      <m3e-button onClick={() => void injectEruda()}>
+      <m3e-button
+        disabled={erudaReady === false ? true : undefined}
+        {...{ class: erudaReady === false ? "lb-tool-disabled" : undefined }}
+        onClick={() => void injectEruda()}
+      >
         <m3e-icon name="terminal" aria-hidden={true} />
-        Eruda in page
+        {erudaReady === false ? "Eruda unavailable" : "Eruda in page"}
       </m3e-button>
       <m3e-button onClick={() => window.open("/zlsw/devtools.html", "_blank", "noopener")}>
         <m3e-icon name="memory" aria-hidden={true} />
