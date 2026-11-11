@@ -83,4 +83,9 @@ assert.ok(settingsPage.includes("terminates the upstream TLS"), "the third-party
 assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
 assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
 
+/* Wave 101h (issue #259): the active view rides the URL hash so a
+   reload restores it; switches use replaceState so no history spam. */
+assert.ok(appSrc.includes("const [view, setView] = useState<View>(viewFromHash);"), "the initial view is read from the URL hash (#259)");
+assert.ok(appSrc.includes('const h = "#view=" + view;') && appSrc.includes("window.history.replaceState(null, \"\", h);"), "view switches update the hash without history entries (#259)");
+
 console.log("ui-wave99: all checks passed");
