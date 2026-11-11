@@ -2226,7 +2226,27 @@ FROM debian:bookworm-slim AS zl-builder
 # its byte-identical twin green there and red at the torture
 # battery; docs/ci-torture-wedge.md). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=c04e4e971472f66e42a0a2bb9fb5181b1e8c1ea7
+# Pin 167 (2026-11-11): dist f44176c4 (build 43018138385) deploys the
+# #634 OAuth round-trip fix: the #431 seam rewrote only the authorize
+# request's redirect_uri, so AAD bound the code to the page origin and
+# then refused the token exchange presenting the engine origin
+# (AADSTS50011); the urlencoded token POST body is now rewritten with
+# the identical match set and honest-fallback rule
+# (virtualAuthorizeTokenBody + isAuthorizeTokenEndpoint, Zeolite
+# e8268db). Also carries the #645 Cloudflare fix (cspGate never gates
+# the /cdn-cgi/ namespace and an unsupported directive no longer
+# falls back to default-src; Perplexity's challenge page, Zeolite
+# 93996d1), the #644 diagnostics fix (a mid-stream body error is no
+# longer masked as a stall), the extension-surface waves
+# (#517/#518/#521/#523), the #643 blocked-notice marker and DNR
+# engine-internal re-entry + getMatchedRules. sw.js
+# d066a19cbee1969a -> 2b29ead4488f92c2 (886531 bytes); bootstrap.js
+# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on 137d0751:
+# rust/wasm/app/compat green; the browser battery closed red on the
+# documented rotating wedge (docs/ci-torture-wedge.md). Cargo-side
+# pin stays 5073f316 (app TS only). Deploy with a cleared Render
+# build cache.
+ARG ZEOLITE_COMMIT=f44176c4f944c040c606740c3276e2448f80bf78
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2289,7 +2309,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d066a19cbee1969a ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2b29ead4488f92c2 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
@@ -2307,4 +2327,5 @@ RUN useradd --system --uid 10001 --no-create-home appuser \
  && chown -R appuser:appuser /app
 USER appuser
 ENTRYPOINT ["/app/lobster-server"]
+
 
