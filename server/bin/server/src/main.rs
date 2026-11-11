@@ -549,9 +549,16 @@ const RELAY_TOTAL_DEADLINE: std::time::Duration = std::time::Duration::from_secs
 /// transport and each such fetch died as a "tls handshake eof" 502
 /// (the user's AI-mode report). Bounds sized for one browser page
 /// load; the endpoint is authorized, same-origin, single-user.
+///
+/// 2026-11-11 live repro (YouTube watch page through the engine): a
+/// media-heavy page load bursts past 150 per 10s; the embedder relay
+/// answered 429 ("relay endpoint unavailable (429)" in the engine
+/// diag) and the affected fetches degraded onto the wisp transport.
+/// The endpoint stays single-user, so 600 per 10s keeps the flood
+/// guard without punishing a real page load.
 const RELAY_MAX_CONCURRENT_CONNECTS: usize = 48;
 const RELAY_RATE_WINDOW_SECS: u64 = 10;
-const RELAY_RATE_MAX_PER_WINDOW: usize = 150;
+const RELAY_RATE_MAX_PER_WINDOW: usize = 600;
 
 async fn relay_send_wait(
     req: reqwest::RequestBuilder,
