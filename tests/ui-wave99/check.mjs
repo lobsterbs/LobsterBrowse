@@ -88,4 +88,12 @@ assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes
 assert.ok(appSrc.includes("const [view, setView] = useState<View>(viewFromHash);"), "the initial view is read from the URL hash (#259)");
 assert.ok(appSrc.includes('const h = "#view=" + view;') && appSrc.includes("window.history.replaceState(null, \"\", h);"), "view switches update the hash without history entries (#259)");
 
+
+/* Wave 101i (issue #268): the wispSel display mapping must match the
+   preset URL (element 0 of the [url, name] pairs), not the name; the
+   old ([, u]) destructure compared "MercuryWork" to the stored URL,
+   so every stored preset displayed as "Custom endpoint" after a
+   reload while the stored value and the engine push stayed correct. */
+assert.ok(settingsPage.includes("WISP_PRESETS.some(([u]) => u === settings.wispServer)"), "wispSel matches the stored preset by URL, the option id (#268)");
+assert.ok(!settingsPage.includes("([, u]) => u === settings.wispServer"), "the name-vs-url destructure is gone (#268)");
 console.log("ui-wave99: all checks passed");

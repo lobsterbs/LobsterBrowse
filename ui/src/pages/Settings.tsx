@@ -312,7 +312,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   const [wispCustom, setWispCustom] = useState(false);
   const wispSel =
     wispCustom ||
-    (settings.wispServer !== "" && !WISP_PRESETS.some(([, u]) => u === settings.wispServer))
+    (settings.wispServer !== "" && !WISP_PRESETS.some(([u]) => u === settings.wispServer))
       ? WISP_CUSTOM
       : settings.wispServer === ""
         ? "default"
