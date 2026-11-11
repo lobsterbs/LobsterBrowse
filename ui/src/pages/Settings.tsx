@@ -6,7 +6,9 @@ import "@m3e/web/heading";
 import "@m3e/web/list";
 import "@m3e/web/option";
 import "@m3e/web/segmented-button";
+import "@m3e/web/card";
 import "@m3e/web/select";
+import "@m3e/web/shape";
 import "@m3e/web/switch";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -14,9 +16,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
    2026-11-06) owns the card surface for the settings groups, search
    results, About and the extension entries. */
 import "@materialwebunofficial/md3e-web/components/md-card.js";
-/* Hero background shapes: the canonical M3E shape vectors are
-   md3e-web only (user request 2026-11-11). */
-import "@materialwebunofficial/md3e-web/components/md-shape.js";
 import { exportSessionData } from "../store";
 import {
   ENGINES,
@@ -378,20 +377,21 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   return (
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
-      {/* About hero (user request 2026-11-11): an MT3E card at the
-          very top with the ASCII wordmark, the version (number and
-          codename) and the running proxy engine. The background
-          shapes are decorative and hidden from assistive tech. */}
-      <md-card variant="filled" {...{ class: "lb-about-hero" }}>
+      {/* About hero (user request 2026-11-11): a real m3e-card filled
+          surface at the very top with the ASCII wordmark, the version
+          (number and codename) and the running proxy engine. The
+          background shapes are real m3e-shape elements, decorative and
+          aria-hidden; the card clips. */}
+      <m3e-card variant="filled" {...{ class: "lb-about-hero" }}>
         <div className="lb-about-hero-shapes" aria-hidden={true}>
-          {/* Shapes render first as the background layer, content on top:
-              the expressive-profile hero. Large 8-leaf-clover spilling off
-              the top-right corner, 4-leaf-clover along the bottom, small
-              sunny on the right edge; container colors at full strength,
-              clipped by the card. md-shape renders itself aria-hidden. */}
-          <md-shape name="8-leaf-clover" size="150" color="primary-container" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
-          <md-shape name="4-leaf-clover" size="62" color="tertiary-container" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
-          <md-shape name="sunny" size="34" color="secondary-container" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
+          {/* Shapes render first as the background layer, content on
+              top: one large clover spilling off the top-right corner,
+              a sunny anchored at the bottom, a small clover on the
+              right edge. Size and container color ride the component's
+              own --m3e-shape-* tokens (theme.css). */}
+          <m3e-shape name="8-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
+          <m3e-shape name="sunny" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
+          <m3e-shape name="4-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
         </div>
         <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
         <div className="lb-about-hero-meta">
@@ -404,7 +404,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             {engineName}
           </span>
         </div>
-      </md-card>
+      </m3e-card>
 
 
       {/* Real M3E accordion coordinating the panels. multi keeps the

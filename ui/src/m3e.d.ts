@@ -24,8 +24,8 @@ declare module "react" {
       "m3e-theme": M3eBase & { color?: string; scheme?: string; motion?: string; "strong-focus"?: boolean; density?: string };
       "m3e-content-pane": M3eBase;
       "md-card": M3eBase & { variant?: string; tabIndex?: number; role?: string; title?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
-      /* md3e-web canonical shape vector (Settings hero background). */
-      "md-shape": M3eBase & { name?: string; size?: string | number; color?: string; mask?: boolean | string };
+      /* Expressive background shapes (Settings hero). */
+      "m3e-shape": M3eBase & { name?: string };
       "m3e-app-bar": M3eBase & { size?: string; centered?: boolean | string; for?: string };
       "m3e-avatar": M3eBase;
       "m3e-search-bar": M3eBase & { clearable?: boolean | string };
