@@ -122,9 +122,10 @@ const ok = (name, cond) => {
 /* --- Wave-80 follow-up (user report 2026-11-07): the settings panels
    sat outside an m3e-accordion, so their surface tokens were empty
    and the page rendered as one flat sheet; the nav rail must carry
-   no outline ring on the edge facing the content; the DevTools
-   Diagnostics page puts both actions at the very top, above the
-   log cards. --- */
+   no outline ring on the edge facing the content. #266 (user request
+   2026-11-11) superseded the diagnostics-actions placement: the
+   Resource failures card is gone entirely and both actions live in
+   the sheet header app bar, reachable from every sub-page. --- */
 {
   const theme = read("src/theme.css");
   const pIdx = theme.indexOf(".lb-set-page m3e-expansion-panel {");
@@ -137,9 +138,15 @@ const ok = (name, cond) => {
   ok("settings: page wrapper mounted", sPage.includes('className="lb-set-page"'));
   const d = read("src/pages/DevTools.tsx");
   const dpos = d.indexOf('dt.page === "diagnostics"');
-  const failCard = d.indexOf('aria-label="Resource failures"', dpos);
-  const topBtn = d.indexOf("void copyLogs()", dpos);
-  ok("devtools: diagnostics actions above the log cards", topBtn !== -1 && topBtn < failCard);
+  const hdr = d.indexOf('slot="header"');
+  const copyBtn = d.indexOf('id="lb-dt-copy-btn"');
+  const erudaBtn = d.indexOf('id="lb-dt-eruda-btn"');
+  ok("devtools: copy logs lives in the sheet header", copyBtn !== -1 && copyBtn > hdr && copyBtn < dpos);
+  ok("devtools: eruda lives in the sheet header", erudaBtn !== -1 && erudaBtn > hdr && erudaBtn < dpos);
+  ok("devtools: resource failures card removed", !d.includes('aria-label="Resource failures"'));
+  ok("devtools: resfail explainer removed", !d.includes("resfail reports"));
+  ok("devtools: empty-fails message removed", !d.includes("No resource failures captured."));
+  ok("devtools: diagnostics page keeps the engine card", dpos !== -1 && d.slice(dpos).includes('aria-label="Engine diagnostics"'));
   ok("devtools: page tools card folded into the actions row", !d.includes('aria-label="Page tools"'));
   ok("devtools: eruda renders once", d.split("<ZeoliteEngineTools").length - 1 === 1);
 }

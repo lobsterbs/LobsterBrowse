@@ -366,16 +366,23 @@ function ZeoliteDownloads() {
    zl:recordStart / zl:recordStop stay available on the engine
    plane. */
 function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }) {
-  const [note, setNote] = useState("");
+  /* #266: the tool lives in the sheet header now, so its notes go
+     through the snackbar (the same channel as the copy
+     confirmations) instead of an inline span at the sheet edge. */
+  const say = (msg: string) => {
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(msg, { duration: 4000 });
+    }
+  };
   const injectEruda = async () => {
     const w = frame()?.contentWindow;
-    if (!w) { setNote("No proxied page in this tab."); return; }
+    if (!w) { say("No proxied page in this tab."); return; }
     let d: Document | null = null;
     try { d = w.document; } catch {
-      setNote("This page rides the split content origin, so the app cannot inject into it. Turn 'Split content origin' off in the debug menu and reload the tab, or use the page's own F12 DevTools.");
+      say("This page rides the split content origin, so the app cannot inject into it. Turn 'Split content origin' off in the debug menu and reload the tab, or use the page's own F12 DevTools.");
       return;
     }
-    if (!d) { setNote("No proxied document in this tab."); return; }
+    if (!d) { say("No proxied document in this tab."); return; }
     if (d.querySelector("script[data-lb-eruda]")) {
       const eruda = (w as unknown as { eruda?: { toggle?: () => void } }).eruda;
       if (eruda && eruda.toggle) eruda.toggle();
@@ -390,19 +397,18 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
       s.setAttribute("data-lb-eruda", "1");
       d.head.appendChild(s);
       const eruda = (w as unknown as { eruda?: { init?: () => void } }).eruda;
-      if (eruda && eruda.init) { eruda.init(); setNote("Eruda loaded in the page."); }
-      else setNote("Eruda script ran but did not register; the page context may block it.");
+      if (eruda && eruda.init) { eruda.init(); say("Eruda loaded in the page."); }
+      else say("Eruda script ran but did not register; the page context may block it.");
     } catch {
-      setNote("Could not load eruda.js.");
+      say("Could not load eruda.js.");
     }
   };
   return (
     <>
-      <m3e-button onClick={() => void injectEruda()}>
+      <m3e-icon-button slot="trailing" id="lb-dt-eruda-btn" aria-label="Eruda in page" onClick={() => void injectEruda()}>
         <m3e-icon name="terminal" aria-hidden={true} />
-        Eruda in page
-      </m3e-button>
-      {note && <span className="lb-muted">{note}</span>}
+      </m3e-icon-button>
+      <m3e-tooltip for="lb-dt-eruda-btn" position="below">Eruda in page</m3e-tooltip>
     </>
   );
 }
@@ -410,7 +416,6 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
 export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, open }: Props) {
   const [cmd, setCmd] = useState("");
   const [histIdx, setHistIdx] = useState(-1);
-  const [copyState, setCopyState] = useState<"" | "ok" | "fail">("");
   const consoleRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -449,7 +454,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const scope = diagnosticsScope(dt.engineClientId, dt.engineSource);
   /* A mounted instance may be reused across tabs or document navigation. */
   snapshotRef.current = snapshotForScope(snapshotRef.current, scope);
-  useEffect(() => setCopyState(""), [tab.id, dt.engineClientId, dt.engineSource]);
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
@@ -466,8 +470,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"]
         : "No engine identity for this document yet.";
     const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
-    setCopyState(ok ? "ok" : "fail");
-    window.setTimeout(() => setCopyState(""), 2000);
     /* #262: snackbar confirmation; the inline label alone was easy
        to miss at the sheet edge. */
     if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
@@ -709,12 +711,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const netPageClamped = Math.min(netPage, netPages - 1);
   const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
 
-  /* Failure counts by resource type for the diagnostics summary. */
-  const failCounts = dt.fails.reduce<Record<string, number>>((acc, f) => {
-    acc[f.kind] = (acc[f.kind] ?? 0) + 1;
-    return acc;
-  }, {});
-
   /* Entry count per section, shown on the picker buttons like real
      devtools do. */
   const pageCounts: Record<DtState["page"], number> = {
@@ -737,6 +733,14 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
         <span slot="title">DevTools - {tab.title || "tab"}</span>
+        {/* #266: Copy logs and Eruda in page moved up here, out of the
+            Diagnostics page body: the header keeps them reachable from
+            every sub-page and the page body stays cards only. */}
+        <m3e-icon-button slot="trailing" id="lb-dt-copy-btn" aria-label="Copy logs" onClick={() => void copyLogs()}>
+          <m3e-icon name="content_copy" aria-hidden={true} />
+        </m3e-icon-button>
+        <m3e-tooltip for="lb-dt-copy-btn" position="below">Copy logs</m3e-tooltip>
+        <ZeoliteEngineTools frame={frame} />
       </m3e-app-bar>
 
       <div className="lb-dt-content">
@@ -911,71 +915,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         )}
 
         {dt.page === "diagnostics" && (
-          <>
-            {/* Actions first, then the logs (user request
-                2026-11-07): both buttons sit at the very top of the
-                Diagnostics page, padded by the sheet's own content
-                padding. */}
-            <div className="lb-dt-toolbar">
-              <m3e-button onClick={() => void copyLogs()}>
-                <m3e-icon name="content_copy" aria-hidden={true} />
-                {copyState === "ok" ? "Copied" : copyState === "fail" ? "Copy failed" : "Copy logs"}
-              </m3e-button>
-              <ZeoliteEngineTools frame={frame} />
+          <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine diagnostics">
+            <div slot="content" className="lb-dt-card-body">
+              <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
             </div>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Resource failures">
-              <div slot="content" className="lb-dt-card-body">
-                <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-                  Real load failures captured from the page runtime (the engine shim&apos;s resfail reports)
-                  are the rows marked FAIL; successful loads are in the Network section.
-                </p>
-                {dt.fails.length === 0 ? (
-                  <div className="lb-net">
-                    <p className="lb-muted">No resource failures captured.</p>
-                  </div>
-                ) : (
-                  <div className="lb-net">
-                    <div className="lb-diag-counts">
-                      {Object.entries(failCounts).map(([kind, n]) => (
-                        <span key={kind} className="lb-diag-chip">
-                          {n} × {kind}
-                        </span>
-                      ))}
-                    </div>
-                    {dt.fails.map((f) => (
-                      <details key={f.id} className="lb-net-row">
-                        <summary className="lb-net-summary">
-                          <span className="lb-net-status lb-bad">FAIL</span>
-                          <span className="lb-net-method">{f.kind}</span>
-                          <span className="lb-net-url">{f.url || "unknown resource"}</span>
-                          {f.status !== undefined && f.status !== 0 && <span className="lb-net-dur">{f.status}</span>}
-                        </summary>
-                        <div className="lb-net-detail">
-                          <div>Resource type: {f.kind}</div>
-                          <div>Resource URL: {f.url || "unknown (element failed before a URL could be identified)"}</div>
-                          <div>Reason: {reasonText(f.reason)} ({f.reason})</div>
-                          {/* Honest status: element-level load failures have no
-                              observable HTTP status; show unknown instead of a
-                              fabricated 0 that reads like a browser network
-                              error. */}
-                          <div>HTTP status: {f.status !== undefined ? f.status : "unknown"}</div>
-                          <div>Transport: Zeolite engine (/zl/)</div>
-                          {f.nav && <div>Navigation: {f.nav}</div>}
-                          {f.note && <div>Note: {f.note}</div>}
-                          <div>Time: {ts(f.ts)}</div>
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </m3e-card>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine diagnostics">
-              <div slot="content" className="lb-dt-card-body">
-                <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
-              </div>
-            </m3e-card>
-          </>
+          </m3e-card>
         )}
       </div>
     </m3e-bottom-sheet>
