@@ -10,9 +10,6 @@ const suggestWarned = new Set<string>();
 
 type Props = {
   settings: Settings;
-  /* #262: persisted session tabs; the recents list reads their
-     stacks. No new storage: session restore already saves these. */
-  tabs: { stack: string[] }[];
   onNavigate: (target: string) => void;
 };
 
@@ -31,7 +28,7 @@ function SugMark({ s }: { s: Suggestion }) {
   return <m3e-icon name={s.icon} aria-hidden={true} />;
 }
 
-export default function HomePage({ settings, tabs, onNavigate }: Props) {
+export default function HomePage({ settings, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
@@ -142,26 +139,6 @@ export default function HomePage({ settings, tabs, onNavigate }: Props) {
   };
   const pick = (s: Suggestion) => commit(s.url);
 
-  /* #262: recent sites from the persisted session tabs, on-device
-     only: each stack newest first, deduped, capped at 6. */
-  const recents = (() => {
-    const seen = new Set<string>();
-    const out: { url: string; label: string }[] = [];
-    for (const t of tabs) {
-      const stack = Array.isArray(t.stack) ? t.stack : [];
-      for (let i = stack.length - 1; i >= 0 && out.length < 6; i--) {
-        const u = stack[i];
-        if (!u || !/^https?:/i.test(u) || seen.has(u)) continue;
-        seen.add(u);
-        let label = u;
-        try { label = new URL(u).hostname.replace(/^www\./, ""); } catch { /* keep the raw URL */ }
-        out.push({ url: u, label });
-      }
-      if (out.length >= 6) break;
-    }
-    return out;
-  })();
-
   const onKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       if (open && idx >= 0 && suggestions[idx]) pick(suggestions[idx]);
@@ -242,39 +219,6 @@ export default function HomePage({ settings, tabs, onNavigate }: Props) {
           )}
         </m3e-search-view>
       </div>
-      {recents.length > 0 && (
-        <div className="lb-home-recents-wrap">
-          <div className="lb-home-recents-head lb-home-in" style={{ animationDelay: "90ms" }}>
-            <m3e-icon name="history" aria-hidden={true} />
-            <span>Recent sites</span>
-          </div>
-          <m3e-list {...{ class: "lb-home-recents" }}>
-            {recents.map((r, i) => (
-              <m3e-list-item
-                key={r.url}
-                {...{
-                  class: "lb-home-recent lb-home-in",
-                  role: "button",
-                  tabIndex: 0,
-                  "aria-label": "Open " + r.label,
-                  style: { animationDelay: 120 + i * 35 + "ms" },
-                  onClick: () => commit(r.url),
-                  onKeyDown: (ev: ReactKeyboardEvent<HTMLElement>) => {
-                    if (ev.key === "Enter" || ev.key === " ") {
-                      ev.preventDefault();
-                      commit(r.url);
-                    }
-                  },
-                }}
-              >
-                <m3e-icon slot="leading" name="language" aria-hidden={true} />
-                <span>{r.label}</span>
-                <span slot="supporting-text">{r.url}</span>
-              </m3e-list-item>
-            ))}
-          </m3e-list>
-        </div>
-      )}
     </section>
   );
 }
