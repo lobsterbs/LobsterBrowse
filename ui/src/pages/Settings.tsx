@@ -164,8 +164,9 @@ function TextInput(props: {
   );
 }
 
-/* The ASCII wordmark, byte-identical with Home.tsx (user request
-   2026-11-11: the Settings hero card carries the real logo). */
+/* The ASCII wordmark, same art as Home.tsx (trailing spaces
+   trimmed; user request 2026-11-11: the Settings hero card carries
+   the real logo). */
 const LB_ASCII = String.raw`    __          __         __            ____
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
