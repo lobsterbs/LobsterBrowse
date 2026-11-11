@@ -2511,24 +2511,9 @@ background: var(--lb-glass-tint);
 /* DevTools console filter chips. */
 .lb-dt-chips { display: flex; flex-wrap: wrap; }
 .lb-dt-chips m3e-chip { cursor: pointer; }
-/* Home: recent sites as list rows with one orchestrated entrance;
-   the rows stagger 35ms inline, the heading leads. */
-.lb-home { overflow-y: auto; }
-.lb-home-recents-wrap { margin: 24px auto 32px; max-width: 640px; width: 100%; text-align: left; }
-.lb-home-recents-head {
-  display: flex; align-items: center; gap: var(--md-sys-measurement-space100, 8px);
-  padding: 0 var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space75, 6px);
-  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
-  font-variation-settings: "wght" 500;
-  color: var(--md-sys-color-on-surface-variant, #cac4d0);
-}
-.lb-home-recents-head m3e-icon { font-size: 18px; }
-.lb-home-recents m3e-list-item.lb-home-recent { cursor: pointer; }
-.lb-home-in { animation: lb-home-in var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)) backwards; }
-@keyframes lb-home-in { from { opacity: 0; transform: translateY(8px); } }
 /* AI: paragraph reveal ramp on the streaming answer's newest block. */
 .lb-ai-md-stream .lb-md > :last-child { animation: lb-ai-para var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease); }
 @keyframes lb-ai-para { from { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
-  .lb-home-in, .lb-ai-md-stream .lb-md > :last-child { animation: none; }
+  .lb-ai-md-stream .lb-md > :last-child { animation: none; }
 }

@@ -994,7 +994,7 @@ export default function App() {
             {view !== "browser" && (
               <div key={view} className="lb-view">
               {view === "home" && (
-                <HomePage settings={settings} tabs={tabs} onNavigate={navigateTo} />
+                <HomePage settings={settings} onNavigate={navigateTo} />
               )}
               {view === "settings" && (
                 <SettingsPanel
