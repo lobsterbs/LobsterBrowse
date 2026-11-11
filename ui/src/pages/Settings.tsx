@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+/* The Settings hero card (user request 2026-11-11) uses the md3e-web
+   card plus the canonical M3E shape vectors for its background. */
+import "@materialwebunofficial/md3e-web/components/md-card.js";
+import "@materialwebunofficial/md3e-web/components/md-shape.js";
 /* Settings (global redesign, user request 2026-11-07): the whole page
    is one @m3e/web surface. The page title lives in an m3e-content-pane;
    every settings sub-card is an m3e-expansion-panel whose header
@@ -265,6 +269,16 @@ function TextInput(props: {
   );
 }
 
+/* The ASCII wordmark, same art as Home.tsx (trailing spaces
+   trimmed; user request 2026-11-11: the Settings hero card carries
+   the real logo). */
+const LB_ASCII = String.raw`    __          __         __            ____
+   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
+  / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
+ / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
+/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/
+                                                                          `;
+
 export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
      several open at once. All panels start closed; the single-control
@@ -441,6 +455,15 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     };
   }, []);
 
+  /* About hero (user request 2026-11-11): /build's lb field carries
+     "number codename" (e.g. "0.8.0 Tungsten"); split once for the
+     hero card's number and text versions. */
+  const lbVersion = build?.lb ?? "";
+  const vSplit = lbVersion.indexOf(" ");
+  const versionNum = vSplit > 0 ? lbVersion.slice(0, vSplit) : lbVersion;
+  const versionName = vSplit > 0 ? lbVersion.slice(vSplit + 1) : "";
+  const engineName = settings.proxyEngine === "scramjet" ? "ScramJet" : "Zeolite";
+
   return (
     <section className="lb-view-content" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
@@ -454,6 +477,30 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
             <p className="lb-set-title-sub">Everything stays on this device. Changes apply immediately.</p>
           </div>
+
+          {/* About hero (user request 2026-11-11): an MT3E card at the
+              very top with the ASCII wordmark, the version (number and
+              codename) and the running proxy engine. Background shapes
+              are the canonical md-shape vectors, placed after the
+              expressive-profile hero; decorative and aria-hidden. */}
+          <md-card variant="filled" className="lb-about-hero">
+            <div className="lb-about-hero-shapes" aria-hidden={true}>
+              <md-shape name="sunny" size="150" color="primary-container" className="lb-hero-shape lb-hero-shape-a" />
+              <md-shape name="very-sunny" size="44" color="secondary-container" className="lb-hero-shape lb-hero-shape-c" />
+              <md-shape name="4-leaf-clover" size="76" color="tertiary-container" className="lb-hero-shape lb-hero-shape-b" />
+            </div>
+            <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
+            <div className="lb-about-hero-meta">
+              <span className="lb-hero-version">
+                <span className="lb-hero-version-num">{build ? versionNum : "unknown"}</span>
+                {versionName ? <span className="lb-hero-version-name">{versionName}</span> : null}
+              </span>
+              <span className="lb-hero-engine">
+                <span className="lb-hero-engine-label">Engine</span>
+                {engineName}
+              </span>
+            </div>
+          </md-card>
 
           {/* #198: search-first Settings. A query swaps the panels for
               a flat result list; picking a result expands the owning

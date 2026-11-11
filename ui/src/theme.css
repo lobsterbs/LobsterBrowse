@@ -2514,3 +2514,86 @@ background: var(--lb-glass-tint);
 @media (prefers-reduced-motion: reduce) {
   .lb-ai-md-stream .lb-md > :last-child { animation: none; }
 }
+/* ---- Settings: About hero card (user request 2026-11-11) ----
+   MT3E identity card at the very top of Settings: neutral
+   surface-container ground through the md-card container token,
+   canonical M3E shapes (md-shape) blended into the background after
+   the expressive-profile hero, the ASCII wordmark, the version
+   (number and codename) and the running engine. Shapes are
+   decorative only (aria-hidden in Settings.tsx). */
+md-card.lb-about-hero {
+  --md-card-padding: 0;
+  --md-card-gap: 0;
+  /* Neutral ground like the expressive-profile hero: container
+     colors read against surface-container without fighting a tint. */
+  --md-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
+  --md-card-content-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--md-sys-measurement-space150);
+  border-radius: var(--m3e-shape-lg, 20px);
+}
+.lb-about-hero-shapes { position: absolute; inset: 0; pointer-events: none; }
+.lb-about-hero > pre,
+.lb-about-hero > .lb-about-hero-meta { position: relative; }
+.lb-hero-shape { position: absolute; display: block; }
+/* Placement follows the expressive-profile hero: one large shape
+   spilling off the top-right corner, a mid shape along the bottom,
+   a small one on the right edge. The card clips them (overflow:
+   hidden); opacity blends them into the ground. */
+.lb-hero-shape-a {
+  top: -52px; right: -48px; opacity: 0.55;
+  animation: lb-hero-spin 90s linear infinite;
+}
+.lb-hero-shape-b {
+  bottom: -30px; right: 200px; opacity: 0.5;
+}
+.lb-hero-shape-c {
+  bottom: 40px; right: -14px; opacity: 0.6;
+  animation: lb-hero-spin-r 70s linear infinite;
+}
+@keyframes lb-hero-spin { to { transform: rotate(360deg); } }
+@keyframes lb-hero-spin-r { to { transform: rotate(-360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .lb-hero-shape-a, .lb-hero-shape-c { animation: none; }
+}
+.lb-about-hero-logo {
+  margin: 0;
+  padding: var(--md-sys-measurement-space200) var(--md-sys-measurement-space200) 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(6px, 2.2vw, 11px);
+  line-height: 1.05;
+  white-space: pre;
+  overflow-x: auto;
+}
+.lb-about-hero-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--md-sys-measurement-space100);
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
+}
+.lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
+.lb-hero-version-num {
+  font-size: var(--md-sys-typescale-display-small-font-size, 32px);
+  font-variation-settings: "wght" 640;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.lb-hero-version-name {
+  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
+  font-variation-settings: "wght" 500;
+  opacity: 0.85;
+}
+.lb-hero-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space75);
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
+  border-radius: var(--md-sys-shape-corner-full, 999px);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface, var(--md-sys-color-on-surface)) 10%, transparent);
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+  font-variation-settings: "wght" 500;
+}
+.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" 400; }
