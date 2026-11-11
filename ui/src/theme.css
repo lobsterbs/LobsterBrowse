@@ -2537,25 +2537,32 @@ md-card.lb-about-hero {
 .lb-about-hero > pre,
 .lb-about-hero > .lb-about-hero-meta { position: relative; }
 .lb-hero-shape { position: absolute; display: block; }
-/* Placement follows the expressive-profile hero: one large shape
-   spilling off the top-right corner, a mid shape along the bottom,
-   a small one on the right edge. The card clips them (overflow:
-   hidden); opacity blends them into the ground. */
+/* Placement follows the expressive-profile hero: shapes render at
+   full container-color strength behind the content - one large shape
+   spilling off the top-right corner, a clover along the bottom, a
+   small one on the right edge. The card clips them (overflow:
+   hidden). Motion mirrors the reference: slow spin, reverse spin,
+   gentle bob. */
 .lb-hero-shape-a {
-  top: -52px; right: -48px; opacity: 0.55;
-  animation: lb-hero-spin 90s linear infinite;
+  top: -36px; right: -44px;
+  animation: lb-hero-spin 40s linear infinite;
 }
 .lb-hero-shape-b {
-  bottom: -30px; right: 200px; opacity: 0.5;
+  bottom: -16px; right: 190px;
+  animation: lb-hero-bob 7s ease-in-out infinite;
 }
 .lb-hero-shape-c {
-  bottom: 40px; right: -14px; opacity: 0.6;
-  animation: lb-hero-spin-r 70s linear infinite;
+  bottom: 46px; right: -12px;
+  animation: lb-hero-spin-r 28s linear infinite;
 }
 @keyframes lb-hero-spin { to { transform: rotate(360deg); } }
 @keyframes lb-hero-spin-r { to { transform: rotate(-360deg); } }
+@keyframes lb-hero-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(12deg); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lb-hero-shape-a, .lb-hero-shape-c { animation: none; }
+  .lb-hero-shape-a, .lb-hero-shape-b, .lb-hero-shape-c { animation: none; }
 }
 .lb-about-hero-logo {
   margin: 0;

@@ -483,11 +483,16 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               codename) and the running proxy engine. Background shapes
               are the canonical md-shape vectors, placed after the
               expressive-profile hero; decorative and aria-hidden. */}
-          <md-card variant="filled" className="lb-about-hero">
+          <md-card variant="filled" {...{ class: "lb-about-hero" }}>
+            {/* Shapes render first as the background layer, content on
+                top: the expressive-profile hero. Large 8-leaf-clover
+                spilling off the top-right corner, 4-leaf-clover along the
+                bottom, small sunny on the right edge; container colors at
+                full strength, clipped by the card. */}
             <div className="lb-about-hero-shapes" aria-hidden={true}>
-              <md-shape name="sunny" size="150" color="primary-container" className="lb-hero-shape lb-hero-shape-a" />
-              <md-shape name="very-sunny" size="44" color="secondary-container" className="lb-hero-shape lb-hero-shape-c" />
-              <md-shape name="4-leaf-clover" size="76" color="tertiary-container" className="lb-hero-shape lb-hero-shape-b" />
+              <md-shape name="8-leaf-clover" size="150" color="primary-container" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
+              <md-shape name="4-leaf-clover" size="62" color="tertiary-container" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
+              <md-shape name="sunny" size="34" color="secondary-container" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
             </div>
             <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
             <div className="lb-about-hero-meta">
