@@ -188,41 +188,45 @@ export default function ExtManage() {
         <p className="lb-ext-note">No extensions installed yet.</p>
       ) : (
         <div className="lb-ext-list">
+          {/* #262: rows on m3e-list-item with leading avatar and
+             supporting text; trailing delete stays. */}
           {list.map((e) => (
-            <m3e-card variant="filled"
+            <m3e-list-item
               key={e.id}
-              {...{ class: "lb-ext-item" + (detail && detail.id === e.id ? " sel" : ""), title: shownError(e.lastError) ?? "" }}
-              role="button"
-              tabIndex={0}
-              onClick={() => void openDetail(e.id)}
-              onKeyDown={(ev) => {
-                if (ev.target !== ev.currentTarget) return;
-                if (ev.key === "Enter" || ev.key === " ") {
-                  ev.preventDefault();
-                  void openDetail(e.id);
-                }
+              {...{
+                class: "lb-ext-item" + (detail && detail.id === e.id ? " sel" : ""),
+                role: "button",
+                tabIndex: 0,
+                title: shownError(e.lastError) ?? "",
+                "aria-label": "Manage " + e.name,
+                onClick: () => void openDetail(e.id),
+                onKeyDown: (ev: KeyboardEvent) => {
+                  if (ev.target !== ev.currentTarget) return;
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    void openDetail(e.id);
+                  }
+                },
               }}
             >
-              <div className="lb-ext-ava" aria-hidden={true}>
+              <div slot="leading" className="lb-ext-ava" aria-hidden={true}>
                 {e.name.replace(/[^A-Za-z0-9].*/, "").slice(0, 2).toUpperCase() || "?"}
               </div>
               <span className="lb-ext-name">{e.name}</span>
-              <span className="lb-ext-ver">{e.version}</span>
-              <span className={"lb-ext-state" + (e.enabled ? "" : " off")}>
-                {e.enabled ? e.state : "disabled"}
+              <span slot="supporting-text" className="lb-ext-sub">
+                {e.version + " - " + (e.enabled ? e.state : "disabled")}
               </span>
-              <span className="lb-ext-item-actions">
-                <m3e-icon-button
-                  aria-label={"Delete " + e.name}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    setPendingDelete({ id: e.id, name: e.name });
-                  }}
-                >
-                  <m3e-icon name="delete" aria-hidden={true} />
-                </m3e-icon-button>
-              </span>
-            </m3e-card>
+              <m3e-icon-button
+                slot="trailing"
+                aria-label={"Delete " + e.name}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  setPendingDelete({ id: e.id, name: e.name });
+                }}
+              >
+                <m3e-icon name="delete" aria-hidden={true} />
+              </m3e-icon-button>
+            </m3e-list-item>
           ))}
         </div>
       )}
@@ -243,6 +247,14 @@ export default function ExtManage() {
             </m3e-icon-button>
           </div>
           {detail.description && <p className="lb-ext-desc">{detail.description}</p>}
+          {(detail.permissions.length > 0 || detail.hostPermissions.length > 0) && (
+            <div className="lb-ext-perm" role="note">
+              <m3e-icon name="gpp_maybe" aria-hidden={true} />
+              <span>
+                This add-on requests: {[...detail.permissions, ...detail.hostPermissions].join(", ")}
+              </span>
+            </div>
+          )}
           <div className="lb-ext-trow">
             <span className="lb-ext-tlabel">Enabled</span>
             <m3e-switch

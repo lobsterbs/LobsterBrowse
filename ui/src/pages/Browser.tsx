@@ -2832,6 +2832,14 @@ export default function BrowserView(props: Props) {
           hideSoon();
         }}
       >
+        {/* #262: 2px page-load progress pinned to the dock top edge;
+            the same activity state drives the top loading indicator. */}
+        <div
+          className={"lb-dock-progress" + (st.loading || engineBusy ? " on" : "")}
+          aria-hidden={!(st.loading || engineBusy)}
+        >
+          <m3e-linear-progress-indicator mode="indeterminate" variant="flat" aria-label="Loading page" />
+        </div>
         {/* Tab switcher: a modal m3e-bottom-sheet (user request
             2026-11-07) with one preview card per tab (favicon, title,
             live tile). Extracted to browser/TabSwitcherCard; state
@@ -2927,22 +2935,27 @@ export default function BrowserView(props: Props) {
             {tbSuggOpen && (
               <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
-                  <button
+                  /* #262: suggestion rows on m3e-list-item; keyboard
+                     stays on the input (roving arrows + Enter), rows
+                     leave the tab order like a proper listbox. */
+                  <m3e-list-item
                     key={it.url}
-                    type="button"
-                    role="option"
-                    aria-selected={i === tbSuggIdx}
-                    className={"lb-tb-ac-item" + (i === tbSuggIdx ? " active" : "")}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setTbSuggOpen(false);
-                      setTbExpanded(false);
-                      go(it.url);
+                    {...{
+                      class: "lb-tb-ac-item" + (i === tbSuggIdx ? " active" : ""),
+                      role: "option",
+                      "aria-selected": i === tbSuggIdx ? "true" : "false",
+                      tabIndex: -1,
+                      onMouseDown: (e: MouseEvent) => {
+                        e.preventDefault();
+                        setTbSuggOpen(false);
+                        setTbExpanded(false);
+                        go(it.url);
+                      },
                     }}
                   >
-                    <m3e-icon name="search" aria-hidden={true} />
+                    <m3e-icon slot="leading" name="search" aria-hidden={true} />
                     <span className="lb-tb-ac-text">{it.text}</span>
-                  </button>
+                  </m3e-list-item>
                 ))}
               </div>
             )}

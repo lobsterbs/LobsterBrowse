@@ -20,7 +20,6 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { type Tab } from "../store";
-import M3eSelect from "../M3eSelect";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
@@ -469,6 +468,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
     setCopyState(ok ? "ok" : "fail");
     window.setTimeout(() => setCopyState(""), 2000);
+    /* #262: snackbar confirmation; the inline label alone was easy
+       to miss at the sheet edge. */
+    if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+      M3eSnackbar.open(ok ? "Diagnostics copied" : "Copy failed", { duration: 3000 });
+    }
   };
 
   /* ---- Console: real JS eval in the proxied page context. ---- */
@@ -783,19 +787,21 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                 </div>
                 <m3e-divider />
                 <div className="lb-dt-toolbar">
-                  <M3eSelect
-                    label="Log level filter"
-                    value={dt.levelFilter}
-                    options={[
-                      ["all", "All levels"],
-                      ["log", "log"],
-                      ["info", "info"],
-                      ["warn", "warn"],
-                      ["error", "error"],
-                      ["debug", "debug"],
-                    ]}
-                    onChange={(v) => setDt({ levelFilter: v })}
-                  />
+                  {/* #262: filter chips replace the select; the active
+                      level is visible at a glance and one press away. */}
+                  <div className="lb-dt-chips" role="group" aria-label="Log level filter">
+                    <m3e-chip-set>
+                      {([["all", "All"], ["log", "log"], ["info", "info"], ["warn", "warn"], ["error", "error"], ["debug", "debug"]] as const).map(([v, l]) => (
+                        <m3e-chip
+                          key={v}
+                          selected={dt.levelFilter === v ? "" : undefined}
+                          onClick={() => setDt({ levelFilter: v })}
+                        >
+                          {l}
+                        </m3e-chip>
+                      ))}
+                    </m3e-chip-set>
+                  </div>
                   <input
                     className="lb-input"
                     placeholder="Filter"
@@ -808,7 +814,13 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                   </m3e-icon-button>
                   <m3e-icon-button
                     aria-label="Copy console output"
-                    onClick={() => void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n"))}
+                    onClick={() =>
+                      void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n")).then((ok) => {
+                        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                          M3eSnackbar.open(ok ? "Console copied" : "Copy failed", { duration: 3000 });
+                        }
+                      })
+                    }
                   >
                     <m3e-icon name="content_copy" aria-hidden={true} />
                   </m3e-icon-button>

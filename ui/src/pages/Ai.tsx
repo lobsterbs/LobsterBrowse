@@ -115,7 +115,13 @@ function useTypewriter(target: string, active: boolean): string {
       const t = targetRef.current;
       if (posRef.current < t.length) {
         const backlog = t.length - posRef.current;
-        posRef.current += Math.max(1, Math.ceil(backlog / 8));
+        /* #262: paragraph-granular reveal: when a paragraph boundary
+           sits within reach, jump just past it so text arrives per
+           paragraph (the last block fades in via CSS); long paragraphs
+           fall back to the proportional char drain. */
+        const nl = t.indexOf("\n\n", posRef.current);
+        const drain = Math.max(1, Math.ceil(backlog / 8));
+        posRef.current += nl !== -1 && nl + 2 - posRef.current <= Math.max(48, drain * 4) ? nl + 2 - posRef.current : drain;
         /* Wave 91 (#244): the typewriter emits at most ~30 updates
            per second. A setShown every frame drove a full Markdown
            parse + sanitize per frame during streams; text at 30fps
@@ -140,7 +146,7 @@ function useTypewriter(target: string, active: boolean): string {
 function Answer({ text, typing }: { text: string; typing: boolean }) {
   const shown = useTypewriter(text, typing);
   return (
-    <div className="lb-ai-bubble lb-ai-answer">
+    <div className={"lb-ai-bubble lb-ai-answer" + (typing ? " lb-ai-md-stream" : "")}>
       <Markdown text={shown} />
     </div>
   );
@@ -464,6 +470,7 @@ export default function AiPage() {
               subRuns[subRuns.length - 1] = {
                 ...subRuns[subRuns.length - 1],
                 status: r.answer ? "done" : "failed",
+                tokens: r.usage?.totalTokens,
               };
             } catch (e) {
               if (ac.signal.aborted) throw e;
@@ -683,6 +690,7 @@ export default function AiPage() {
                               </span>
                               <span className="lb-ai-sub-task">{s.task}</span>
                               {s.ms > 0 && <span className="lb-ai-sub-ms">{formatElapsed(s.ms)}</span>}
+                              {s.tokens ? <span className="lb-ai-sub-ms">{s.tokens} tokens</span> : null}
                             </div>
                           );
                         })}
