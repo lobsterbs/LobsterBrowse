@@ -2832,14 +2832,6 @@ export default function BrowserView(props: Props) {
           hideSoon();
         }}
       >
-        {/* #262: 2px page-load progress pinned to the dock top edge;
-            the same activity state drives the top loading indicator. */}
-        <div
-          className={"lb-dock-progress" + (st.loading || engineBusy ? " on" : "")}
-          aria-hidden={!(st.loading || engineBusy)}
-        >
-          <m3e-linear-progress-indicator mode="indeterminate" variant="flat" aria-label="Loading page" />
-        </div>
         {/* Tab switcher: a modal m3e-bottom-sheet (user request
             2026-11-07) with one preview card per tab (favicon, title,
             live tile). Extracted to browser/TabSwitcherCard; state
