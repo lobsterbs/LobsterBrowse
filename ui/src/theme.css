@@ -2516,18 +2516,16 @@ background: var(--lb-glass-tint);
 }
 /* ---- Settings: About hero card (user request 2026-11-11) ----
    MT3E identity card at the very top of Settings: neutral
-   surface-container ground through the md-card container token,
-   canonical M3E shapes (md-shape) blended into the background after
+   surface-container ground, the canonical M3E expressive shape
+   vectors inlined as SVG blended into the background after
    the expressive-profile hero, the ASCII wordmark, the version
    (number and codename) and the running engine. Shapes are
    decorative only (aria-hidden in Settings.tsx). */
-md-card.lb-about-hero {
-  --md-card-padding: 0;
-  --md-card-gap: 0;
-  /* Neutral ground like the expressive-profile hero: container
-     colors read against surface-container without fighting a tint. */
-  --md-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
-  --md-card-content-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
+.lb-about-hero {
+  /* Neutral ground like the expressive-profile hero: a plain
+     surface-container block (the beta UI has no card component here). */
+  background: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
+  color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
   position: relative;
   overflow: hidden;
   margin-bottom: var(--md-sys-measurement-space150);
@@ -2537,6 +2535,7 @@ md-card.lb-about-hero {
 .lb-about-hero > pre,
 .lb-about-hero > .lb-about-hero-meta { position: relative; }
 .lb-hero-shape { position: absolute; display: block; }
+.lb-hero-shape svg { display: block; width: 100%; height: 100%; }
 /* Placement follows the expressive-profile hero: shapes render at
    full container-color strength behind the content - one large shape
    spilling off the top-right corner, a clover along the bottom, a
@@ -2544,14 +2543,20 @@ md-card.lb-about-hero {
    hidden). Motion mirrors the reference: slow spin, reverse spin,
    gentle bob. */
 .lb-hero-shape-a {
+  width: 150px; height: 150px;
+  fill: var(--md-sys-color-primary-container);
   top: -36px; right: -44px;
   animation: lb-hero-spin 40s linear infinite;
 }
 .lb-hero-shape-b {
+  width: 62px; height: 62px;
+  fill: var(--md-sys-color-tertiary-container);
   bottom: -16px; right: 190px;
   animation: lb-hero-bob 7s ease-in-out infinite;
 }
 .lb-hero-shape-c {
+  width: 34px; height: 34px;
+  fill: var(--md-sys-color-secondary-container);
   bottom: 46px; right: -12px;
   animation: lb-hero-spin-r 28s linear infinite;
 }
