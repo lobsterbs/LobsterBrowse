@@ -184,20 +184,35 @@ export default function App() {
      can re-arm after a worker restart (the engine keeps them
      memory-only). */
   const wispAuthRef = useRef<{ endpoint: string; username: string; password: string } | null>(null);
+  /* #250: the deployment's own wisp endpoint (the /build sjWisp
+     value), kept in a ref so an override can be withdrawn back to it
+     mid-session without a reload. */
+  const sjWispRef = useRef("");
+  /* #250: the effective wisp endpoint: the Settings override
+     (Settings > Advanced > WISP server) when it is a wss:// URL,
+     otherwise the deployment default. loadSettings already drops
+     stored junk on load; the shape check also covers mid-typing
+     edits, which persist through update() unvalidated. */
+  const effectiveWisp = () => {
+    const c = loadSettings().wispServer.trim();
+    return /^wss:\/\/\S+$/.test(c) ? c : sjWispRef.current;
+  };
   const [accessGateOpen, setAccessGateOpen] = useState(false);
   const [accessErr, setAccessErr] = useState("");
   const accessGateRef = useRef<(HTMLElement & { show: () => Promise<void>; returnValue: string }) | null>(null);
   const accessPwRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     zlRelayInit();
-    let wispUrl = "";
     void fetch("/build", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         const u = b && typeof b.sjWisp === "string" ? b.sjWisp : "";
         if (u) {
-          wispUrl = u;
-          zlWispInit(u);
+          sjWispRef.current = u;
+          /* #250: the stored override wins over the deployment
+             default from the first boot push on. */
+          const w = effectiveWisp();
+          if (w) zlWispInit(w);
         }
         /* #107: a provisioned content origin (ZL_CONTENT_ORIGIN on
            the server) is inert configuration until the operator
@@ -244,7 +259,10 @@ export default function App() {
       .catch(() => zlAnnounceContentOrigin(""));
     const re = () => {
       zlRelayInit();
-      if (wispUrl) zlWispInit(wispUrl);
+      /* #250: re-read the stored override on every heal so a worker
+         restart never resurrects a withdrawn endpoint. */
+      const w = effectiveWisp();
+      if (w) zlWispInit(w);
       /* #642: a worker restart drops the memory-only wisp
          credentials; re-arm with the same creds. */
       if (wispAuthRef.current) void zlWispAuthArm(wispAuthRef.current);
@@ -271,6 +289,20 @@ export default function App() {
       navigator.serviceWorker?.removeEventListener("message", onRelayLost);
     };
   }, []);
+
+  /* #250: a mid-session edit re-pushes at once. Clearing the override
+     re-pushes the deployment default (the worker keeps the last
+     registered endpoint until told otherwise). Worker restarts are
+     covered by the boot effect's controllerchange handler, which
+     re-reads the stored setting through effectiveWisp. Honest limit:
+     on split-origin deployments the content-origin worker keeps the
+     deployment endpoint - the /zlsw-register boot page relays only
+     zl:config messages, so a content-side override would need a
+     boot-page relay extension (not in this pass). */
+  useEffect(() => {
+    const w = effectiveWisp();
+    if (w) zlWispInit(w);
+  }, [settings.wispServer]);
 
   /* Persist the session whenever tabs change (never in incognito). */
   useEffect(() => {
