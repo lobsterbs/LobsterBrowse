@@ -2762,11 +2762,42 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
       }
       const ch = new MessageChannel();
       const controllers = new Map();
+      /* Zeolite #470 producer half (the LB half of the engine #644
+         fix): the engine grants byte credits (upfront after
+         zl:fetchRelay, then per drained chunk) and this side must
+         pause when they run out, or a fast body floods the engine's
+         relay queue and dies mid-stream with "relay response queue
+         limit exceeded" (YouTube's multi-MiB main module). Chunk
+         frames are sliced to 256 KiB so grants map to bounded byte
+         counts. Credit mode arms only after the FIRST grant: a legacy
+         engine never grants, and it must keep streaming exactly as
+         before (no stall). Mirrors ui/src/zeolite.ts. */
+      const RELAY_CREDIT_FRAME = 256 * 1024;
+      const relayCreditSinks = new Map();
       ch.port1.onmessage = (ev) => {
         const m = ev.data || {};
         if (m.type === "zl:fetchRelay" && typeof m.rid === "number") {
           const ac = new AbortController();
           controllers.set(m.rid, ac);
+          /* #470: the credit sink must be live BEFORE the first await:
+             the engine posts its upfront grant as soon as zl:fetchRelay
+             lands, which can precede the /zlrelay response. */
+          let credit = 0;
+          let creditArmed = false;
+          let creditWake = null;
+          const sink = (bytes) => {
+            if (bytes > 0) credit += bytes;
+            creditArmed = true;
+            const w = creditWake;
+            creditWake = null;
+            if (w) w();
+          };
+          relayCreditSinks.set(m.rid, sink);
+          const waitForCredit = () => new Promise((res) => {
+            const onAbort = () => { ac.signal.removeEventListener("abort", onAbort); creditWake = null; res(); };
+            ac.signal.addEventListener("abort", onAbort, { once: true });
+            creditWake = () => { ac.signal.removeEventListener("abort", onAbort); res(); };
+          });
           (async () => {
             const fail = (error, delivery) => { try { ch.port1.postMessage({ type: "zl:relayError", rid: m.rid, error, ...(delivery ? { delivery } : {}) }); } catch (e) {} };
             try {
@@ -2810,18 +2841,34 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
               for (;;) {
                 const r = await reader.read();
                 if (r.done) break;
-                if (r.value && r.value.length) ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value });
+                if (!r.value || !r.value.length) continue;
+                for (let off = 0; off < r.value.length; ) {
+                  if (creditArmed && credit <= 0) {
+                    await waitForCredit();
+                    if (ac.signal.aborted) throw new Error("relay aborted awaiting credit");
+                    continue;
+                  }
+                  const n = Math.min(RELAY_CREDIT_FRAME, r.value.length - off);
+                  ch.port1.postMessage({ type: "zl:relayChunk", rid: m.rid, bytes: r.value.slice(off, off + n) });
+                  if (creditArmed) credit -= n;
+                  off += n;
+                }
               }
               ch.port1.postMessage({ type: "zl:relayEnd", rid: m.rid });
             } catch (e) {
               fail(e && e.message ? e.message : String(e));
             } finally {
+              /* Only drop our own sink: a reused rid must not remove
+                 the entry of a newer fetch. */
+              if (relayCreditSinks.get(m.rid) === sink) relayCreditSinks.delete(m.rid);
               controllers.delete(m.rid);
             }
           })();
         } else if (m.type === "zl:relayCancel" && typeof m.rid === "number") {
           const ac = controllers.get(m.rid);
           if (ac) ac.abort();
+        } else if (m.type === "zl:relayCredit" && typeof m.rid === "number") {
+          relayCreditSinks.get(m.rid)?.(Number(m.bytes) || 0);
         } else if (m.type === "zl:wsRelay" && typeof m.rid === "number") {
           wsRelayOpen(m, ch.port1);
         } else if (m.type === "zl:wsSend" && typeof m.rid === "number") {
@@ -2844,7 +2891,11 @@ const ZL_BOOT_PAGE: &str = r#"<!doctype html>
           }
         }
       };
-      swc.postMessage({ type: "zl:relayRegister" }, [ch.port2]);
+      /* credits: 1 opts this channel into the engine's #470 credit
+         protocol: the engine grants its upfront budget after
+         zl:fetchRelay and tops up per drained chunk, so the producer
+         above pauses instead of flooding the queue. */
+      swc.postMessage({ type: "zl:relayRegister", credits: 1 }, [ch.port2]);
       relayHost = { port: ch.port1, controllers };
       pushCfg(swc);
       if (wispUrl) swc.postMessage({ type: "zl:wispRegister", url: wispUrl });

@@ -501,7 +501,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   return (
     <m3e-card
-      variant="elevated"
+      /* outlined, not elevated (user request 2026-11-11): the elevated
+         variant paints its own opaque surface-container fill inside the
+         shadow DOM, which reads as the grey slab behind the panel
+         content. Outlined keeps the border and stays transparent, so
+         the frosted host background from theme.css is what shows. */
+      variant="outlined"
       {...{
         ref: (el: any) => {
           if (el) {

@@ -136,3 +136,43 @@ bridge.onmessage({ data: JSON.stringify({ op: "close", code: 1000, reason: "done
 await new Promise(setImmediate);
 assert(wsReplies.some((m) => m.type === "zl:wsClose" && m.rid === 11 && m.code === 1000), "echoed close reaches the engine as zl:wsClose");
 console.log("relay-recovery: ws relay absolute-URL bridge, connect/data/close envelope parity passed");
+
+/* #644 regression: the boot page is the content origin's relay producer
+   and must opt into the engine's #470 byte credit protocol. A legacy
+   un-credited producer floods the engine's relay queue and dies
+   mid-stream with "relay response queue limit exceeded" (YouTube's
+   multi-MiB kevlar main module). Assert: the registration carries
+   credits: 1, chunk frames are sliced to 256 KiB, the producer pauses
+   when its credits run out, resumes on zl:relayCredit, and the stream
+   ends with zl:relayEnd. */
+assert.equal(liveReg.data.credits, 1, "relay registration must opt into byte credits (#470)");
+const frameCap = 256 * 1024;
+const bigChunk = new Uint8Array(frameCap * 2 + 188 * 1024); /* 700 KiB: three frames */
+let enqueueBody = () => {};
+const creditReplies = [];
+const relayBody = new ReadableStream({
+  start(controller) { enqueueBody = () => { controller.enqueue(bigChunk); controller.close(); }; },
+});
+context.fetch = async () => new Response(relayBody, {
+  headers: { "x-zl-relay-status": "200", "x-zl-relay-headers": "[]", "x-zl-relay-set-cookie": "[]" },
+});
+enginePort.onmessage = (ev) => creditReplies.push(ev.data);
+enginePort.postMessage({ type: "zl:fetchRelay", rid: 21, dest: "https://up.example/main.js", method: "GET", headers: [] });
+enginePort.postMessage({ type: "zl:relayCredit", rid: 21, bytes: frameCap });
+await new Promise(setImmediate);
+enqueueBody();
+await new Promise(setImmediate);
+await new Promise(setImmediate);
+const frames1 = creditReplies.filter((m) => m.type === "zl:relayChunk" && m.rid === 21);
+assert.equal(frames1.length, 1, "producer pauses once the upfront credit is spent");
+assert.equal(frames1[0].bytes.length, frameCap, "chunk frames slice to 256 KiB");
+enginePort.postMessage({ type: "zl:relayCredit", rid: 21, bytes: frameCap });
+await new Promise(setImmediate);
+assert.equal(creditReplies.filter((m) => m.type === "zl:relayChunk" && m.rid === 21).length, 2, "a credit grant resumes the producer");
+enginePort.postMessage({ type: "zl:relayCredit", rid: 21, bytes: frameCap });
+await new Promise(setImmediate);
+const frames3 = creditReplies.filter((m) => m.type === "zl:relayChunk" && m.rid === 21);
+assert.equal(frames3.length, 3, "the tail of the body drains after the last grant");
+assert.equal(frames3[2].bytes.length, 188 * 1024, "the tail frame carries only the remainder");
+assert(creditReplies.some((m) => m.type === "zl:relayEnd" && m.rid === 21), "the stream ends with zl:relayEnd");
+console.log("relay-recovery: #644 credit protocol (credits:1, 256 KiB frames, pause/resume, relayEnd) passed");

@@ -644,7 +644,9 @@ md-card .lb-ext-item { border: 0; background: none; }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
 .lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
+/* Bottom margin space200 (user request 2026-11-11): breathing room
+   between the mode-switch tabs and the log sections below them. */
+.lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space200); }
 /* #103: the tab panels are siblings of the switcher (bounded card layout, see DevTools.tsx) and flex to fill the card, so the page body inside keeps its bounded scroll area. */
 .lb-dt-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .lb-dt-panel[hidden] { display: none; }
@@ -1525,3 +1527,63 @@ body .lb-ext-panel {
 .lb-empty-state m3e-icon { font-size: 40px; opacity: 0.65; }
 .lb-empty-headline { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); color: var(--md-sys-color-on-surface, #e4e2e6); }
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
+
+/* ---- DevTools diagnostics presentation (user request 2026-11-11) ----
+   The card drops its grey slab: the outlined m3e-card variant (see
+   DevTools.tsx) stops painting its internal fill, and the frosted host
+   tint drops from 85% to 35% so the page reads through the blur.
+   Scoped to .lb-devtools only; the extensions panel keeps #92. */
+body .lb-devtools {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container, var(--md-sys-color-surface)) 35%, transparent);
+}
+/* Log rows read as a list, not a table: rounded rows, hairline
+   separators between rows only, hover tint, pill statuses, monospace
+   meta columns for scanability. */
+.lb-net-row {
+  border-bottom: none;
+  margin: 1px 0;
+  border-radius: var(--m3e-shape-sm, 12px);
+}
+.lb-net-row ~ .lb-net-row {
+  border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 14%, transparent);
+}
+.lb-net-summary {
+  align-items: center;
+  padding: var(--md-sys-measurement-space75, 6px) var(--md-sys-measurement-space100, 8px);
+  border-radius: var(--m3e-shape-sm, 12px);
+  transition: background-color var(--md-sys-motion-duration-short3, 150ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lb-net-summary:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent);
+}
+.lb-net-summary::marker { color: var(--md-sys-color-outline, #938f99); }
+.lb-net-status {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.lb-net-status.lb-ok {
+  color: #1e8e3e;
+  background: color-mix(in srgb, #1e8e3e 16%, transparent);
+}
+.lb-net-status.lb-bad {
+  color: var(--md-sys-color-error);
+  background: color-mix(in srgb, var(--md-sys-color-error) 16%, transparent);
+}
+.lb-net-url {
+  font-family: ui-monospace, "Cascadia Mono", "Source Code Pro", Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.lb-net-dur {
+  font-family: ui-monospace, "Cascadia Mono", "Source Code Pro", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.lb-net-detail {
+  border-top: 1px dashed color-mix(in srgb, var(--md-sys-color-outline) 18%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-net-summary { transition: none; }
+}
