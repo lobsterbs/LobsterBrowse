@@ -102,6 +102,14 @@ export const FP_PRESETS = (Object.keys(UA_PRESETS) as Exclude<UaPresetId, "custo
   (id): id is Exclude<UaPresetId, "custom" | "server-default"> => id !== "server-default",
 );
 
+/* #250: well-known public WISP endpoints offered as presets in
+   Settings. The deployment default ("") keeps transit on the
+   deployment's own endpoint announced by /build. */
+export const WISP_PRESETS: Array<[string, string]> = [
+  ["wss://anura.pro", "Anura Pro"],
+  ["wss://wisp.mercurywork.shop", "MercuryWork"],
+];
+
 /* Per-site rules. A rule only overrides the global setting for the
    fields it explicitly configures; the UI pushes the effective values
    to the engine (zl:rules), so they genuinely change engine
@@ -143,6 +151,11 @@ export type Settings = {
      epoxy (rustls+hyper, different TLS fingerprint). Applied on the
      next engine init; no mid-session swap. */
   transport: "libcurl" | "epoxy";
+  /* #250: custom WISP transit endpoint override (Settings >
+     Advanced > WISP server). Empty = the deployment default (the
+     /build sjWisp endpoint). Validated to the wss:// shape on load;
+     the engine worker receives it through the zl:wispRegister push. */
+  wispServer: string;
   /* Auto cloak: swap the visible page when the tab is hidden. */
   cloakEnabled: boolean;
   cloakUrl: string;
@@ -176,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsUpgrade: true,
   imageLazy: true,
   transport: "libcurl",
+  wispServer: "",
   cloakEnabled: false,
   cloakUrl: "https://www.wikipedia.org/",
   cloakTitle: "Wikipedia",
@@ -241,6 +255,12 @@ export function loadSettings(): Settings {
       httpsUpgrade: parsed.httpsUpgrade === undefined ? true : Boolean(parsed.httpsUpgrade),
       imageLazy: parsed.imageLazy === undefined ? true : Boolean(parsed.imageLazy),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
+      /* #250: a stored override must be a wss:// URL; anything else
+         falls back to the deployment default. */
+      wispServer:
+        typeof parsed.wispServer === "string" && /^wss:\/\/\S+$/.test(parsed.wispServer.trim())
+          ? parsed.wispServer.trim()
+          : "",
       density: "normal",
     };
   } catch {

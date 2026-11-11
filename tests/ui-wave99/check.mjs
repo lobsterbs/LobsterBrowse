@@ -68,4 +68,19 @@ assert.ok(
 );
 assert.ok(!appSrc.includes("useState<number>(0)"), "activeId no longer initializes to the unmatched sentinel 0");
 
+/* Wave 101h (issue #250): the custom WISP server picker. The setting
+   persists validated, the presets ship, the Settings panel carries
+   the third-party trust warning, and App pushes the effective
+   endpoint to the engine worker on boot, on change and on every
+   controllerchange heal. */
+const setSrc = read("../../ui/src/settings.ts");
+const settingsPage = read("../../ui/src/pages/Settings.tsx");
+assert.ok(setSrc.includes("wispServer: string;"), "Settings carries the wispServer field (#250)");
+assert.ok(setSrc.includes('typeof parsed.wispServer === "string"'), "a stored wispServer value is validated on load (#250)");
+assert.ok(setSrc.includes('"wss://anura.pro"') && setSrc.includes('"wss://wisp.mercurywork.shop"'), "the WISP presets ship (#250)");
+assert.ok(settingsPage.includes('headline="WISP server"'), "Settings exposes the WISP server panel (#250)");
+assert.ok(settingsPage.includes("terminates the upstream TLS"), "the third-party trust warning is shown (#250)");
+assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
+assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
+
 console.log("ui-wave99: all checks passed");

@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
    expansion panel - one switch behind a chevron is a wasted click. */
 import {
   ENGINES,
+  WISP_PRESETS,
   type EngineId,
   type Settings,
   type SiteRule,
@@ -64,6 +65,10 @@ const SEEDS: Array<[string, string]> = [
   ["#4F5B92", "Slate"],
   ["#6750A4", "Violet"],
 ];
+
+/* #250: pseudo-id of the "Custom endpoint" option in the WISP server
+   select; the real custom value lives in settings.wispServer. */
+const WISP_CUSTOM = "__custom__";
 
 const SECTION_TITLES: Record<string, string> = {
   search: "Search & browse",
@@ -128,6 +133,7 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "cloak", label: "Open in about:blank", terms: "popout window blank", panel: "p-aboutblank", target: "set-aboutblank" },
   { section: "advanced", label: "Proxy engine", terms: "zeolite scramjet engine", panel: "p-proxy", target: "set-proxy" },
   { section: "advanced", label: "Transport engine", terms: "libcurl epoxy tls transport", panel: "p-transport", target: "set-transport" },
+  { section: "advanced", label: "WISP server", terms: "wisp transit upstream endpoint anura mercurywork custom", panel: "p-wisp", target: "set-wisp" },
   { section: "advanced", label: "Data", terms: "delete cache data", target: "set-data" },
   { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
 ];
@@ -279,6 +285,18 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
       </span>
     </div>
   );
+
+  /* #250: WISP server picker. "" is the deployment default; a stored
+     value that is neither empty nor a preset opens the custom input
+     (it may also have been typed there directly). */
+  const [wispCustom, setWispCustom] = useState(false);
+  const wispSel =
+    wispCustom ||
+    (settings.wispServer !== "" && !WISP_PRESETS.some(([, u]) => u === settings.wispServer))
+      ? WISP_CUSTOM
+      : settings.wispServer === ""
+        ? "default"
+        : settings.wispServer;
 
   /* #198: searchable Settings - all local, no persistence change. */
   const [q, setQ] = useState("");
@@ -729,6 +747,49 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 <p className="lb-muted" style={{ marginTop: 6 }}>
                   epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
                 </p>
+              </SetPanel>
+              <SetPanel
+                id="p-wisp"
+                headline="WISP server"
+                sub="Upstream transit endpoint override"
+                anchorId="set-wisp"
+                open={!!openP["p-wisp"]}
+                toggle={() => toggleP("p-wisp")}
+              >
+                {zlOff && zlNote}
+                <div className={zlOff ? "lb-zl-guard" : undefined}>
+                  <M3eSelect
+                    label="WISP server"
+                    value={wispSel}
+                    options={[
+                      ["default", "Deployment default"],
+                      ...WISP_PRESETS,
+                      [WISP_CUSTOM, "Custom endpoint"],
+                    ]}
+                    onChange={(v) => {
+                      if (v === WISP_CUSTOM) {
+                        setWispCustom(true);
+                        return;
+                      }
+                      setWispCustom(false);
+                      onChange({ wispServer: v === "default" ? "" : v });
+                    }}
+                  />
+                  {wispSel === WISP_CUSTOM && (
+                    <TextInput
+                      label="Custom WISP endpoint"
+                      value={settings.wispServer}
+                      placeholder="wss://your-server.example/wisp/"
+                      hint="Must start with wss://"
+                      onChange={(v) => onChange({ wispServer: v })}
+                    />
+                  )}
+                  <p className="lb-muted">
+                    A WISP server terminates the upstream TLS for proxied traffic: a third-party endpoint can see
+                    and modify everything you load. Use only servers you trust. Deployment default keeps transit on
+                    this deployment&apos;s own endpoint.
+                  </p>
+                </div>
               </SetPanel>
               <SetInline
                 anchorId="set-data"
