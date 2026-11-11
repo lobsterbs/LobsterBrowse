@@ -1588,17 +1588,19 @@ body .lb-devtools {
   .lb-net-summary { transition: none; }
 }
 /* ---- Settings: About hero card (user request 2026-11-11) ----
-   MT3E identity card at the very top of Settings: primary-container
-   tint through the md-card container token, blended expressive
-   background shapes (mixed corner radii from the shape tokens, the
-   "cookie" cut custom-ROM about cards use), the ASCII wordmark, the
-   version (number and codename) and the running engine. Shapes are
+   MT3E identity card at the very top of Settings: neutral
+   surface-container ground through the md-card container token,
+   canonical M3E shapes (md-shape) blended into the background after
+   the expressive-profile hero, the ASCII wordmark, the version
+   (number and codename) and the running engine. Shapes are
    decorative only (aria-hidden in Settings.tsx). */
 md-card.lb-about-hero {
   --md-card-padding: 0;
   --md-card-gap: 0;
-  --md-card-container-color: color-mix(in srgb, var(--md-sys-color-primary-container, var(--md-sys-color-surface-container-high)) 62%, transparent);
-  --md-card-content-color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
+  /* Neutral ground like the expressive-profile hero: container
+     colors read against surface-container without fighting a tint. */
+  --md-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
+  --md-card-content-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
   position: relative;
   overflow: hidden;
   margin-bottom: var(--md-sys-measurement-space150);
@@ -1608,25 +1610,25 @@ md-card.lb-about-hero {
 .lb-about-hero > pre,
 .lb-about-hero > .lb-about-hero-meta { position: relative; }
 .lb-hero-shape { position: absolute; display: block; }
-/* Each shape mixes two corners of the M3E shape scale so the card
-   reads as composed, not decorated. */
+/* Placement follows the expressive-profile hero: one large shape
+   spilling off the top-right corner, a mid shape along the bottom,
+   a small one on the right edge. The card clips them (overflow:
+   hidden); opacity blends them into the ground. */
 .lb-hero-shape-a {
-  top: -34px; right: -26px; width: 128px; height: 128px;
-  border-radius: var(--md-sys-shape-corner-extra-large, 28px) var(--md-sys-shape-corner-full, 999px)
-    var(--md-sys-shape-corner-extra-large, 28px) var(--md-sys-shape-corner-full, 999px);
-  background: color-mix(in srgb, var(--md-sys-color-primary, var(--md-sys-color-on-primary-container)) 16%, transparent);
+  top: -52px; right: -48px; opacity: 0.55;
+  animation: lb-hero-spin 90s linear infinite;
 }
 .lb-hero-shape-b {
-  bottom: -52px; left: -36px; width: 150px; height: 150px;
-  border-radius: var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-extra-large, 28px)
-    var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-extra-large, 28px);
-  background: color-mix(in srgb, var(--md-sys-color-tertiary, var(--md-sys-color-primary)) 14%, transparent);
+  bottom: -30px; right: 200px; opacity: 0.5;
 }
 .lb-hero-shape-c {
-  top: 14px; left: 38%; width: 64px; height: 64px;
-  border-radius: var(--md-sys-shape-corner-large, 16px) var(--md-sys-shape-corner-full, 999px)
-    var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-large, 16px);
-  background: color-mix(in srgb, var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface)) 6%, transparent);
+  bottom: 40px; right: -14px; opacity: 0.6;
+  animation: lb-hero-spin-r 70s linear infinite;
+}
+@keyframes lb-hero-spin { to { transform: rotate(360deg); } }
+@keyframes lb-hero-spin-r { to { transform: rotate(-360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .lb-hero-shape-a, .lb-hero-shape-c { animation: none; }
 }
 .lb-about-hero-logo {
   margin: 0;
@@ -1663,7 +1665,7 @@ md-card.lb-about-hero {
   gap: var(--md-sys-measurement-space75);
   padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
   border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: color-mix(in srgb, var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface)) 10%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-on-surface, var(--md-sys-color-on-surface)) 10%, transparent);
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
   font-variation-settings: "wght" 500;
 }
