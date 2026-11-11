@@ -164,6 +164,15 @@ function TextInput(props: {
   );
 }
 
+/* The ASCII wordmark, byte-identical with Home.tsx (user request
+   2026-11-11: the Settings hero card carries the real logo). */
+const LB_ASCII = String.raw`    __          __         __            ____
+   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
+  / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
+ / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
+/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/
+                                                                          `;
+
 export default function SettingsPanel({ settings, onChange, rules, onRulesChange, onOpenLogs, onDeleteAll, onImportSession }: Props) {
   /* 0.7 Zirconium: session data backup, local file only. Export
      serializes the persisted history and open tabs (the store
@@ -352,10 +361,42 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       cancelled = true;
     };
   }, []);
+  /* About hero (user request 2026-11-11): /build's lb field carries
+     "number codename" (e.g. "0.8.0 Tungsten"); split once for the
+     hero card's number and text versions. */
+  const lbVersion = build?.lb ?? "";
+  const vSplit = lbVersion.indexOf(" ");
+  const versionNum = vSplit > 0 ? lbVersion.slice(0, vSplit) : lbVersion;
+  const versionName = vSplit > 0 ? lbVersion.slice(vSplit + 1) : "";
+  const engineName = settings.proxyEngine === "scramjet" ? "ScramJet" : "Zeolite";
+
 
   return (
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
+      {/* About hero (user request 2026-11-11): an MT3E card at the
+          very top with the ASCII wordmark, the version (number and
+          codename) and the running proxy engine. The background
+          shapes are decorative and hidden from assistive tech. */}
+      <md-card variant="filled" className="lb-about-hero">
+        <div className="lb-about-hero-shapes" aria-hidden={true}>
+          <span className="lb-hero-shape lb-hero-shape-a" />
+          <span className="lb-hero-shape lb-hero-shape-b" />
+          <span className="lb-hero-shape lb-hero-shape-c" />
+        </div>
+        <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
+        <div className="lb-about-hero-meta">
+          <span className="lb-hero-version">
+            <span className="lb-hero-version-num">{build ? versionNum : "unknown"}</span>
+            {versionName ? <span className="lb-hero-version-name">{versionName}</span> : null}
+          </span>
+          <span className="lb-hero-engine">
+            <span className="lb-hero-engine-label">Engine</span>
+            {engineName}
+          </span>
+        </div>
+      </md-card>
+
 
       {/* Real M3E accordion coordinating the panels. multi keeps the
           current behavior (several panels open at once); without it

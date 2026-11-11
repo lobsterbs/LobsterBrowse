@@ -1587,3 +1587,84 @@ body .lb-devtools {
 @media (prefers-reduced-motion: reduce) {
   .lb-net-summary { transition: none; }
 }
+/* ---- Settings: About hero card (user request 2026-11-11) ----
+   MT3E identity card at the very top of Settings: primary-container
+   tint through the md-card container token, blended expressive
+   background shapes (mixed corner radii from the shape tokens, the
+   "cookie" cut custom-ROM about cards use), the ASCII wordmark, the
+   version (number and codename) and the running engine. Shapes are
+   decorative only (aria-hidden in Settings.tsx). */
+md-card.lb-about-hero {
+  --md-card-padding: 0;
+  --md-card-gap: 0;
+  --md-card-container-color: color-mix(in srgb, var(--md-sys-color-primary-container, var(--md-sys-color-surface-container-high)) 62%, transparent);
+  --md-card-content-color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--md-sys-measurement-space150);
+  border-radius: var(--m3e-shape-lg, 20px);
+}
+.lb-about-hero-shapes { position: absolute; inset: 0; pointer-events: none; }
+.lb-about-hero > pre,
+.lb-about-hero > .lb-about-hero-meta { position: relative; }
+.lb-hero-shape { position: absolute; display: block; }
+/* Each shape mixes two corners of the M3E shape scale so the card
+   reads as composed, not decorated. */
+.lb-hero-shape-a {
+  top: -34px; right: -26px; width: 128px; height: 128px;
+  border-radius: var(--md-sys-shape-corner-extra-large, 28px) var(--md-sys-shape-corner-full, 999px)
+    var(--md-sys-shape-corner-extra-large, 28px) var(--md-sys-shape-corner-full, 999px);
+  background: color-mix(in srgb, var(--md-sys-color-primary, var(--md-sys-color-on-primary-container)) 16%, transparent);
+}
+.lb-hero-shape-b {
+  bottom: -52px; left: -36px; width: 150px; height: 150px;
+  border-radius: var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-extra-large, 28px)
+    var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-extra-large, 28px);
+  background: color-mix(in srgb, var(--md-sys-color-tertiary, var(--md-sys-color-primary)) 14%, transparent);
+}
+.lb-hero-shape-c {
+  top: 14px; left: 38%; width: 64px; height: 64px;
+  border-radius: var(--md-sys-shape-corner-large, 16px) var(--md-sys-shape-corner-full, 999px)
+    var(--md-sys-shape-corner-full, 999px) var(--md-sys-shape-corner-large, 16px);
+  background: color-mix(in srgb, var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface)) 6%, transparent);
+}
+.lb-about-hero-logo {
+  margin: 0;
+  padding: var(--md-sys-measurement-space200) var(--md-sys-measurement-space200) 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(6px, 2.2vw, 11px);
+  line-height: 1.05;
+  white-space: pre;
+  overflow-x: auto;
+}
+.lb-about-hero-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--md-sys-measurement-space100);
+  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
+}
+.lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
+.lb-hero-version-num {
+  font-size: var(--md-sys-typescale-display-small-font-size, 32px);
+  font-variation-settings: "wght" 640;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.lb-hero-version-name {
+  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
+  font-variation-settings: "wght" 500;
+  opacity: 0.85;
+}
+.lb-hero-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--md-sys-measurement-space75);
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
+  border-radius: var(--md-sys-shape-corner-full, 999px);
+  background: color-mix(in srgb, var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface)) 10%, transparent);
+  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
+  font-variation-settings: "wght" 500;
+}
+.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" 400; }
