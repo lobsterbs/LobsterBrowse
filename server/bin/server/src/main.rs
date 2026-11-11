@@ -4312,8 +4312,8 @@ async fn build_payload(headers: &axum::http::HeaderMap) -> String {
 }
 
 /// Zeolite version out of the vendored engine worker source. The dist
-/// sw.js keeps its identity as the only quoted "MAJOR.MINOR Substance"
-/// string (e.g. "1.0 Nitride"). The scan anchors the shape check at
+/// sw.js keeps its identity as the only quoted "MAJOR.MINOR(.PATCH)?
+/// Substance" string (e.g. "1.0 Nitride", "3.0.1 Diamond"). The scan anchors the shape check at
 /// every quote: pairing quotes (split parity or quote-to-quote
 /// skipping) desyncs on real minified bundles, whose escaped and
 /// unpaired quotes made both earlier cuts report "unknown" against a
@@ -4341,7 +4341,24 @@ fn zeolite_version(js: &str) -> String {
         while p < b.len() && b[p].is_ascii_digit() {
             p += 1;
         }
-        if p == start_min || p >= b.len() || b[p] != b' ' {
+        if p == start_min || p >= b.len() {
+            i += 1;
+            continue;
+        }
+        /* #258: the dist bundle moved to three-component identities
+        ("3.0.1 Diamond"). Accept an optional third numeric component
+        before the space; two-component strings keep matching. */
+        if b[p] == b'.' {
+            p += 1;
+            let start_patch = p;
+            while p < b.len() && b[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == start_patch || p >= b.len() || b[p] != b' ' {
+                i += 1;
+                continue;
+            }
+        } else if b[p] != b' ' {
             i += 1;
             continue;
         }
@@ -5073,6 +5090,20 @@ mod version_tests {
         assert_eq!(zeolite_version(js), "1.0 Nitride");
         // Multi-digit minor must still parse (a future "1.10 Fullerene").
         assert_eq!(zeolite_version("x=\"1.10 Fullerene\";"), "1.10 Fullerene");
+    }
+
+    #[test]
+    fn three_component_identities_read_and_bad_shapes_stay_unknown() {
+        // #258: the live dist sw.js carries "3.0.1 Diamond".
+        assert_eq!(zeolite_version("x=\"3.0.1 Diamond\";"), "3.0.1 Diamond");
+        let js = r#"const fe=[];const pt="3.0.1 Diamond";const mt="zeolite-pages-v1";"#;
+        assert_eq!(zeolite_version(js), "3.0.1 Diamond");
+        // Four numeric components are not the identity shape.
+        assert_eq!(zeolite_version("x=\"1.2.3.4 Nitride\";"), "unknown");
+        // Two substances after the minor do not match either.
+        assert_eq!(zeolite_version("x=\"1.2 Nitride Diamond\";"), "unknown");
+        // A non-numeric patch keeps the honest unknown.
+        assert_eq!(zeolite_version("x=\"1.2.x Nitride\";"), "unknown");
     }
 
     #[test]
