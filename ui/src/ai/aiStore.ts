@@ -117,6 +117,8 @@ export interface AiSub {
   task: string;
   ms: number;
   status?: "working" | "done" | "failed";
+  /* #262: settled sub agent token count, when the run reports usage. */
+  tokens?: number;
 }
 
 export interface AiMsg {

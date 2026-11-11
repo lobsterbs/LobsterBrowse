@@ -38,6 +38,13 @@ export default function DownloadsCard(props: {
         <span slot="title">Downloads ({props.downloads.length})</span>
       </m3e-app-bar>
       <div slot="content" className="lb-dl-list">
+        {props.downloads.length === 0 && (
+          <div className="lb-dl-empty">
+            <m3e-icon name="download" aria-hidden={true} />
+            <span className="lb-dl-empty-title">No downloads yet</span>
+            <span className="lb-dl-empty-sub">Files you save appear here with live progress.</span>
+          </div>
+        )}
         {props.downloads.map((d) => (
           <div key={d.id} className="lb-dl-item">
             <m3e-icon name={dlIconFor(d.name)} aria-hidden={true} />
@@ -59,7 +66,7 @@ export default function DownloadsCard(props: {
               )}
               <div className="lb-dl-meta">
                 {d.status === "active"
-                  ? (d.size > 0 ? fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
+                  ? (d.size > 0 ? Math.round((d.got / d.size) * 100) + "%, " + fmtBytes(d.got) + " / " + fmtBytes(d.size) : fmtBytes(d.got)) + " downloaded"
                   : d.status === "done"
                     ? "Complete, saved to your device"
                     : d.status === "cancelled"

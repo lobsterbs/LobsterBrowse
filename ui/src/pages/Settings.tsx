@@ -330,10 +330,16 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      parser and registration. Import results report through the
      snackbar (the inline status line and the other transient status
      cards are gone). */
+  /* #262: visible busy state for the import. The engine zl:installExt
+     call is one-shot (no progress events), so the progress is honestly
+     indeterminate, never a fake percentage. */
+  const [extImporting, setExtImporting] = useState(false);
   const importZip = async (file: File) => {
     if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
       M3eSnackbar.open("Importing " + file.name + "...", { duration: 3000 });
     }
+    setExtImporting(true);
+    try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
     const warnings = extWarnings(rep);
@@ -350,6 +356,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
         M3eSnackbar.open(msg, { duration: 7000 });
       }
+    }
+    } finally {
+      setExtImporting(false);
     }
   };
 
@@ -620,6 +629,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
                   </m3e-button>
                 </label>
+                {extImporting && (
+                  <div className="lb-import-progress">
+                    <m3e-linear-progress-indicator mode="indeterminate" aria-label="Importing extension" />
+                  </div>
+                )}
                 <p className="lb-muted" style={{ marginTop: 4 }}>
                   Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
                   (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).

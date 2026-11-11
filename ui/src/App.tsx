@@ -923,6 +923,11 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
+          {/* #262: view names on the collapsed rail. */}
+          <m3e-tooltip for="nav-home" position="right">Home</m3e-tooltip>
+          <m3e-tooltip for="nav-browse" position="right">Browse</m3e-tooltip>
+          <m3e-tooltip for="nav-ai" position="right">AI</m3e-tooltip>
+          <m3e-tooltip for="nav-settings" position="right">Settings</m3e-tooltip>
         </m3e-nav-rail>
 
         {/* Small screens (#76): the M3E nav bar replaces the wide
@@ -989,7 +994,7 @@ export default function App() {
             {view !== "browser" && (
               <div key={view} className="lb-view">
               {view === "home" && (
-                <HomePage settings={settings} onNavigate={navigateTo} />
+                <HomePage settings={settings} tabs={tabs} onNavigate={navigateTo} />
               )}
               {view === "settings" && (
                 <SettingsPanel
