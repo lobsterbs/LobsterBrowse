@@ -382,15 +382,16 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           very top with the ASCII wordmark, the version (number and
           codename) and the running proxy engine. The background
           shapes are decorative and hidden from assistive tech. */}
-      <md-card variant="filled" className="lb-about-hero">
+      <md-card variant="filled" {...{ class: "lb-about-hero" }}>
         <div className="lb-about-hero-shapes" aria-hidden={true}>
-          {/* Canonical M3E shapes via md-shape, after the expressive-profile
-              hero: large sunny top-right, 4-leaf-clover along the bottom,
-              very-sunny on the right edge; container colors, clipped by
-              the card. md-shape renders itself aria-hidden. */}
-          <md-shape name="sunny" size="150" color="primary-container" className="lb-hero-shape lb-hero-shape-a" />
-          <md-shape name="very-sunny" size="44" color="secondary-container" className="lb-hero-shape lb-hero-shape-c" />
-          <md-shape name="4-leaf-clover" size="76" color="tertiary-container" className="lb-hero-shape lb-hero-shape-b" />
+          {/* Shapes render first as the background layer, content on top:
+              the expressive-profile hero. Large 8-leaf-clover spilling off
+              the top-right corner, 4-leaf-clover along the bottom, small
+              sunny on the right edge; container colors at full strength,
+              clipped by the card. md-shape renders itself aria-hidden. */}
+          <md-shape name="8-leaf-clover" size="150" color="primary-container" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
+          <md-shape name="4-leaf-clover" size="62" color="tertiary-container" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
+          <md-shape name="sunny" size="34" color="secondary-container" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
         </div>
         <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
         <div className="lb-about-hero-meta">
@@ -421,7 +422,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
           ) : (
             hits.map((h) => (
-              <md-card key={"c-" + h.label} variant="filled" className="lb-set-result">
+              <md-card key={"c-" + h.label} variant="filled" {...{ class: "lb-set-result" }}>
                 <button type="button" className="lb-set-result-btn" onClick={() => jumpTo(h)}>
                   <span>{h.label}</span>
                   <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
@@ -433,7 +434,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       ) : (
       <m3e-accordion multi>
       <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <md-card variant="filled" className="lb-setting-group" id="set-search-engine" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-search-engine" tabIndex={-1}>
           <div className="lb-setting-label">Search engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Search engine">
@@ -462,21 +463,21 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <md-card variant="filled" className="lb-setting-group" id="set-manage-ext" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-manage-ext" tabIndex={-1}>
           <div className="lb-setting-label">Manage installed</div>
           {/* #230: the extension configuration UI moved here from the
               toolbar extension card; the toolbar card now launches the
               extension UI directly. */}
           <ExtManage />
         </md-card>
-        <md-card variant="filled" className="lb-setting-group" id="set-amo" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-amo" tabIndex={-1}>
           <div className="lb-setting-label">Find and install add-ons</div>
           {/* AMO web pages are blocked from this deployment's egress;
              the public API is not, so search and install run over the
              API instead of the store site. */}
           <AmoSearch />
         </md-card>
-        <md-card variant="filled" className="lb-setting-group" id="set-import" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-import" tabIndex={-1}>
           <div className="lb-setting-label">Import locally</div>
           {/* Exactly one import action: our button triggers the picker;
              the input itself stays hidden. */}
@@ -506,7 +507,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <md-card variant="filled" className="lb-setting-group" id="set-theme-color" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-theme-color" tabIndex={-1}>
           {/* #102: a visible, associated label for the colour input. */}
           <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
             Theme color
@@ -529,7 +530,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </div>
         </md-card>
         <m3e-divider />
-        <md-card variant="filled" className="lb-setting-group">
+        <md-card variant="filled" {...{ class: "lb-setting-group" }}>
           <div className="lb-setting-label">Background</div>
           <m3e-list>
             <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
@@ -546,7 +547,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
         <m3e-list>
           <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
         </m3e-list>
-        <md-card variant="filled" className="lb-setting-group" id="set-cloak-url" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-cloak-url" tabIndex={-1}>
           <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
           <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
           <p className="lb-muted">
@@ -555,7 +556,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             page re-render while hidden - this is the strongest behavior a normal web page can offer.
           </p>
         </md-card>
-        <md-card variant="filled" className="lb-setting-group" id="set-aboutblank" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-aboutblank" tabIndex={-1}>
           <div className="lb-setting-label">Open in about:blank</div>
           <m3e-button onClick={openInAboutBlank}>
             <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
@@ -569,7 +570,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </Panel>
 
       <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <md-card variant="filled" className="lb-setting-group" id="set-proxy" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-proxy" tabIndex={-1}>
           <div className="lb-setting-label">Proxy engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Proxy engine">
@@ -586,7 +587,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </p>
         </md-card>
         <m3e-divider />
-        <md-card variant="filled" className="lb-setting-group" id="set-transport" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-transport" tabIndex={-1}>
           <div className="lb-setting-label">Transport engine</div>
           <div className="lb-seg-wrap">
           <m3e-segmented-button aria-label="Transport engine">
@@ -603,7 +604,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           </p>
         </md-card>
         <m3e-divider />
-        <md-card variant="filled" className="lb-setting-group" id="set-data" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-data" tabIndex={-1}>
           <div className="lb-setting-label">Data</div>
           <p className="lb-muted">
             Export the persisted session (open tabs) to a local file,
@@ -680,7 +681,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             purpose): every failed resource, page console message and
             proxy intervention (CSP/SRI stripping) is logged in full to
             the app log and DevTools. */}
-        <md-card variant="filled" className="lb-setting-group" id="set-logs" tabIndex={-1}>
+        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-logs" tabIndex={-1}>
           <div className="lb-setting-label">Logs</div>
           <m3e-button onClick={onOpenLogs}>
             <m3e-icon name="history" aria-hidden={true} /> Open Logs
@@ -691,7 +692,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </m3e-accordion>
       )}
 
-      <md-card variant="filled" className="lb-setting-group lb-about">
+      <md-card variant="filled" {...{ class: "lb-setting-group lb-about" }}>
         <div className="lb-setting-label">About</div>
         {/* The pills always render (unknown while loading or on
             failure), so the About section never looks empty. */}
