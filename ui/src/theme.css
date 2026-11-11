@@ -636,10 +636,20 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  /* #264: cap the dock to its containing block (.lb-browser). The
+     fit-content pill is wider than the browser area on mid-size
+     viewports, which ran the dock 21px past the right viewport edge
+     with no way to scroll to it. */
+  max-width: 100%;
 }
 .lb-dock-pill {
   transform: translateY(0);
   opacity: 1;
+  /* #264: the pill follows the dock cap; anything that cannot shrink
+     scrolls inside the pill instead of leaving the viewport. */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   transition:
     transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
     opacity var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
