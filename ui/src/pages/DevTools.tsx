@@ -374,6 +374,27 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
       M3eSnackbar.open(msg, { duration: 4000 });
     }
   };
+  /* Eruda availability (user request 2026-11-11): the tool greys out
+     and stops responding when /eruda.js cannot be fetched. HEAD
+     first; a static layer that refuses HEAD falls back to a one-byte
+     ranged GET. */
+  const [erudaReady, setErudaReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let dead = false;
+    const probe = async (): Promise<boolean> => {
+      try {
+        const h = await fetch("/eruda.js", { method: "HEAD", cache: "no-store" });
+        if (h.ok) return true;
+      } catch { /* fall through to the ranged GET */ }
+      try {
+        const g = await fetch("/eruda.js", { cache: "no-store", headers: { Range: "bytes=0-0" } });
+        if (g.body) { try { void g.body.cancel(); } catch { /* ignore */ } }
+        return g.ok;
+      } catch { return false; }
+    };
+    void probe().then((ok) => { if (!dead) setErudaReady(ok); });
+    return () => { dead = true; };
+  }, []);
   const injectEruda = async () => {
     const w = frame()?.contentWindow;
     if (!w) { say("No proxied page in this tab."); return; }
@@ -405,7 +426,14 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   };
   return (
     <>
-      <m3e-icon-button slot="trailing" id="lb-dt-eruda-btn" aria-label="Eruda in page" onClick={() => void injectEruda()}>
+      <m3e-icon-button
+        slot="trailing"
+        id="lb-dt-eruda-btn"
+        aria-label={erudaReady === false ? "Eruda in page (unavailable)" : "Eruda in page"}
+        disabled={erudaReady === false ? true : undefined}
+        {...{ class: erudaReady === false ? "lb-tool-disabled" : undefined }}
+        onClick={() => void injectEruda()}
+      >
         <m3e-icon name="terminal" aria-hidden={true} />
       </m3e-icon-button>
       <m3e-tooltip for="lb-dt-eruda-btn" position="below">Eruda in page</m3e-tooltip>
@@ -914,12 +942,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           </>
         )}
 
+        {/* Diagnostics renders bare (user request 2026-11-11): the card
+            wrapper is gone, the component sits directly in the bottom
+            sheet like the rest of the page content. */}
         {dt.page === "diagnostics" && (
-          <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine diagnostics">
-            <div slot="content" className="lb-dt-card-body">
-              <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
-            </div>
-          </m3e-card>
+          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
         )}
       </div>
     </m3e-bottom-sheet>
