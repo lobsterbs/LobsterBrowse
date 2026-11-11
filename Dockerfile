@@ -1,4 +1,5 @@
 
+
 # syntax=docker/dockerfile:1
 # Multi-stage build for the LobsterBrowse single-site service:
 # the Rust Wisp server and the static M3E UI it serves from one origin.
@@ -2263,6 +2264,18 @@ FROM debian:bookworm-slim AS zl-builder
 # ws-shim MIME flake (#493) while the original run app suite was green.
 # Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
 # Render build cache.
+# Pin 169 (2026-11-11): dist ad1ff922 (build 43105043278) deploys the
+# #648 devtools self-heal (Zeolite 12258b0): a redundant or
+# never-activated registration left the /zlsw/devtools.html page
+# waiting forever on navigator.serviceWorker.controller (the byte-churn
+# redeploy class); the page now re-registers the sibling sw.js
+# (scope "/", Service-Worker-Allowed) once per 10s while waiting.
+# sw.js 09b6ee10ce6b3f18 -> 5de381a916e3c88f (888050 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on
+# 12258b0: run 43105043278 rust/wasm/app/compat green; the browser
+# battery closed red on the documented rotating wedge only
+# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
 ARG ZEOLITE_COMMIT=ad1ff9223e4b3fd3a88d8d44e4c4b5e274a8ed17
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
