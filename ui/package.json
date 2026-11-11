@@ -12,6 +12,7 @@
     "@fontsource-variable/google-sans-flex": "^5.3.1",
     "@m3e/web": "^2.8.2",
     "@material-symbols/svg-400": "^0.47.5",
+    "@materialwebunofficial/md3e-web": "^1.0.14",
     "@zip.js/zip.js": "^2.0.0",
     "comlink": "^4.4.2",
     "dompurify": "^3.2.0",

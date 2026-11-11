@@ -34,6 +34,9 @@ declare module "react" {
       "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       "m3e-card": M3eBase & { variant?: string; tabIndex?: number; role?: string; title?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
+      /* md3e-web card and canonical shape vector (Settings hero). */
+      "md-card": M3eBase & { variant?: string; tabIndex?: number; role?: string; title?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
+      "md-shape": M3eBase & { name?: string; size?: string | number; color?: string; mask?: boolean | string };
       "m3e-switch": M3eBase & { checked?: boolean | string; icons?: string; disabled?: boolean | string };
       "m3e-radio-group": M3eBase;
       "m3e-radio": M3eBase & { value?: string; checked?: boolean | string; disabled?: boolean };
