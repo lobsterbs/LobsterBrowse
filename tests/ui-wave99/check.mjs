@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const b = read("../../ui/src/pages/Browser.tsx");
+const appSrc = read("../../ui/src/App.tsx");
 const ci = read("../../.github/workflows/ci.yml");
 
 /* The 5-minute idle deadline drives the unload ticker. */
@@ -53,5 +54,18 @@ assert.ok(/@media \(max-width: 600px\)[\s\S]*?\.lb-setting-desc, \.lb-setp-sub \
 
 /* The ci ui job runs this check. */
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
+
+
+/* Wave 101g (issue #267): a session restore must restore activeId
+   along with the tabs. Restored tabs keep their persisted ids while
+   App used to initialize activeId to 0, which matches no real tab:
+   the DevTools mount effect keyed off dt[props.activeId].open, so the
+   Developer tools menu toggle could never open the sheet after a
+   reload, and Alt+W / the Logs session scope hit the same mismatch. */
+assert.ok(
+  /const \[activeId, setActiveId\] = useState<number>\(\(\) => \{[\s\S]*?store\.loadSessionTabs\(\)[\s\S]*?restored\[restored\.length - 1\]\.id[\s\S]*?\}\);/.test(appSrc),
+  "App restores activeId from the persisted session (last restored tab, #267)"
+);
+assert.ok(!appSrc.includes("useState<number>(0)"), "activeId no longer initializes to the unmatched sentinel 0");
 
 console.log("ui-wave99: all checks passed");
