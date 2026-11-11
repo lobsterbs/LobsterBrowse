@@ -46,7 +46,20 @@ function freshTab(url = ""): Tab {
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
-  const [view, setView] = useState<View>("home");
+  /* #259: the active view rides the URL hash (#view=<name>) so a
+     reload restores it. Tabs restore from the persisted session;
+     only the view needs the hash. replaceState (not location.hash)
+     keeps every switch off the history stack and fires no hashchange
+     scroll jump. Unknown or missing hashes stay Home. */
+  const viewFromHash = (): View => {
+    const m = /^#view=(home|browser|ai|settings|logs)$/.exec(window.location.hash);
+    return m ? (m[1] as View) : "home";
+  };
+  const [view, setView] = useState<View>(viewFromHash);
+  useEffect(() => {
+    const h = "#view=" + view;
+    if (window.location.hash !== h) window.history.replaceState(null, "", h);
+  }, [view]);
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const restored = store.loadSessionTabs();
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
