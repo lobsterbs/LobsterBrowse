@@ -2475,19 +2475,6 @@ background: var(--lb-glass-tint);
 .lb-ai-error-retry:hover { text-decoration: underline; }
 
 /* ---- #262 site-wide polish wave ---- */
-/* Dock top edge: 2px page-load progress, same activity state as the
-   top loading indicator. Opacity only, so it stays on the compositor. */
-.lb-dock-progress {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  opacity: 0;
-  pointer-events: none;
-  overflow: hidden;
-  transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease);
-}
-.lb-dock-progress.on { opacity: 1; }
-.lb-dock-progress m3e-linear-progress-indicator { width: 100%; }
 /* Omnibox suggestion rows on m3e-list-item: transparent container,
    the old hover/active tint moves onto the M3E container token. */
 .lb-tb-ac m3e-list-item.lb-tb-ac-item { --m3e-list-item-container-color: transparent; cursor: pointer; }
