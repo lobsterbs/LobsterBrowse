@@ -2172,7 +2172,21 @@ FROM debian:bookworm-slim AS zl-builder
 # its byte-identical twin green there and red at the torture
 # battery; docs/ci-torture-wedge.md). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=c04e4e971472f66e42a0a2bb9fb5181b1e8c1ea7
+# Pin 167 (2026-11-11): dist b72324ac (build 43080960090) catches beta
+# up to Zeolite main f09b8e5: the #634 OAuth round-trip fix
+# (virtualAuthorizeTokenBody, Zeolite e8268db), the #645 Cloudflare
+# CSP fix (cspGate never gates /cdn-cgi/, Zeolite 93996d1), the #644
+# diagnostics fix (mid-stream body errors no longer masked as stalls),
+# and the #521 slice 3 DNR semantics (Zeolite f09b8e5): upgradeScheme
+# on the redirect seam, allowAllRequests frame bypass,
+# declarativeNetRequestFeedback permission gate on getMatchedRules/
+# onRuleMatchedDebug. sw.js d066a19cbee1969a -> 09b6ee10ce6b3f18
+# (888041 bytes); bootstrap.js unchanged 0ddd6edd9485c8ab (51030
+# bytes). CI on f09b8e5: rust/wasm/app/compat green; the browser
+# battery closed red on the documented rotating wedge only
+# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=b72324ac07126463850ef99be7529b08fb14952c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2235,7 +2249,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d066a19cbee1969a ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=09b6ee10ce6b3f18 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
