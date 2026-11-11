@@ -52,7 +52,17 @@ export default function App() {
     for (const t of restored) if (t.id >= tabSeq) tabSeq = t.id + 1;
     return restored;
   });
-  const [activeId, setActiveId] = useState<number>(0);
+  /* #267: restored tabs keep their persisted ids, so activeId must be
+     restored alongside them: 0 matches no real tab id, and every
+     props.activeId consumer (the DevTools mount effect, the Alt+W
+     close shortcut, the Logs session scope) would then key off a tab
+     that does not exist. The persisted save carries no active marker,
+     so the last restored tab is shown, matching closeTab's and the
+     incognito restore's pick-next convention. */
+  const [activeId, setActiveId] = useState<number>(() => {
+    const restored = store.loadSessionTabs();
+    return restored.length > 0 ? restored[restored.length - 1].id : 0;
+  });
   /* #81: Ctrl+K command palette. */
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cloaked, setCloaked] = useState(false);
