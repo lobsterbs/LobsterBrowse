@@ -14,6 +14,9 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
    2026-11-06) owns the card surface for the settings groups, search
    results, About and the extension entries. */
 import "@materialwebunofficial/md3e-web/components/md-card.js";
+/* Hero background shapes: the canonical M3E shape vectors are
+   md3e-web only (user request 2026-11-11). */
+import "@materialwebunofficial/md3e-web/components/md-shape.js";
 import { exportSessionData } from "../store";
 import {
   ENGINES,
@@ -381,9 +384,13 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           shapes are decorative and hidden from assistive tech. */}
       <md-card variant="filled" className="lb-about-hero">
         <div className="lb-about-hero-shapes" aria-hidden={true}>
-          <span className="lb-hero-shape lb-hero-shape-a" />
-          <span className="lb-hero-shape lb-hero-shape-b" />
-          <span className="lb-hero-shape lb-hero-shape-c" />
+          {/* Canonical M3E shapes via md-shape, after the expressive-profile
+              hero: large sunny top-right, 4-leaf-clover along the bottom,
+              very-sunny on the right edge; container colors, clipped by
+              the card. md-shape renders itself aria-hidden. */}
+          <md-shape name="sunny" size="150" color="primary-container" className="lb-hero-shape lb-hero-shape-a" />
+          <md-shape name="very-sunny" size="44" color="secondary-container" className="lb-hero-shape lb-hero-shape-c" />
+          <md-shape name="4-leaf-clover" size="76" color="tertiary-container" className="lb-hero-shape lb-hero-shape-b" />
         </div>
         <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
         <div className="lb-about-hero-meta">
