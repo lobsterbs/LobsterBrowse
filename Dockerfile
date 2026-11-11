@@ -2186,7 +2186,19 @@ FROM debian:bookworm-slim AS zl-builder
 # battery closed red on the documented rotating wedge only
 # (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
 # only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=b72324ac07126463850ef99be7529b08fb14952c
+# Pin 169 (2026-11-11): dist ad1ff922 (build 43105043278) deploys the
+# #648 devtools self-heal (Zeolite 12258b0): a redundant or
+# never-activated registration left the /zlsw/devtools.html page
+# waiting forever on navigator.serviceWorker.controller (the byte-churn
+# redeploy class); the page now re-registers the sibling sw.js
+# (scope "/", Service-Worker-Allowed) once per 10s while waiting.
+# sw.js 09b6ee10ce6b3f18 -> 5de381a916e3c88f (888050 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on
+# 12258b0: run 43105043278 rust/wasm/app/compat green; the browser
+# battery closed red on the documented rotating wedge only
+# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=ad1ff9223e4b3fd3a88d8d44e4c4b5e274a8ed17
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2249,7 +2261,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=09b6ee10ce6b3f18 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5de381a916e3c88f ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
