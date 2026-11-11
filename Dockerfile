@@ -1,3 +1,4 @@
+
 # syntax=docker/dockerfile:1
 # Multi-stage build for the LobsterBrowse single-site service:
 # the Rust Wisp server and the static M3E UI it serves from one origin.
@@ -2262,7 +2263,7 @@ FROM debian:bookworm-slim AS zl-builder
 # ws-shim MIME flake (#493) while the original run app suite was green.
 # Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
 # Render build cache.
-ARG ZEOLITE_COMMIT=b72324ac07126463850ef99be7529b08fb14952c
+ARG ZEOLITE_COMMIT=ad1ff9223e4b3fd3a88d8d44e4c4b5e274a8ed17
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2325,7 +2326,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=09b6ee10ce6b3f18 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=5de381a916e3c88f ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
