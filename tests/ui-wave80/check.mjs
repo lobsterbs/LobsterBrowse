@@ -146,9 +146,10 @@ const ok = (name, cond) => {
   ok("devtools: resource failures card removed", !d.includes('aria-label="Resource failures"'));
   ok("devtools: resfail explainer removed", !d.includes("resfail reports"));
   ok("devtools: empty-fails message removed", !d.includes("No resource failures captured."));
-  ok("devtools: diagnostics page keeps the engine card", dpos !== -1 && d.slice(dpos).includes('aria-label="Engine diagnostics"'));
+  ok("devtools: diagnostics page card removed (user request 2026-11-11)", dpos !== -1 && !d.slice(dpos).includes('aria-label="Engine diagnostics"'));
   ok("devtools: page tools card folded into the actions row", !d.includes('aria-label="Page tools"'));
   ok("devtools: eruda renders once", d.split("<ZeoliteEngineTools").length - 1 === 1);
+  ok("devtools: eruda gated on /eruda.js availability (user request 2026-11-11)", d.includes("erudaReady") && d.includes("disabled={erudaReady"));
 }
 
 /* --- Settings follow-up (user request 2026-11-07): a sub option

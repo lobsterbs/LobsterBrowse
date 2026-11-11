@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-/* The Settings hero card (user request 2026-11-11): the canonical M3E
-   expressive shape vectors are inlined as SVG paths (SHAPE_* below),
-   so the beta UI keeps its single @m3e/web provider (ui-wave80 gate). */
+/* The Settings hero card (user request 2026-11-11): the background
+   shapes are real m3e-shape elements (registered by @m3e/web/all), so
+   the beta UI keeps its single @m3e/web provider (ui-wave80 gate). */
 /* Settings (global redesign, user request 2026-11-07): the whole page
    is one @m3e/web surface. The page title lives in an m3e-content-pane;
    every settings sub-card is an m3e-expansion-panel whose header
@@ -278,13 +278,6 @@ const LB_ASCII = String.raw`    __          __         __            ____
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/
                                                                           `;
 
-/* Canonical M3E expressive shape vectors (380x380 grid), from the
-   community shape token set, inlined so the hero needs no second
-   component library. */
-const SHAPE_CLOVER8 = "M189.999977 27.090641C192.760031 25.625032 195.52007 24.159427 198.280124 22.69383C240.222396 0.422161 291.952165 23.251636 303.766555 69.247278C304.24244 71.100082 304.718363 72.95289 305.194283 74.805683C308.182261 75.720989 311.170258 76.636302 314.158236 77.551605C359.56436 91.460805 379.999962 144.182165 355.830138 185.060019C354.856517 186.706669 353.882919 188.353327 352.909306 189.999977C354.37489 192.760016 355.840512 195.52007 357.306115 198.280086C379.577782 240.222358 356.748317 291.952138 310.752691 303.766555C308.899872 304.24244 307.047068 304.718363 305.194283 305.194283C304.278935 308.182261 303.363637 311.170258 302.448384 314.158236C288.539183 359.564387 235.817816 380 194.939935 355.830165C193.29327 354.856563 191.646616 353.882942 189.999954 352.909344C187.239908 354.374928 184.479854 355.84055 181.719811 357.306115C139.777555 379.577809 88.047801 356.748317 76.233388 310.752691C75.75748 308.899872 75.281568 307.047068 74.805652 305.194264C71.817667 304.278935 68.829681 303.363637 65.841696 302.448346C20.435607 288.539115 0.000021 235.817755 24.169816 194.939886C25.143418 193.293255 26.117024 191.646616 27.090631 189.999977C25.625019 187.239908 24.159401 184.479854 22.693788 181.719789C0.422138 139.777555 23.251594 88.047813 69.247206 76.233388C71.100037 75.75748 72.952879 75.281557 74.805706 74.805645C75.721012 71.817667 76.636318 68.829681 77.551616 65.841707C91.46084 20.435581 144.182211 0 185.060087 24.169843C186.706711 25.143441 188.353346 26.117043 189.999977 27.090641Z";
-const SHAPE_CLOVER4 = "M190 37.289229C191.834184 35.878946 193.66833 34.468668 195.502533 33.058385C238.497576 0.000008 299.342226 3.957985 337.69213 42.307881C376.041996 80.657801 380 141.502435 346.941596 184.497486C345.531317 186.331655 344.121046 188.165835 342.710752 190C344.121027 191.834184 345.531317 193.66833 346.941581 195.502533C379.999962 238.497565 376.041996 299.342226 337.69213 337.69213C299.342226 376.042034 238.497576 380 195.502514 346.941634C193.66833 345.531317 191.834184 344.121084 190 342.710752C188.165816 344.121046 186.331632 345.53134 184.497448 346.941596C141.502386 380 80.657774 376.041996 42.30787 337.69213C3.957982 299.342226 0.000008 238.497576 33.058377 195.502552C34.468662 193.668357 35.878946 191.834184 37.289233 190C35.878943 188.165789 34.46866 186.331609 33.058377 184.497421C0 141.502367 3.957976 80.657766 42.307875 42.307864C80.657774 3.957968 141.502386 0 184.497421 33.05837C186.331609 34.468656 188.165816 35.878943 190 37.289229Z";
-const SHAPE_SUNNY = "M378.823976 190C378.823976 196.819366 376.471928 203.638732 371.767832 209.158726C362.152312 220.441963 352.536792 231.725216 342.92131 243.008442C338.889681 247.739328 336.453201 253.621462 335.958779 259.817514C334.779506 274.595129 333.600237 289.372785 332.420975 304.150423C331.267151 318.609442 319.785466 330.091131 305.326428 331.244936C290.548787 332.424213 275.771168 333.603482 260.993515 334.782736C254.797513 335.277192 248.915352 337.713676 244.184443 341.745286C232.901202 351.360806 221.617961 360.976303 210.334731 370.591808C199.294762 380 183.057237 380 172.01726 370.591808C160.734034 360.976303 149.450793 351.360806 138.167574 341.745286C133.436685 337.713676 127.554532 335.277177 121.358495 334.782736C106.580869 333.603482 91.803239 332.424213 77.025605 331.244936C62.566567 330.091131 51.084909 318.609465 49.93105 304.150442C48.751796 289.372785 47.572512 274.595129 46.393236 259.817491C45.898792 253.621447 43.462321 247.739301 39.430698 243.008404C29.815207 231.725178 20.199706 220.441952 10.584214 209.158711C1.176016 198.118765 1.176016 181.881213 10.584227 170.841255C20.199728 159.558025 29.815229 148.274795 39.430721 136.991566C43.462356 132.260687 45.898817 126.37853 46.393273 120.182497C47.572542 105.404848 48.751807 90.627203 49.931084 75.849558C51.084931 61.390524 62.56659 49.908866 77.025616 48.755026C91.803261 47.575757 106.580918 46.396489 121.358548 45.217232C127.5546 44.722789 133.436742 42.286307 138.167631 38.254672C149.450861 28.639192 160.734057 19.023689 172.017275 9.408211C183.057248 0 199.294785 0 210.33475 9.408198C221.617976 19.023713 232.90124 28.639215 244.184466 38.254718C248.915367 42.286341 254.797513 44.722823 260.993538 45.217268C275.771206 46.396545 290.548836 47.575814 305.326466 48.755068C319.785504 49.908915 331.267204 61.390585 332.421021 75.849634C333.600252 90.62726 334.779517 105.404871 335.958779 120.182486C336.453216 126.378519 338.889681 132.260687 342.92131 136.991577C352.53683 148.274807 362.152323 159.558037 371.767832 170.841266C376.471928 176.361253 378.823976 183.180634 378.823976 190Z";
-
 export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
      several open at once. All panels start closed; the single-control
@@ -484,21 +477,21 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <p className="lb-set-title-sub">Everything stays on this device. Changes apply immediately.</p>
           </div>
 
-          {/* About hero (user request 2026-11-11): an MT3E card at the
-              very top with the ASCII wordmark, the version (number and
-              codename) and the running proxy engine. Background shapes
-              are the canonical md-shape vectors, placed after the
-              expressive-profile hero; decorative and aria-hidden. */}
-          <div {...{ class: "lb-about-hero" }}>
-            {/* Shapes render first as the background layer, content on
-                top: the expressive-profile hero. Large 8-leaf-clover
-                spilling off the top-right corner, 4-leaf-clover along the
-                bottom, small sunny on the right edge; container colors at
-                full strength, clipped by the card. */}
+          {/* About hero (user request 2026-11-11): a real m3e-card filled
+              surface at the very top with the ASCII wordmark, the version
+              (number and codename) and the running proxy engine. The
+              background shapes are real m3e-shape elements (registered by
+              @m3e/web/all), decorative and aria-hidden; the card clips. */}
+          <m3e-card variant="filled" {...{ class: "lb-about-hero" }}>
             <div className="lb-about-hero-shapes" aria-hidden={true}>
-              <svg viewBox="0 0 380 380" aria-hidden={true} {...{ class: "lb-hero-shape lb-hero-shape-a" }}><path d={SHAPE_CLOVER8} /></svg>
-              <svg viewBox="0 0 380 380" aria-hidden={true} {...{ class: "lb-hero-shape lb-hero-shape-b" }}><path d={SHAPE_CLOVER4} /></svg>
-              <svg viewBox="0 0 380 380" aria-hidden={true} {...{ class: "lb-hero-shape lb-hero-shape-c" }}><path d={SHAPE_SUNNY} /></svg>
+              {/* Shapes render first as the background layer, content on
+                  top: one large clover spilling off the top-right corner,
+                  a sunny anchored at the bottom, a small clover on the
+                  right edge. Size and container color ride the component's
+                  own --m3e-shape-* tokens (theme.css). */}
+              <m3e-shape name="8-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
+              <m3e-shape name="sunny" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
+              <m3e-shape name="4-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
             </div>
             <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
             <div className="lb-about-hero-meta">
@@ -511,7 +504,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 {engineName}
               </span>
             </div>
-          </div>
+          </m3e-card>
 
           {/* #198: search-first Settings. A query swaps the panels for
               a flat result list; picking a result expands the owning
