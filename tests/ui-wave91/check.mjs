@@ -4,9 +4,8 @@
      extension tiles, ad rows) lift lighter than the sheet surface
      with the new --lb-glass-lift token; a transparent or same-tint
      card over the uniform sheet frost read as a flat grey panel.
-     Settings search results keep their 62% tint, and the opaque
-     fallbacks (no backdrop-filter support, reduced transparency)
-     define the lift as the solid surface.
+     The opaque fallbacks (no backdrop-filter support, reduced
+     transparency) define the lift as the solid surface.
    - Animation audit (#244): the AI typewriter caps text emits at
      ~30 per second instead of a setShown (full Markdown parse +
      sanitize) every animation frame, and the extension detail pop
@@ -32,7 +31,7 @@ const extCss = read("src/extensions.css");
 ok(theme.includes("--lb-glass-lift: color-mix(in srgb, #ffffff 7%, transparent);"), "the glass lift token is a 7% white fill");
 ok(theme.split("--lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2b2f);").length - 1 === 2, "both opaque fallbacks define the lift token");
 
-/* 2. In-sheet sub-cards lift; the settings results keep their tint. */
+/* 2. In-sheet sub-cards lift. */
 const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 600) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the lift");
@@ -42,7 +41,7 @@ ok(tile.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "extensio
 const adRow = block(theme, ".lb-ad-row {");
 ok(adRow.includes("background: var(--lb-glass-lift);"), "the ad row paints the lift");
 const frostShared = block(theme, ".lb-dt-card,");
-ok(frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);") && frostShared.indexOf(".lb-set-result") >= 0, "settings search results keep their tint in the shared frost rule");
+ok(frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "the shared frost rule keeps the tint");
 
 /* 3. Typewriter 30fps cap (#244). */
 ok(ai.includes("const lastEmitRef = useRef(0);"), "the typewriter tracks its last emit time");

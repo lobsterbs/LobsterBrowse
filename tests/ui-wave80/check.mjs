@@ -29,11 +29,7 @@ const ok = (name, cond) => {
     "engine",
     "proxyEngine",
     "adblock",
-    "httpsUpgrade",
     "transport",
-    "cloakEnabled",
-    "cloakUrl",
-    "cloakTitle",
     "suggestQueries",
     "fancyBackground",
   ];
@@ -161,15 +157,12 @@ const ok = (name, cond) => {
    entries opened a panel but never scrolled. --- */
 {
   const page = read("src/pages/Settings.tsx");
-  const inline = ["set-search-engine", "set-search-suggest", "set-adblock", "set-https", "set-cloak-enabled", "set-data", "set-logs"];
+  const inline = ["set-search-engine", "set-search-suggest", "set-adblock", "set-data", "set-logs"];
   for (const t of inline) ok("settings: " + t + " is an inline card", page.includes('anchorId="' + t + '"'));
   const gone = ["p-search-engine", "p-search-suggest", "p-adblock", "p-https", "p-cloak-enabled", "p-data", "p-logs"];
   for (const p of gone) ok("settings: panel " + p + " removed", !page.includes('id="' + p + '"'));
-  const targets = [...page.matchAll(/target: "(set-[a-z-]+)"/g)].map((m) => m[1]);
-  ok("settings: search index targets parsed", targets.length >= 16);
-  for (const t of targets) {
-    ok("settings: jump target " + t + " exists on the page", page.includes('anchorId="' + t + '"') || page.includes('id="' + t + '"'));
-  }
+  /* #269: the #198 search index left with the search bar. */
+  ok("settings: search index removed", !page.includes("SETTING_INDEX") && !page.includes('target: "set-'));
   const theme = read("src/theme.css");
   ok("settings: inline card surface defined", theme.includes(".lb-set-inline {"));
   ok("settings: inline cards join the jump focus ring", theme.includes(".lb-set-inline:focus-visible"));
