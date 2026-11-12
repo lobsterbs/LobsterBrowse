@@ -2312,8 +2312,12 @@ WORKDIR /bundle
 # GitHub archive 503/504 truncations killed pin builds; the pipe to
 # tar also silently disables curl --retry (stdout is not rewindable), so
 # fetch to a file first, retry, then extract.
+# Per-sha archives 404 for CI-created dist commits (codeload cannot
+# generate them; the pin 171 deploy failed 5x404 on the archive/<sha>
+# URL). The dist branch head IS the pinned commit at bump time; the
+# sha-verification gate below fails the build honestly if it moved.
 RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
-      -o /zlsrc.tar.gz "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.tar.gz" \
+      -o /zlsrc.tar.gz "https://codeload.github.com/lobsterbs/Zeolite/tar.gz/refs/heads/dist" \
  && tar xzf /zlsrc.tar.gz --strip-components=1 && rm -f /zlsrc.tar.gz
 # The libcurl transport (TLS termination for the wisp hop): pulled
 # from npm at build time, same pinned version the Zeolite CI vendors.
