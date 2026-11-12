@@ -27,28 +27,6 @@ import AmoSearch from "../browser/AmoSearch";
 import ExtManage from "../browser/ExtManage";
 import { extWarnings } from "../browser/browserShared";
 
-/* Cloaking popout: a fresh window whose address bar reads about:blank.
-   The window inherits this origin, so the app and its service worker run
-   normally inside the iframe; severing opener removes the window.opener
-   link. Settings changes sync only after the new window reloads. */
-function openInAboutBlank() {
-  const w = window.open("about:blank", "_blank");
-  if (!w) {
-    pushLog("warn", "settings: the browser blocked the about:blank popout (popup blocker)");
-    return;
-  }
-  w.opener = null;
-  const d = w.document;
-  d.title = "about:blank";
-  const style = d.createElement("style");
-  style.textContent = "html,body{margin:0;height:100%;overflow:hidden;background:#fff}iframe{border:0;width:100%;height:100%}";
-  d.head.appendChild(style);
-  const frame = d.createElement("iframe");
-  frame.src = window.location.origin + "/";
-  d.body.appendChild(frame);
-  pushLog("info", "settings: opened LobsterBrowse in an about:blank window");
-}
-
 type Props = {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -78,9 +56,7 @@ const SECTION_TITLES: Record<string, string> = {
   privacy: "Privacy",
   extensions: "Extensions",
   appearance: "Appearance",
-  cloak: "Auto Cloak",
   advanced: "Advanced",
-  about: "About",
 };
 
 /* Wave 101 (#256): each section reads as one M3 group: an icon tile
@@ -90,9 +66,7 @@ const SECTION_META: Record<string, { icon: string; sub: string }> = {
   privacy: { icon: "shield", sub: "Blocking and connection upgrades" },
   extensions: { icon: "extension", sub: "Add-ons from the catalog or local files" },
   appearance: { icon: "palette", sub: "Seed color and hero background" },
-  cloak: { icon: "visibility_off", sub: "Hide the tab while you are away" },
   advanced: { icon: "tune", sub: "Engines, data and diagnostics" },
-  about: { icon: "info", sub: "Versions compiled into this build" },
 };
 
 function SectionHead(props: { section: string }) {
@@ -111,35 +85,6 @@ function SectionHead(props: { section: string }) {
     </div>
   );
 }
-
-/* #198: settings search index. One entry per findable setting; the
-   targets are the id attributes set on the inline cards, rows and
-   panels below, and
-   `panel` is the sub-card panel that owns the target (jumpTo opens
-   it before scrolling). */
-/* panel is optional: single-control sub options are inline row
-   cards that are always visible, so there is no panel to open. */
-type SetEntry = { section: string; label: string; terms?: string; panel?: string; target: string };
-const SETTING_INDEX: SetEntry[] = [
-  { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", target: "set-search-engine" },
-  { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
-  { section: "privacy", label: "Ad & tracker blocking", terms: "adblock shield ads trackers", target: "set-adblock" },
-  { section: "privacy", label: "HTTPS upgrade", terms: "https ssl tls secure", target: "set-https" },
-  { section: "extensions", label: "Manage installed extensions", terms: "installed enable disable options remove uninstall", panel: "p-manage-ext", target: "set-manage-ext" },
-  { section: "extensions", label: "Find and install add-ons", terms: "amo extensions store addons", panel: "p-amo", target: "set-amo" },
-  { section: "extensions", label: "Import locally", terms: "xpi zip package", panel: "p-import", target: "set-import" },
-  { section: "appearance", label: "Theme color", terms: "seed palette color colour", panel: "p-theme-color", target: "set-theme-color" },
-  { section: "appearance", label: "Enhanced UI (hero background image)", terms: "fancy background hero image photo wallpaper", panel: "p-fancy", target: "set-fancy" },
-  { section: "cloak", label: "Cloak when the tab is hidden", terms: "auto cloak hide hidden", target: "set-cloak-enabled" },
-  { section: "cloak", label: "Cloak destination", terms: "cloak url site", panel: "p-cloak-url", target: "set-cloak-url" },
-  { section: "cloak", label: "Tab title while cloaked", terms: "cloak title name", panel: "p-cloak-url", target: "set-cloak-url" },
-  { section: "cloak", label: "Open in about:blank", terms: "popout window blank", panel: "p-aboutblank", target: "set-aboutblank" },
-  { section: "advanced", label: "Proxy engine", terms: "zeolite scramjet engine", panel: "p-proxy", target: "set-proxy" },
-  { section: "advanced", label: "Transport engine", terms: "libcurl epoxy tls transport", panel: "p-transport", target: "set-transport" },
-  { section: "advanced", label: "WISP server", terms: "wisp transit upstream endpoint anura mercurywork custom", panel: "p-wisp", target: "set-wisp" },
-  { section: "advanced", label: "Data", terms: "delete cache data", target: "set-data" },
-  { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
-];
 
 /* One settings sub-card = one expansion panel. The header carries the
    headline and supporting text; the body carries the controls. Only the
@@ -311,33 +256,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
         ? "default"
         : settings.wispServer;
 
-  /* #198: searchable Settings - all local, no persistence change. */
-  const [q, setQ] = useState("");
-  const [chipSection, setChipSection] = useState("all");
-  const handleQuery = (v: string) => {
-    setQ(v);
-    setChipSection("all");
-  };
-  const needle = q.trim().toLowerCase();
-  const hits = needle
-    ? SETTING_INDEX.filter((e) =>
-        (e.label + " " + (e.terms ?? "") + " " + SECTION_TITLES[e.section]).toLowerCase().includes(needle),
-      )
-    : [];
-  const resultSections = ["all", ...Array.from(new Set(hits.map((h) => h.section)))];
-  const shownHits = chipSection === "all" ? hits : hits.filter((h) => h.section === chipSection);
-  const jumpTo = (entry: SetEntry) => {
-    const panel = entry.panel;
-    if (panel) setOpenP((prev) => ({ ...prev, [panel]: true }));
-    setQ("");
-    /* Let the panel expand before scrolling. */
-    setTimeout(() => {
-      const el = document.getElementById(entry.target);
-      if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.focus({ preventScroll: true });
-    }, 120);
-  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   /* m3e-dialog opens/closes imperatively (show/hide methods, per the
      M3E dialog docs). React state mirrors it: opening sets the flag,
@@ -404,8 +322,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     build: string;
     buildShort: string;
   } | null>(null);
-  const [buildError, setBuildError] = useState(false);
-  const [buildErrorDetail, setBuildErrorDetail] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     /* Cache-busted: some edge caches serve a stale /build despite
@@ -435,18 +351,13 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             build: String(d.build ?? "unknown"),
             buildShort: String(d.buildShort ?? "unknown"),
           });
-          setBuildErrorDetail(null);
         } else {
-          setBuildError(true);
-          setBuildErrorDetail("endpoint returned " + JSON.stringify(d).slice(0, 120));
           pushLog("warn", "settings: /build returned an unexpected body");
         }
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
-        setBuildError(true);
-        setBuildErrorDetail(msg);
         pushLog("error", "settings: /build fetch failed: " + msg);
       });
     return () => {
@@ -461,8 +372,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   const vSplit = lbVersion.indexOf(" ");
   const versionNum = vSplit > 0 ? lbVersion.slice(0, vSplit) : lbVersion;
   const versionName = vSplit > 0 ? lbVersion.slice(vSplit + 1) : "";
-  const engineName = settings.proxyEngine === "scramjet" ? "ScramJet" : "Zeolite";
-
   return (
     <section className="lb-view-content" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
@@ -472,10 +381,12 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             container sits inside the component's shadow root, so
             the column spacing must live on the page content. */}
         <div className="lb-set-page">
-          <div className="lb-set-title">
-            <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
-            <p className="lb-set-title-sub">Everything stays on this device. Changes apply immediately.</p>
-          </div>
+          {/* The classical app top bar (issue #269): the same basic
+              m3e-app-bar the Logs page and the AI history sheet use,
+              title only. */}
+          <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
+            <span slot="title">Settings</span>
+          </m3e-app-bar>
 
           {/* About hero (user request 2026-11-11): a real m3e-card filled
               surface at the very top with the ASCII wordmark, the version
@@ -499,49 +410,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 <span className="lb-hero-version-num">{build ? versionNum : "unknown"}</span>
                 {versionName ? <span className="lb-hero-version-name">{versionName}</span> : null}
               </span>
-              <span className="lb-hero-engine">
-                <span className="lb-hero-engine-label">Engine</span>
-                {engineName}
-              </span>
             </div>
           </m3e-card>
 
-          {/* #198: search-first Settings. A query swaps the panels for
-              a flat result list; picking a result expands the owning
-              panel, clears the query and scrolls the row into view. */}
-          <div className="lb-set-search">
-            <TextInput label="Search settings" value={q} onChange={handleQuery} />
-          </div>
-          {q.trim() ? (
-            <div className="lb-set-results">
-              {resultSections.length > 1 && (
-                <m3e-chip-set {...{ class: "lb-set-chips" }}>
-                  {resultSections.map((s2) => (
-                      <m3e-chip
-                        key={"f-" + s2}
-                        selected={chipSection === s2 ? "" : undefined}
-                        onClick={() => setChipSection(chipSection === s2 ? "all" : s2)}
-                      >
-                        {s2 === "all" ? "All" : SECTION_TITLES[s2]}
-                      </m3e-chip>
-                  ))}
-                </m3e-chip-set>
-              )}
-              {shownHits.length === 0 ? (
-                <p className="lb-set-noresult">No settings match &quot;{q.trim()}&quot;.</p>
-              ) : (
-                shownHits.map((h) => (
-                  <m3e-card key={"c-" + h.label} variant="filled" {...{ class: "lb-set-result" }}>
-                    <button type="button" className="lb-set-result-btn" onClick={() => jumpTo(h)}>
-                      <span>{h.label}</span>
-                      <span className="lb-set-result-section">{SECTION_TITLES[h.section]}</span>
-                    </button>
-                  </m3e-card>
-                ))
-              )}
-            </div>
-          ) : (
-            <>
               <SectionHead section="search" />
               <SetInline
                 anchorId="set-search-engine"
@@ -626,19 +497,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 disabled={zlOff}
               />
               {zlOff && zlNote}
-              <SetInline
-                anchorId="set-https"
-                label="HTTPS upgrade"
-                desc="Rewrite http page links to https before they are fetched"
-                on={settings.httpsUpgrade}
-                toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })}
-                disabled={zlOff}
-              />
-              {zlOff && zlNote}
-              <p className="lb-muted">
-                No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
-              </p>
-
               <SectionHead section="extensions" />
               <SetPanel
                 id="p-manage-ext"
@@ -708,48 +566,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
                   The engine validates the manifest and permission grants; a bad package only lands that
                   extension in an error state.
-                </p>
-              </SetPanel>
-
-              <SectionHead section="cloak" />
-              <SetInline
-                anchorId="set-cloak-enabled"
-                label="Cloak when the tab is hidden"
-                desc="Change the tab title and stage a harmless site while the tab is hidden"
-                on={settings.cloakEnabled}
-                toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })}
-              />
-              <SetPanel
-                id="p-cloak-url"
-                headline="Cloak destination"
-                sub="Which site is staged and which title the tab shows while cloaked"
-                anchorId="set-cloak-url"
-                open={!!openP["p-cloak-url"]}
-                toggle={() => toggleP("p-cloak-url")}
-              >
-                <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
-                <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
-                <p className="lb-muted">
-                  When you switch away from this tab, the tab title changes and a harmless site is staged. When
-                  you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
-                  page re-render while hidden - this is the strongest behavior a normal web page can offer.
-                </p>
-              </SetPanel>
-              <SetPanel
-                id="p-aboutblank"
-                headline="Open in about:blank"
-                sub="Pop the app out into a window whose address bar reads about:blank"
-                anchorId="set-aboutblank"
-                open={!!openP["p-aboutblank"]}
-                toggle={() => toggleP("p-aboutblank")}
-              >
-                <m3e-button onClick={openInAboutBlank}>
-                  <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
-                </m3e-button>
-                <p className="lb-muted">
-                  Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
-                  it. The new window has no connection back to this one and starts from a fresh view of
-                  the app (settings sync there only after a reload).
                 </p>
               </SetPanel>
 
@@ -910,38 +726,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </m3e-button>
               </SetInline>
 
-              <SectionHead section="about" />
-              <SetPanel
-                id="p-about"
-                headline="About"
-                sub="Versions compiled into this exact build"
-                open={!!openP["p-about"]}
-                toggle={() => toggleP("p-about")}
-              >
-                {/* Clawd naps here, above the build pills (user request
-                    2026-11-04). Vendored local asset, no external
-                    dependency. */}
-                <img className="lb-clawd" src="/clawd-sleep.gif" alt="Clawd sleeping" title="Shh. Clawd is sleeping." />
-                {/* The pills always render (unknown while loading or on
-                    failure), so the About section never looks empty. */}
-                <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-                  <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
-                  <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
-                  <span className="lb-build-chip"><span className="lb-build-name">ScramJet</span><span className="lb-build-val">{build ? build.scramjet : "unknown"}</span></span>
-                  <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
-                </div>
-                {buildError && (
-                  <p className="lb-muted">
-                    Build information unavailable on this deployment.
-                    {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
-                  </p>
-                )}
-                {!build && !buildError && (
-                  <p className="lb-muted">Loading build information...</p>
-                )}
-              </SetPanel>
-            </>
-          )}
         </div>
       </m3e-content-pane>
     </section>
