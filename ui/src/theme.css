@@ -762,9 +762,11 @@ md-card .lb-ext-item { border: 0; background: none; }
   --m3e-shape-xs: var(--md-sys-shape-corner-small, 8px);
 }
 
-/* Expressive display type: heavier weight axis, wider width axis. */
+/* Expressive display type: real weight-axis emphasis. Google Sans
+   Flex spans wght 100-1000; its wdth axis only spans 75-100, so the
+   old 112 silently clamped and is gone. */
 m3e-heading[variant="display"] {
-  font-variation-settings: "wght" 640, "wdth" 112;
+  font-variation-settings: "wght" 700;
   letter-spacing: -0.02em;
 }
 
