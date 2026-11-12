@@ -15,9 +15,10 @@ import "@m3e/web/search";
 import "@m3e/web/snackbar";
 import "@m3e/web/theme";
 import "material-symbols/outlined.css";
-/* Typography is self-hosted too: Google Sans Flex variable (wght + wdth
-   axes) bundled from npm, no Google Fonts CDN request at runtime. */
-import "@fontsource-variable/google-sans-flex/standard.css";
+/* Typography is self-hosted too: Google Sans Flex variable, full axis
+   set (wght, wdth, opsz, GRAD, ROND, slnt) bundled from npm, no Google
+   Fonts CDN request at runtime. */
+import "@fontsource-variable/google-sans-flex/full.css";
 import App from "./App";
 import "./theme.css";
 
