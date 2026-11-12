@@ -33,15 +33,14 @@ ok(theme.split("--lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2
 
 /* 2. In-sheet sub-cards lift. */
 const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
-const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 600) : "";
+const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the lift");
 ok(dtWin.includes("box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);"), "DevTools card host carries the inset top highlight");
 const tile = block(theme, ".lb-ext-tile {");
 ok(tile.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "extension tiles paint the lift");
 const adRow = block(theme, ".lb-ad-row {");
 ok(adRow.includes("background: var(--lb-glass-lift);"), "the ad row paints the lift");
-const frostShared = block(theme, ".lb-dt-card,");
-ok(frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "the shared frost rule keeps the tint");
+ok(dtWin.includes("border-radius: 20px;"), "the DevTools card host keeps the rounded halo");
 
 /* 3. Typewriter 30fps cap (#244). */
 ok(ai.includes("const lastEmitRef = useRef(0);"), "the typewriter tracks its last emit time");

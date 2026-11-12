@@ -1384,19 +1384,26 @@ m3e-menu {
   }
   m3e-bottom-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
-/* In-sheet m3e-cards (DevTools sections, settings search results,
-   extension tiles): the container token goes translucent and the
-   host carries the blur - the same host-paints-frost chain as the
-   sheets. 20px radius per the settings-card spec. */
-.lb-dt-card,
+/* In-sheet m3e-cards (DevTools sections, extension tiles): the
+   host carries the blur and the card shape - the same
+   host-paints-frost chain as the sheets. 20px radius per the
+   settings-card spec; the settings search results that shared
+   this rule were removed in #269. */
 /* Wave 91 (issue #243, reopened): the DevTools cards sit on the
    uniform sheet frost, so a fully transparent card was invisible
    as glass (user report: cards still not frosted). In-sheet
    sub-cards instead lift lighter than the sheet surface - a 7%
    white glass fill plus an inset top highlight reads as a glass
-   panel over the frost. Settings search results keep their tint. */
+   panel over the frost. */
 .lb-dt-card {
   --m3e-card-container-color: var(--lb-glass-lift);
+  --m3e-card-shape: 20px;
+  /* Wave 89: the frost halo rides the host, so the host carries the
+     card shape too - a square host painted a square grey outline
+     behind the rounded card (user report 2026-11-08). */
+  border-radius: 20px;
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 .lb-ext-tile {

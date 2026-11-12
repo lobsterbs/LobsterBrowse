@@ -52,10 +52,9 @@ ok(/useEffect\(\(\) => \{\s*setBadIcons\(\{\}\);\s*\}, \[props\.list\]\);/.test(
    fully transparent container, which was invisible as glass over the
    uniform sheet frost, to the light glass lift token). */
 const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
-const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 600) : "";
+const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the light glass lift");
-const frostShared = block(theme, ".lb-dt-card,");
-ok(frostShared.includes("border-radius: 20px;") && frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "the shared frost rule keeps the halo and the settings tint");
+ok(dtWin.includes("border-radius: 20px;") && dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "the DevTools card host keeps the halo and the blur");
 
 if (fails > 0) {
   console.log(fails + " failing check(s)");
