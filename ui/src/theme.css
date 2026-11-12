@@ -994,8 +994,6 @@ border-radius: 20px;
 .lb-log-line { padding: var(--md-sys-measurement-space25) 0; word-break: break-word; }
 .lb-log-line b { font-variation-settings: "wght" var(--lb-wght-strong); }
 
-/* Cloak */
-
 /* ---- Small screens ---- */
 @media (max-width: 600px) {
   .app-content { padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space150) var(--md-sys-measurement-space500); }
