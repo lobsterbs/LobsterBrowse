@@ -2594,7 +2594,6 @@ m3e-card.lb-about-hero {
   font-variation-settings: "wght" var(--lb-wght-emph);
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
 }
-/* Engine chip: real container roles (M3 chips), not a grey overlay. */
 
 /* Diagnostics renders bare in the DevTools sheet (user request
    2026-11-11): the old card's height cap moves to the direct child. */
