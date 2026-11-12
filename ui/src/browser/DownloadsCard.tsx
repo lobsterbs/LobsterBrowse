@@ -40,7 +40,7 @@ export default function DownloadsCard(props: {
       <div slot="content" className="lb-dl-list">
         {props.downloads.length === 0 && (
           <div className="lb-dl-empty">
-            <m3e-icon name="download" aria-hidden={true} />
+            <m3e-shape {...{ class: "lb-dl-empty-shape" }} name="ghost-ish" aria-hidden={true} />
             <span className="lb-dl-empty-title">No downloads yet</span>
             <span className="lb-dl-empty-sub">Files you save appear here with live progress.</span>
           </div>
