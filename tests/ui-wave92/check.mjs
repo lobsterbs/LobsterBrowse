@@ -32,9 +32,11 @@ assert.ok(themeSrc.includes("center / cover no-repeat"), "the hero image covers 
 assert.ok(!themeSrc.includes("shader-metal"), "no shader-metal CSS remains");
 assert.ok(!themeSrc.includes("lb-fx-bg::after"), "the aurora bloom overlay is gone with the shader");
 
-/* Settings copy describes the photographic hero. */
+/* Settings copy describes the photographic hero. #269 removed the
+   Settings search index, which carried the third occurrence; the
+   panel headline and the toggle row label remain. */
 const settingsPageSrc = read("../../ui/src/pages/Settings.tsx");
-assert.equal(settingsPageSrc.split("Enhanced UI (hero background image)").length - 1, 3, "all three Settings labels describe the hero image");
+assert.equal(settingsPageSrc.split("Enhanced UI (hero background image)").length - 1, 2, "both remaining Settings labels describe the hero image");
 assert.ok(settingsPageSrc.includes("The photographic hero background on Home and AI"), "the panel sub describes the hero (wave 96)");
 assert.ok(!settingsPageSrc.includes("liquid-metal"), "no liquid-metal copy remains in Settings");
 assert.ok(read("../../ui/src/settings.ts").includes("photographic hero background"), "the settings comment describes the hero");
