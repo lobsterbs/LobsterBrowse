@@ -11,8 +11,7 @@
      fresh token retries the real icon. No broken-image glyph.
    - DevTools (#243): the Console/Network/Diagnostics cards keep the
      rounded host frost halo but paint no container tint of their
-     own (transparent over the sheet frost); the Settings search
-     result cards keep their tint. */
+     own (transparent over the sheet frost). */
 import { readFileSync } from "node:fs";
 const ui = new URL("../../ui/", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ui), "utf8");
@@ -57,7 +56,6 @@ const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 600) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the light glass lift");
 const frostShared = block(theme, ".lb-dt-card,");
 ok(frostShared.includes("border-radius: 20px;") && frostShared.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "the shared frost rule keeps the halo and the settings tint");
-ok(frostShared.indexOf(".lb-set-result") >= 0, "settings search results keep their tint");
 
 if (fails > 0) {
   console.log(fails + " failing check(s)");

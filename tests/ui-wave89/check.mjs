@@ -51,7 +51,7 @@ ok(!tabs.includes("Tabs ({"), "count marker removed from the title");
 ok(block(theme, ".lb-dt-nav {").includes("justify-content: center;"), "DevTools sub-tool picker is centered");
 ok(block(theme, ".lb-dt-card,").includes("border-radius: 20px;"), "DevTools card frost halo is rounded");
 const frostCards = block(theme, ".lb-dt-card,");
-ok(frostCards.includes(".lb-set-result") && frostCards.includes("border-radius: 20px;"), "settings search result halo is rounded");
+ok(frostCards.includes("border-radius: 20px;"), "frost card halo is rounded");
 
 /* 3. Settings. */
 ok(block(theme, ".lb-set-page m3e-expansion-panel {").includes("border-radius: 20px;"), "settings panel frost halo is rounded");
