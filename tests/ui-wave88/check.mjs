@@ -66,7 +66,7 @@ ok(theme.includes("inset 0 1px 0 rgb(255 255 255 / .05)"), "inset highlight pres
 /* Sub-cards and remaining surfaces. */
 ok(theme.includes("--m3e-expansion-panel-container-color: var(--lb-glass-tint);"), "settings panels are glass");
 ok(theme.includes(".lb-set-inline .lb-setting-label"), "settings rows keep their typography");
-ok(theme.includes("--m3e-card-container-color: var(--lb-glass-tint);"), "in-sheet m3e-cards ride the glass tint");
+ok(theme.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "in-sheet m3e-cards ride the glass lift");
 ok(theme.includes("--m3e-card-shape: 20px;"), "sub-cards use the spec 20px radius");
 ok(theme.includes(".lb-ext-list { display: flex; flex-direction: column; gap: 18px; }"), "extension list is a glass card column");
 ok(theme.includes("--m3e-snackbar-container-color: color-mix(in srgb, var(--md-sys-color-inverse-surface, #322f35) 78%, transparent);"), "snackbar is glass");
