@@ -156,10 +156,6 @@ export type Settings = {
      /build sjWisp endpoint). Validated to the wss:// shape on load;
      the engine worker receives it through the zl:wispRegister push. */
   wispServer: string;
-  /* Auto cloak: swap the visible page when the tab is hidden. */
-  cloakEnabled: boolean;
-  cloakUrl: string;
-  cloakTitle: string;
   /* Engine-queried completions in the search fields. */
   suggestQueries: boolean;
   /* Warm the engine cache when links are hovered. */
@@ -190,9 +186,6 @@ export const DEFAULT_SETTINGS: Settings = {
   imageLazy: true,
   transport: "libcurl",
   wispServer: "",
-  cloakEnabled: false,
-  cloakUrl: "https://www.wikipedia.org/",
-  cloakTitle: "Wikipedia",
   suggestQueries: true,
   prefetchLinks: true,
   autoHideChrome: true,
@@ -252,7 +245,8 @@ export function loadSettings(): Settings {
             : (parsed as { fingerprintSpoof?: boolean }).fingerprintSpoof === false
               ? "native"
               : DEFAULT_SETTINGS.fingerprintProfile,
-      httpsUpgrade: parsed.httpsUpgrade === undefined ? true : Boolean(parsed.httpsUpgrade),
+      /* HTTPS upgrade is always on; the Settings toggle was removed (#269). */
+      httpsUpgrade: true,
       imageLazy: parsed.imageLazy === undefined ? true : Boolean(parsed.imageLazy),
       transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
       /* #250: a stored override must be a wss:// URL; anything else

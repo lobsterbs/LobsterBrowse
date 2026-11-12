@@ -78,7 +78,6 @@ export default function App() {
   });
   /* #81: Ctrl+K command palette. */
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
   /* P0 data-flow: while incognito is on, the technical log ring stays
@@ -150,7 +149,6 @@ export default function App() {
     return () => navigator.serviceWorker.removeEventListener("message", onMsg);
   }, []);
   const closedTabs = useRef<Tab[]>([]);
-  const prevTitle = useRef(document.title);
 
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
@@ -701,61 +699,6 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.transport]);
 
-  /* ---- Cloak favicon (#76): the tab icon must follow the cloak,
-     not keep the LobsterBrowse logo. A neutral inline SVG data URL
-     avoids both the logo and any network request to the cloak
-     site; the original icon hrefs are restored on uncloak. ---- */
-  const cloakIconHref =
-    "data:image/svg+xml," +
-    encodeURIComponent(
-      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='#9aa0a6'/></svg>",
-    );
-  const cloakPrevIcons = useRef<Array<string | null>>([]);
-  const cloakFavicon = () => {
-    const links = Array.from(
-      document.head.querySelectorAll("link[rel=icon]"),
-    ) as HTMLLinkElement[];
-    if (cloakPrevIcons.current.length === 0) {
-      cloakPrevIcons.current = links.map((l) => l.getAttribute("href"));
-    }
-    for (const l of links) l.setAttribute("href", cloakIconHref);
-  };
-  const uncloakFavicon = () => {
-    const links = Array.from(
-      document.head.querySelectorAll("link[rel=icon]"),
-    ) as HTMLLinkElement[];
-    links.forEach((l, i) => {
-      const prev = cloakPrevIcons.current[i];
-      if (prev === null || prev === undefined) return;
-      l.setAttribute("href", prev);
-    });
-    cloakPrevIcons.current = [];
-  };
-
-  /* ---- Auto cloak ---- */
-  useEffect(() => {
-    const onVisibility = () => {
-      /* #56: capture the real title only on the first hide; a second
-         hide while already cloaked would clobber prevTitle with the
-         cloak title and lose the real one forever. */
-      if (settings.cloakEnabled && document.hidden && !cloaked) {
-        prevTitle.current = document.title;
-        document.title = settings.cloakTitle;
-        cloakFavicon();
-        setCloaked(true);
-        store.pushLog("info", "auto cloak engaged");
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [settings, cloaked]);
-
-  const uncloak = () => {
-    setCloaked(false);
-    document.title = prevTitle.current;
-    uncloakFavicon();
-  };
-
   const deleteAll = () => {
     store.clearAllData();
     store.pushLog("warn", "all local data deleted");
@@ -795,24 +738,7 @@ export default function App() {
       for (const t of evts) rail.removeEventListener(t, arm);
     };
   }, []);
-  if (cloaked) {
-    return (
-      <div className="lb-cloak">
-        <iframe title="Cloak" src={settings.cloakUrl} />
-        <m3e-button
-          {...{
-            ref: (el: any) => {
-              if (el) el.classList.add("lb-cloak-return");
-            },
-          }}
-          variant="filled"
-          onClick={uncloak}
-        >
-          Return
-        </m3e-button>
-      </div>
-    );
-  }
+
 
   /* ---- #81 command palette actions. Browser.tsx-owned surfaces
      (extensions panel, toolbar omnibox) are reached through window

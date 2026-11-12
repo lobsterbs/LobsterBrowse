@@ -234,7 +234,7 @@ m3e-nav-rail {
 /* Settings (global redesign, user request 2026-11-07): the page is a
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
-.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space100) 0; }
 .lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
@@ -265,7 +265,7 @@ m3e-nav-rail {
      read as one family with identical text margins. */
   --m3e-expansion-header-padding-left: var(--md-sys-measurement-space150);
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space150);
-  --m3e-expansion-panel-content-padding: 0 var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
+  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
   /* Wave 88: the panel surface is frosted glass like every other
      card (user request 2026-11-08). Wave 89: the host carries the
      panel shape so the frost halo is rounded, not a square grey
@@ -315,15 +315,10 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    component's shadow root, so the page content carries its own
    column rhythm. */
 .lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
-.lb-set-page > m3e-heading { margin: var(--md-sys-measurement-space150) 0 var(--md-sys-measurement-space50); }
-.lb-set-page > m3e-heading:first-child { margin-top: 0; }
-.lb-set-page .lb-set-search { margin: 0 0 var(--md-sys-measurement-space50); }
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
    body-small supporting line. All color stays on tokens. */
-.lb-set-title { display: flex; flex-direction: column; gap: 2px; }
-.lb-set-title-sub { margin: 0; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface-variant); }
 .lb-set-section-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space150) 0 0; }
 .lb-set-section-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -340,7 +335,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    page: the title block leads, the section tiles follow on the
    emphasized curve. Transform + opacity only, so it stays on the
    compositor; reduced-motion users get the plain page. */
-.lb-set-title, .lb-set-section-head {
+.lb-set-section-head {
   animation: lb-set-in var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)) backwards;
 }
 .lb-set-section-head { animation-delay: var(--md-sys-motion-duration-short-4, 200ms); }
@@ -348,7 +343,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   from { opacity: 0; transform: translateY(8px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lb-set-title, .lb-set-section-head { animation: none; }
+  .lb-set-section-head { animation: none; }
 }
 /* Row labels: the vertical margins were built for the old flat list
    and made the switch rows uneven inside the panels. */
@@ -748,36 +743,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   border: none !important;
   border-radius: 999px !important;
   box-shadow: var(--md-sys-elevation-level5, 0 10px 36px rgba(0, 0, 0, 0.28)) !important;
-}.lb-set-results { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-.lb-set-chips { margin-bottom: var(--md-sys-measurement-space100); }
-/* Search result cards: m3e-card variant="filled" owns the surface;
-   the full-width button inside carries the layout and focus. */
-.lb-set-result { --m3e-card-padding: 0; }
-.lb-set-result-section {
-  font-size: var(--md-sys-typescale-label-small-font-size, 11px);
-  color: var(--md-sys-color-on-surface-variant);
-  white-space: nowrap;
 }
-.lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
-.lb-set-result-btn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--md-sys-measurement-space100);
-  width: 100%;
-  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150);
-  background: none;
-  border: 0;
-  color: var(--md-sys-color-on-surface);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.lb-set-result-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
-.lb-set-result-btn:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
-/* #257: press feedback on the result rows. */
-.lb-set-result-btn { transition: transform 120ms var(--md-sys-motion-easing-standard, ease); }
-.lb-set-result-btn:active { transform: scale(0.98); }
 /* #198 search jump targets take focus: keep the focus ring visible. */
 .lb-setting-row:focus-visible,
 .lb-set-anchor:focus-visible,
@@ -1029,10 +995,6 @@ border-radius: 20px;
 .lb-log-line b { font-variation-settings: "wght" var(--lb-wght-strong); }
 
 /* Cloak */
-.lb-cloak { position: fixed; inset: 0; z-index: 1000; background: var(--md-sys-color-surface); }
-.lb-cloak iframe { width: 100%; height: 100%; border: none; }
-.lb-cloak-return { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); opacity: 0.15; }
-.lb-cloak-return:hover { opacity: 1; }
 
 /* ---- Small screens ---- */
 @media (max-width: 600px) {
@@ -1295,30 +1257,10 @@ border-radius: var(--m3e-shape-lg);
 /* Build facts as M3E-style chips: one pill per component, name muted,
    value on-surface. Hashes use the monospace family so they read as
    identifiers, not prose. */
-.lb-build {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  text-align: center;
-  flex-wrap: wrap;
-  gap: var(--md-sys-measurement-space100);
-}
-.lb-build-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: var(--md-sys-color-tertiary-container);
-  border: none;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  line-height: 1.6;
-}
-.lb-build-chip .lb-build-name { color: color-mix(in srgb, var(--md-sys-color-on-tertiary-container) 72%, transparent); }
-.lb-build-chip .lb-build-val {
-  color: var(--md-sys-color-on-tertiary-container);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
+
+
+
+
 
 /* ---- DevTools diagnostics ---- */
 .lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75, 6px); margin-bottom: var(--md-sys-measurement-space100, 8px); }
@@ -1447,16 +1389,6 @@ m3e-menu {
    host carries the blur - the same host-paints-frost chain as the
    sheets. 20px radius per the settings-card spec. */
 .lb-dt-card,
-.lb-set-result {
-  --m3e-card-container-color: var(--lb-glass-tint);
-  --m3e-card-shape: 20px;
-  /* Wave 89: the frost halo rides the host, so the host carries the
-     card shape too - a square host painted a square grey outline
-     behind the rounded card (user report 2026-11-08). */
-  border-radius: 20px;
-  backdrop-filter: var(--lb-glass-blur);
-  -webkit-backdrop-filter: var(--lb-glass-blur);
-}
 /* Wave 91 (issue #243, reopened): the DevTools cards sit on the
    uniform sheet frost, so a fully transparent card was invisible
    as glass (user report: cards still not frosted). In-sheet
@@ -2501,15 +2433,6 @@ background: var(--lb-glass-tint);
 /* ---- Clawd easter egg: the sleeping mascot in the Settings About
        card, above the build chips. Pixel art: nearest-neighbour
        upscaling keeps the edges crisp. ---- */
-.lb-clawd {
-  display: block;
-  width: 88px;
-  max-width: 100%;
-  height: auto;
-  image-rendering: pixelated;
-  margin: 0 0 var(--md-sys-measurement-space100);
-  border-radius: var(--md-sys-shape-corner-small, 8px);
-}
 
 /* AgentChat (21st.dev) error part, wave 96: a failed turn renders
    as an inline error card in the conversation (with Try again),
@@ -2672,18 +2595,6 @@ m3e-card.lb-about-hero {
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
 }
 /* Engine chip: real container roles (M3 chips), not a grey overlay. */
-.lb-hero-engine {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space75);
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
-  color: var(--md-sys-color-on-secondary-container, var(--md-sys-color-on-surface));
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" var(--lb-wght-emph), "ROND" 25;
-}
-.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" var(--lb-wght-plain); }
 
 /* Diagnostics renders bare in the DevTools sheet (user request
    2026-11-11): the old card's height cap moves to the direct child. */
