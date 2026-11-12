@@ -49,9 +49,10 @@ ok(!tabs.includes("Tabs ({"), "count marker removed from the title");
 
 /* 2. DevTools. */
 ok(block(theme, ".lb-dt-nav {").includes("justify-content: center;"), "DevTools sub-tool picker is centered");
-ok(block(theme, ".lb-dt-card,").includes("border-radius: 20px;"), "DevTools card frost halo is rounded");
-const frostCards = block(theme, ".lb-dt-card,");
-ok(frostCards.includes("border-radius: 20px;"), "frost card halo is rounded");
+const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
+const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
+ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("border-radius: 20px;"), "DevTools card frost halo is rounded");
+ok(dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "frost card halo keeps the blur");
 
 /* 3. Settings. */
 ok(block(theme, ".lb-set-page m3e-expansion-panel {").includes("border-radius: 20px;"), "settings panel frost halo is rounded");
