@@ -654,6 +654,7 @@ export default function AiPage() {
                           : "Thinking"
                     }
                     doneLabel={m.thinking ? "Thought" : "Worked"}
+                    shape
                     active={last && busy && phase !== "streaming" && phase !== "idle"}
                     duration={last && m.thinking ? dur.think : undefined}
                   >

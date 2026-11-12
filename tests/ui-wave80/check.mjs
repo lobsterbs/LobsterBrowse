@@ -175,6 +175,32 @@ const ok = (name, cond) => {
   ok("settings: inline cards join the jump focus ring", theme.includes(".lb-set-inline:focus-visible"));
 }
 
+/* --- Expressive type + shapes (user request 2026-11-12): the full
+   Google Sans Flex axis set loads, the weight ramp and the M3E
+   typescale are tokenized, no rule hardcodes a weight outside the
+   ramp, and the decorative shapes are aria-hidden with the morph
+   frozen under reduced motion. --- */
+{
+  const mainTs = read("src/main.tsx");
+  ok("type: full variable font axis set loaded", mainTs.includes("@fontsource-variable/google-sans-flex/full.css"));
+  ok("type: standard subset import gone", !mainTs.includes("google-sans-flex/standard.css"));
+  const theme = read("src/theme.css");
+  for (const tok of ["--lb-wght-plain", "--lb-wght-medium", "--lb-wght-strong", "--lb-wght-emph", "--lb-wght-display", "--lb-fvs-display", "--lb-fvs-display-round"]) {
+    ok("type: token " + tok + " defined", theme.includes(tok + ":"));
+  }
+  ok("type: baseline typescale defined", theme.includes("--md-sys-typescale-display-large-font-weight: 400"));
+  ok("type: emphasized typescale defined", theme.includes("--md-sys-typescale-emphasized-label-large-font-weight: 700"));
+  const hard = [...theme.matchAll(/font-variation-settings:[^;]*"wght"\s+\d/g)];
+  ok("type: no hardcoded weight outside the token ramp", hard.length === 0);
+  const toolRow = read("src/ai/ToolRow.tsx");
+  ok("shape: thinking morph shape renders", toolRow.includes("<m3e-shape"));
+  ok("shape: morph shape is decorative", toolRow.includes("aria-hidden={true}"));
+  ok("shape: morph settles when done", toolRow.includes('? "4-leaf-clover"'));
+  const dlCard = read("src/browser/DownloadsCard.tsx");
+  ok("shape: downloads empty state shape is decorative", dlCard.includes("lb-dl-empty-shape") && dlCard.includes("aria-hidden={true}"));
+  ok("shape: reduced motion freezes morphs", /--m3e-shape-transition:\s*none/.test(theme));
+}
+
 if (failures > 0) {
   console.error(failures + " check(s) failed");
   process.exit(1);

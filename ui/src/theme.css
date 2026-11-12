@@ -20,10 +20,68 @@ body {
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   font-family: "Google Sans Flex Variable", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
-  font-variation-settings: "wght" 400;
+  font-variation-settings: "wght" var(--lb-wght-plain);
 }
 
-h1, h2, h3, b, th { font-variation-settings: "wght" 600; }
+h1, h2 { font-variation-settings: "wght" var(--lb-wght-emph); }
+h3, b, th { font-variation-settings: "wght" var(--lb-wght-strong); }
+
+/* Expressive type tokens (user request 2026-11-12). The 30-style M3
+   scale (15 baseline + 15 emphasized roles), values verbatim from the
+   @m3e/web 2.8.2 TypescaleToken source, the library's encoding of the
+   official Material 3 type scale: components already resolve these
+   exact values as fallbacks, so defining them changes nothing for
+   them while giving LB CSS the same roles to consume. The library's
+   emphasized title-medium line-height (3.5rem, official spec 1.5rem)
+   is copied verbatim for the same reason. The LB weight ramp and the
+   display recipes live here too. Rule: font-variation-settings wins
+   over font-weight for wght, so a rule that sets an fvs weight never
+   also sets font-weight; font-weight remains only as the fallback
+   for non-variable fonts. */
+:root {
+  --lb-wght-plain: 400;
+  --lb-wght-medium: 500;
+  --lb-wght-strong: 600;
+  --lb-wght-emph: 700;
+  --lb-wght-display: 760;
+  /* Display recipes: display moments only (hero version number, AI
+     greeting). Body and UI text stay at wdth 100. */
+  --lb-fvs-display: "wght" var(--lb-wght-display), "wdth" 115, "opsz" 72;
+  --lb-fvs-display-round: "wght" var(--lb-wght-display), "wdth" 115, "opsz" 40, "ROND" 25;
+  /* Baseline roles. */
+  --md-sys-typescale-display-large-font-size: 3.5625rem; --md-sys-typescale-display-large-font-weight: 400; --md-sys-typescale-display-large-line-height: 4rem; --md-sys-typescale-display-large-tracking: 0.015625rem;
+  --md-sys-typescale-display-medium-font-size: 2.8125rem; --md-sys-typescale-display-medium-font-weight: 400; --md-sys-typescale-display-medium-line-height: 3.25rem; --md-sys-typescale-display-medium-tracking: 0;
+  --md-sys-typescale-display-small-font-size: 2.25rem; --md-sys-typescale-display-small-font-weight: 400; --md-sys-typescale-display-small-line-height: 2.75rem; --md-sys-typescale-display-small-tracking: 0;
+  --md-sys-typescale-headline-large-font-size: 2rem; --md-sys-typescale-headline-large-font-weight: 400; --md-sys-typescale-headline-large-line-height: 2.5rem; --md-sys-typescale-headline-large-tracking: 0;
+  --md-sys-typescale-headline-medium-font-size: 1.75rem; --md-sys-typescale-headline-medium-font-weight: 400; --md-sys-typescale-headline-medium-line-height: 2.25rem; --md-sys-typescale-headline-medium-tracking: 0;
+  --md-sys-typescale-headline-small-font-size: 1.5rem; --md-sys-typescale-headline-small-font-weight: 400; --md-sys-typescale-headline-small-line-height: 2rem; --md-sys-typescale-headline-small-tracking: 0;
+  --md-sys-typescale-title-large-font-size: 1.375rem; --md-sys-typescale-title-large-font-weight: 400; --md-sys-typescale-title-large-line-height: 1.75rem; --md-sys-typescale-title-large-tracking: 0;
+  --md-sys-typescale-title-medium-font-size: 1rem; --md-sys-typescale-title-medium-font-weight: 500; --md-sys-typescale-title-medium-line-height: 1.5rem; --md-sys-typescale-title-medium-tracking: 0.009375rem;
+  --md-sys-typescale-title-small-font-size: 0.875rem; --md-sys-typescale-title-small-font-weight: 500; --md-sys-typescale-title-small-line-height: 1.25rem; --md-sys-typescale-title-small-tracking: 0.00625rem;
+  --md-sys-typescale-body-large-font-size: 1rem; --md-sys-typescale-body-large-font-weight: 400; --md-sys-typescale-body-large-line-height: 1.5rem; --md-sys-typescale-body-large-tracking: 0.03125rem;
+  --md-sys-typescale-body-medium-font-size: 0.875rem; --md-sys-typescale-body-medium-font-weight: 400; --md-sys-typescale-body-medium-line-height: 1.25rem; --md-sys-typescale-body-medium-tracking: 0.015625rem;
+  --md-sys-typescale-body-small-font-size: 0.75rem; --md-sys-typescale-body-small-font-weight: 400; --md-sys-typescale-body-small-line-height: 1rem; --md-sys-typescale-body-small-tracking: 0.025rem;
+  --md-sys-typescale-label-large-font-size: 0.875rem; --md-sys-typescale-label-large-font-weight: 500; --md-sys-typescale-label-large-line-height: 1.25rem; --md-sys-typescale-label-large-tracking: 0.00625rem;
+  --md-sys-typescale-label-medium-font-size: 0.75rem; --md-sys-typescale-label-medium-font-weight: 500; --md-sys-typescale-label-medium-line-height: 1rem; --md-sys-typescale-label-medium-tracking: 0.03125rem;
+  --md-sys-typescale-label-small-font-size: 0.6875rem; --md-sys-typescale-label-small-font-weight: 500; --md-sys-typescale-label-small-line-height: 1rem; --md-sys-typescale-label-small-tracking: 0.03125rem;
+  /* Emphasized roles: display/headline/title-large/body emphasize to
+     500, title-medium/small and the labels to 700. */
+  --md-sys-typescale-emphasized-display-large-font-size: 3.5625rem; --md-sys-typescale-emphasized-display-large-font-weight: 500; --md-sys-typescale-emphasized-display-large-line-height: 4rem; --md-sys-typescale-emphasized-display-large-tracking: 0.015625rem;
+  --md-sys-typescale-emphasized-display-medium-font-size: 2.8125rem; --md-sys-typescale-emphasized-display-medium-font-weight: 500; --md-sys-typescale-emphasized-display-medium-line-height: 3.25rem; --md-sys-typescale-emphasized-display-medium-tracking: 0;
+  --md-sys-typescale-emphasized-display-small-font-size: 2.25rem; --md-sys-typescale-emphasized-display-small-font-weight: 500; --md-sys-typescale-emphasized-display-small-line-height: 2.75rem; --md-sys-typescale-emphasized-display-small-tracking: 0;
+  --md-sys-typescale-emphasized-headline-large-font-size: 2rem; --md-sys-typescale-emphasized-headline-large-font-weight: 500; --md-sys-typescale-emphasized-headline-large-line-height: 2.5rem; --md-sys-typescale-emphasized-headline-large-tracking: 0;
+  --md-sys-typescale-emphasized-headline-medium-font-size: 1.75rem; --md-sys-typescale-emphasized-headline-medium-font-weight: 500; --md-sys-typescale-emphasized-headline-medium-line-height: 2.25rem; --md-sys-typescale-emphasized-headline-medium-tracking: 0;
+  --md-sys-typescale-emphasized-headline-small-font-size: 1.5rem; --md-sys-typescale-emphasized-headline-small-font-weight: 500; --md-sys-typescale-emphasized-headline-small-line-height: 2rem; --md-sys-typescale-emphasized-headline-small-tracking: 0;
+  --md-sys-typescale-emphasized-title-large-font-size: 1.375rem; --md-sys-typescale-emphasized-title-large-font-weight: 500; --md-sys-typescale-emphasized-title-large-line-height: 1.75rem; --md-sys-typescale-emphasized-title-large-tracking: 0;
+  --md-sys-typescale-emphasized-title-medium-font-size: 1rem; --md-sys-typescale-emphasized-title-medium-font-weight: 700; --md-sys-typescale-emphasized-title-medium-line-height: 3.5rem; --md-sys-typescale-emphasized-title-medium-tracking: 0.009375rem;
+  --md-sys-typescale-emphasized-title-small-font-size: 0.875rem; --md-sys-typescale-emphasized-title-small-font-weight: 700; --md-sys-typescale-emphasized-title-small-line-height: 1.25rem; --md-sys-typescale-emphasized-title-small-tracking: 0.00625rem;
+  --md-sys-typescale-emphasized-body-large-font-size: 1rem; --md-sys-typescale-emphasized-body-large-font-weight: 500; --md-sys-typescale-emphasized-body-large-line-height: 1.5rem; --md-sys-typescale-emphasized-body-large-tracking: 0.03125rem;
+  --md-sys-typescale-emphasized-body-medium-font-size: 0.875rem; --md-sys-typescale-emphasized-body-medium-font-weight: 500; --md-sys-typescale-emphasized-body-medium-line-height: 1.25rem; --md-sys-typescale-emphasized-body-medium-tracking: 0.015625rem;
+  --md-sys-typescale-emphasized-body-small-font-size: 0.75rem; --md-sys-typescale-emphasized-body-small-font-weight: 500; --md-sys-typescale-emphasized-body-small-line-height: 1rem; --md-sys-typescale-emphasized-body-small-tracking: 0.025rem;
+  --md-sys-typescale-emphasized-label-large-font-size: 0.875rem; --md-sys-typescale-emphasized-label-large-font-weight: 700; --md-sys-typescale-emphasized-label-large-line-height: 1.25rem; --md-sys-typescale-emphasized-label-large-tracking: 0.00625rem;
+  --md-sys-typescale-emphasized-label-medium-font-size: 0.75rem; --md-sys-typescale-emphasized-label-medium-font-weight: 700; --md-sys-typescale-emphasized-label-medium-line-height: 1rem; --md-sys-typescale-emphasized-label-medium-tracking: 0.03125rem;
+  --md-sys-typescale-emphasized-label-small-font-size: 0.6875rem; --md-sys-typescale-emphasized-label-small-font-weight: 700; --md-sys-typescale-emphasized-label-small-line-height: 1rem; --md-sys-typescale-emphasized-label-small-tracking: 0.03125rem;
+}
 
 
 /* Smooth nav rail: items glide on state changes. The host width is
@@ -177,7 +235,7 @@ m3e-nav-rail {
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
 .lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
-.lb-setp-headline { font-variation-settings: "wght" 500; }
+.lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 .lb-set-anchor { scroll-margin-block: 96px; }
@@ -276,7 +334,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 }
 .lb-set-section-icon m3e-icon { font-size: 20px; }
 .lb-set-section-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" 700; }
+.lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" var(--lb-wght-emph); }
 .lb-set-section-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 /* Wave 101b (#257): one orchestrated entrance for the redesigned
    page: the title block leads, the section tiles follow on the
@@ -320,7 +378,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   gap: var(--md-sys-measurement-space150);
   align-items: center;
   margin: var(--md-sys-measurement-space150) 0 var(--md-sys-measurement-space75);
-  font-variation-settings: "wght" 500;
+  font-variation-settings: "wght" var(--lb-wght-medium);
 }
 .lb-setting-group { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space50); }
 .lb-setting-sub { margin-top: var(--md-sys-measurement-space50); }
@@ -510,7 +568,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-tab.active {
   color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
   background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
-  font-variation-settings: "wght" 560;
+  font-variation-settings: "wght" var(--lb-wght-strong);
 }
 .lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 120px; min-width: 0; }
 .lb-tab-favicon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; object-fit: contain; }
@@ -767,7 +825,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   font-family: inherit;
   font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
-  font-variation-settings: "wght" 500;
+  font-variation-settings: "wght" var(--lb-wght-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -887,7 +945,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
-.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" var(--lb-wght-medium); font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 /* #103: the tab panels are siblings of the switcher (bounded card layout, see DevTools.tsx) and flex to fill the card, so the page body inside keeps its bounded scroll area. */
 .lb-dt-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -896,7 +954,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-dt-toolbar { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; margin-bottom: var(--md-sys-measurement-space100); flex-wrap: wrap; }
 .lb-inspect { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: auto; }
 .lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
-.lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" 500; margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
+.lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" var(--lb-wght-medium); margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
 
 /* DevTools bottom sheet (user request 2026-11-07): the live DevTools
    mounts in an m3e-bottom-sheet; each section renders its mini
@@ -912,7 +970,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-dt-nav-btn { flex: 0 1 auto; }
 .lb-dt-card { width: 100%; }
 .lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
-.lb-dt-card-title { font-variation-settings: "wght" 500; }
+.lb-dt-card-title { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-dt-card-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
 .lb-dt-card .lb-console, .lb-dt-card .lb-net { max-height: 38vh; }
 
@@ -938,7 +996,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-net { flex: 1; overflow: auto; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
-.lb-net-status { flex-shrink: 0; font-variation-settings: "wght" 600; }
+.lb-net-status { flex-shrink: 0; font-variation-settings: "wght" var(--lb-wght-strong); }
 .lb-net-status.lb-ok { color: #1e8e3e; }
 .lb-net-status.lb-bad { color: var(--md-sys-color-error); }
 .lb-net-method { flex-shrink: 0; opacity: 0.6; }
@@ -968,7 +1026,7 @@ border-radius: 20px;
   padding: var(--md-sys-measurement-space100);
 }
 .lb-log-line { padding: var(--md-sys-measurement-space25) 0; word-break: break-word; }
-.lb-log-line b { font-variation-settings: "wght" 600; }
+.lb-log-line b { font-variation-settings: "wght" var(--lb-wght-strong); }
 
 /* Cloak */
 .lb-cloak { position: fixed; inset: 0; z-index: 1000; background: var(--md-sys-color-surface); }
@@ -1022,12 +1080,17 @@ border-radius: 20px;
 }
 
 /* Expressive display type: real weight-axis emphasis. Google Sans
-   Flex spans wght 100-1000; its wdth axis only spans 75-100, so the
-   old 112 silently clamped and is gone. */
+   Flex spans wght 1-1000 AND wdth 25-151 (the earlier "wdth clamps
+   at 100" note was wrong); the width axis is reserved for display
+   moments via --lb-fvs-display. */
 m3e-heading[variant="display"] {
-  font-variation-settings: "wght" 700;
+  font-variation-settings: "wght" var(--lb-wght-emph);
   letter-spacing: -0.02em;
 }
+
+/* Primary actions read at the emphasized label weight (M3E maps
+   buttons to label-large). */
+m3e-button[variant="filled"] { font-variation-settings: "wght" var(--lb-wght-emph); }
 
 /* Larger, softer shapes on the floating chrome. */
 .lb-tabstrip { border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl); }
@@ -1291,7 +1354,7 @@ border-radius: var(--m3e-shape-lg);
   color: var(--md-sys-color-on-error-container);
   font-family: inherit;
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" 500;
+  font-variation-settings: "wght" var(--lb-wght-medium);
   cursor: pointer;
 }
 .lb-diag-tb-chip m3e-icon { font-size: 16px; }
@@ -1692,7 +1755,7 @@ m3e-snackbar {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
 }
-.lb-ext-note-title { font-variation-settings: "wght" 500; font-size: var(--md-sys-typescale-title-small-font-size, 14px); }
+.lb-ext-note-title { font-variation-settings: "wght" var(--lb-wght-medium); font-size: var(--md-sys-typescale-title-small-font-size, 14px); }
 .lb-ext-note-msg { opacity: 0.85; margin-top: var(--md-sys-measurement-space25, 2px); }
 .lb-ext-note-actions {
   display: flex;
@@ -2183,11 +2246,10 @@ body .lb-ext-panel {
   margin: auto;
   text-align: center;
   font-size: var(--md-sys-typescale-headline-small-font-size, 24px);
-  /* The Google Sans Flex axes the product look asks for: weight 760,
-     width 130, and the round corner axis; font-weight stays as the
-     fallback when the variable axes are unavailable. */
+  /* The shared round display recipe (token above); font-weight stays
+     as the fallback when the variable axes are unavailable. */
   font-family: "Google Sans Flex Variable", "Roboto Flex Variable", Roboto, system-ui, sans-serif;
-  font-variation-settings: "wght" 760, "wdth" 130, "opsz" 15, "slnt" 0, "ROND" 15;
+  font-variation-settings: var(--lb-fvs-display-round);
   font-weight: 500;
   color: var(--md-sys-color-on-surface, #e4e2e6);
   animation: lb-ai-msg-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
@@ -2415,7 +2477,7 @@ border-radius: 20px;
 }
 .lb-ad-hero-ic > m3e-icon { color: currentColor; }
 .lb-ad-hero-txt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; min-width: 0; }
-.lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" 600; line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
+.lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" var(--lb-wght-strong); line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
 .lb-ad-sub { margin: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-ad-hosts {
   display: flex;
@@ -2431,7 +2493,7 @@ border-radius: 20px;
 background: var(--lb-glass-tint);
 }
 .lb-ad-host { font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
-.lb-ad-hostn { font-variation-settings: "wght" 500; margin-right: 6px; }
+.lb-ad-hostn { font-variation-settings: "wght" var(--lb-wght-medium); margin-right: 6px; }
 .lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
 .lb-ad-rowtitle { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); }
 .lb-ad-foot { width: 100%; }
@@ -2462,7 +2524,7 @@ background: var(--lb-glass-tint);
   padding: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space200, 16px);
   animation: lb-ai-msg-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard-decelerate, ease-out);
 }
-.lb-ai-error-title { font-variation-settings: "wght" 500; }
+.lb-ai-error-title { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-ai-error-msg { margin-top: 2px; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface-variant, #cac4d0); overflow-wrap: anywhere; }
 .lb-ai-error-retry {
   margin-top: var(--md-sys-measurement-space100, 8px);
@@ -2488,8 +2550,11 @@ background: var(--lb-glass-tint);
   padding: var(--md-sys-measurement-space300, 24px) var(--md-sys-measurement-space200, 16px);
   color: var(--md-sys-color-on-surface-variant, #cac4d0);
 }
-.lb-dl-empty m3e-icon { font-size: 28px; }
-.lb-dl-empty-title { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface, #1d1b20); }
+.lb-dl-empty-shape {
+  width: 56px;
+  --m3e-shape-container-color: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
+}
+.lb-dl-empty-title { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface, #1d1b20); font-variation-settings: "wght" var(--lb-wght-emph), "ROND" 25; }
 .lb-dl-empty-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 /* Extensions manage rows + permission banner. */
 .lb-ext-list m3e-list-item.lb-ext-item { cursor: pointer; }
@@ -2594,16 +2659,16 @@ m3e-card.lb-about-hero {
 .lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
 .lb-hero-version-num {
   font-size: var(--md-sys-typescale-display-small-font-size, 32px);
-  /* Expressive display emphasis: Google Sans Flex runs wght 100-1000,
-     so the version number carries real display weight. wdth stays out:
-     the axis only spans 75-100 and the old 112 silently clamped. */
-  font-variation-settings: "wght" 740;
+  /* Expressive display recipe (token above): max optical size, real
+     width, weight 760. Google Sans Flex runs wght 1-1000 and wdth
+     25-151 (the earlier "wdth clamps at 100" claim was wrong). */
+  font-variation-settings: var(--lb-fvs-display);
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .lb-hero-version-name {
   font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
-  font-variation-settings: "wght" 560;
+  font-variation-settings: "wght" var(--lb-wght-emph);
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
 }
 /* Engine chip: real container roles (M3 chips), not a grey overlay. */
@@ -2616,9 +2681,9 @@ m3e-card.lb-about-hero {
   background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
   color: var(--md-sys-color-on-secondary-container, var(--md-sys-color-on-surface));
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" 620;
+  font-variation-settings: "wght" var(--lb-wght-emph), "ROND" 25;
 }
-.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" 400; }
+.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" var(--lb-wght-plain); }
 
 /* Diagnostics renders bare in the DevTools sheet (user request
    2026-11-11): the old card's height cap moves to the direct child. */
@@ -2629,3 +2694,15 @@ m3e-card.lb-about-hero {
    available; the class makes the grey-out explicit regardless of the
    component's own disabled styling. */
 .lb-tool-disabled { opacity: 0.38; pointer-events: none; }
+
+/* Morphing thinking shape (AI tool row, user request 2026-11-12):
+   one morphing element per view, decorative (aria-hidden in TSX);
+   reduced motion freezes every morph by dropping the transition. */
+.lb-ai-tool-shape {
+  width: 18px;
+  flex-shrink: 0;
+  --m3e-shape-container-color: var(--md-sys-color-primary, #7f9cf5);
+}
+@media (prefers-reduced-motion: reduce) {
+  m3e-shape { --m3e-shape-transition: none; }
+}

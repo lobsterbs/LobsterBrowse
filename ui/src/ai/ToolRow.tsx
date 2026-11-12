@@ -3,8 +3,15 @@
    shimmers while the step runs and settles to a static label once
    done; the detail area expands under it. Shared by the reasoning
    stream and by tool calls such as the Exa web search, so every
-   assistant step renders with the same anatomy. */
+   assistant step renders with the same anatomy. The morphing shape
+   (user request 2026-11-12) is functional feedback: it cycles while
+   the step runs and settles once done. Only the main thinking row
+   passes shape, so the AI view keeps one morphing element. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+
+/* Morph cycle names (verified against the @m3e/web 2.8.2 ShapeName
+   union); the m3e-shape name morph is a real clip-path spring. */
+const MORPH = ["sunny", "4-leaf-clover", "8-leaf-clover"];
 
 interface ToolRowProps {
   label: string;
@@ -13,16 +20,25 @@ interface ToolRowProps {
   /* Settled step duration in ms; rendered as tabular seconds
      beside the done label when present. */
   duration?: number;
+  /* Render the decorative morphing shape (main thinking row only). */
+  shape?: boolean;
   children?: ReactNode;
 }
 
-export function ToolRow({ label, doneLabel, active, duration, children }: ToolRowProps) {
+export function ToolRow({ label, doneLabel, active, duration, shape, children }: ToolRowProps) {
   const hasBody = children != null;
   const [open, setOpen] = useState(active);
   /* Track manual toggles: an untouched row auto-expands while the
      step runs and auto-folds when it settles; a user-opened row
      keeps its state across the transition. */
   const touched = useRef(false);
+  /* Morph tick while the step runs; the shape settles when done. */
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!shape || !active) return;
+    const t = setInterval(() => setTick((v) => v + 1), 900);
+    return () => clearInterval(t);
+  }, [shape, active]);
   useEffect(() => {
     if (active) {
       if (!touched.current) setOpen(true);
@@ -43,6 +59,13 @@ export function ToolRow({ label, doneLabel, active, duration, children }: ToolRo
         onClick={toggle}
         disabled={!hasBody}
       >
+        {shape && (
+          <m3e-shape
+            {...{ class: "lb-ai-tool-shape" }}
+            name={active ? MORPH[tick % MORPH.length] : "4-leaf-clover"}
+            aria-hidden={true}
+          />
+        )}
         {hasBody && (
           <svg
             className={"lb-ai-tool-chev" + (open ? " lb-ai-tool-chev-open" : "")}
