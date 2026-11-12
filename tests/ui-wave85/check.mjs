@@ -60,7 +60,8 @@ ok(theme.includes(".lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-
 
 /* Settings uniformity: panels and inline cards share one rhythm. */
 ok(theme.includes("--m3e-expansion-header-padding-left: var(--md-sys-measurement-space150);"), "panel header padding harmonized");
-ok(theme.includes("--m3e-expansion-panel-content-padding: 0 var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);"), "panel content padding harmonized");
+ok(theme.includes("--m3e-expansion-panel-content-padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);"), "panel content padding harmonized (#269)");
+ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space100) 0; }"), "panel header carries the same vertical rhythm as the inline rows (#269)");
 ok(theme.includes("min-height: 48px;"), "inline card min-height matches collapsed panel");
 
 const tabs = read("src/browser/TabSwitcherCard.tsx");
