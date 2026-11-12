@@ -3542,43 +3542,59 @@ embed the /zlsw-register boot page and the honest engine-offline
 notice before the worker exists, so the whole origin opts in.
 Worker-served responses get the same header in the engine
 bundle (Zeolite app/src/corp.ts, at the respondWith seam). */
-fn with_corp(mut res: Response) -> Response {
+fn with_static_headers(mut res: Response) -> Response {
     res.headers_mut().insert(
         "cross-origin-resource-policy",
         HeaderValue::from_static("cross-origin"),
+    );
+    /* #650: the engine bundle assets (sw.js, bootstrap.js, the wasm
+    modules, libcurl, epoxy) are executable JS and WASM served on this
+    origin and fetched cross-origin by embedders. nosniff keeps a
+    mis-served or mis-proxied asset from being reinterpreted as a
+    different scriptable content type; zeolite-server's own static
+    layer already sets the same header for direct deployments. */
+    res.headers_mut().insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
     );
     res
 }
 
 #[cfg(test)]
-mod corp {
+mod static_headers {
     use super::*;
-    /* The header is load-bearing for COEP embedders: an absent or
-    wrong-spelled CORP header reproduces the blocked-frame bug
-    the layer exists to fix, so the gate checks the exact
-    header value and that the response is otherwise intact. */
+    /* The headers are load-bearing for COEP embedders (#650): an absent
+    or wrong-spelled CORP header reproduces the blocked-frame bug the
+    layer exists to fix, and a missing nosniff reopens the MIME
+    sniffing hole the doctor's probe-assets check warns about, so the
+    gate checks both exact header values and that the response is
+    otherwise intact. */
     #[test]
-    fn with_corp_sets_the_embedder_header_and_keeps_the_response() {
+    fn with_static_headers_sets_embedder_headers_and_keeps_the_response() {
         let res = Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
             .body(Body::from("offline notice"))
             .unwrap();
-        let out = with_corp(res);
+        let out = with_static_headers(res);
         assert_eq!(
             out.headers().get("cross-origin-resource-policy").unwrap(),
             "cross-origin"
+        );
+        assert_eq!(
+            out.headers().get("x-content-type-options").unwrap(),
+            "nosniff"
         );
         assert_eq!(out.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]
-    fn with_corp_overwrites_an_existing_corp_value() {
+    fn with_static_headers_overwrites_an_existing_corp_value() {
         let res = Response::builder()
             .status(StatusCode::OK)
             .header("cross-origin-resource-policy", "same-origin")
             .body(Body::empty())
             .unwrap();
-        let out = with_corp(res);
+        let out = with_static_headers(res);
         assert_eq!(
             out.headers().get("cross-origin-resource-policy").unwrap(),
             "cross-origin"
@@ -3799,12 +3815,12 @@ async fn main() {
         are same-origin, so cross-origin ACAO headers serve nobody - the
         permissive layer that used to sit here turned the deployment
         into a CORS-stripping relay any web page could read. */
-        /* COEP embedder parity (see with_corp): applies to every
+        /* COEP embedder parity (see with_static_headers): applies to every
            route above, the SPA fallback and the wisp upgrade alike -
            the content origin is embeddable as a whole. */
         .layer(axum::middleware::from_fn(
             |req: axum::extract::Request, next: axum::middleware::Next| async move {
-                with_corp(next.run(req).await)
+                with_static_headers(next.run(req).await)
             },
         ))
         .with_state(state);
