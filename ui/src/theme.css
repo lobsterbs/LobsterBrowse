@@ -2523,13 +2523,18 @@ background: var(--lb-glass-tint);
    (aria-hidden in Settings.tsx); the card clips the spill. */
 m3e-card.lb-about-hero {
   --m3e-card-padding: 0;
-  --m3e-card-shape: var(--m3e-shape-lg, 20px);
+  --m3e-card-shape: 20px;
   /* Neutral ground like the expressive-profile hero: container colors
      read against surface-container without fighting a tint. */
   --m3e-filled-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
   --m3e-filled-card-text-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
   position: relative;
   overflow: hidden;
+  /* The rounded corners live on the shadow surface; without a matching
+     host radius, overflow:hidden clips at the host RECTANGLE and the
+     overflowing shapes paint square corners over the right edge
+     (user report 2026-11-12). */
+  border-radius: 20px;
   margin-bottom: var(--md-sys-measurement-space150);
 }
 .lb-about-hero-shapes { position: absolute; inset: 0; pointer-events: none; }
@@ -2587,14 +2592,16 @@ m3e-card.lb-about-hero {
 .lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
 .lb-hero-version-num {
   font-size: var(--md-sys-typescale-display-small-font-size, 32px);
-  /* Expressive display emphasis, same treatment as m3e-heading[variant=display]. */
-  font-variation-settings: "wght" 640, "wdth" 112;
+  /* Expressive display emphasis: Google Sans Flex runs wght 100-1000,
+     so the version number carries real display weight. wdth stays out:
+     the axis only spans 75-100 and the old 112 silently clamped. */
+  font-variation-settings: "wght" 740;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .lb-hero-version-name {
   font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
-  font-variation-settings: "wght" 500;
+  font-variation-settings: "wght" 560;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
 }
 /* Engine chip: real container roles (M3 chips), not a grey overlay. */
@@ -2607,7 +2614,7 @@ m3e-card.lb-about-hero {
   background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
   color: var(--md-sys-color-on-secondary-container, var(--md-sys-color-on-surface));
   font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" 500;
+  font-variation-settings: "wght" 620;
 }
 .lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" 400; }
 
