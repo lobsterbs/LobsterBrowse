@@ -195,7 +195,7 @@ const ok = (name, cond) => {
   const toolRow = read("src/ai/ToolRow.tsx");
   ok("shape: thinking morph shape renders", toolRow.includes("<m3e-shape"));
   ok("shape: morph shape is decorative", toolRow.includes("aria-hidden={true}"));
-  ok("shape: morph settles when done", toolRow.includes('? "4-leaf-clover"'));
+  ok("shape: morph settles when done", toolRow.includes(': "4-leaf-clover"'));
   const dlCard = read("src/browser/DownloadsCard.tsx");
   ok("shape: downloads empty state shape is decorative", dlCard.includes("lb-dl-empty-shape") && dlCard.includes("aria-hidden={true}"));
   ok("shape: reduced motion freezes morphs", /--m3e-shape-transition:\s*none/.test(theme));
