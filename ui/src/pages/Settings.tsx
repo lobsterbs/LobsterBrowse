@@ -365,7 +365,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     };
   }, []);
   /* About hero (user request 2026-11-11): /build's lb field carries
-     "number codename" (e.g. "0.8.0 Tungsten"); split once for the
+     "number codename" (e.g. "0.9.0 Iridium"); split once for the
      hero card's number and text versions. */
   const lbVersion = build?.lb ?? "";
   const vSplit = lbVersion.indexOf(" ");
