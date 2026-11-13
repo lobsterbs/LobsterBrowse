@@ -1,3 +1,6 @@
+
+
+
 # syntax=docker/dockerfile:1
 # Multi-stage build for the LobsterBrowse single-site service:
 # the Rust Wisp server and the static M3E UI it serves from one origin.
@@ -1017,6 +1020,24 @@ FROM debian:bookworm-slim AS zl-builder
 # cannot distinguish this bump - verify the served
 # /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
 # b0296f8 (the rewriter crate is not a server dep).
+# Pin 101: Zeolite dist 15a049461aca31f1862e3f791990cfc5f18d72eb
+# (from CI build 39574090321, Zeolite main 45ed5449, all 5 jobs
+# green, app suite 1404 tests). Pin 101 carries the 2026-10-21
+# Zeolite fix wave: #385 expired navigation handles re-mint on
+# GET navigations (Zeolite 22c0755); #383 prel parents always
+# reach the handle form (a non-NAVH parent now mints a fresh
+# NAVH handle for the decoded destination too, instead of
+# parking the document on the opaque prel pathname); #382 the
+# 60s relay header deadline breach resolves null and emits a
+# TRANSPORT DIAG row so the caller falls back instead of
+# wedging (undeclared long-polls beyond 60s stay an honest
+# residual); #381 Ghostery list fetches ride the full
+# upstreamFetch transport decision (relay routing works on
+# relay-only deployments) and load failures emit TRANSPORT
+# DIAG rows (no longer silent). sw.js 4326069120ccb9dc ->
+# c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
+# unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
+# Cargo-side pin stays a385fa9.
 # Pin 112: Zeolite dist b7c924e5a6bb658d92922a541fbcb03a3870d534
 # (from CI build 39847696942, Zeolite main c981e19a, all 5 jobs
 # green, app suite 1459 tests). Pin 112 ships the Injector
@@ -1101,12 +1122,6 @@ FROM debian:bookworm-slim AS zl-builder
 # natively plus a synchronous cur update, search/pathname
 # rebuild the virtual URL preserving the other components
 # and navigate.
-# Beta also ships the back/forward fix, LB #181 (the #122
-# port): the history idx travels inside load(); the old
-# separate updateTab wrote the new idx and then load()
-# overwrote it with the stale snapshot idx, so Back reloaded
-# the same entry forever and Forward never moved. Main
-# already carries the #122 fix.
 # sw.js 71d0bd6f016437e7 unchanged (626483 bytes);
 # bootstrap.js 20589f579aa89383 -> 7dfd6645656bab22
 # (34628 bytes; the CI bootstrap size budget rose
@@ -1168,34 +1183,33 @@ FROM debian:bookworm-slim AS zl-builder
 # stays a385fa9.
 # Pin 103: Zeolite dist ec7fd8fe27d7b10ffd7349e5a238cb1fd72bebc9
 # (from CI build 39636675089, Zeolite main 2b1633b, all 5 jobs
-# green, app suite 1411 tests). Beta rides the same engine bundle
-# as main pin 103 together with the #107 phase 2 UI seam port:
-# the host-gate fix (the /zlsw-register boot page joins
-# HOST_PATHS so the content-origin relay opens), the
-# decodeLegacyRoute client fallback, and the embedder URL/title
-# sync (zl:getEmbedder, zl:embedderOrigin, the boot-page
-# zlRegAsk handshake). sw.js c7cb3102e12f9e57 ->
-# ce02ad5c6c73bd90 (626093 bytes); bootstrap.js
-# e15f38fb1b1557e2 -> 37460e146d217cb7 (31406 bytes).
+# green, app suite 1411 tests). Pin 103 fixes the two roots of
+# the #107 phase 2 live gap: the fail-closed host gate (#170)
+# classified the /zlsw-register boot page as a proxied sender
+# and silently refused its host-only zl:relayRegister /
+# zl:wispRegister / zl:embedderOrigin registrations, so the
+# content-origin relay never opened and content loads rode the
+# wisp transport instead; decodeClientUrl now falls back to
+# decodeLegacyRoute so /zl/<b64u> clients decode on a
+# prefix-less (default /j/) worker. sw.js
+# 628614de5754a91f -> ce02ad5c6c73bd90 (626093 bytes);
+# bootstrap.js unchanged 37460e146d217cb7 (31406 bytes).
 # Cargo-side pin stays a385fa9.
-# Pin 101: Zeolite dist 15a049461aca31f1862e3f791990cfc5f18d72eb
-# (from CI build 39574090321, Zeolite main 45ed5449, all 5 jobs
-# green, app suite 1404 tests). Pin 101 carries the 2026-10-21
-# Zeolite fix wave: #385 expired navigation handles re-mint on
-# GET navigations (Zeolite 22c0755); #383 prel parents always
-# reach the handle form (a non-NAVH parent now mints a fresh
-# NAVH handle for the decoded destination too, instead of
-# parking the document on the opaque prel pathname); #382 the
-# 60s relay header deadline breach resolves null and emits a
-# TRANSPORT DIAG row so the caller falls back instead of
-# wedging (undeclared long-polls beyond 60s stay an honest
-# residual); #381 Ghostery list fetches ride the full
-# upstreamFetch transport decision (relay routing works on
-# relay-only deployments) and load failures emit TRANSPORT
-# DIAG rows (no longer silent). sw.js 4326069120ccb9dc ->
-# c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
-# unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
-# Cargo-side pin stays a385fa9.
+# Pin 102: Zeolite dist dc16a50c8e95cdc59a0460fd4ba5431861fb7bcc
+# (from CI build 39628337530, Zeolite main 0c809c2, all 5 jobs
+# green, app suite 1410 tests). Pin 102 carries the #107 phase 2
+# embedder URL/title sync: zl:getEmbedder (page-facing, in
+# PAGE_MESSAGES) answers an embedded frame with the registered
+# embedder origin plus THIS client's own SW-decoded virtual URL;
+# zl:embedderOrigin (host-only, the boot page's zlRegAsk
+# handshake) registers the embedder origin; the bootstrap gained
+# the embedsync module (posts {lb:"nav",url,title} to the parent
+# on load, vloc moves and title mutations) and the vloc
+# onVlocChange hook at its real-path choke points; the bootstrap
+# size gate rose 30400 -> 31744 for it. sw.js
+# c7cb3102e12f9e57 -> 628614de5754a91f (626076 bytes);
+# bootstrap.js e15f38fb1b1557e2 -> 37460e146d217cb7 (31406
+# bytes). Cargo-side pin stays a385fa9.
 # Pin 100 (re-pointed to carry ALL fixes): Zeolite dist 12d9f83c
 # (from CI build 39487725296, Zeolite main fb6f8fa0, all 5 jobs
 # green; bootstrap budget 30381/30400). Pin 100 first shipped
@@ -1706,6 +1720,22 @@ FROM debian:bookworm-slim AS zl-builder
 # commits no Cargo.lock (Zeolite #513); rustc and wasm-pack were
 # identical in both builds. Cargo-side pin stays d4ca407: no crates
 # changed.
+# Pin 139 (2026-10-30): dist cd11717 (Zeolite main 01bf05aa, CI run
+# 41136428811, all 5 jobs green) ships the storage wave (#557/#548/#555)
+# and the #543 fragment seams: page-cache entries carry Vary variant
+# metadata behind a fail-closed varyMatches gate (supported Vary
+# request headers finally cache; Vary:* stays refused), the page cache
+# holds a hard 60-entry bound with evict-before-put plus a fail-closed
+# pageCacheDisabled flag, and indexedDB.databases() is site-scoped in
+# both the page and worker realms. Navigations keep destination
+# fragments on the committed URL: mapped Location/Refresh routes carry
+# the fragment raw, marker/prel payloads stay fragment-free, and
+# decodeClientUrl joins the committed fragment (native hash wins over
+# a payload hash). sw.js c4208f42a1552246 -> 1b4a979dff9f3dbf
+# (702633 bytes); bootstrap.js 3936718bd9dcdd64 -> 77fb46f864491a2b
+# (41025 bytes; the Zeolite CI budget gate rose 40704 -> 41216 in
+# 4fd5870). Cargo-side pin unchanged: no crates changed (both waves
+# touched app/ and suite/ only).
 # Pin 140 (2026-10-30): dist afe08b6a (Zeolite main 59fb2bac, CI run
 # 41143099257, all 5 jobs green) ships the engine fix wave for
 # #558/#559/#560/#561: decodeQueryHandle strips every MAC-verifying
@@ -1716,11 +1746,10 @@ FROM debian:bookworm-slim AS zl-builder
 # back instead of parking on the 60 s header deadline, and the next
 # fetch re-registers), and extension background scripts run against
 # a sandboxed self (Tampermonkey 5.5.0).
-# sw.js c4208f42a1552246 ->
-# 53b198940dc5e311 (705406 bytes); bootstrap.js 3936718bd9dcdd64 ->
-# 77fb46f864491a2b (41025 bytes; the Zeolite CI budget gate rose
-# 40704 -> 41216 in 4fd5870). Cargo-side pin stays d4ca407: no
-# crates changed.
+# sw.js 1b4a979dff9f3dbf ->
+# 53b198940dc5e311 (705406 bytes); bootstrap.js unchanged
+# 77fb46f864491a2b (41025 bytes). Cargo-side pin unchanged: no crates
+# changed (app/ TS only).
 # Pin 141 (2026-10-30): dist 790178cb (Zeolite main 7d14bb41, CI run
 # 41147759573, all 5 jobs green) ships the residual fixes of the
 # #558-#561 wave: the vloc anchor strips every zlNavh token a page
@@ -2124,15 +2153,43 @@ FROM debian:bookworm-slim AS zl-builder
 # cascade, the #514/#545 wedge; the pin 135/151-161 precedent,
 # docs/ci-torture-wedge.md run 42246542499). Cargo-side pin stays
 # 5073f316 (app TS only, no crates changed).
-# Pin 164 (2026-11-07): dist 5881b90 (build 42422624039) jumps this
-# branch from pin 162, carrying pin 163's #633/#612/#640 fix wave
-# plus the #633 query-shape expired handle Referer recovery: the
-# deployed sign-in commits on the query shape (?zlNavh=), and an
-# expired committed query route lost the upstream Referer;
-# decodeQueryHandle gains the {expired} opt-in (committed decode
-# stays live-only) and forwardedHeaders derives the Referer from the
-# expired MAC-verified token (Zeolite 26926b6c on main). sw.js
-# 2337cd1084d158a0 -> 42d69f0827cbb2f7 (831503 bytes); bootstrap.js
+# Pin 163 (2026-11-07): dist 02e58ac (build 42383331239) ships the
+# #633/#612/#640 engine fix wave (Zeolite main 728ed78 + docs-only
+# wedge records): the route shape survives idle kills (an absent
+# zl:config knob keeps the live value, the query-routes flag
+# persists in the route-config KDL and restores on worker
+# restart), Referer, initiator and widget page-URL derivation
+# recover from an expired NAVH whose MAC still verifies while
+# committed navigation decode stays live-only (#633), a navguard
+# NAV marker inside a NAVH handle tail decodes as the engine route
+# it names instead of composing <site>/__zl_nav__/<b64> upstream
+# while a marker-shaped tail that does not decode keeps the honest
+# composition (#612), and the Discourse embed.js embed_url=
+# parameter virtualizes to the real page URL via referrerPageUrl,
+# mirroring the #565 Disqus seam, failing closed without a
+# decodable referrer (#640). Also carries the unwired Rust
+# rewrite crates zeolite-cookies (#614) and zeolite-csp (#615):
+# no engine byte differs from 728ed78's app. sw.js
+# 2337cd1084d158a0 -> 0c9c92048b2a0aaa (826132 bytes);
+# bootstrap.js unchanged 0c81efb9ba343dff. CI on 14ca12f and
+# f1a073b: rust/wasm/app/compat green; browser red with the
+# documented wedge signatures on both runs (the torture cascade
+# pair plus img#uni on 42381860014, the #96 NativeTransit hang
+# cascade on 42383331239; docs/ci-torture-wedge.md; the pin
+# 135/151-162 precedent, operator approved 2026-11-07).
+# Cargo-side pin stays 5073f316 (no crates in the server tree
+# changed; cookies/csp are unwired siblings). Deploy with a
+# cleared Render build cache.
+# Pin 164 (2026-11-07): dist 5881b90 (build 42422624039) ships the
+# #633 query-shape expired handle Referer recovery: the deployed
+# sign-in commits on the query shape (?zlNavh=), and an expired
+# committed query route lost the upstream Referer exactly like the
+# path shape the #633 seam wave already recovers. decodeQueryHandle
+# gains the {expired} opt-in (committed decode stays live-only) and
+# forwardedHeaders derives the Referer from the expired MAC-verified
+# token; tests cover opt-in recovery, the token-bound origin, tamper
+# fail-closed and the strip (Zeolite 26926b6c on main). sw.js
+# 0c9c92048b2a0aaa -> 42d69f0827cbb2f7 (831503 bytes); bootstrap.js
 # unchanged 0c81efb9ba343dff. CI on the pushed head: rust/wasm/app
 # green. Cargo-side pin stays 5073f316 (app TS only). Deploy with a
 # cleared Render build cache.
@@ -2172,20 +2229,42 @@ FROM debian:bookworm-slim AS zl-builder
 # its byte-identical twin green there and red at the torture
 # battery; docs/ci-torture-wedge.md). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-# Pin 167 (2026-11-11): dist b72324ac (build 43080960090) catches beta
-# up to Zeolite main f09b8e5: the #634 OAuth round-trip fix
-# (virtualAuthorizeTokenBody, Zeolite e8268db), the #645 Cloudflare
-# CSP fix (cspGate never gates /cdn-cgi/, Zeolite 93996d1), the #644
-# diagnostics fix (mid-stream body errors no longer masked as stalls),
-# and the #521 slice 3 DNR semantics (Zeolite f09b8e5): upgradeScheme
-# on the redirect seam, allowAllRequests frame bypass,
-# declarativeNetRequestFeedback permission gate on getMatchedRules/
-# onRuleMatchedDebug. sw.js d066a19cbee1969a -> 09b6ee10ce6b3f18
-# (888041 bytes); bootstrap.js unchanged 0ddd6edd9485c8ab (51030
-# bytes). CI on f09b8e5: rust/wasm/app/compat green; the browser
-# battery closed red on the documented rotating wedge only
-# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
-# only). Deploy with a cleared Render build cache.
+# Pin 167 (2026-11-11): dist f44176c4 (build 43018138385) deploys the
+# #634 OAuth round-trip fix: the #431 seam rewrote only the authorize
+# request's redirect_uri, so AAD bound the code to the page origin and
+# then refused the token exchange presenting the engine origin
+# (AADSTS50011); the urlencoded token POST body is now rewritten with
+# the identical match set and honest-fallback rule
+# (virtualAuthorizeTokenBody + isAuthorizeTokenEndpoint, Zeolite
+# e8268db). Also carries the #645 Cloudflare fix (cspGate never gates
+# the /cdn-cgi/ namespace and an unsupported directive no longer
+# falls back to default-src; Perplexity's challenge page, Zeolite
+# 93996d1), the #644 diagnostics fix (a mid-stream body error is no
+# longer masked as a stall), the extension-surface waves
+# (#517/#518/#521/#523), the #643 blocked-notice marker and DNR
+# engine-internal re-entry + getMatchedRules. sw.js
+# d066a19cbee1969a -> 2b29ead4488f92c2 (886531 bytes); bootstrap.js
+# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on 137d0751:
+# rust/wasm/app/compat green; the browser battery closed red on the
+# documented rotating wedge (docs/ci-torture-wedge.md). Cargo-side
+# pin stays 5073f316 (app TS only). Deploy with a cleared Render
+# build cache.
+# Pin 168 (2026-11-11): dist b72324ac (build 43080960090) deploys the
+# #521 slice 3 DNR semantics (Zeolite f09b8e5): upgradeScheme rides the
+# slice-2 redirect seam (scheme-derived target, engine-internal re-entry,
+# host-permission gated), allowAllRequests arms a bounded TTL-scoped
+# frame bypass keyed on document origin (documented divergence from
+# Chrome's frame-subtree identity), and getMatchedRules/
+# onRuleMatchedDebug are mounted only with the
+# declarativeNetRequestFeedback permission. sw.js
+# 2b29ead4488f92c2 -> 09b6ee10ce6b3f18 (888041 bytes); bootstrap.js
+# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on f09b8e5: run
+# 43080960090 rust/wasm/app/compat green; the browser battery closed
+# red on the documented rotating wedge only (docs/ci-torture-wedge.md);
+# the retrigger run 43087051481 failed app on the documented one-off
+# ws-shim MIME flake (#493) while the original run app suite was green.
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
+# Render build cache.
 # Pin 169 (2026-11-11): dist ad1ff922 (build 43105043278) deploys the
 # #648 devtools self-heal (Zeolite 12258b0): a redundant or
 # never-activated registration left the /zlsw/devtools.html page
@@ -2210,7 +2289,22 @@ FROM debian:bookworm-slim AS zl-builder
 # bytes). CI on da61925: rust/wasm/app/compat green (dist published).
 # Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
 # Render build cache.
-ARG ZEOLITE_COMMIT=7c24b313757467a284149252a7cccd0e25b62090
+# Pin 171 (2026-11-12): dist 6b76707 (build 43187277069) deploys the
+# Zeolite aab00e0c lineage since pin 170: the #556 fresh-session upload
+# controller fix (POST uploads arm the streaming upload seam instead of
+# silently materializing via Request.arrayBuffer()), the 3.4.2
+# Ferrierite release with the #647 bounded redacted 4xx body-prefix
+# capture (#651), and the #652 guest clients.matchAll fix
+# (install-time matchAll is [] natively; the unconditional live-context
+# enumeration broke the guest-sw oracle twice).
+# sw.js c88466a3ec1898c2 -> acdd65650003e6db (889657 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on
+# aab00e0c: run 43187277069 rust/wasm/app/compat green (dist
+# published); the browser battery closed red on the goto-timeout
+# cascade class (#514, docs/ci-torture-wedge.md). Cargo-side pin stays
+# 5073f316 (no zeolite-server crate change since). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=6b76707edde0c289a0ee4a61404eee6af642d99
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2218,8 +2312,12 @@ WORKDIR /bundle
 # GitHub archive 503/504 truncations killed pin builds; the pipe to
 # tar also silently disables curl --retry (stdout is not rewindable), so
 # fetch to a file first, retry, then extract.
+# Per-sha archives 404 for CI-created dist commits (codeload cannot
+# generate them; the pin 171 deploy failed 5x404 on the archive/<sha>
+# URL). The dist branch head IS the pinned commit at bump time; the
+# sha-verification gate below fails the build honestly if it moved.
 RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
-      -o /zlsrc.tar.gz "https://github.com/lobsterbs/Zeolite/archive/${ZEOLITE_COMMIT}.tar.gz" \
+      -o /zlsrc.tar.gz "https://codeload.github.com/lobsterbs/Zeolite/tar.gz/refs/heads/dist" \
  && tar xzf /zlsrc.tar.gz --strip-components=1 && rm -f /zlsrc.tar.gz
 # The libcurl transport (TLS termination for the wisp hop): pulled
 # from npm at build time, same pinned version the Zeolite CI vendors.
@@ -2273,7 +2371,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c88466a3ec1898c2 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=acdd65650003e6db ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
@@ -2291,3 +2389,5 @@ RUN useradd --system --uid 10001 --no-create-home appuser \
  && chown -R appuser:appuser /app
 USER appuser
 ENTRYPOINT ["/app/lobster-server"]
+
+
