@@ -3260,7 +3260,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
     );
     let lb_access = access_password().is_some();
     let wisp_auth = wisp_auth_env().is_some();
-    let lb_version = format!("{} Tungsten", env!("CARGO_PKG_VERSION"));
+    let lb_version = format!("{} Iridium", env!("CARGO_PKG_VERSION"));
     let body = format!(
         "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"lbAccess\":{},\"wispAuth\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
