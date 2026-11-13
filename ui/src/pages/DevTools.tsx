@@ -10,6 +10,10 @@
    m3e-card components: a card per concern, content above a divider
    with inline action buttons under it.
 
+   Wave 100 (user request 2026-11-13): console and network render
+   bare like diagnostics, the level filter chips are gone, and all
+   three pages stay mounted ([hidden] toggle, no remount churn).
+
    Proxied pages ride the engine's split content origin, so the frame
    is usually cross-origin to the app: iframe.contentWindow.eval then
    throws SecurityError, and the console says so together with the
@@ -96,7 +100,6 @@ export type DtState = {
   console: ConsoleEntry[];
   net: NetEntry[];
   fails: ResFailEntry[];
-  levelFilter: string;
   consoleFilter: string;
   netFilter: string;
   history: string[];
@@ -111,7 +114,6 @@ export function emptyDt(): DtState {
     console: [],
     net: [],
     fails: [],
-    levelFilter: "all",
     consoleFilter: "",
     netFilter: "",
     history: [],
@@ -216,27 +218,34 @@ const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
   malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
 };
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }: {
   clientId?: string;
   source?: EngineSource;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
   statusRef: MutableRefObject<DiagnosticsStatus | null>;
+  active: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(clientId, source);
   /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
-  useEffect(() => pollDocumentDiagnostics(
-    diagnosticsScope(clientId, source), zlSend, zlContentQuery,
-    (next, why) => {
-      snapshotRef.current = next;
-      setSnapshot(next);
-      const s = why ?? (next ? "ok" : "unavailable");
-      statusRef.current = s;
-      setStatus(s);
-    },
-  ), [clientId, source, snapshotRef, statusRef]);
+  useEffect(() => {
+    /* Poll only while the Diagnostics page is open (user request
+       2026-11-13): a hidden 5 s loop burns control-plane round trips
+       for a page the user is not looking at. */
+    if (!active) return;
+    return pollDocumentDiagnostics(
+      diagnosticsScope(clientId, source), zlSend, zlContentQuery,
+      (next, why) => {
+        snapshotRef.current = next;
+        setSnapshot(next);
+        const s = why ?? (next ? "ok" : "unavailable");
+        statusRef.current = s;
+        setStatus(s);
+      },
+    );
+  }, [clientId, source, snapshotRef, statusRef, active]);
 
   if (!scope) {
     return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
@@ -303,11 +312,15 @@ function fmtBytes(n: number): string {
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function ZeoliteDownloads() {
+function ZeoliteDownloads({ active }: { active: boolean }) {
   const [dls, setDls] = useState<ZlDownload[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
+    /* Poll only while the Network page is open: the registry is a
+       mirror, not a live tap, and a hidden poll burns control-plane
+       round trips every 2 s. */
+    if (!active) return;
     let dead = false;
     const tick = async () => {
       const r = await zlSend({ type: "zl:downloads" });
@@ -319,7 +332,7 @@ function ZeoliteDownloads() {
       dead = true;
       clearInterval(iv);
     };
-  }, []);
+  }, [active]);
 
   if (!dls || dls.length === 0) return null;
   const cancel = async (id: string) => {
@@ -704,7 +717,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     k === "error" ? "error" : k === "warn" ? "warn" : k === "info" ? "info" : k === "debug" ? "debug" : "log";
 
   const consoleEntries = dt.console.filter((c) => {
-    if (dt.levelFilter !== "all" && levelOf(c.kind) !== dt.levelFilter) return false;
     if (dt.consoleFilter && !c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase())) return false;
     return true;
   });
@@ -797,157 +809,130 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           })}
         </div>
 
-        {dt.page === "console" && (
-          <>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Console output">
-              <div slot="content" className="lb-dt-card-body">
-                <div className="lb-console" ref={consoleRef}>
-                  {/* #94: quiet empty state; a filtered-to-nothing list says
-                      so instead of implying nothing was ever logged. */}
-                  {consoleEntries.length === 0 && (
-                    <p className="lb-muted lb-console-empty">
-                      {dt.console.length > 0 ? "No matching entries." : "Console output will appear here."}
-                    </p>
-                  )}
-                  {consoleEntries.map((c) => (
-                    <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
-                      <span className="lb-console-ts">{ts(c.ts)}</span>
-                      <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
-                      <span className="lb-console-text">{c.text}</span>
-                    </div>
-                  ))}
-                </div>
-                <m3e-divider />
-                <div className="lb-dt-toolbar">
-                  {/* #262: filter chips replace the select; the active
-                      level is visible at a glance and one press away. */}
-                  <div className="lb-dt-chips" role="group" aria-label="Log level filter">
-                    <m3e-chip-set>
-                      {([["all", "All"], ["log", "log"], ["info", "info"], ["warn", "warn"], ["error", "error"], ["debug", "debug"]] as const).map(([v, l]) => (
-                        <m3e-chip
-                          key={v}
-                          selected={dt.levelFilter === v ? "" : undefined}
-                          onClick={() => setDt({ levelFilter: v })}
-                        >
-                          {l}
-                        </m3e-chip>
-                      ))}
-                    </m3e-chip-set>
-                  </div>
-                  <input
-                    className="lb-input"
-                    placeholder="Filter"
-                    aria-label="Filter console output"
-                    value={dt.consoleFilter}
-                    onChange={(e) => setDt({ consoleFilter: e.target.value })}
-                  />
-                  <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
-                    <m3e-icon name="mop" aria-hidden={true} />
-                  </m3e-icon-button>
-                  <m3e-icon-button
-                    aria-label="Copy console output"
-                    onClick={() =>
-                      void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n")).then((ok) => {
-                        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                          M3eSnackbar.open(ok ? "Console copied" : "Copy failed", { duration: 3000 });
-                        }
-                      })
-                    }
-                  >
-                    <m3e-icon name="content_copy" aria-hidden={true} />
-                  </m3e-icon-button>
-                </div>
+        {/* Console and Network render bare like Diagnostics (user
+            request 2026-11-13): the filled cards are gone and the
+            content sits directly in the sheet. All three pages stay
+            mounted; the sub-tool switch toggles [hidden], so flipping
+            sub-tools no longer unmounts and remounts everything. */}
+        <div className="lb-dt-page" hidden={dt.page !== "console"}>
+          <div className="lb-console" ref={consoleRef}>
+            {/* #94: quiet empty state; a filtered-to-nothing list says
+                so instead of implying nothing was ever logged. */}
+            {consoleEntries.length === 0 && (
+              <p className="lb-muted lb-console-empty">
+                {dt.console.length > 0 ? "No matching entries." : "Console output will appear here."}
+              </p>
+            )}
+            {consoleEntries.map((c) => (
+              <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
+                <span className="lb-console-ts">{ts(c.ts)}</span>
+                <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
+                <span className="lb-console-text">{c.text}</span>
               </div>
-            </m3e-card>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Console input">
-              <div slot="content" className="lb-dt-card-body">
-                <div className="lb-console-input">
-                  {/* m3e-textarea-autosize grows the console input to fit
-                      multi-line expressions (Shift+Enter). */}
-                  <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
-                  <textarea
-                    ref={inputRef}
-                    id="lb-dt-console-in"
-                    className="lb-input lb-console-area"
-                    aria-label="Console input"
-                    value={cmd}
-                    rows={1}
-                    onChange={(e) => setCmd(e.target.value)}
-                    onKeyDown={keyDown}
-                  />
-                  <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
-                </div>
-              </div>
-            </m3e-card>
-          </>
-        )}
+            ))}
+          </div>
+          <m3e-divider />
+          <div className="lb-dt-toolbar">
+            <input
+              className="lb-input"
+              placeholder="Filter"
+              aria-label="Filter console output"
+              value={dt.consoleFilter}
+              onChange={(e) => setDt({ consoleFilter: e.target.value })}
+            />
+            <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
+              <m3e-icon name="mop" aria-hidden={true} />
+            </m3e-icon-button>
+            <m3e-icon-button
+              aria-label="Copy console output"
+              onClick={() =>
+                void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("
+")).then((ok) => {
+                  if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                    M3eSnackbar.open(ok ? "Console copied" : "Copy failed", { duration: 3000 });
+                  }
+                })
+              }
+            >
+              <m3e-icon name="content_copy" aria-hidden={true} />
+            </m3e-icon-button>
+          </div>
+          <div className="lb-console-input">
+            {/* m3e-textarea-autosize grows the console input to fit
+                multi-line expressions (Shift+Enter). */}
+            <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
+            <textarea
+              ref={inputRef}
+              id="lb-dt-console-in"
+              className="lb-input lb-console-area"
+              aria-label="Console input"
+              value={cmd}
+              rows={1}
+              onChange={(e) => setCmd(e.target.value)}
+              onKeyDown={keyDown}
+            />
+            <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
+          </div>
+        </div>
 
-        {dt.page === "network" && (
-          <>
-            <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Network requests">
-              <div slot="content" className="lb-dt-card-body">
-                <p className="lb-muted" style={{ margin: "0 8px 4px" }}>
-                  Requests the page's JavaScript makes (fetch/XHR) plus element load failures, captured live
-                  from the frame. Headers, byte sizes and bodies are not exposed to the page context by the
-                  browser - this is a page-level view, not a network tap.
-                </p>
-                <div className="lb-net">
-                  {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
-                  {pagedNet.map((n) => (
-                    <details key={n.id} className="lb-net-row">
-                      <summary className="lb-net-summary">
-                        <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
-                          {n.error ? "ERR" : n.status}
-                        </span>
-                        <span className="lb-net-method">{n.method}</span>
-                        <span className="lb-net-url">{n.url}</span>
-                        {n.dur !== undefined && <span className="lb-net-dur">{n.dur} ms</span>}
-                      </summary>
-                      <div className="lb-net-detail">
-                        <div>URL: {n.url}</div>
-                        <div>Method: {n.method}</div>
-                        <div>Status: {n.error ? n.error : n.status}</div>
-                        {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
-                        <div>Time: {ts(n.ts)}</div>
-                        <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
-                      </div>
-                    </details>
-                  ))}
+        <div className="lb-dt-page" hidden={dt.page !== "network"}>
+          <div className="lb-net">
+            {netEntries.length === 0 && <p className="lb-muted">No requests captured yet.</p>}
+            {pagedNet.map((n) => (
+              <details key={n.id} className="lb-net-row">
+                <summary className="lb-net-summary">
+                  <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
+                    {n.error ? "ERR" : n.status}
+                  </span>
+                  <span className="lb-net-method">{n.method}</span>
+                  <span className="lb-net-url">{n.url}</span>
+                  {n.dur !== undefined && <span className="lb-net-dur">{n.dur} ms</span>}
+                </summary>
+                <div className="lb-net-detail">
+                  <div>URL: {n.url}</div>
+                  <div>Method: {n.method}</div>
+                  <div>Status: {n.error ? n.error : n.status}</div>
+                  {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
+                  <div>Time: {ts(n.ts)}</div>
+                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
                 </div>
-                <m3e-divider />
-                <div className="lb-dt-toolbar">
-                  <input
-                    className="lb-input"
-                    placeholder="Filter by URL"
-                    aria-label="Filter network requests"
-                    value={dt.netFilter}
-                    onChange={(e) => setDt({ netFilter: e.target.value })}
-                  />
-                  <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
-                    <m3e-icon name="mop" aria-hidden={true} />
-                  </m3e-icon-button>
-                  {netEntries.length > netPageSize && (
-                    <m3e-paginator
-                      length={netEntries.length}
-                      page-size={netPageSize}
-                      page-sizes="25,50,100"
-                      aria-label="Network log pages"
-                      {...{ class: "lb-dt-pager", ref: pagerRef }}
-                    />
-                  )}
-                </div>
-              </div>
-            </m3e-card>
-            <ZeoliteDownloads />
-          </>
-        )}
+              </details>
+            ))}
+          </div>
+          <m3e-divider />
+          <div className="lb-dt-toolbar">
+            <input
+              className="lb-input"
+              placeholder="Filter by URL"
+              aria-label="Filter network requests"
+              value={dt.netFilter}
+              onChange={(e) => setDt({ netFilter: e.target.value })}
+            />
+            <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
+              <m3e-icon name="mop" aria-hidden={true} />
+            </m3e-icon-button>
+            {netEntries.length > netPageSize && (
+              <m3e-paginator
+                length={netEntries.length}
+                page-size={netPageSize}
+                page-sizes="25,50,100"
+                aria-label="Network log pages"
+                {...{ class: "lb-dt-pager", ref: pagerRef }}
+              />
+            )}
+          </div>
+          <ZeoliteDownloads active={dt.page === "network"} />
+        </div>
 
-        {/* Diagnostics renders bare (user request 2026-11-11): the card
-            wrapper is gone, the component sits directly in the bottom
-            sheet like the rest of the page content. */}
-        {dt.page === "diagnostics" && (
-          <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
-        )}
+        <div className="lb-dt-page" hidden={dt.page !== "diagnostics"}>
+          <ZeoliteDiagnostics
+            clientId={dt.engineClientId}
+            source={dt.engineSource}
+            snapshotRef={snapshotRef}
+            statusRef={diagStatusRef}
+            active={dt.page === "diagnostics"}
+          />
+        </div>
       </div>
     </m3e-bottom-sheet>
   );

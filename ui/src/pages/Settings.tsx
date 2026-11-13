@@ -372,6 +372,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   const vSplit = lbVersion.indexOf(" ");
   const versionNum = vSplit > 0 ? lbVersion.slice(0, vSplit) : lbVersion;
   const versionName = vSplit > 0 ? lbVersion.slice(vSplit + 1) : "";
+  const engineName = settings.proxyEngine === "scramjet" ? "ScramJet" : "Zeolite";
   return (
     <section className="lb-view-content" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
@@ -409,6 +410,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               <span className="lb-hero-version">
                 <span className="lb-hero-version-num">{build ? versionNum : "unknown"}</span>
                 {versionName ? <span className="lb-hero-version-name">{versionName}</span> : null}
+              </span>
+              <span className="lb-hero-engine">
+                <span className="lb-hero-engine-label">Engine</span>
+                {engineName}
               </span>
             </div>
           </m3e-card>
