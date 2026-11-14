@@ -314,7 +314,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
-.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
