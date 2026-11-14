@@ -2304,7 +2304,22 @@ FROM debian:bookworm-slim AS zl-builder
 # cascade class (#514, docs/ci-torture-wedge.md). Cargo-side pin stays
 # 5073f316 (no zeolite-server crate change since). Deploy with a
 # cleared Render build cache.
-ARG ZEOLITE_COMMIT=6b76707edde0c289a0ee4a61404eee6af642d99
+# Pin 172 (2026-11-14): dist 17442ed8 (build 43598607246) deploys the
+# download-registry destination gate (Zeolite cb15413): only a
+# navigation (request destination "document") registers an attachment
+# response, so background fetches that carry Content-Disposition:
+# attachment (beacons, fetch(), images, iframes) stop forging f.txt
+# and .bin rows no user asked for; the doubleclick f.txt host filter
+# stays as the second layer. sw.js acdd65650003e6db ->
+# 0e605bbc1001e94b (889709 bytes); bootstrap.js unchanged
+# 0ddd6edd9485c8ab (51030 bytes). CI on cb154132: wasm and app green
+# (the app suite is the dist-publish gate); rust closed red on the
+# pre-existing clippy failure (red on the two runs before this push
+# too, no crates touched). Cargo-side pin stays 5073f316 (app TS
+# only; note the zeolite-server crate moved on main with 730e562a,
+# the wisp v1 send window: ride it on the next cargo-side bump).
+# Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=17442ed812b4e0cd69425a18ba9b5e516b806fff
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2371,7 +2386,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=acdd65650003e6db ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0e605bbc1001e94b ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
