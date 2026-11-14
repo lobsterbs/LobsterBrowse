@@ -60,10 +60,10 @@ ok(theme.includes(".lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-
 
 /* Settings uniformity: panels and inline cards share one rhythm. */
 ok(theme.includes("--m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);"), "panel header padding harmonized, roomier (wave 104)");
-ok(theme.includes("--m3e-expansion-panel-content-padding: var(--md-sys-measurement-space200);"), "panel body padding matches the header rhythm (wave 105)");
+ok(theme.includes("--m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);"), "panel body padding keeps the 12/16/16 rhythm (wave 107)");
 ok(theme.includes("--m3e-expansion-header-collapsed-height: auto;") && theme.includes("--m3e-expansion-header-expanded-height: auto;"), "panel header height tokens go auto, the 48px clip is gone (wave 105)");
-ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space200) 0; }"), "panel headers carry the roomier vertical rhythm (wave 104)");
-ok(theme.includes("min-height: 64px;"), "inline card min-height grew with the panel headers (wave 104)");
+ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }"), "panel headers carry the compact 12px rhythm (wave 107)");
+ok(theme.includes("min-height: 56px;"), "inline card min-height matches the collapsed panel header (#274, wave 107)");
 
 const tabs = read("src/browser/TabSwitcherCard.tsx");
 ok(tabs.includes("<m3e-avatar"), "tab rows use m3e-avatar");
