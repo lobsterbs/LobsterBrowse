@@ -2319,7 +2319,17 @@ FROM debian:bookworm-slim AS zl-builder
 # only; note the zeolite-server crate moved on main with 730e562a,
 # the wisp v1 send window: ride it on the next cargo-side bump).
 # Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=17442ed812b4e0cd69425a18ba9b5e516b806fff
+# Pin 173 (2026-11-14): dist e34b1024 (build 43639864619) deploys the
+# Zeolite main cde7cf0d pair: DL.load() purges persisted ad-artefact
+# rows (the f.txt/.bin ghost entries registered before the c3268850
+# filter aged out of the IndexedDB ring), and the JS body buffering
+# cap goes 2 MiB -> 8 MiB (#456 bound) so multi-megabyte SPA entry
+# bundles (icloud.com main.js, the duck.ai entry script #663) get
+# their specifier/URL-literal passes instead of verbatim RAW_BODY_CAP
+# serving. sw.js 0e605bbc1001e94b -> 528d640167af0297 (889851 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side
+# pin stays 5073f316. Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=e34b102472afd47c26c0d30544ec86704773d216
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2386,7 +2396,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=0e605bbc1001e94b ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=528d640167af0297 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
