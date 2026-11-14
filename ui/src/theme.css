@@ -234,7 +234,7 @@ m3e-nav-rail {
 /* Settings (global redesign, user request 2026-11-07): the page is a
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
-.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }
+.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space200) 0; }
 .lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
@@ -263,9 +263,9 @@ m3e-nav-rail {
   /* Wave 85 uniformity: the panel header and body align to the same
      12px inline rhythm as the inline row cards, so both card shapes
      read as one family with identical text margins. */
-  --m3e-expansion-header-padding-left: var(--md-sys-measurement-space150);
-  --m3e-expansion-header-padding-right: var(--md-sys-measurement-space150);
-  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150) var(--md-sys-measurement-space150);
+  --m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);
+  --m3e-expansion-header-padding-right: var(--md-sys-measurement-space200);
+  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
   /* Wave 88: the panel surface is frosted glass like every other
      card (user request 2026-11-08). Wave 89: the host carries the
      panel shape so the frost halo is rounded, not a square grey
@@ -290,8 +290,8 @@ m3e-nav-rail {
   /* Roomier rows (user request 2026-11-13): 56px tall with a taller
      top pad, so the controls stop feeling cramped against the
      roomier panel headers. */
-  min-height: 56px;
-  padding: var(--md-sys-measurement-space125) var(--md-sys-measurement-space150);
+  min-height: 64px;
+  padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
 background: var(--lb-glass-tint);
 border-radius: 20px;
   box-sizing: border-box;
