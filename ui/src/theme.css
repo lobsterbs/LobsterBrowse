@@ -234,7 +234,7 @@ m3e-nav-rail {
 /* Settings (global redesign, user request 2026-11-07): the page is a
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
-.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }
+.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space200) 0; }
 .lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
@@ -263,11 +263,18 @@ m3e-nav-rail {
   /* Wave 85 uniformity: the panel header and body align to the same
      12px inline rhythm as the inline row cards, so both card shapes
      read as one family with identical text margins. */
-  /* #274: the shared rhythm steps up one token so every option card
-     breathes: 16px headers, 16/20/20px bodies. */
   --m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space200);
-  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
+  /* Wave 105 (user request 2026-11-14): the expansion header host pins
+     its own height through --m3e-expansion-header-collapsed-height and
+     --m3e-expansion-header-expanded-height (defaults 48px/64px), which
+     clipped the roomier setp-head into a 48px band with the headline
+     and supporting text painting past the card edges. Both tokens go
+     auto so the header sizes to its own content, and the body padding
+     matches the header 16px rhythm on every edge. */
+  --m3e-expansion-header-collapsed-height: auto;
+  --m3e-expansion-header-expanded-height: auto;
+  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space200);
   /* Wave 88: the panel surface is frosted glass like every other
      card (user request 2026-11-08). Wave 89: the host carries the
      panel shape so the frost halo is rounded, not a square grey
@@ -287,13 +294,14 @@ m3e-nav-rail {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--md-sys-measurement-space75) var(--md-sys-measurement-space200);
+  gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
   width: 100%;
-  /* Wave 85 uniformity, #274: matches the collapsed expansion-panel
-     header height, so inline rows and collapsed panels read as the
-     same card size; the padding steps up with the panel rhythm. */
-  min-height: 56px;
-  padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
+  /* Roomier rows (user request 2026-11-13, wave 105): 64px
+     min-height with an even 16px inner pad on every edge, so the
+     two-line rows stop feeling cramped against the roomier panel
+     headers. */
+  min-height: 64px;
+  padding: var(--md-sys-measurement-space200);
 background: var(--lb-glass-tint);
 border-radius: 20px;
   box-sizing: border-box;
@@ -316,7 +324,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
-.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
+.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space400); }
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
@@ -1251,16 +1259,6 @@ border-radius: var(--m3e-shape-lg);
   to { opacity: 1; transform: scale(1); }
 }
 .lb-newtab { animation: lb-fade-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
-
-/* ---- Settings: About / Build ---- */
-.lb-about { margin-top: var(--md-sys-measurement-space100); }
-/* Build facts as M3E-style chips: one pill per component, name muted,
-   value on-surface. Hashes use the monospace family so they read as
-   identifiers, not prose. */
-
-
-
-
 
 /* ---- DevTools diagnostics ---- */
 .lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75, 6px); margin-bottom: var(--md-sys-measurement-space100, 8px); }
@@ -2502,110 +2500,19 @@ background: var(--lb-glass-tint);
 /* Extension import: honest indeterminate busy line. */
 .lb-import-progress { margin-top: var(--md-sys-measurement-space100, 8px); }
 .lb-import-progress m3e-linear-progress-indicator { width: 100%; }
-/* DevTools console filter chips. */
-.lb-dt-chips { display: flex; flex-wrap: wrap; }
-.lb-dt-chips m3e-chip { cursor: pointer; }
 /* AI: paragraph reveal ramp on the streaming answer's newest block. */
 .lb-ai-md-stream .lb-md > :last-child { animation: lb-ai-para var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard, ease); }
 @keyframes lb-ai-para { from { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
   .lb-ai-md-stream .lb-md > :last-child { animation: none; }
 }
-/* ---- Settings: About hero card (user request 2026-11-11) ----
-   A real m3e-card (variant filled) at the very top of Settings: the
-   dynamic palette's surface-container ground, the ASCII wordmark, the
-   version (number and codename) and the running engine. The background
-   shapes are real m3e-shape elements - size and container color ride
-   the component's own --m3e-shape-* tokens. Decorative only
-   (aria-hidden in Settings.tsx); the card clips the spill. */
-m3e-card.lb-about-hero {
-  --m3e-card-padding: 0;
-  --m3e-card-shape: 20px;
-  /* Neutral ground like the expressive-profile hero: container colors
-     read against surface-container without fighting a tint. */
-  --m3e-filled-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
-  --m3e-filled-card-text-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
-  position: relative;
-  overflow: hidden;
-  /* The rounded corners live on the shadow surface; without a matching
-     host radius, overflow:hidden clips at the host RECTANGLE and the
-     overflowing shapes paint square corners over the right edge
-     (user report 2026-11-12). */
-  border-radius: 20px;
-  margin-bottom: var(--md-sys-measurement-space150);
-}
-.lb-about-hero-shapes { position: absolute; inset: 0; pointer-events: none; }
-.lb-about-hero > pre,
-.lb-about-hero > .lb-about-hero-meta { position: relative; }
-.lb-hero-shape { position: absolute; display: block; }
-/* Refined composition (user request 2026-11-11): one large clover
-   spills off the top-right corner well clear of the wordmark, a sunny
-   anchors the bottom edge, a small clover rides the right edge. Full
-   container-color strength, slow deliberate motion. */
-.lb-hero-shape-a {
-  width: 140px;
-  --m3e-shape-container-color: var(--md-sys-color-primary-container);
-  top: -38px; right: -46px;
-  animation: lb-hero-spin 64s linear infinite;
-}
-.lb-hero-shape-b {
-  width: 64px;
-  --m3e-shape-container-color: var(--md-sys-color-tertiary-container);
-  bottom: -18px; right: 168px;
-  animation: lb-hero-bob 9s ease-in-out infinite;
-}
-.lb-hero-shape-c {
-  width: 30px;
-  --m3e-shape-container-color: var(--md-sys-color-secondary-container);
-  bottom: 52px; right: -9px;
-  animation: lb-hero-spin-r 32s linear infinite;
-}
-@keyframes lb-hero-spin { to { transform: rotate(360deg); } }
-@keyframes lb-hero-spin-r { to { transform: rotate(-360deg); } }
-@keyframes lb-hero-bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-8px) rotate(10deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lb-hero-shape-a, .lb-hero-shape-b, .lb-hero-shape-c { animation: none; }
-}
-.lb-about-hero-logo {
-  margin: 0;
-  padding: var(--md-sys-measurement-space250) var(--md-sys-measurement-space250) 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: clamp(6px, 2.2vw, 11px);
-  line-height: 1.05;
-  white-space: pre;
-  overflow-x: auto;
-}
-.lb-about-hero-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space125) var(--md-sys-measurement-space250) var(--md-sys-measurement-space200);
-}
-.lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
-.lb-hero-version-num {
-  font-size: var(--md-sys-typescale-display-small-font-size, 32px);
-  /* Expressive display recipe (token above): max optical size, real
-     width, weight 760. Google Sans Flex runs wght 1-1000 and wdth
-     25-151 (the earlier "wdth clamps at 100" claim was wrong). */
-  font-variation-settings: var(--lb-fvs-display);
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-.lb-hero-version-name {
-  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
-  font-variation-settings: "wght" var(--lb-wght-emph);
-  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
-}
 
-/* Console, network and diagnostics render bare in the DevTools
-   sheet (user request 2026-11-11/14): the old card's height cap moves
-   to the direct child of the persistent page wrapper. */
-.lb-dt-page > .lb-console, .lb-dt-page > .lb-net { max-height: 38vh; }
+/* DevTools pages stay mounted; the sub-tool switch toggles [hidden]
+   (user request 2026-11-13): no unmount/remount churn between
+   sub-tools. The old height cap moves to the page sections. */
+.lb-dt-page { display: flex; flex-direction: column; gap: 18px; }
+.lb-dt-page[hidden] { display: none; }
+.lb-dt-page .lb-console, .lb-dt-page .lb-net { max-height: 38vh; }
 
 /* Disabled tool buttons grey out (user request 2026-11-11): the
    Eruda button in DevTools is disabled when /eruda.js is not

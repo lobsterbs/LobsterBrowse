@@ -10,6 +10,10 @@
    m3e-card components: a card per concern, content above a divider
    with inline action buttons under it.
 
+   Wave 100 (user request 2026-11-13): console and network render
+   bare like diagnostics, the level filter chips are gone, and all
+   three pages stay mounted ([hidden] toggle, no remount churn).
+
    Proxied pages ride the engine's split content origin, so the frame
    is usually cross-origin to the app: iframe.contentWindow.eval then
    throws SecurityError, and the console says so together with the
@@ -214,27 +218,34 @@ const DIAG_STATUS_TEXT: Record<DiagnosticsStatus, string> = {
   malformed: "The diagnostics reply was malformed. Retrying every 5 seconds; reload the page if this persists.",
 };
 
-function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef }: {
+function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }: {
   clientId?: string;
   source?: EngineSource;
   snapshotRef: MutableRefObject<DiagnosticsSnapshot | null>;
   statusRef: MutableRefObject<DiagnosticsStatus | null>;
+  active: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
   const scope = diagnosticsScope(clientId, source);
   /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
-  useEffect(() => pollDocumentDiagnostics(
-    diagnosticsScope(clientId, source), zlSend, zlContentQuery,
-    (next, why) => {
-      snapshotRef.current = next;
-      setSnapshot(next);
-      const s = why ?? (next ? "ok" : "unavailable");
-      statusRef.current = s;
-      setStatus(s);
-    },
-  ), [clientId, source, snapshotRef, statusRef]);
+  useEffect(() => {
+    /* Poll only while the Diagnostics page is open (user request
+       2026-11-13): a hidden 5 s loop burns control-plane round trips
+       for a page the user is not looking at. */
+    if (!active) return;
+    return pollDocumentDiagnostics(
+      diagnosticsScope(clientId, source), zlSend, zlContentQuery,
+      (next, why) => {
+        snapshotRef.current = next;
+        setSnapshot(next);
+        const s = why ?? (next ? "ok" : "unavailable");
+        statusRef.current = s;
+        setStatus(s);
+      },
+    );
+  }, [clientId, source, snapshotRef, statusRef, active]);
 
   if (!scope) {
     return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
@@ -305,11 +316,15 @@ function fmtBytes(n: number): string {
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function ZeoliteDownloads() {
+function ZeoliteDownloads({ active }: { active: boolean }) {
   const [dls, setDls] = useState<ZlDownload[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
+    /* Poll only while the Network page is open: the registry is a
+       mirror, not a live tap, and a hidden poll burns control-plane
+       round trips every 2 s. */
+    if (!active) return;
     let dead = false;
     const tick = async () => {
       const r = await zlSend({ type: "zl:downloads" });
@@ -321,7 +336,7 @@ function ZeoliteDownloads() {
       dead = true;
       clearInterval(iv);
     };
-  }, []);
+  }, [active]);
 
   if (!dls || dls.length === 0) return null;
   const cancel = async (id: string) => {
@@ -706,9 +721,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const levelOf = (k: ConsoleEntry["kind"]) =>
     k === "error" ? "error" : k === "warn" ? "warn" : k === "info" ? "info" : k === "debug" ? "debug" : "log";
 
-  const consoleEntries = dt.console.filter((c) =>
-    dt.consoleFilter ? c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase()) : true
-  );
+  const consoleEntries = dt.console.filter((c) => {
+    if (dt.consoleFilter && !c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase())) return false;
+    return true;
+  });
 
   const netEntries = dt.net.filter((n) =>
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
@@ -798,18 +814,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           })}
         </div>
 
-        {/* Tab panels stay mounted (user request 2026-11-14): switching
-            sub-tools used to unmount the whole page and remount the new
-            one, and the sheet visibly jumped on every switch. Each page
-            is a persistent wrapper toggled with the hidden attribute,
-            so the console scroll position and both logs survive the
-            switch. Components with live polls (diagnostics collection,
-            the download registry) still mount only while their page is
-            active, so the polling contract is unchanged. Console and
-            network render bare like Diagnostics (user request
-            2026-11-14): no card wrapper, no level filter chips, and in
-            the network log no explanatory paragraph or empty-state
-            line. */}
+        {/* Console and Network render bare like Diagnostics (user
+            request 2026-11-13): the filled cards are gone and the
+            content sits directly in the sheet. All three pages stay
+            mounted; the sub-tool switch toggles [hidden], so flipping
+            sub-tools no longer unmounts and remounts everything. */}
         <div className="lb-dt-page" hidden={dt.page !== "console"}>
           <div className="lb-console" ref={consoleRef}>
             {/* #94: quiet empty state; a filtered-to-nothing list says
@@ -822,7 +831,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
-                <span className="lb-console-arrow">{c.kind === "input" ? "\u203a" : c.kind === "result" ? "\u2039" : levelOf(c.kind)}</span>
+                <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
                 <span className="lb-console-text">{c.text}</span>
               </div>
             ))}
@@ -915,16 +924,17 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
               />
             )}
           </div>
-          {dt.page === "network" && <ZeoliteDownloads />}
+          <ZeoliteDownloads active={dt.page === "network"} />
         </div>
 
-        {/* Diagnostics renders bare (user request 2026-11-11): the card
-            wrapper is gone, the component sits directly in the bottom
-            sheet like the rest of the page content. */}
         <div className="lb-dt-page" hidden={dt.page !== "diagnostics"}>
-          {dt.page === "diagnostics" && (
-            <ZeoliteDiagnostics clientId={dt.engineClientId} source={dt.engineSource} snapshotRef={snapshotRef} statusRef={diagStatusRef} />
-          )}
+          <ZeoliteDiagnostics
+            clientId={dt.engineClientId}
+            source={dt.engineSource}
+            snapshotRef={snapshotRef}
+            statusRef={diagStatusRef}
+            active={dt.page === "diagnostics"}
+          />
         </div>
       </div>
     </m3e-bottom-sheet>
