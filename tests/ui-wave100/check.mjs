@@ -38,7 +38,7 @@ ok(theme.includes(".lb-hero-engine {"), "engine badge style restored");
 ok(!theme.includes(".lb-dt-chips"), "chip css removed");
 ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }"), "panel headers gained breathing room");
 ok(theme.includes("min-height: 56px;"), "inline rows grew with the panel headers");
-ok(theme.includes(".lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }"), "settings cards get more space between them (space200 page gap)");
+ok(theme.includes(".lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space300); }"), "settings cards get real separation (space300 page gap)");
 
 const ciwf = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
 ok(ciwf.includes("ui-wave100"), "ci.yml runs the wave 100 check");
