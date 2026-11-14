@@ -6,7 +6,7 @@
    - All three pages stay mounted; the sub-tool switch toggles
      [hidden], so flipping sub-tools does not unmount and remount.
    - The engine surfaces poll only while their page is open.
-   - Settings: the About hero carries the engine badge again. */
+   - Settings: the About hero card is removed (#272, #273). */
 import { readFileSync } from "node:fs";
 const ui = new URL("../../ui/", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ui), "utf8");
@@ -28,13 +28,12 @@ ok(dt.includes("active: boolean"), "engine surfaces gate polling on the visible 
 ok(dt.includes("m3e-card"), "the download registry card remains");
 
 const settings = read("src/pages/Settings.tsx");
-ok(settings.includes("lb-hero-engine"), "the About hero carries the engine badge");
-ok(settings.includes('"ScramJet" : "Zeolite"'), "the badge names the running proxy engine");
+ok(!settings.includes("lb-hero-engine") && !settings.includes("lb-about-hero"), "the About hero card is removed (#272, #273)");
 
 const theme = read("src/theme.css");
 ok(theme.includes(".lb-dt-page { display: flex; flex-direction: column; gap: 18px; }"), "page sections keep the sheet rhythm");
 ok(theme.includes(".lb-dt-page[hidden] { display: none; }"), "hidden pages do not paint");
-ok(theme.includes(".lb-hero-engine {"), "engine badge style restored");
+ok(!theme.includes(".lb-hero-engine"), "engine badge css removed (#272, #273)");
 ok(!theme.includes(".lb-dt-chips"), "chip css removed");
 ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space200) 0; }"), "panel headers gained breathing room");
 ok(theme.includes("min-height: 64px;"), "inline rows grew with the panel headers");

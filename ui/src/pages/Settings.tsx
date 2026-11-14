@@ -1,7 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-/* The Settings hero card (user request 2026-11-11): the background
-   shapes are real m3e-shape elements (registered by @m3e/web/all), so
-   the beta UI keeps its single @m3e/web provider (ui-wave80 gate). */
 /* Settings (global redesign, user request 2026-11-07): the whole page
    is one @m3e/web surface. The page title lives in an m3e-content-pane;
    every settings sub-card is an m3e-expansion-panel whose header
@@ -213,15 +210,6 @@ function TextInput(props: {
   );
 }
 
-/* The ASCII wordmark, same art as Home.tsx (trailing spaces
-   trimmed; user request 2026-11-11: the Settings hero card carries
-   the real logo). */
-const LB_ASCII = String.raw`    __          __         __            ____
-   / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
-  / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
- / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
-/_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/
-                                                                          `;
 
 export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
@@ -311,68 +299,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     }
   };
 
-  /* About / Build: one authoritative source. The /build endpoint on
-     the deployed server reports the versions compiled into that exact
-     build plus its deployment git commit, so the UI never claims a
-     version the deployed build does not have. */
-  const [build, setBuild] = useState<{
-    lb: string;
-    zeolite: string;
-    scramjet: string;
-    build: string;
-    buildShort: string;
-  } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    /* Cache-busted: some edge caches serve a stale /build despite
-       no-store, which previously left the About pills stuck on
-       "Loading". Failures now log to the client log (visible on the
-       Logs page) with the actual reason instead of failing silently. */
-    fetch("/build?t=" + Date.now(), { cache: "no-store" })
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json() as Promise<{
-          ok: boolean;
-          lb?: string;
-          zeolite?: string;
-          scramjet?: string;
-          zlswSha?: string;
-          build?: string;
-          buildShort?: string;
-        }>;
-      })
-      .then((d) => {
-        if (cancelled) return;
-        if (d && d.ok && d.lb) {
-          setBuild({
-            lb: String(d.lb),
-            zeolite: String(d.zeolite ?? "unknown"),
-            scramjet: String(d.scramjet ?? "unknown"),
-            build: String(d.build ?? "unknown"),
-            buildShort: String(d.buildShort ?? "unknown"),
-          });
-        } else {
-          pushLog("warn", "settings: /build returned an unexpected body");
-        }
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        pushLog("error", "settings: /build fetch failed: " + msg);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /* About hero (user request 2026-11-11): /build's lb field carries
-     "number codename" (e.g. "0.8.0 Tungsten"); split once for the
-     hero card's number and text versions. */
-  const lbVersion = build?.lb ?? "";
-  const vSplit = lbVersion.indexOf(" ");
-  const versionNum = vSplit > 0 ? lbVersion.slice(0, vSplit) : lbVersion;
-  const versionName = vSplit > 0 ? lbVersion.slice(vSplit + 1) : "";
-  const engineName = settings.proxyEngine === "scramjet" ? "ScramJet" : "Zeolite";
   return (
     <section className="lb-view-content" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
@@ -388,35 +314,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
           <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
             <span slot="title">Settings</span>
           </m3e-app-bar>
-
-          {/* About hero (user request 2026-11-11): a real m3e-card filled
-              surface at the very top with the ASCII wordmark, the version
-              (number and codename) and the running proxy engine. The
-              background shapes are real m3e-shape elements (registered by
-              @m3e/web/all), decorative and aria-hidden; the card clips. */}
-          <m3e-card variant="filled" {...{ class: "lb-about-hero" }}>
-            <div className="lb-about-hero-shapes" aria-hidden={true}>
-              {/* Shapes render first as the background layer, content on
-                  top: one large clover spilling off the top-right corner,
-                  a sunny anchored at the bottom, a small clover on the
-                  right edge. Size and container color ride the component's
-                  own --m3e-shape-* tokens (theme.css). */}
-              <m3e-shape name="8-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-a" }} />
-              <m3e-shape name="sunny" {...{ class: "lb-hero-shape lb-hero-shape-b" }} />
-              <m3e-shape name="4-leaf-clover" {...{ class: "lb-hero-shape lb-hero-shape-c" }} />
-            </div>
-            <pre className="lb-about-hero-logo" aria-label="LobsterBrowse">{LB_ASCII}</pre>
-            <div className="lb-about-hero-meta">
-              <span className="lb-hero-version">
-                <span className="lb-hero-version-num">{build ? versionNum : "unknown"}</span>
-                {versionName ? <span className="lb-hero-version-name">{versionName}</span> : null}
-              </span>
-              <span className="lb-hero-engine">
-                <span className="lb-hero-engine-label">Engine</span>
-                {engineName}
-              </span>
-            </div>
-          </m3e-card>
 
               <SectionHead section="search" />
               <SetInline
