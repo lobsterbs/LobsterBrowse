@@ -70,7 +70,7 @@ DevTools is a real diagnostic surface. Events should identify trace/request ID, 
 ## UI rules
 No hamburger menu. The compact nav rail owns its sizing/overflow. Tabs shrink rather than horizontally scrolling. Toolbar URL editing remains inside the center pill. Bookmarks and the old nav-rail badge are intentionally removed. Settings are localStorage-backed and migration-safe.
 ## Privacy
-LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets. Cloaking is user-side: Auto Cloak swaps the tab title and stages a harmless site when the tab is hidden, and the Settings cloaking panel can open LobsterBrowse inside a fresh about:blank window with no opener link back to the original.
+LobsterBrowse is a proxy, so the engine transport necessarily carries the traffic it proxies. Do not describe it as server-blind. Browser UI state is stored locally. Diagnostics/logs must redact credentials, cookies, authorization data and other secrets.
 ## Building
 
 ### Server

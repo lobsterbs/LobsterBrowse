@@ -1260,16 +1260,6 @@ border-radius: var(--m3e-shape-lg);
 }
 .lb-newtab { animation: lb-fade-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
-/* ---- Settings: About / Build ---- */
-.lb-about { margin-top: var(--md-sys-measurement-space100); }
-/* Build facts as M3E-style chips: one pill per component, name muted,
-   value on-surface. Hashes use the monospace family so they read as
-   identifiers, not prose. */
-
-
-
-
-
 /* ---- DevTools diagnostics ---- */
 .lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space75, 6px); margin-bottom: var(--md-sys-measurement-space100, 8px); }
 .lb-diag-chip {
@@ -2516,111 +2506,6 @@ background: var(--lb-glass-tint);
 @media (prefers-reduced-motion: reduce) {
   .lb-ai-md-stream .lb-md > :last-child { animation: none; }
 }
-/* ---- Settings: About hero card (user request 2026-11-11) ----
-   A real m3e-card (variant filled) at the very top of Settings: the
-   dynamic palette's surface-container ground, the ASCII wordmark, the
-   version (number and codename) and the running engine. The background
-   shapes are real m3e-shape elements - size and container color ride
-   the component's own --m3e-shape-* tokens. Decorative only
-   (aria-hidden in Settings.tsx); the card clips the spill. */
-m3e-card.lb-about-hero {
-  --m3e-card-padding: 0;
-  --m3e-card-shape: 20px;
-  /* Neutral ground like the expressive-profile hero: container colors
-     read against surface-container without fighting a tint. */
-  --m3e-filled-card-container-color: var(--md-sys-color-surface-container, var(--md-sys-color-surface-container-high));
-  --m3e-filled-card-text-color: var(--md-sys-color-on-surface, var(--md-sys-color-on-surface));
-  position: relative;
-  overflow: hidden;
-  /* The rounded corners live on the shadow surface; without a matching
-     host radius, overflow:hidden clips at the host RECTANGLE and the
-     overflowing shapes paint square corners over the right edge
-     (user report 2026-11-12). */
-  border-radius: 20px;
-  margin-bottom: var(--md-sys-measurement-space150);
-}
-.lb-about-hero-shapes { position: absolute; inset: 0; pointer-events: none; }
-.lb-about-hero > pre,
-.lb-about-hero > .lb-about-hero-meta { position: relative; }
-.lb-hero-shape { position: absolute; display: block; }
-/* Refined composition (user request 2026-11-11): one large clover
-   spills off the top-right corner well clear of the wordmark, a sunny
-   anchors the bottom edge, a small clover rides the right edge. Full
-   container-color strength, slow deliberate motion. */
-.lb-hero-shape-a {
-  width: 140px;
-  --m3e-shape-container-color: var(--md-sys-color-primary-container);
-  top: -38px; right: -46px;
-  animation: lb-hero-spin 64s linear infinite;
-}
-.lb-hero-shape-b {
-  width: 64px;
-  --m3e-shape-container-color: var(--md-sys-color-tertiary-container);
-  bottom: -18px; right: 168px;
-  animation: lb-hero-bob 9s ease-in-out infinite;
-}
-.lb-hero-shape-c {
-  width: 30px;
-  --m3e-shape-container-color: var(--md-sys-color-secondary-container);
-  bottom: 52px; right: -9px;
-  animation: lb-hero-spin-r 32s linear infinite;
-}
-@keyframes lb-hero-spin { to { transform: rotate(360deg); } }
-@keyframes lb-hero-spin-r { to { transform: rotate(-360deg); } }
-@keyframes lb-hero-bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-8px) rotate(10deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lb-hero-shape-a, .lb-hero-shape-b, .lb-hero-shape-c { animation: none; }
-}
-.lb-about-hero-logo {
-  margin: 0;
-  padding: var(--md-sys-measurement-space250) var(--md-sys-measurement-space250) 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: clamp(6px, 2.2vw, 11px);
-  line-height: 1.05;
-  white-space: pre;
-  overflow-x: auto;
-}
-.lb-about-hero-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space125) var(--md-sys-measurement-space250) var(--md-sys-measurement-space200);
-}
-.lb-hero-version { display: inline-flex; align-items: baseline; gap: var(--md-sys-measurement-space100); min-width: 0; }
-.lb-hero-version-num {
-  font-size: var(--md-sys-typescale-display-small-font-size, 32px);
-  /* Expressive display recipe (token above): max optical size, real
-     width, weight 760. Google Sans Flex runs wght 1-1000 and wdth
-     25-151 (the earlier "wdth clamps at 100" claim was wrong). */
-  font-variation-settings: var(--lb-fvs-display);
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-.lb-hero-version-name {
-  font-size: var(--md-sys-typescale-title-medium-font-size, 16px);
-  font-variation-settings: "wght" var(--lb-wght-emph);
-  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
-}
-
-/* Engine badge in the About hero (restored, user request 2026-11-13):
-   a real secondary-container chip, not a grey overlay. */
-.lb-hero-engine {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space75);
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space150);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
-  color: var(--md-sys-color-on-secondary-container, var(--md-sys-color-on-surface));
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" var(--lb-wght-medium);
-}
-.lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" var(--lb-wght-plain); }
 
 /* DevTools pages stay mounted; the sub-tool switch toggles [hidden]
    (user request 2026-11-13): no unmount/remount churn between
