@@ -265,7 +265,16 @@ m3e-nav-rail {
      read as one family with identical text margins. */
   --m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space200);
-  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
+  /* Wave 105 (user request 2026-11-14): the expansion header host pins
+     its own height through --m3e-expansion-header-collapsed-height and
+     --m3e-expansion-header-expanded-height (defaults 48px/64px), which
+     clipped the roomier setp-head into a 48px band with the headline
+     and supporting text painting past the card edges. Both tokens go
+     auto so the header sizes to its own content, and the body padding
+     matches the header 16px rhythm on every edge. */
+  --m3e-expansion-header-collapsed-height: auto;
+  --m3e-expansion-header-expanded-height: auto;
+  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space200);
   /* Wave 88: the panel surface is frosted glass like every other
      card (user request 2026-11-08). Wave 89: the host carries the
      panel shape so the frost halo is rounded, not a square grey
@@ -287,11 +296,12 @@ m3e-nav-rail {
   flex-wrap: wrap;
   gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
   width: 100%;
-  /* Roomier rows (user request 2026-11-13): 56px tall with a taller
-     top pad, so the controls stop feeling cramped against the
-     roomier panel headers. */
+  /* Roomier rows (user request 2026-11-13, wave 105): 64px
+     min-height with an even 16px inner pad on every edge, so the
+     two-line rows stop feeling cramped against the roomier panel
+     headers. */
   min-height: 64px;
-  padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
+  padding: var(--md-sys-measurement-space200);
 background: var(--lb-glass-tint);
 border-radius: 20px;
   box-sizing: border-box;
