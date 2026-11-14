@@ -234,7 +234,7 @@ m3e-nav-rail {
 /* Settings (global redesign, user request 2026-11-07): the page is a
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
-.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space200) 0; }
+.lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }
 .lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
@@ -270,11 +270,11 @@ m3e-nav-rail {
      --m3e-expansion-header-expanded-height (defaults 48px/64px), which
      clipped the roomier setp-head into a 48px band with the headline
      and supporting text painting past the card edges. Both tokens go
-     auto so the header sizes to its own content, and the body padding
-     matches the header 16px rhythm on every edge. */
+     auto so the header sizes to its own content. Wave 107 sets the
+     body padding to the compact 12/16/16 rhythm. */
   --m3e-expansion-header-collapsed-height: auto;
   --m3e-expansion-header-expanded-height: auto;
-  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space200);
+  --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
   /* Wave 88: the panel surface is frosted glass like every other
      card (user request 2026-11-08). Wave 89: the host carries the
      panel shape so the frost halo is rounded, not a square grey
@@ -296,12 +296,10 @@ m3e-nav-rail {
   flex-wrap: wrap;
   gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
   width: 100%;
-  /* Roomier rows (user request 2026-11-13, wave 105): 64px
-     min-height with an even 16px inner pad on every edge, so the
-     two-line rows stop feeling cramped against the roomier panel
-     headers. */
-  min-height: 64px;
-  padding: var(--md-sys-measurement-space200);
+  /* Wave 107 (#274 redesign): the compact M3 rhythm, matched to the
+     panel headers: 56px min-height, 12/16px inner pad. */
+  min-height: 56px;
+  padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
 background: var(--lb-glass-tint);
 border-radius: 20px;
   box-sizing: border-box;
@@ -324,12 +322,12 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
-.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space400); }
+.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
    body-small supporting line. All color stays on tokens. */
-.lb-set-section-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space150) 0 0; }
+.lb-set-section-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space250) 0 0; }
 .lb-set-section-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; flex: none;
