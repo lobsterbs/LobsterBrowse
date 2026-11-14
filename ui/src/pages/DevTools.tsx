@@ -846,8 +846,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             <m3e-icon-button
               aria-label="Copy console output"
               onClick={() =>
-                void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("
-")).then((ok) => {
+                void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n")).then((ok) => {
                   if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
                     M3eSnackbar.open(ok ? "Console copied" : "Copy failed", { duration: 3000 });
                   }
