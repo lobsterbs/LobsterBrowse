@@ -4,7 +4,7 @@
    X, preview windows gone), basic m3e-app-bar top bars everywhere,
    Settings card uniformity, and typescale-token typography. Static
    source asserts; live visual verification rides the deploy check. */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const ui = new URL("../../ui/", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ui), "utf8");
@@ -25,7 +25,7 @@ ok(theme.includes("m3e-bottom-sheet {"), "sheet frost rule exists");
 ok(theme.includes("--m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);"), "sheet container color is translucent");
 ok(theme.includes("m3e-menu {"), "menu frost rule exists");
 ok(theme.includes(".lb-cmdk {") && theme.includes("background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 74%, transparent);"), "command palette is frosted");
-ok(theme.includes(".lb-dl-card,\n.lb-fv-card {"), "floating elevated cards are frosted");
+ok(theme.includes(".lb-fv-card {") && theme.includes("--m3e-elevated-card-container-color"), "floating elevated cards are frosted");
 ok(!theme.includes("body.lb-fancy .lb-ac {"), "home suggestor frost is unscoped");
 ok(!theme.includes("body.lb-fancy .lb-tb-ac {"), "toolbar suggestor frost is unscoped");
 ok(!theme.includes("body.lb-fancy .lb-ai-bar"), "AI chat bar frost is unscoped");
@@ -93,11 +93,9 @@ const ai = read("src/pages/Ai.tsx");
 ok(ai.includes('<span slot="title">Conversations</span>'), "AI history header is a basic app bar");
 ok(!ai.includes("lb-ai-hist-head"), "AI history old header gone");
 
-const dl = read("src/browser/DownloadsCard.tsx");
-ok(dl.includes("<m3e-app-bar") && dl.includes('<span slot="title">Downloads'), "downloads card header is a basic app bar");
-ok(!dl.includes("lb-site-head"), "downloads old header gone");
-
 const fv = read("src/browser/FileViewer.tsx");
+ok(!existsSync(new URL("src/browser/DownloadsCard.tsx", ui)), "downloads card file removed");
+ok(!read("src/pages/Browser.tsx").includes("lb-dl-btn"), "downloads toolbar button removed");
 ok(fv.includes("<m3e-app-bar"), "file viewer header is a basic app bar");
 ok(!fv.includes("lb-site-head"), "file viewer old header gone");
 
