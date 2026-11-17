@@ -1652,6 +1652,14 @@ m3e-snackbar {
 /* XPI install prompt: the busy state's progress indicator spans the
    dialog body. */
 .lb-xpi-progress m3e-linear-progress-indicator { width: 100%; }
+/* Motion: an xpi prompt state switch (busy to ready, busy to failed)
+   remounts the dialog's direct children, so this entrance fires per
+   state change and rides the same curve as the settings section
+   switch. Composite-only properties; reduced motion collapses it. */
+.lb-xpi-prompt > * { animation: lb-set-section-in 180ms cubic-bezier(0.2, 0, 0, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-xpi-prompt > * { animation: none; }
+}
 
 /* Engine extension notifications (#50): bottom-right stack of note
    cards; clicked / buttonClicked / closed report back over
