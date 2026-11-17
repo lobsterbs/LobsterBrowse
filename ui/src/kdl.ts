@@ -1,5 +1,5 @@
-/* KDL serialization for the DevTools Diagnostics Copy logs button
-   (user request 2026-10-29): the same content the JSON export carries,
+/* KDL serialization for the DevTools Diagnostics Copy logs button:
+   the same content the JSON export carries,
    emitted as a KDL document in the style of the engine's KDL exports.
    Structurally typed against the DevTools console and failure rows so
    this module owns no state and has no import cycle with the page. */
@@ -55,7 +55,7 @@ export function diagKdl(
   const rows: string[] = [];
   rows.push('zeolite-diagnostics "this document" {');
   rows.push("  exported " + kdlStr(new Date().toISOString()));
-  /* Build identity (user request 2026-10-29): a capture that cannot
+  /* Build identity: a capture that cannot
      name its engine build invites stale-worker guesses. The engine
      version line rides the snapshot (zl:getNetLog version); the
      server build chip (buildShort + engine SW sha from /build) is

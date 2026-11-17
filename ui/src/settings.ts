@@ -158,7 +158,7 @@ export type Settings = {
   siteTint: boolean;
   /* Enhanced UI: animated starfield background in every view
      instead of the flat surface. Transform-composited animation,
-     on by default (user request 2026-10-29). */
+     on by default. */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";

@@ -26,7 +26,7 @@ body {
 h1, h2 { font-variation-settings: "wght" var(--lb-wght-emph); }
 h3, b, th { font-variation-settings: "wght" var(--lb-wght-strong); }
 
-/* Expressive type tokens (user request 2026-11-12). The 30-style M3
+/* Expressive type tokens. The 30-style M3
    scale (15 baseline + 15 emphasized roles), values verbatim from the
    @m3e/web 2.8.2 TypescaleToken source, the library's encoding of the
    official Material 3 type scale: components already resolve these
@@ -149,8 +149,8 @@ body.lb-fancy .lb-home m3e-search-bar {
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Suggestion dropdown: no extra surface behind the suggestor rows
-   (user request 2026-11-06) - the dropdown keeps its normal solid
+/* Suggestion dropdown: no extra surface behind the suggestor rows -
+   the dropdown keeps its normal solid
    surface; the old frosted grey overlay is gone. */
 /* The frosted rail needs something behind it to blur: the fancy
    setting paints a soft colour field on the shell that the rail,
@@ -527,7 +527,7 @@ body.lb-fancy .lb-home pre.lb-ascii {
   white-space: nowrap;
 }
 .lb-set-noresult { padding: var(--md-sys-measurement-space200); color: var(--md-sys-color-on-surface-variant); }
-/* Settings cards (user request 2026-11-06): md-card variant="filled"
+/* Settings cards: md-card variant="filled"
    owns the surface - the old hand-rolled borders and translucent
    backgrounds are gone. */
 md-card.lb-set-result { border: 0; background: none; }
@@ -703,7 +703,7 @@ md-card .lb-ext-item { border: 0; background: none; }
 .lb-devtools-head { display: flex; justify-content: space-between; align-items: center; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
 .lb-devtools-head-actions { display: flex; gap: var(--md-sys-measurement-space50); }
 .lb-devtools-title { display: flex; gap: var(--md-sys-measurement-space100); align-items: center; font-variation-settings: "wght" var(--lb-wght-medium); font-size: var(--md-sys-typescale-body-medium-font-size, 14px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Bottom margin space200 (user request 2026-11-11): breathing room
+/* Bottom margin space200: breathing room
    between the mode-switch tabs and the log sections below them. */
 .lb-dt-tabs { margin: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100) var(--md-sys-measurement-space200); }
 /* #103: the tab panels are siblings of the switcher (bounded card layout, see DevTools.tsx) and flex to fill the card, so the page body inside keeps its bounded scroll area. */
@@ -1447,7 +1447,7 @@ m3e-snackbar {
   .lb-cmdk { animation: none; }
 }
 
-/* ---- Beta UI wave: wordmark scale, dock grip, incognito badge,
+/* ---- Beta UI polish: wordmark scale, dock grip, incognito badge,
    recent sites, tile row, shared panel surface, layout fixes
    (#82 #83 #85 #86 #88 #91 #92 #93 #94 #95 #96). Additive layer;
    baseline rules above stay untouched. ---- */
@@ -1593,7 +1593,7 @@ body .lb-ext-panel {
 .lb-empty-headline { font-size: var(--md-sys-typescale-title-medium-font-size, 16px); color: var(--md-sys-color-on-surface, #e4e2e6); }
 .lb-empty-help { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 
-/* ---- DevTools diagnostics presentation (user request 2026-11-11) ----
+/* ---- DevTools diagnostics presentation ----
    The card drops its grey slab: the outlined m3e-card variant (see
    DevTools.tsx) stops painting its internal fill, and the frosted host
    tint drops from 85% to 35% so the page reads through the blur.
@@ -1652,7 +1652,7 @@ body .lb-devtools {
 @media (prefers-reduced-motion: reduce) {
   .lb-net-summary { transition: none; }
 }
-/* ---- Settings: About hero card (user request 2026-11-11) ----
+/* ---- Settings: About hero card ----
    A real m3e-card (variant filled) at the very top of Settings: the
    dynamic palette's surface-container ground, the ASCII wordmark, the
    version (number and codename) and the running engine. The background
@@ -1679,7 +1679,7 @@ m3e-card.lb-about-hero {
 .lb-about-hero > pre,
 .lb-about-hero > .lb-about-hero-meta { position: relative; }
 .lb-hero-shape { position: absolute; display: block; }
-/* Refined composition (user request 2026-11-11): one large clover
+/* Refined composition: one large clover
    spills off the top-right corner well clear of the wordmark, a sunny
    anchors the bottom edge, a small clover rides the right edge. Full
    container-color strength, slow deliberate motion. */
@@ -1755,14 +1755,14 @@ m3e-card.lb-about-hero {
 }
 .lb-hero-engine-label { opacity: 0.7; font-variation-settings: "wght" var(--lb-wght-plain); }
 
-/* Disabled tool buttons grey out (user request 2026-11-11): the
+/* Disabled tool buttons grey out: the
    Eruda button in DevTools is disabled when /eruda.js is not
    available; the class makes the grey-out explicit regardless of the
    component's own disabled styling. */
 .lb-tool-disabled { opacity: 0.38; pointer-events: none; }
 
 /* Reduced motion freezes every m3e-shape morph by dropping the
-   transition (user request 2026-11-12). */
+   transition. */
 @media (prefers-reduced-motion: reduce) {
   m3e-shape { --m3e-shape-transition: none; }
 }

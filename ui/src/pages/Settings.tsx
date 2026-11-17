@@ -12,8 +12,8 @@ import "@m3e/web/shape";
 import "@m3e/web/switch";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-/* Settings cards: the MD3E filled card component (user request
-   2026-11-06) owns the card surface for the settings groups, search
+/* Settings cards: the MD3E filled card component owns the card
+   surface for the settings groups, search
    results, About and the extension entries. */
 import "@materialwebunofficial/md3e-web/components/md-card.js";
 import { exportSessionData } from "../store";
@@ -167,8 +167,7 @@ function TextInput(props: {
 }
 
 /* The ASCII wordmark, same art as Home.tsx (trailing spaces
-   trimmed; user request 2026-11-11: the Settings hero card carries
-   the real logo). */
+   trimmed; the Settings hero card carries the real logo). */
 const LB_ASCII = String.raw`    __          __         __            ____
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
@@ -364,7 +363,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       cancelled = true;
     };
   }, []);
-  /* About hero (user request 2026-11-11): /build's lb field carries
+  /* About hero: /build's lb field carries
      "number codename" (e.g. "0.9.0 Iridium"); split once for the
      hero card's number and text versions. */
   const lbVersion = build?.lb ?? "";
@@ -377,7 +376,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
   return (
     <section className="lb-view-content" aria-label="Settings">
       <m3e-heading variant="title" size="medium" level={2}>Settings</m3e-heading>
-      {/* About hero (user request 2026-11-11): a real m3e-card filled
+      {/* About hero: a real m3e-card filled
           surface at the very top with the ASCII wordmark, the version
           (number and codename) and the running proxy engine. The
           background shapes are real m3e-shape elements, decorative and

@@ -305,7 +305,7 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
   const [tracingOn, setTracingOn] = useState(false);
   const [recId, setRecId] = useState("");
   const [note, setNote] = useState("");
-  /* Eruda availability (user request 2026-11-11): the tool greys out
+  /* Eruda availability: the tool greys out
      and stops responding when /eruda.js cannot be fetched. HEAD
      first; a static layer that refuses HEAD falls back to a one-byte
      ranged GET. */
@@ -449,8 +449,8 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the snapshot as KDL (user request
-     2026-10-29): header, stats, the event ring, #228 the request ring,
+  /* Copy logs serializes the snapshot as KDL:
+     header, stats, the event ring, #228 the request ring,
      console errors and warnings, and resource failures. The clipboard
      copy makes no control-plane round-trips, so its doctor row is the
      honest unavailable note. */
@@ -526,7 +526,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   return (
     <m3e-card
-      /* outlined, not elevated (user request 2026-11-11): the elevated
+      /* outlined, not elevated: the elevated
          variant paints its own opaque surface-container fill inside the
          shadow DOM, which reads as the grey slab behind the panel
          content. Outlined keeps the border and stays transparent, so

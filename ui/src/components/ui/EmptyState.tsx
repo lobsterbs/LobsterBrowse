@@ -1,8 +1,7 @@
 /* #214: shared empty state. One place says "there is nothing here"
    with a shape, a short heading, one line of help and an optional
    concrete next step. role="status" announces the same information
-   the old one-line strings carried. The decorative m3e-shape
-   (user request 2026-11-12) replaces the icon; the icon prop stays in
+   the old one-line strings carried. The decorative m3e-shape replaces the icon; the icon prop stays in
    the interface so existing call sites keep compiling. */
 import "@m3e/web/shape";
 

@@ -221,7 +221,7 @@ export default function App() {
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         zlAnnounceContentOrigin(co);
         if (co) zlContentRegister(co);
-        /* #477 wave 3: keep the guest-host realm open on the app and
+        /* #477: keep the guest-host realm open on the app and
            content origins so proxied-page service-worker registrations
            can spawn their isolated guest realms. */
         zlGuestHost(co);
