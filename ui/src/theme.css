@@ -144,9 +144,21 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    fixed layer can never be trapped or resized by a view ancestor.
    Negative z-index covers the plain body background yet stays under
    the app. The wave 78 liquid-metal ribbon shader is gone; the home
-   hero is the static photographic image pinned center/cover, and the
-   frost layers blur it as their real backdrop. */
-.lb-fx-bg { position: fixed; inset: 0; z-index: -1; background: url("/lb-hero.jpg") center / cover no-repeat; }
+   hero is the photographic image pinned center/cover, and the frost
+   layers blur it as their real backdrop. Layer order: dark scrim,
+   remote wallpaper, local lb-hero.jpg, surface token, so an
+   unreachable or hotlink-blocked remote degrades to the previous
+   backdrop instead of a bare surface. */
+.lb-fx-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35)),
+    url("https://images4.alphacoders.com/134/thumb-1920-1341558.png") center / cover no-repeat,
+    url("/lb-hero.jpg") center / cover no-repeat,
+    var(--md-sys-color-surface);
+}
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
    readable over the animated background. Wave 88: unconditional - every surface is glass (user request 2026-11-08). */
