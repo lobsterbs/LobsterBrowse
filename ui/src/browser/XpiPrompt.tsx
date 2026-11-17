@@ -51,7 +51,7 @@ export default function XpiPrompt(props: {
   const known = props.size > 0;
 
   return (
-    <m3e-dialog {...{ ref: dialogRef }}>
+    <m3e-dialog {...{ ref: dialogRef, class: "lb-xpi-prompt" }}>
       {props.error ? (
         <>
           <span slot="header">Download failed</span>
