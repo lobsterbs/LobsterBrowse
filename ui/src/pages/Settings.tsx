@@ -94,18 +94,22 @@ const SETTING_INDEX: SetEntry[] = [
   { section: "advanced", label: "Logs", terms: "diagnostics history log", target: "set-logs" },
 ];
 
-/* Expansion panels: only the header toggles open state, so selecting an
-   option inside a panel never collapses it. */
-function Panel(props: { id: string; icon: string; title: string; open: boolean; toggle: () => void; children: ReactNode }) {
-  return (
-    <m3e-expansion-panel open={props.open ? "" : undefined} id={props.id}>
-      <span slot="header" className="lb-panel-header" onClick={props.toggle}>
-        <m3e-icon name={props.icon} aria-hidden={true} /> {props.title}
-      </span>
-      <div className="lb-panel-body">{props.children}</div>
-    </m3e-expansion-panel>
-  );
-}
+/* Wave 108 (settings redesign, user request 2026-11-17): the sticky
+   frosted side navigation below switches the one visible section; the
+   accordion is gone. Every control, anchor and id of the old panels
+   stays, so the #198 search targets keep working. */
+type SectionId = "search" | "privacy" | "extensions" | "appearance" | "cloak" | "advanced" | "about";
+const NAV_ORDER: SectionId[] = ["search", "privacy", "extensions", "appearance", "cloak", "advanced", "about"];
+/* Each nav item: an icon and a supporting line. */
+const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
+  search: { icon: "search", sub: "Engine and omnibox behavior" },
+  privacy: { icon: "lock", sub: "Blocking and connection upgrades" },
+  extensions: { icon: "extension", sub: "Add-ons from the catalog or local files" },
+  appearance: { icon: "palette", sub: "Seed color and background" },
+  cloak: { icon: "visibility_off", sub: "Tab cloaking and the about:blank popout" },
+  advanced: { icon: "settings_applications", sub: "Engines, data and diagnostics" },
+  about: { icon: "info", sub: "Version and build information" },
+};
 
 function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; id?: string }) {
   /* #116: the visible label names the switch and toggles it too. */
@@ -210,27 +214,20 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       );
     }
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({
-    /* #90: only Search & browse starts expanded; the accordion
-       keeps its multi-open behavior. */
-    search: true,
-    privacy: false,
-    appearance: false,
-    extensions: false,
-    cloak: false,
-    advanced: false,
-  });
-  const toggle = (key: string) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  /* Wave 108: the active section. One section renders at a time; the
+     sticky side navigation switches between them. */
+  const [section, setSection] = useState<SectionId>("search");
 
   /* #198: searchable Settings - all local, no persistence change. */
   const [q, setQ] = useState("");
-  const SECTION_TITLES: Record<string, string> = {
+  const SECTION_TITLES: Record<SectionId, string> = {
     search: "Search & browse",
     privacy: "Privacy",
     extensions: "Extensions",
     appearance: "Appearance",
     cloak: "Auto Cloak",
     advanced: "Advanced",
+    about: "About",
   };
   const needle = q.trim().toLowerCase();
   const hits = needle
@@ -239,9 +236,9 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       )
     : [];
   const jumpTo = (entry: SetEntry) => {
-    setOpen((prev) => ({ ...prev, [entry.section]: true }));
+    setSection(entry.section as SectionId);
     setQ("");
-    /* Let the accordion remount with the panel open before scrolling. */
+    /* Let the section remount before scrolling to the target. */
     setTimeout(() => {
       const el = document.getElementById(entry.target);
       if (!el) return;
@@ -431,286 +428,315 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           )}
         </div>
       ) : (
-      <m3e-accordion multi>
-      <Panel id="panel-search" icon="search" title="Search & browse" open={open.search} toggle={() => toggle("search")}>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-search-engine" tabIndex={-1}>
-          <div className="lb-setting-label">Search engine</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Search engine">
-            {(Object.keys(ENGINES) as EngineId[]).map((id) => (
-              <m3e-button-segment key={id} checked={settings.engine === id ? "" : undefined} onClick={() => onChange({ engine: id })}>
-                {ENGINES[id].name}
-              </m3e-button-segment>
-            ))}
-          </m3e-segmented-button>
-          </div>
-        </md-card>
-        <m3e-list>
-          <Row id="set-search-suggest" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
-        </m3e-list>
-      </Panel>
+            <div className="lb-set-page">
+        {/* Wave 108 (settings redesign, user request 2026-11-17): the
+            sticky frosted side rail replaces the accordion. One section
+            renders at a time; the active item carries the M3 pill and
+            aria-current. */}
+        <nav className="lb-set-nav" aria-label="Settings sections">
+          {NAV_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={"lb-set-nav-item" + (section === id ? " active" : "")}
+              aria-current={section === id ? "true" : undefined}
+              onClick={() => setSection(id)}
+            >
+              <m3e-icon name={SECTION_META[id].icon} aria-hidden={true} />
+              <span>{SECTION_TITLES[id]}</span>
+            </button>
+          ))}
+        </nav>
 
+        <div className="lb-set-section">
+          {section === "search" && (
+            <>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-search-engine" tabIndex={-1}>
+                <div className="lb-setting-label">Search engine</div>
+                <div className="lb-seg-wrap">
+                <m3e-segmented-button aria-label="Search engine">
+                  {(Object.keys(ENGINES) as EngineId[]).map((id) => (
+                    <m3e-button-segment key={id} checked={settings.engine === id ? "" : undefined} onClick={() => onChange({ engine: id })}>
+                      {ENGINES[id].name}
+                    </m3e-button-segment>
+                  ))}
+                </m3e-segmented-button>
+                </div>
+              </md-card>
+              <m3e-list>
+                <Row id="set-search-suggest" label="Engine search suggestions" icon="manage_search" on={settings.suggestQueries} toggle={() => onChange({ suggestQueries: !settings.suggestQueries })} />
+              </m3e-list>
+            </>
+          )}
+          {section === "privacy" && (
+            <>
+              <m3e-list>
+                <Row id="set-adblock" label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
+                <Row id="set-https" label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
+              </m3e-list>
+              <p className="lb-muted" style={{ fontSize: 12 }}>
+                HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
+              </p>
+            </>
+          )}
+          {section === "extensions" && (
+            <>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-manage-ext" tabIndex={-1}>
+                <div className="lb-setting-label">Manage installed</div>
+                {/* #230: the extension configuration UI moved here from the
+                    toolbar extension card; the toolbar card now launches the
+                    extension UI directly. */}
+                <ExtManage />
+              </md-card>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-amo" tabIndex={-1}>
+                <div className="lb-setting-label">Find and install add-ons</div>
+                {/* AMO web pages are blocked from this deployment's egress;
+                   the public API is not, so search and install run over the
+                   API instead of the store site. */}
+                <AmoSearch />
+              </md-card>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-import" tabIndex={-1}>
+                <div className="lb-setting-label">Import locally</div>
+                {/* Exactly one import action: our button triggers the picker;
+                   the input itself stays hidden. */}
+                <label className="lb-import-row">
+                  <input
+                    type="file"
+                    accept=".xpi,.zip"
+                    className="lb-import-file"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importZip(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <m3e-button onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}>
+                    <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
+                  </m3e-button>
+                </label>
+                <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
+                  (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
+                  The engine validates the manifest and permission grants; a bad package only lands that
+                  extension in an error state.
+                </p>
+                {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
+              </md-card>
+            </>
+          )}
+          {section === "appearance" && (
+            <>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-theme-color" tabIndex={-1}>
+                {/* #102: a visible, associated label for the colour input. */}
+                <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
+                  Theme color
+                </label>
+                <div className="lb-seed-row">
+                  <input
+                    id="lb-theme-color"
+                    type="color"
+                    value={settings.seed}
+                    onChange={(e) => onChange({ seed: e.target.value })}
+                    className="lb-color-input"
+                  />
+                  <m3e-chip-set>
+                    {SEEDS.map(([hex, name]) => (
+                      <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
+                        {name}
+                      </m3e-chip>
+                    ))}
+                  </m3e-chip-set>
+                </div>
+              </md-card>
+              <m3e-divider />
+              <md-card variant="filled" {...{ class: "lb-setting-group" }}>
+                <div className="lb-setting-label">Background</div>
+                <m3e-list>
+                  <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
+                  <Row id="set-site-tint" label="Tint toolbar with the site color" icon="palette" on={settings.siteTint} toggle={() => onChange({ siteTint: !settings.siteTint })} />
+                </m3e-list>
+                <p className="lb-muted" style={{ fontSize: 12 }}>
+                  Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
+                  Off keeps the plain flat background.
+                </p>
+              </md-card>
+            </>
+          )}
+          {section === "cloak" && (
+            <>
+              <m3e-list>
+                <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
+              </m3e-list>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-cloak-url" tabIndex={-1}>
+                <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
+                <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
+                <p className="lb-muted">
+                  When you switch away from this tab, the tab title changes and a harmless site is staged. When
+                  you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
+                  page re-render while hidden - this is the strongest behavior a normal web page can offer.
+                </p>
+              </md-card>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-aboutblank" tabIndex={-1}>
+                <div className="lb-setting-label">Open in about:blank</div>
+                <m3e-button onClick={openInAboutBlank}>
+                  <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
+                </m3e-button>
+                <p className="lb-muted">
+                  Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
+                  it. The new window has no connection back to this one and starts from a fresh view of
+                  the app (settings sync there only after a reload).
+                </p>
+              </md-card>
+            </>
+          )}
+          {section === "advanced" && (
+            <>
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-proxy" tabIndex={-1}>
+                <div className="lb-setting-label">Proxy engine</div>
+                <div className="lb-seg-wrap">
+                <m3e-segmented-button aria-label="Proxy engine">
+                  <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
+                    Zeolite (default)
+                  </m3e-button-segment>
+                  <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+                    ScramJet
+                  </m3e-button-segment>
+                </m3e-segmented-button>
+                </div>
+                <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only. Applied on the next navigation.
+                </p>
+              </md-card>
+              <m3e-divider />
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-transport" tabIndex={-1}>
+                <div className="lb-setting-label">Transport engine</div>
+                <div className="lb-seg-wrap">
+                <m3e-segmented-button aria-label="Transport engine">
+                  <m3e-button-segment checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
+                    libcurl (default)
+                  </m3e-button-segment>
+                  <m3e-button-segment checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
+                    epoxy (experimental)
+                  </m3e-button-segment>
+                </m3e-segmented-button>
+                </div>
+                <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
+                </p>
+              </md-card>
+              <m3e-divider />
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-data" tabIndex={-1}>
+                <div className="lb-setting-label">Data</div>
+                <p className="lb-muted">
+                  Export the persisted session (open tabs) to a local file,
+                  import one back, clear the proxied page cache on this device, or
+                  delete every stored session and setting.
+                </p>
+                <div className="lb-seed-row">
+                  <m3e-button onClick={exportData}>
+                    <m3e-icon name="download" aria-hidden={true} /> Export session
+                  </m3e-button>
+                  <m3e-button onClick={() => importRef.current?.click()}>
+                    <m3e-icon name="upload" aria-hidden={true} /> Import session
+                  </m3e-button>
+                  <m3e-button onClick={() => setConfirmDelete(true)}>
+                    <m3e-icon name="delete" aria-hidden={true} /> Manage data
+                  </m3e-button>
+                </div>
+                <input
+                  hidden
+                  ref={importRef}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void importData(f);
+                  }}
+                />
+                {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
+                    handling and alertdialog semantics (alert attribute). */}
+                <m3e-dialog
+                  {...{ ref: deleteDialogRef }}
+                  alert=""
+                  dismissible=""
+                  close-label="Cancel"
+                >
+                  <span slot="header">Manage data</span>
+                  <p>Clear the Zeolite page cache, or delete all data on this device?</p>
+                  <div slot="actions">
+                    <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
+                    <m3e-button
+                      onClick={() => {
+                        deleteDialogRef.current?.hide();
+                        (async () => {
+                          try {
+                            const keys = await caches.keys();
+                            await Promise.all(keys.map((k) => caches.delete(k)));
+                            if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                              M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
+                            }
+                          } catch {
+                            /* caches unavailable */
+                          }
+                        })();
+                      }}
+                    >
+                      Clear cache
+                    </m3e-button>
+                    <m3e-button
+                      variant="filled"
+                      onClick={() => {
+                        onDeleteAll();
+                        deleteDialogRef.current?.hide();
+                      }}
+                    >
+                      Delete all data
+                    </m3e-button>
+                  </div>
+                </m3e-dialog>
+              </md-card>
 
-      <Panel id="panel-privacy" icon="lock" title="Privacy" open={open.privacy} toggle={() => toggle("privacy")}>
-        <m3e-list>
-          <Row id="set-adblock" label="Ad & tracker blocking" icon="shield" on={settings.adblock} toggle={() => onChange({ adblock: !settings.adblock })} />
-          <Row id="set-https" label="HTTPS upgrade" icon="https" on={settings.httpsUpgrade} toggle={() => onChange({ httpsUpgrade: !settings.httpsUpgrade })} />
-        </m3e-list>
-        <p className="lb-muted" style={{ fontSize: 12 }}>
-          HTTPS upgrade rewrites http page links to https before they are fetched. No silent fallback: a target that fails over https shows the error page instead of quietly downgrading.
-        </p>
-      </Panel>
-
-      <Panel id="panel-extensions" icon="extension" title="Extensions" open={open.extensions} toggle={() => toggle("extensions")}>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-manage-ext" tabIndex={-1}>
-          <div className="lb-setting-label">Manage installed</div>
-          {/* #230: the extension configuration UI moved here from the
-              toolbar extension card; the toolbar card now launches the
-              extension UI directly. */}
-          <ExtManage />
-        </md-card>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-amo" tabIndex={-1}>
-          <div className="lb-setting-label">Find and install add-ons</div>
-          {/* AMO web pages are blocked from this deployment's egress;
-             the public API is not, so search and install run over the
-             API instead of the store site. */}
-          <AmoSearch />
-        </md-card>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-import" tabIndex={-1}>
-          <div className="lb-setting-label">Import locally</div>
-          {/* Exactly one import action: our button triggers the picker;
-             the input itself stays hidden. */}
-          <label className="lb-import-row">
-            <input
-              type="file"
-              accept=".xpi,.zip"
-              className="lb-import-file"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importZip(f);
-                e.target.value = "";
-              }}
-            />
-            <m3e-button onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}>
-              <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
-            </m3e-button>
-          </label>
-          <p className="lb-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
-            (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
-            The engine validates the manifest and permission grants; a bad package only lands that
-            extension in an error state.
-          </p>
-          {extImport.status && <p className="lb-muted" style={{ fontSize: 12 }}>{extImport.status}</p>}
-        </md-card>
-      </Panel>
-
-      <Panel id="panel-appearance" icon="palette" title="Appearance" open={open.appearance} toggle={() => toggle("appearance")}>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-theme-color" tabIndex={-1}>
-          {/* #102: a visible, associated label for the colour input. */}
-          <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
-            Theme color
-          </label>
-          <div className="lb-seed-row">
-            <input
-              id="lb-theme-color"
-              type="color"
-              value={settings.seed}
-              onChange={(e) => onChange({ seed: e.target.value })}
-              className="lb-color-input"
-            />
-            <m3e-chip-set>
-              {SEEDS.map(([hex, name]) => (
-                <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
-                  {name}
-                </m3e-chip>
-              ))}
-            </m3e-chip-set>
-          </div>
-        </md-card>
-        <m3e-divider />
-        <md-card variant="filled" {...{ class: "lb-setting-group" }}>
-          <div className="lb-setting-label">Background</div>
-          <m3e-list>
-            <Row id="set-fancy" label="Enhanced UI (animated background)" icon="stars" on={settings.fancyBackground} toggle={() => onChange({ fancyBackground: !settings.fancyBackground })} />
-            <Row id="set-site-tint" label="Tint toolbar with the site color" icon="palette" on={settings.siteTint} toggle={() => onChange({ siteTint: !settings.siteTint })} />
-          </m3e-list>
-          <p className="lb-muted" style={{ fontSize: 12 }}>
-            Replaces the Home page's plain background with an animated starfield (CSS star layers with pointer parallax).
-            Off keeps the plain flat background.
-          </p>
-        </md-card>
-      </Panel>
-
-      <Panel id="panel-cloak" icon="visibility_off" title="Auto Cloak" open={open.cloak} toggle={() => toggle("cloak")}>
-        <m3e-list>
-          <Row id="set-cloak-enabled" label="Cloak when the tab is hidden" icon="hide_image" on={settings.cloakEnabled} toggle={() => onChange({ cloakEnabled: !settings.cloakEnabled })} />
-        </m3e-list>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-cloak-url" tabIndex={-1}>
-          <TextInput label="Cloak destination" value={settings.cloakUrl} onChange={(v) => onChange({ cloakUrl: v })} />
-          <TextInput label="Tab title while cloaked" value={settings.cloakTitle} onChange={(v) => onChange({ cloakTitle: v })} />
-          <p className="lb-muted">
-            When you switch away from this tab, the tab title changes and a harmless site is staged. When
-            you return, the cloak covers LobsterBrowse Preview until you click "Return". Browsers do not let a
-            page re-render while hidden - this is the strongest behavior a normal web page can offer.
-          </p>
-        </md-card>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-aboutblank" tabIndex={-1}>
-          <div className="lb-setting-label">Open in about:blank</div>
-          <m3e-button onClick={openInAboutBlank}>
-            <m3e-icon name="crop_square" aria-hidden={true} /> Open in about:blank
-          </m3e-button>
-          <p className="lb-muted">
-            Opens a new window whose address bar reads about:blank, with LobsterBrowse loaded inside
-            it. The new window has no connection back to this one and starts from a fresh view of
-            the app (settings sync there only after a reload).
-          </p>
-        </md-card>
-      </Panel>
-
-      <Panel id="panel-advanced" icon="settings_applications" title="Advanced" open={open.advanced} toggle={() => toggle("advanced")}>
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-proxy" tabIndex={-1}>
-          <div className="lb-setting-label">Proxy engine</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Proxy engine">
-            <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
-              Zeolite (default)
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-              ScramJet
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only. Applied on the next navigation.
-          </p>
-        </md-card>
-        <m3e-divider />
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-transport" tabIndex={-1}>
-          <div className="lb-setting-label">Transport engine</div>
-          <div className="lb-seg-wrap">
-          <m3e-segmented-button aria-label="Transport engine">
-            <m3e-button-segment checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
-              libcurl (default)
-            </m3e-button-segment>
-            <m3e-button-segment checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
-              epoxy (experimental)
-            </m3e-button-segment>
-          </m3e-segmented-button>
-          </div>
-          <p className="lb-muted" style={{ marginTop: 6, fontSize: 12 }}>
-            epoxy terminates TLS with rustls instead of libcurl's mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
-          </p>
-        </md-card>
-        <m3e-divider />
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-data" tabIndex={-1}>
-          <div className="lb-setting-label">Data</div>
-          <p className="lb-muted">
-            Export the persisted session (open tabs) to a local file,
-            import one back, clear the proxied page cache on this device, or
-            delete every stored session and setting.
-          </p>
-          <div className="lb-seed-row">
-            <m3e-button onClick={exportData}>
-              <m3e-icon name="download" aria-hidden={true} /> Export session
-            </m3e-button>
-            <m3e-button onClick={() => importRef.current?.click()}>
-              <m3e-icon name="upload" aria-hidden={true} /> Import session
-            </m3e-button>
-            <m3e-button onClick={() => setConfirmDelete(true)}>
-              <m3e-icon name="delete" aria-hidden={true} /> Manage data
-            </m3e-button>
-          </div>
-          <input
-            hidden
-            ref={importRef}
-            type="file"
-            accept="application/json,.json"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void importData(f);
-            }}
-          />
-          {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
-              handling and alertdialog semantics (alert attribute). */}
-          <m3e-dialog
-            {...{ ref: deleteDialogRef }}
-            alert=""
-            dismissible=""
-            close-label="Cancel"
-          >
-            <span slot="header">Manage data</span>
-            <p>Clear the Zeolite page cache, or delete all data on this device?</p>
-            <div slot="actions">
-              <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
-              <m3e-button
-                onClick={() => {
-                  deleteDialogRef.current?.hide();
-                  (async () => {
-                    try {
-                      const keys = await caches.keys();
-                      await Promise.all(keys.map((k) => caches.delete(k)));
-                      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                        M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
-                      }
-                    } catch {
-                      /* caches unavailable */
-                    }
-                  })();
-                }}
-              >
-                Clear cache
-              </m3e-button>
-              <m3e-button
-                variant="filled"
-                onClick={() => {
-                  onDeleteAll();
-                  deleteDialogRef.current?.hide();
-                }}
-              >
-                Delete all data
-              </m3e-button>
-            </div>
-          </m3e-dialog>
-        </md-card>
-
-        <m3e-divider />
-        {/* Diagnostic mode is always on (the toggle was removed on
-            purpose): every failed resource, page console message and
-            proxy intervention (CSP/SRI stripping) is logged in full to
-            the app log and DevTools. */}
-        <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-logs" tabIndex={-1}>
-          <div className="lb-setting-label">Logs</div>
-          <m3e-button onClick={onOpenLogs}>
-            <m3e-icon name="history" aria-hidden={true} /> Open Logs
-          </m3e-button>
-        </md-card>
-
-      </Panel>
-      </m3e-accordion>
-      )}
-
-      <md-card variant="filled" {...{ class: "lb-setting-group lb-about" }}>
-        <div className="lb-setting-label">About</div>
-        {/* The pills always render (unknown while loading or on
-            failure), so the About section never looks empty. */}
-        <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
-          <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
-          <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
-          <span className="lb-build-chip"><span className="lb-build-name">ScramJet</span><span className="lb-build-val">{build ? build.scramjet : "unknown"}</span></span>
-          <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
+              <m3e-divider />
+              {/* Diagnostic mode is always on (the toggle was removed on
+                  purpose): every failed resource, page console message and
+                  proxy intervention (CSP/SRI stripping) is logged in full to
+                  the app log and DevTools. */}
+              <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-logs" tabIndex={-1}>
+                <div className="lb-setting-label">Logs</div>
+                <m3e-button onClick={onOpenLogs}>
+                  <m3e-icon name="history" aria-hidden={true} /> Open Logs
+                </m3e-button>
+              </md-card>
+            </>
+          )}
+          {section === "about" && (
+            <>
+              <md-card variant="filled" {...{ class: "lb-setting-group lb-about" }}>
+                <div className="lb-setting-label">About</div>
+                {/* The pills always render (unknown while loading or on
+                    failure), so the About section never looks empty. */}
+                <div className="lb-build" title={build ? "Build " + build.build : "Build information unavailable"}>
+                  <span className="lb-build-chip"><span className="lb-build-name">LobsterBrowse Preview</span><span className="lb-build-val">{build ? build.lb : "unknown"}</span></span>
+                  <span className="lb-build-chip"><span className="lb-build-name">Zeolite</span><span className="lb-build-val">{build ? build.zeolite : "unknown"}</span></span>
+                  <span className="lb-build-chip"><span className="lb-build-name">ScramJet</span><span className="lb-build-val">{build ? build.scramjet : "unknown"}</span></span>
+                  <span className="lb-build-chip"><span className="lb-build-name">Build</span><span className="lb-build-val">{build ? build.buildShort : "unknown"}</span></span>
+                </div>
+                {buildError && (
+                  <p className="lb-muted" style={{ fontSize: 12 }}>
+                    Build information unavailable on this deployment.
+                    {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
+                  </p>
+                )}
+                {!build && !buildError && (
+                  <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
+                )}
+              </md-card>
+            </>
+          )}
         </div>
-        {buildError && (
-          <p className="lb-muted" style={{ fontSize: 12 }}>
-            Build information unavailable on this deployment.
-            {buildErrorDetail ? " Reason: " + buildErrorDetail : ""}
-          </p>
-        )}
-        {!build && !buildError && (
-          <p className="lb-muted" style={{ fontSize: 12 }}>Loading build information...</p>
-        )}
-      </md-card>
+      </div>
+      )}
     </section>
   );
 }
