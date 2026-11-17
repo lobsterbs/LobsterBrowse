@@ -1378,7 +1378,6 @@ m3e-menu {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
-.lb-dl-card,
 .lb-fv-card {
   --m3e-elevated-card-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-low, #f7f2fa) 78%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
@@ -1638,42 +1637,8 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
 .lb-tabs-ic svg rect { fill: currentColor; }
 
 
-/* Download card: same anchoring pattern as the site card. */
-.lb-dl-card {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 360px;
-  max-width: calc(100vw - 32px);
-  z-index: 45;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-.lb-dl-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--md-sys-measurement-space75);
-  width: 100%;
-  max-height: 280px;
-  overflow-y: auto;
-}
-.lb-dl-item {
-  display: flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space100);
-}
-.lb-dl-item > m3e-icon { flex-shrink: 0; }
-.lb-dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25); }
-.lb-dl-name {
-  font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lb-dl-progress m3e-linear-progress-indicator { width: 100%; }
-.lb-dl-meta { font-size: var(--md-sys-typescale-label-small-font-size, 11px); opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-tabs-card, .lb-dl-card, .lb-site-card { animation: none; }
+  .lb-tabs-card, .lb-site-card { animation: none; }
   .lb-tab-row, .lb-dock-pill { transition: none; }
 }
 
@@ -1687,27 +1652,9 @@ m3e-snackbar {
   transform-origin: top !important;
 }
 
-/* XPI install prompt: fixed centered overlay. m3e-dialog is not wired
-   anywhere else in the app; a plain overlay card avoids guessing the
-   component's open/close API, reusing the site-card row paddings. */
-.lb-xpi-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 3000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-}
-.lb-xpi-card {
-  width: min(400px, calc(100vw - 32px));
-  border-radius: var(--m3e-shape-lg);
-  overflow: hidden;
-  animation: lb-card-in var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-@media (prefers-reduced-motion: reduce) {
-  .lb-xpi-card { animation: none; }
-}
+/* XPI install prompt: the busy state's progress indicator spans the
+   dialog body. */
+.lb-xpi-progress m3e-linear-progress-indicator { width: 100%; }
 
 /* Engine extension notifications (#50): bottom-right stack of note
    cards; clicked / buttonClicked / closed report back over
@@ -1774,13 +1721,6 @@ m3e-snackbar {
 .lb-ext-panel.lb-out {
   animation: lb-pop-out var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
 }
-@keyframes lb-card-out {
-  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-  to { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
-}
-.lb-dl-card.lb-out {
-  animation: lb-card-out var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-standard-accelerate, ease-in) forwards;
-}
 
 /* ---- #76 small screens: the M3E nav bar (m3e-nav-bar) replaces the
    wide rail; the floating toolbar dock sits above it. Normal screens
@@ -1815,8 +1755,7 @@ m3e-snackbar {
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-devtools.lb-devtools-out,
-  .lb-ext-panel.lb-out,
-  .lb-dl-card.lb-out { animation: none; }
+  .lb-ext-panel.lb-out { animation: none; }
 }
 
 
@@ -2511,18 +2450,6 @@ background: var(--lb-glass-tint);
 .lb-tb-ac m3e-list-item.lb-tb-ac-item { --m3e-list-item-container-color: transparent; cursor: pointer; }
 .lb-tb-ac m3e-list-item.lb-tb-ac-item:hover,
 .lb-tb-ac m3e-list-item.lb-tb-ac-item.active { --m3e-list-item-container-color: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent); }
-/* Downloads: designed empty state. */
-.lb-dl-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: var(--md-sys-measurement-space300, 24px) var(--md-sys-measurement-space200, 16px);
-  color: var(--md-sys-color-on-surface-variant, #cac4d0);
-}
-.lb-dl-empty-shape {
-  width: 56px;
-  --m3e-shape-container-color: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-high));
-}
-.lb-dl-empty-title { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); color: var(--md-sys-color-on-surface, #1d1b20); font-variation-settings: "wght" var(--lb-wght-emph), "ROND" 25; }
-.lb-dl-empty-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 /* Extensions manage rows + permission banner. */
 .lb-ext-list m3e-list-item.lb-ext-item { cursor: pointer; }
 .lb-ext-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); }

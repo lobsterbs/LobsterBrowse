@@ -49,7 +49,8 @@ const ok = (name, cond) => {
 {
   const b = read("src/pages/Browser.tsx");
   ok("browser: Downloads overflow item removed", !b.includes("disabled={downloads.length === 0"));
-  ok("browser: downloads card still mounted", b.includes("<DownloadsCard"));
+  ok("browser: downloads card removed", !b.includes("<DownloadsCard"));
+  ok("browser: downloads toolbar button removed", !b.includes("lb-dl-btn"));
   ok("browser: scroll hook wired (helper + both frame paths)", b.split("hookFrameScroll").length - 1 >= 3);
   ok("browser: dock reveal on very top", b.includes("y <= 1 && dockTucked"));
 }
@@ -189,8 +190,10 @@ const ok = (name, cond) => {
   ok("shape: thinking morph shape renders", toolRow.includes("<m3e-shape"));
   ok("shape: morph shape is decorative", toolRow.includes("aria-hidden={true}"));
   ok("shape: morph settles when done", toolRow.includes(': "4-leaf-clover"'));
-  const dlCard = read("src/browser/DownloadsCard.tsx");
-  ok("shape: downloads empty state shape is decorative", dlCard.includes("lb-dl-empty-shape") && dlCard.includes("aria-hidden={true}"));
+  ok("shape: downloads card file removed", !existsSync(new URL("src/browser/DownloadsCard.tsx", ui)));
+  const xpiPrompt = read("src/browser/XpiPrompt.tsx");
+  ok("shape: xpi prompt icons are decorative", xpiPrompt.includes('name="extension" aria-hidden={true}'));
+  ok("shape: xpi prompt progress is labelled", xpiPrompt.includes('aria-label={"Downloading '));
   ok("shape: reduced motion freezes morphs", /--m3e-shape-transition:\s*none/.test(theme));
 }
 

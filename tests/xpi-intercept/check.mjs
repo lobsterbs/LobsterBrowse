@@ -49,10 +49,12 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const shared = read("../../ui/src/browser/browserShared.ts");
 assert.ok(shared.includes("zip|xpi|crx"), "DL_FILE_RE still catches .xpi links");
 const browser = read("../../ui/src/pages/Browser.tsx");
-assert.ok(browser.includes("setXpiPrompt"), "a finished .xpi lands in the install prompt state");
+assert.ok(browser.includes("setXpiPrompt({ name, got: 0, size: 0 })"), "the prompt opens immediately on click, not after the package arrives");
+assert.ok(!browser.includes("<DownloadsCard") && !browser.includes("lb-dl-btn"), "the downloads card and toolbar button are gone");
 assert.ok(browser.includes('zlSend({ type: "zl:installExt", bytes'), "install hands the bytes to the engine");
 assert.ok(browser.includes("<XpiPrompt"), "the install prompt is mounted");
 const prompt = read("../../ui/src/browser/XpiPrompt.tsx");
+assert.ok(prompt.includes("m3e-linear-progress-indicator"), "the busy state shows live progress");
 assert.ok(
   prompt.includes('return-value="install"') &&
   prompt.includes('return-value="save"') &&

@@ -15,19 +15,8 @@ export function tabLabel(t: Tab): string {
   }
 }
 
-/* File-extension heuristic: download click capture in Browser.tsx and
-   the download icon picker below. */
+/* File-extension heuristic: download click capture in Browser.tsx. */
 export const DL_FILE_RE = /\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar|exe|msi|dmg|pkg|deb|rpm|apk|iso|mp3|flac|wav|ogg|m4a|mp4|mkv|webm|mov|avi|pdf|epub|doc|docx|xls|xlsx|ppt|pptx|csv|json|txt)([?#].*)?$/i;
-
-/* Material Symbols icon name for a download, by file extension. */
-export function dlIconFor(name: string): string {
-  const n = name.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/.test(n)) return "image";
-  if (/\.(mp3|flac|wav|ogg|m4a)$/.test(n)) return "audio_file";
-  if (/\.(mp4|mkv|webm|mov|avi)$/.test(n)) return "video_file";
-  if (/\.(zip|xpi|crx|tar|gz|tgz|bz2|7z|rar)$/.test(n)) return "folder_zip";
-  return "draft";
-}
 
 /* Install-result warnings the engine may report. background.page
    is a known unsupported manifest field (Zeolite tracks support for

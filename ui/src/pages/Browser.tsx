@@ -44,7 +44,6 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
 import AdBlockCard from "../browser/AdBlockCard";
-import DownloadsCard from "../browser/DownloadsCard";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
 import XpiPrompt from "../browser/XpiPrompt";
@@ -345,18 +344,15 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
 };
 
-/* ---- Downloads (UI-side manager) ----
-   Proxied pages fetch through the engine, so every download is
-   relayed by our server but SAVED on the user's device. Captured
-   a[download] links (and obvious file links) are streamed by the app
-   with visible progress instead of a silent browser download. */
-type DlItem = {
-  id: number;
+/* A .xpi download surfaced as a prompt dialog. The prompt opens the
+   moment the user clicks the link (busy state, live progress); the
+   bytes arrive only when the transfer completes, and a failed
+   transfer turns the same prompt into an honest error state. */
+type XpiPromptState = {
   name: string;
-  url: string;
-  size: number;
+  bytes?: Uint8Array;
   got: number;
-  status: "active" | "done" | "error" | "cancelled";
+  size: number;
   error?: string;
 };
 
@@ -691,20 +687,6 @@ export default function BrowserView(props: Props) {
   /* The tab switcher card stays mounted all the time (its preview
      iframes must stay alive or tiles show blank frames, not pages);
      the .open class animates and gates interaction instead. */
-  /* ---- Downloads ---- */
-  const [downloads, setDownloads] = useState<DlItem[]>([]);
-  const [dlOpen, setDlOpen] = useState(false);
-  /* #76: same mount-stay for the downloads card. */
-  const [dlMounted, setDlMounted] = useState(false);
-  useEffect(() => {
-    if (dlOpen) {
-      setDlMounted(true);
-      return;
-    }
-    const t = setTimeout(() => setDlMounted(false), 280);
-    return () => clearTimeout(t);
-  }, [dlOpen]);
-  const dlSeq = useRef(1);
   /* ---- Ad-blocking sheet (#236): the sheet stays mounted and owns
        its open state (show/hide plus the closing event), like the
        extensions and tab switcher sheets. ---- */
@@ -714,9 +696,10 @@ export default function BrowserView(props: Props) {
   /* Per-document/per-window wiring for the new-tab interception. */
   const tabWired = useRef<WeakSet<Document>>(new WeakSet());
   const openWired = useRef<WeakSet<Window>>(new WeakSet());
-  /* A finished .xpi download waiting for the install prompt. The
-     bytes are held here so Install needs no second fetch. */
-  const [xpiPrompt, setXpiPrompt] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  /* A .xpi download: the prompt opens immediately as a real dialog
+     (busy with progress, then the install question, or the error
+     state); the bytes are held here so Install needs no second fetch. */
+  const [xpiPrompt, setXpiPrompt] = useState<XpiPromptState | null>(null);
   /* Local file viewer (#39-#42, #44): a finished transfer the
      detection layer routed to a viewer surface instead of a silent
      save. The viewer keeps a Download button, so the normal save
@@ -726,14 +709,19 @@ export default function BrowserView(props: Props) {
      sink is disk streaming via the File System Access API when the
      context allows it, and capped in-memory Blob assembly otherwise;
      both paths honor the cancel button. */
-  const dlAbort = useRef<Map<number, AbortController>>(new Map());
+  /* The AbortController of the transfer behind the xpi prompt, so
+     the prompt's Cancel button can stop a download in flight. Null
+     once the bytes are ready (Cancel then just dismisses). */
+  const xpiAbort = useRef<AbortController | null>(null);
   const MAX_DL_BYTES = 1024 * 1024 * 1024; // 1 GiB in-memory ceiling
-  const cancelDownload = (id: number) => {
-    dlAbort.current.get(id)?.abort();
-    dlAbort.current.delete(id);
-  };
   const startDownload = (href: string, name: string, engId?: number) => {
-    const id = dlSeq.current++;
+    const isXpi = /\.xpi$/i.test(name);
+    /* Prompt-state updater scoped to this transfer: it stops applying
+       the moment the bytes land (a stale progress tick must not
+       resurrect a finished or failed prompt) or the prompt carries an
+       error. */
+    const setXpi = (patch: Partial<XpiPromptState>) =>
+      setXpiPrompt((p) => (p && p.name === name && !p.bytes && !p.error ? { ...p, ...patch } : p));
     /* Engine handoff (#46): when the download came from the engine's
        zl:downloadOp (an extension's downloads.download()), report
        state back over zl:downloadState so the engine's registry and
@@ -754,7 +742,12 @@ export default function BrowserView(props: Props) {
        anything else goes through routeUrl so it rides the engine
        like a navigation. */
     const target = href.startsWith("/zl/") || href.startsWith("/sj/r/") ? href : routeUrl(href);
-    setDownloads((prev) => [...prev, { id, name, url: href, size: 0, got: 0, status: "active" }]);
+    if (isXpi) {
+      /* The prompt opens NOW, not after the package arrives: a real
+         popup with live progress replaces the toolbar button + card. */
+      xpiAbort.current = null;
+      setXpiPrompt({ name, got: 0, size: 0 });
+    }
     pushLog("info", "download start " + name);
     /* Ask for notification permission once, on the first download. */
     try {
@@ -767,22 +760,27 @@ export default function BrowserView(props: Props) {
     }
     (async () => {
       const ac = new AbortController();
-      dlAbort.current.set(id, ac);
+      if (isXpi) xpiAbort.current = ac;
       /* Streaming sink state lives outside the try so the catch can
          discard a partial streamed file. */
       let writable: FileSystemWritableFileStreamLike | null = null;
       let streaming = false;
       const fail = (msg: string) => {
-        dlAbort.current.delete(id);
         pushLog("error", "download failed " + name + ": " + msg);
         reportEng("error", { error: msg.slice(0, 120) });
-        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
+        if (isXpi) {
+          /* The prompt itself reports the failure. */
+          xpiAbort.current = null;
+          setXpiPrompt((p) => (p && p.name === name && !p.bytes ? { ...p, error: msg.slice(0, 160) } : p));
+        } else if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+          M3eSnackbar.open("Download failed: " + msg.slice(0, 120), { duration: 5000 });
+        }
       };
       try {
         const res = await fetch(target, { signal: ac.signal });
         if (!res.ok) throw new Error("HTTP " + res.status);
         const size = Number(res.headers.get("content-length")) || 0;
-        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, size } : d)));
+        if (isXpi) setXpi({ size });
         /* Filename from Content-Disposition (#11): the engine route
            forwards it (main.rs stream passthrough); the download
            attribute and the URL basename remain the fallbacks. */
@@ -793,8 +791,12 @@ export default function BrowserView(props: Props) {
           try { cdName = decodeURIComponent(cdm[1]); } catch { cdName = cdm[1]; }
           cdName = cdName.trim().slice(0, 120);
           if (cdName) {
+            if (isXpi) {
+              /* Keep the prompt's title honest when the server
+                 renames the package mid-transfer. */
+              setXpiPrompt((p) => (p && p.name === name && !p.bytes ? { ...p, name: cdName } : p));
+            }
             name = cdName;
-            setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, name } : d)));
           }
         }
         /* Streaming sink (P0 download architecture): when the File
@@ -805,7 +807,12 @@ export default function BrowserView(props: Props) {
            so any picker failure other than the user dismissing the
            dialog falls back to the capped in-memory Blob path below.
            A user dismissal is an honest cancel, not a failure. */
-        const picker: SavePickerFn | undefined = (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
+        /* The xpi prompt owns saving (its Save file button); a disk
+           stream would bypass the install question entirely, so the
+           package always assembles in memory. */
+        const picker: SavePickerFn | undefined = isXpi
+          ? undefined
+          : (window as unknown as { showSaveFilePicker?: SavePickerFn }).showSaveFilePicker;
         if (res.body && typeof picker === "function") {
           try {
             const handle = await picker({ suggestedName: name.slice(0, 120) });
@@ -819,7 +826,6 @@ export default function BrowserView(props: Props) {
               ac.abort();
               pushLog("info", "download cancelled at save dialog " + name);
               reportEng("cancelled");
-              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
               return;
             }
             writable = null;
@@ -853,7 +859,7 @@ export default function BrowserView(props: Props) {
                 fail("larger than " + fmtBytes(MAX_DL_BYTES) + " - cancelled to protect device memory (this browser/context cannot stream downloads to disk)");
                 return;
               }
-              setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, got: total } : d)));
+              if (isXpi) setXpi({ got: total });
               if (Date.now() - lastRep > 1000) {
                 lastRep = Date.now();
                 reportEng("active", { received: total, size });
@@ -868,10 +874,6 @@ export default function BrowserView(props: Props) {
         }
         if (streaming) {
           /* The file is already on disk; no blob anchor round trip. */
-          dlAbort.current.delete(id);
-          setDownloads((prev) =>
-            prev.map((d) => (d.id === id ? { ...d, size: d.size || total, got: total, status: "done" } : d)),
-          );
           reportEng("done", { received: total, size: size || total });
           pushLog("info", "download streamed to disk " + name + " (" + fmtBytes(total) + ")");
           try {
@@ -884,24 +886,19 @@ export default function BrowserView(props: Props) {
           if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
             M3eSnackbar.open("Saved " + name, { duration: 4000 });
           }
-          window.setTimeout(() => {
-            setDownloads((prev) => prev.filter((d) => d.id !== id));
-          }, 4000);
           return;
         }
         const blob = new Blob(chunks);
-        dlAbort.current.delete(id);
-        setDownloads((prev) =>
-          prev.map((d) => (d.id === id ? { ...d, size: d.size || blob.size, got: blob.size, status: "done" } : d)),
-        );
         reportEng("done", { received: blob.size, size: size || blob.size });
-        /* XPI packages from the add-ons store: ask before anything
-           happens. Install goes straight into the engine (the same
+        /* XPI packages from the add-ons store: the transfer is
+           complete, the prompt flips from busy to the install
+           question. Install goes straight into the engine (the same
            zl:installExt path the Settings import uses); Save file
            falls back to the normal blob download. */
-        if (/\.xpi$/i.test(name)) {
+        if (isXpi) {
           const bytes = new Uint8Array(await blob.arrayBuffer());
-          setXpiPrompt({ name, bytes });
+          xpiAbort.current = null;
+          setXpiPrompt((p) => (p && p.name === name ? { ...p, bytes, got: bytes.length, size: size || bytes.length } : p));
           pushLog("info", "xpi ready: " + name + " (" + fmtBytes(bytes.length) + ")");
           return;
         }
@@ -917,9 +914,6 @@ export default function BrowserView(props: Props) {
         if (kind !== "other") {
           setFileView({ name, blob, kind });
           pushLog("info", "download ready to view: " + name + " (" + fmtBytes(blob.size) + ", detected " + kind + ")");
-          window.setTimeout(() => {
-            setDownloads((prev) => prev.filter((d) => d.id !== id));
-          }, 4000);
           return;
         }
         /* Saved on the user's device via a blob anchor click. */
@@ -942,28 +936,22 @@ export default function BrowserView(props: Props) {
         if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
           M3eSnackbar.open("Downloaded " + name, { duration: 4000 });
         }
-        window.setTimeout(() => {
-          setDownloads((prev) => prev.filter((d) => d.id !== id));
-        }, 4000);
       } catch (err) {
-        dlAbort.current.delete(id);
         if (writable) {
           /* Discard the partial streamed file instead of leaving a
              broken half-download on disk. */
           try { await writable.abort?.(); } catch { /* already closed */ }
         }
         if (ac.signal.aborted) {
-          /* User cancel, save-dialog dismissal or the size-cap abort:
-             an honest "cancelled" state, not a fake failure. */
+          /* Prompt cancel, save-dialog dismissal or the size-cap
+             abort: an honest cancel, not a fake failure. The prompt
+             is already cleared by its Cancel handler. */
           pushLog("info", "download cancelled " + name);
           reportEng("cancelled");
-          setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "cancelled" } : d)));
           return;
         }
         const msg = err instanceof Error ? err.message : String(err);
-        pushLog("error", "download failed " + name + ": " + msg);
-        reportEng("error", { error: msg.slice(0, 120) });
-        setDownloads((prev) => prev.map((d) => (d.id === id ? { ...d, status: "error", error: msg.slice(0, 120) } : d)));
+        fail(msg);
       }
     })();
   };
@@ -1374,7 +1362,7 @@ export default function BrowserView(props: Props) {
         return;
       }
       /* The tucked pill is unmounted: never tuck while the user is
-         inside it (typing in the URL field, a downloads card) or
+         inside it (typing in the URL field, an open sheet) or
          the field would vanish mid-edit. */
       const ae = document.activeElement;
       if (ae && ae.closest && ae.closest(".lb-dock-pill")) {
@@ -3036,26 +3024,6 @@ export default function BrowserView(props: Props) {
               {activeDt.fails.length}
             </button>
           )}
-          {/* Downloads: the button appears only while something is
-              downloading (or just finished); opens the download card. */}
-          {downloads.length > 0 && (
-            <>
-              <m3e-icon-button
-                id="lb-dl-btn"
-                aria-label={"Downloads (" + downloads.length + ")"}
-                toggle
-                selected={dlOpen ? "" : undefined}
-                onClick={() => {
-                  setDlOpen((v) => !v);
-                  setTabsOpen(false);
-                }}
-              >
-                <m3e-icon name="download" aria-hidden={true} />
-              </m3e-icon-button>
-              <m3e-badge for="lb-dl-btn">{String(downloads.length)}</m3e-badge>
-              <m3e-tooltip for="lb-dl-btn" position="above">Downloads</m3e-tooltip>
-            </>
-          )}
           <m3e-icon-button
             id="lb-fs-btn"
             aria-label={fullscreen ? "Exit full screen" : "Full screen"}
@@ -3133,19 +3101,25 @@ export default function BrowserView(props: Props) {
           {xpiPrompt && (
             <XpiPrompt
               name={xpiPrompt.name}
+              got={xpiPrompt.got}
+              size={xpiPrompt.size}
               bytes={xpiPrompt.bytes}
-              onInstall={() => void installXpi(xpiPrompt)}
-              onSave={() => saveXpi(xpiPrompt)}
-              onCancel={() => setXpiPrompt(null)}
-            />
-          )}
-          {dlMounted && downloads.length > 0 && (
-            <DownloadsCard
-              closing={!dlOpen}
-              downloads={downloads}
-              onClose={() => setDlOpen(false)}
-              onRemove={(id) => setDownloads((prev) => prev.filter((x) => x.id !== id))}
-              onCancel={cancelDownload}
+              error={xpiPrompt.error}
+              onInstall={() => {
+                if (!xpiPrompt.bytes) return;
+                void installXpi({ name: xpiPrompt.name, bytes: xpiPrompt.bytes });
+              }}
+              onSave={() => {
+                if (!xpiPrompt.bytes) return;
+                saveXpi({ name: xpiPrompt.name, bytes: xpiPrompt.bytes });
+              }}
+              onCancel={() => {
+                /* Busy: stop the transfer. Ready or failed: dismiss. */
+                const ac = xpiAbort.current;
+                xpiAbort.current = null;
+                if (ac) ac.abort();
+                setXpiPrompt(null);
+              }}
             />
           )}
           {fileView && (
