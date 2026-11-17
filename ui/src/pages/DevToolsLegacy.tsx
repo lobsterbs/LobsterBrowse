@@ -1,4 +1,4 @@
-/* LEGACY DevTools (rollback copy, user request 2026-11-07): the
+/* LEGACY DevTools (rollback copy): the
    floating-card DevTools from before the bottom-sheet redesign.
    This file is intentionally NOT imported anywhere; it stays in-repo
    so the old surface can be restored quickly (restore by pointing
@@ -430,11 +430,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the document diagnostics as KDL (user
-     request 2026-10-29): header, stats, console errors and warnings,
-     resource failures, and the full retained event ring. It is the
-     single export path since Export and Share to MCP were removed
-     (user request 2026-10-30). */
+  /* Copy logs serializes the document diagnostics as KDL: header,
+     stats, console errors and warnings, resource failures, and the
+     full retained event ring. It is the single export path since
+     Export and Share to MCP were removed. */
   const copyLogs = async () => {
     const snapshot = snapshotForScope(snapshotRef.current, scope);
     const statusLine = snapshot

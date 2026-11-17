@@ -13,7 +13,7 @@ type Props = {
   onNavigate: (target: string) => void;
 };
 
-/* The row's leading icon (wave 77): the real brand mark of the
+/* The row's leading icon: the real brand mark of the
    engine the suggestion actually came from when we have one,
    otherwise the generic icon. */
 function SugMark({ s }: { s: Suggestion }) {
@@ -85,14 +85,14 @@ export default function HomePage({ settings, onNavigate }: Props) {
     searchFor: (q: string) => searchUrl(settings, q),
   });
 
-  /* Panel visibility (wave 77): no row renders and the view's panel
+  /* Panel visibility: no row renders and the view's panel
      never opens until the query clears SUGGEST_MIN_CHARS
      (buildSuggests returns [] below it), and only while the input
      holds focus. The open attribute mirrors that onto the element;
      React cannot set attributes on unknown custom elements
      declaratively, so an effect does it after each render. */
   const menuOpen = open && suggestions.length > 0;
-  /* Wave 78: the view also opens itself on plain input focus (and on
+  /* The view also opens itself on plain input focus (and on
      the first keystroke) before any row exists; its beforetoggle is
      cancelable, so cancel the open whenever no suggestion would
      render. The panel then appears only once real rows exist. */
@@ -173,7 +173,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
-          {/* Wave 78: one icon only. The view ships its own default
+          {/* One icon only. The view ships its own default
               magnifier in the leading area; overriding the search-icon
               slot replaces it, and the old duplicated leading slots
               (closed + open) showed two icons in the closed state. */}

@@ -1,9 +1,8 @@
-/* Settings (wave 108 redesign, user request 2026-11-17): a sticky
-   frosted side navigation with one section visible at a time. The
-   page keeps the wave-80 component language (SetPanel expansion
-   panels, SetInline row cards, Row switches inside an
+/* Settings: a sticky frosted side navigation with one section
+   visible at a time. The page keeps the component language (SetPanel
+   expansion panels, SetInline row cards, Row switches inside an
    m3e-content-pane) and every option, anchor and control of the
-   pre-redesign page; the wave-80 field oracle and the wave-108
+   pre-redesign page; the ui-wave80 field oracle and the ui-wave108
    anchor scan pin that. While ScramJet is the current proxy engine,
    every Zeolite-only option is greyed out. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -30,7 +29,7 @@ type Props = {
   onDeleteAll: () => void;
 };
 
-/* Wave 101 (#256): the default seed was the indigo-violet default
+/* #256: the default seed was the indigo-violet default
    every generated interface ships. The default is now derived from
    the product (a lobster red-orange); the old baseline stays as
    "Violet" for anyone attached to it. */
@@ -45,7 +44,7 @@ const SEEDS: Array<[string, string]> = [
    select; the real custom value lives in settings.wispServer. */
 const WISP_CUSTOM = "__custom__";
 
-/* Wave 108: the sections the side navigation switches between. One
+/* The sections the side navigation switches between. One
    section renders at a time; the nav carries the icon and title. */
 type SectionId = "search" | "privacy" | "appearance" | "extensions" | "advanced";
 
@@ -57,7 +56,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   advanced: "Advanced",
 };
 
-/* Wave 101 (#256): each section reads as one M3 group: an icon tile
+/* #256: each section reads as one M3 group: an icon tile
    on primary-container, a title heading and a supporting line. */
 const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
   search: { icon: "search", sub: "Engine and omnibox behavior" },
@@ -113,7 +112,7 @@ function SetPanel(props: {
   );
 }
 
-/* Single-control sub-card (user request 2026-11-07): a sub option
+/* Single-control sub-card: a sub option
    whose entire payload is one control renders as an inline row card,
    not an expansion panel - one switch behind a chevron is a wasted
    click. The headline and supporting text sit beside the control;
@@ -223,7 +222,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   const [openP, setOpenP] = useState<Record<string, boolean>>({});
   const toggleP = (id: string) => setOpenP((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  /* Wave 108: the active section. One section renders at a time; the
+  /* The active section. One section renders at a time; the
      sticky side navigation switches between them. */
   const [section, setSection] = useState<SectionId>("search");
 
@@ -323,7 +322,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <span slot="title">Settings</span>
           </m3e-app-bar>
 
-          {/* Wave 108: the sticky frosted side rail. One section is
+          {/* The sticky frosted side rail. One section is
               visible at a time; the active item carries the M3 pill
               and aria-current. */}
           <nav className="lb-set-nav" aria-label="Settings sections">
@@ -405,10 +404,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 <m3e-chip-set>
                   {SEEDS.map(([hex, name]) => (
                     <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
-                      {/* Wave 89: a colored swatch in the chip's icon slot
-                         (the plain m3e-chip exposes no avatar slot) so
-                         every seed option shows its color (user report
-                         2026-11-08). */}
+                      {/* A colored swatch in the chip's icon slot (the
+                         plain m3e-chip exposes no avatar slot) so every
+                         seed option shows its color. */}
                       <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
                       {name}
                     </m3e-chip>
@@ -430,8 +428,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
               />
               <p className="lb-muted">
-                Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
-                wave 92 #245; extended to AI and Settings in wave 96; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
+                Replaces the flat background with the photographic hero image (the Half-Life wallpaper, #245; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
               </p>
             </SetPanel>
               </>

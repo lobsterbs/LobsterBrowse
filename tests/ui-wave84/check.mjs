@@ -1,4 +1,4 @@
-/* Wave 84 UI regression checks: #235 AI attachment peek floats
+/* UI regression checks: #235 AI attachment peek floats
    above the bar and image-only sends work, #236 the ad-blocking card
    is a bottom sheet, #237 the search-engine picker is a select,
    #239 the DevTools sub-tool picker is a tonal pill row. Static

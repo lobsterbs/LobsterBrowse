@@ -1,8 +1,7 @@
-/* Wave 108 UI regression checks (settings redesign, user request
-   2026-11-17): the Settings page is a sticky frosted side navigation
-   with one section visible at a time. No capability was lost: the
-   wave-80 anchor set still renders and the expansion-panel component
-   language stays. */
+/* Settings redesign regression checks: the Settings page is a sticky
+   frosted side navigation with one section visible at a time. No
+   capability was lost: the anchor set still renders and the
+   expansion-panel component language stays. */
 import { readFileSync } from "node:fs";
 
 const ui = new URL("../../ui/", import.meta.url);

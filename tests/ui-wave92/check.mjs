@@ -1,4 +1,4 @@
-/* Regression check for the wave 92 home hero (issue #245): the
+/* Regression check for the home hero (#245): the
    liquid-metal shader is fully removed and the photographic hero
    image replaces it. Run from the repo root:
 

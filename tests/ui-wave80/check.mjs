@@ -1,10 +1,10 @@
-/* Wave-80 UI regression checks (user request 2026-11-07): static gates
-   for the beta UI redesign - the DevTools and tab-switcher bottom
-   sheets, the Settings expansion-panel redesign (no option lost), the
-   Downloads overflow-menu removal, the scroll-tuck toolbar, the
-   hero background (home, AI and Settings since wave 96), and the
-   single-provider (@m3e/web) consolidation. Plain fs checks; no app imports, so it runs anywhere
-   node runs. */
+/* UI regression checks: static gates for the beta UI redesign -
+   the DevTools and tab-switcher bottom sheets, the Settings
+   expansion-panel redesign (no option lost), the Downloads
+   overflow-menu removal, the scroll-tuck toolbar, the hero
+   background (home and AI), and the single-provider (@m3e/web)
+   consolidation. Plain fs checks; no app imports, so it runs
+   anywhere node runs. */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 
 const ui = new URL("../../ui/", import.meta.url);
@@ -21,7 +21,7 @@ const ok = (name, cond) => {
 /* --- Settings: every option the pre-redesign page exposed still
    surfaces in the redesigned page (the honest no-loss oracle: the
    fields the old page referenced, verified field by field against
-   the wave-80 rewrite). --- */
+   the rewrite). --- */
 {
   const page = read("src/pages/Settings.tsx");
   const fields = [
@@ -59,9 +59,9 @@ const ok = (name, cond) => {
 {
   const t = read("src/browser/TabSwitcherCard.tsx");
   ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal=""'));
-  /* #85 (user directive): the card grid and the live preview window are
-     gone; one row per tab now: favicon in a frosted m3e-avatar, then the
-     title, then the close button. */
+  /* #85: the card grid and the live preview window are gone; one row
+     per tab now: favicon in a frosted m3e-avatar, then the title,
+     then the close button. */
   ok("tabs: one row per tab", t.includes("m3e-avatar") && t.includes("lb-tab-row"));
   ok("tabs: preview window removed", !t.includes("lb-tab-preview"));
 }
@@ -72,7 +72,7 @@ const ok = (name, cond) => {
 {
   const d = read("src/pages/DevTools.tsx");
   ok("devtools: bottom sheet host", d.includes("m3e-bottom-sheet"));
-  /* #239 (wave 84): the connected button group was replaced by the tonal pill row. */
+  /* #239: the connected button group was replaced by the tonal pill row. */
   ok("devtools: sub-tool picker is the tonal pill row", d.includes("lb-dt-nav") && d.includes('variant={on ? "tonal" : "text"}'));
   ok("devtools: section cards", d.includes("m3e-card"));
   ok("devtools: legacy copy kept", existsSync(new URL("src/pages/DevToolsLegacy.tsx", ui)));
@@ -92,9 +92,7 @@ const ok = (name, cond) => {
   ok("devtools: legacy copy imported nowhere", stray === 0);
 }
 
-/* --- App: the hero background renders on home, AI and Settings
-     (user request 2026-11-09; wave 96 superseded the 2026-11-07
-     home-only shape). --- */
+/* --- App: the hero background renders on home and AI. --- */
 {
   const a = read("src/App.tsx");
   ok("app: fx background on home and AI (#261)", a.includes('settings.fancyBackground && (view === "home" || view === "ai")'));
@@ -116,13 +114,13 @@ const ok = (name, cond) => {
   ok("lock: md3e-web entry removed", !read("package-lock.json").includes("materialwebunofficial"));
 }
 
-/* --- Wave-80 follow-up (user report 2026-11-07): the settings panels
-   sat outside an m3e-accordion, so their surface tokens were empty
-   and the page rendered as one flat sheet; the nav rail must carry
-   no outline ring on the edge facing the content. #266 (user request
-   2026-11-11) superseded the diagnostics-actions placement: the
-   Resource failures card is gone entirely and both actions live in
-   the sheet header app bar, reachable from every sub-page. --- */
+/* --- Settings follow-up: the settings panels sat outside an
+   m3e-accordion, so their surface tokens were empty and the page
+   rendered as one flat sheet; the nav rail must carry no outline
+   ring on the edge facing the content. #266 superseded the
+   diagnostics-actions placement: the Resource failures card is gone
+   entirely and both actions live in the sheet header app bar,
+   reachable from every sub-page. --- */
 {
   const theme = read("src/theme.css");
   const pIdx = theme.indexOf(".lb-set-page m3e-expansion-panel {");
@@ -143,13 +141,13 @@ const ok = (name, cond) => {
   ok("devtools: resource failures card removed", !d.includes('aria-label="Resource failures"'));
   ok("devtools: resfail explainer removed", !d.includes("resfail reports"));
   ok("devtools: empty-fails message removed", !d.includes("No resource failures captured."));
-  ok("devtools: diagnostics page card removed (user request 2026-11-11)", dpos !== -1 && !d.slice(dpos).includes('aria-label="Engine diagnostics"'));
+  ok("devtools: diagnostics page card removed", dpos !== -1 && !d.slice(dpos).includes('aria-label="Engine diagnostics"'));
   ok("devtools: page tools card folded into the actions row", !d.includes('aria-label="Page tools"'));
   ok("devtools: eruda renders once", d.split("<ZeoliteEngineTools").length - 1 === 1);
-  ok("devtools: eruda gated on /eruda.js availability (user request 2026-11-11)", d.includes("erudaReady") && d.includes("disabled={erudaReady"));
+  ok("devtools: eruda gated on /eruda.js availability", d.includes("erudaReady") && d.includes("disabled={erudaReady"));
 }
 
-/* --- Settings follow-up (user request 2026-11-07): a sub option
+/* --- Settings follow-up: a sub option
    whose entire payload is one control is an inline row card
    (SetInline), not an expansion panel - one switch behind a chevron
    is a wasted click. Multi-control or explanatory sub options keep
@@ -169,7 +167,7 @@ const ok = (name, cond) => {
   ok("settings: inline cards join the jump focus ring", theme.includes(".lb-set-inline:focus-visible"));
 }
 
-/* --- Expressive type + shapes (user request 2026-11-12): the full
+/* --- Expressive type + shapes: the full
    Google Sans Flex axis set loads, the weight ramp and the M3E
    typescale are tokenized, no rule hardcodes a weight outside the
    ramp, and the decorative shapes are aria-hidden with the morph

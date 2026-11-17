@@ -26,7 +26,7 @@ body {
 h1, h2 { font-variation-settings: "wght" var(--lb-wght-emph); }
 h3, b, th { font-variation-settings: "wght" var(--lb-wght-strong); }
 
-/* Expressive type tokens (user request 2026-11-12). The 30-style M3
+/* Expressive type tokens. The 30-style M3
    scale (15 baseline + 15 emphasized roles), values verbatim from the
    @m3e/web 2.8.2 TypescaleToken source, the library's encoding of the
    official Material 3 type scale: components already resolve these
@@ -140,10 +140,10 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
-/* Enhanced UI (issue #245, wave 92): portaled to <body>, so the
+/* Enhanced UI (#245): portaled to <body>, so the
    fixed layer can never be trapped or resized by a view ancestor.
    Negative z-index covers the plain body background yet stays under
-   the app. The wave 78 liquid-metal ribbon shader is gone; the home
+   the app. The liquid-metal ribbon shader is gone; the home
    hero is the photographic image pinned center/cover, and the frost
    layers blur it as their real backdrop. Layer order: dark scrim,
    remote wallpaper, local lb-hero.jpg, surface token, so an
@@ -161,7 +161,8 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 }
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
-   readable over the animated background. Wave 88: unconditional - every surface is glass (user request 2026-11-08). */
+   readable over the animated background. Unconditional - every
+   surface is glass. */
 .lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host: backdrop-filter blurs the whole host
@@ -173,35 +174,35 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
-/* Wave 77/79: the Home search surface is m3e-search-view. Its bar
+/* The Home search surface is m3e-search-view. Its bar
    lives inside the view's shadow tree, so the frost travels by token
    inheritance: the bar container color (translucent surface 38%)
    crosses the shadow boundary, and the host-level backdrop blur is
    pill-clipped at 9999px (the closed host rect IS the bar rect) so
    the blur no longer paints square corners around the rounded bar.
-   Wave 88: the popover surface paints nothing - the .lb-ac glass card is
-   the suggestion surface (user request 2026-11-08). */
+   The popover surface paints nothing - the .lb-ac glass card is
+   the suggestion surface. */
 .lb-home m3e-search-view {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   border-radius: 9999px;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
-/* Wave 79: the docked view popover backdrop would tint the whole
+/* The docked view popover backdrop would tint the whole
    page while suggestions show; the suggestor is a docked overlay,
    not a modal, so the page behind stays untinted. */
 .lb-home m3e-search-view {
   --m3e-search-view-docked-scrim-opacity: 0%;
-  /* Wave 88 (user request 2026-11-08): the popover surface paints
-     nothing - the .lb-ac glass card is the suggestion surface, so
-     no grey panel sits under the suggestor. */
+  /* The popover surface paints nothing - the .lb-ac glass card is
+     the suggestion surface, so no grey panel sits under the
+     suggestor. */
   --m3e-search-view-container-color: transparent;
   --m3e-search-view-contained-container-color: transparent;
   --m3e-search-view-docked-scrim-color: transparent;
 }
-/* #231 (user request 2026-11-07): the open suggestion list reads as
+/* #231: the open suggestion list reads as
    frosted glass, consistent with the bar, rail and wordmark frost
-   chain. Wave 85: an overlay frosts regardless of the Enhanced UI
+   chain. An overlay frosts regardless of the Enhanced UI
    setting - it is always over other content. */
 .lb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
@@ -216,7 +217,8 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    so the flat look was the backdrop, not an overwrite: the home
    hero image paints a mostly dark stage, and blur over a flat dark
    field is invisible. The tint drops to 38% so the hero photo reads
-   through the glass; the inset gloss matches the search bar; the outer hairline ring is gone (user request 2026-11-07: it read as a border edge on the side facing the content views).
+   through the glass; the inset gloss matches the search bar; the outer hairline ring is gone (it read as a border edge on the side
+   facing the content views).
    The @m3e/web 2.8.2 rail shadow paints no background of its own
    (verified in dist nav-rail.js), so the container token stays a
    harmless no-op kept for component updates. */
@@ -226,11 +228,11 @@ m3e-nav-rail {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
-}/* ASCII wordmark: Wave 89 - the banner follows the exact sheet frost
+}/* ASCII wordmark: the banner follows the exact sheet frost
    spec (52% surface-container-high tint behind blur(28px)
    saturate(180%) brightness(.66) plus the shared glass ring), so the
-   art reads as real frosted glass, not a grey box (user report
-   2026-11-08). Wave 88: the wordmark glass is unconditional. */
+   art reads as real frosted glass, not a grey box. The wordmark
+   glass is unconditional. */
 .lb-home pre.lb-ascii {
   display: inline-block;
   max-width: 100%;
@@ -243,7 +245,7 @@ m3e-nav-rail {
   border-radius: 20px;
 }
 
-/* Settings (global redesign, user request 2026-11-07): the page is a
+/* Settings (global redesign): the page is a
    m3e-content-pane; every sub-card is an m3e-expansion-panel whose
    header carries the headline and supporting text. */
 .lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }
@@ -251,7 +253,7 @@ m3e-nav-rail {
 .lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 .lb-set-anchor { scroll-margin-block: 96px; }
-/* Wave 96 (user request 2026-11-09): Settings renders over the home
+/* Settings renders over the home
    hero image. The content pane paints an opaque surface by default,
    which would fully cover the fx layer, so the pane goes transparent
    and the glass cards frost the photo directly. */
@@ -260,7 +262,7 @@ m3e-nav-rail {
    m3e-accordion: the library defines the container color and
    elevation only for panels slotted into an accordion, so outside
    one the tokens are empty and the panels rendered transparent -
-   the whole page read as one flat sheet (user report 2026-11-07).
+   the whole page read as one flat sheet.
    The values follow the app's filled-card language (m3e-card
    variant="filled" defaults to surface-container-highest) so the
    sub-cards read as the same card family as the search results and
@@ -272,30 +274,29 @@ m3e-nav-rail {
   --m3e-expansion-panel-open-elevation: var(--md-sys-elevation-level0, none);
 --m3e-expansion-panel-shape: 20px;
 --m3e-expansion-panel-open-shape: 20px;
-  /* Wave 85 uniformity: the panel header and body align to the same
+  /* Uniformity: the panel header and body align to the same
      12px inline rhythm as the inline row cards, so both card shapes
      read as one family with identical text margins. */
   --m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);
   --m3e-expansion-header-padding-right: var(--md-sys-measurement-space200);
-  /* Wave 105 (user request 2026-11-14): the expansion header host pins
+  /* The expansion header host pins
      its own height through --m3e-expansion-header-collapsed-height and
      --m3e-expansion-header-expanded-height (defaults 48px/64px), which
      clipped the roomier setp-head into a 48px band with the headline
      and supporting text painting past the card edges. Both tokens go
-     auto so the header sizes to its own content. Wave 107 sets the
-     body padding to the compact 12/16/16 rhythm. */
+     auto so the header sizes to its own content; the body padding
+     follows the compact 12/16/16 rhythm. */
   --m3e-expansion-header-collapsed-height: auto;
   --m3e-expansion-header-expanded-height: auto;
   --m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);
-  /* Wave 88: the panel surface is frosted glass like every other
-     card (user request 2026-11-08). Wave 89: the host carries the
-     panel shape so the frost halo is rounded, not a square grey
-     outline (user report 2026-11-08). */
+  /* The panel surface is frosted glass like every other card. The
+     host carries the panel shape so the frost halo is rounded, not
+     a square grey outline. */
   border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
-/* Single-control sub-cards (user request 2026-11-07): a sub option
+/* Single-control sub-cards: a sub option
    whose entire payload is one control is an inline row card, not an
    expansion panel. Same filled-card surface family as the panels
    above; the control sits beside the text and nothing hides behind
@@ -308,7 +309,7 @@ m3e-nav-rail {
   flex-wrap: wrap;
   gap: var(--md-sys-measurement-space50) var(--md-sys-measurement-space200);
   width: 100%;
-  /* Wave 107 (#274 redesign): the compact M3 rhythm, matched to the
+  /* #274 redesign: the compact M3 rhythm, matched to the
      panel headers: 56px min-height, 12/16px inner pad. */
   min-height: 56px;
   padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
@@ -320,7 +321,7 @@ border-radius: 20px;
   -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
-/* Wave 101 (#256): the destructive Data row tints toward the
+/* #256: the destructive Data row tints toward the
    error container instead of the neutral glass. */
 .lb-set-inline.lb-set-danger {
   background: color-mix(in srgb, var(--md-sys-color-error-container) 42%, transparent);
@@ -336,7 +337,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    column rhythm. */
 .lb-set-page { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }
 .lb-set-bar { grid-column: 1 / -1; }
-/* Wave 108 (settings redesign, user request 2026-11-17): the sticky
+/* Settings side rail: the sticky
    frosted navigation rail. Same glass language as the sheets; the
    active item is the secondary-container pill. */
 .lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); padding: var(--md-sys-measurement-space100); background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); border-radius: 20px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent); }
@@ -350,7 +351,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   .lb-set-nav { position: static; flex-direction: row; overflow-x: auto; }
   .lb-set-nav-item { width: auto; white-space: nowrap; }
 }
-/* Motion (wave 108): a section switch remounts the section children,
+/* Motion: a section switch remounts the section children,
    so this entrance animation fires per switch; the nav pill crossfades
    its container colors. Composite-only properties; reduced motion
    collapses both. */
@@ -364,7 +365,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   .lb-set-nav-item { transition: none; }
 }
 
-/* Wave 101 (#256) redesign: the page title carries a supporting
+/* #256 redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
    body-small supporting line. All color stays on tokens. */
@@ -380,7 +381,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-set-section-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" var(--lb-wght-emph); }
 .lb-set-section-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
-/* Wave 101b (#257): one orchestrated entrance for the redesigned
+/* #257: one orchestrated entrance for the redesigned
    page: the title block leads, the section tiles follow on the
    emphasized curve. Transform + opacity only, so it stays on the
    compositor; reduced-motion users get the plain page. */
@@ -431,15 +432,14 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    affordance, so they did not read as clickable. */
 .lb-seed-row m3e-chip { cursor: pointer; }
 .lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
-/* Wave 89: each seed chip carries a colored swatch in the chip's/* #257: hover-only affordance, gated to fine pointers (touch fires
+/* #257: hover-only affordance, gated to fine pointers (touch fires
    hover on tap). */
 @media (hover: hover) and (pointer: fine) {
   .lb-seed-row m3e-chip:hover { filter: brightness(1.15); }
 }
-/* Wave 89: each seed chip carries a colored swatch in the chip's
-   icon slot (the plain m3e-chip exposes no avatar slot), so the
-   option shows its color instead of text only (user report
-   2026-11-08). */
+/* Each seed chip carries a colored swatch in the chip's icon slot
+   (the plain m3e-chip exposes no avatar slot), so the option shows
+   its color instead of text only. */
 .lb-seed-dot {
   width: 16px;
   height: 16px;
@@ -491,14 +491,14 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
    rules, DevTools toolbar) it just must not collapse. */
 .lb-seed-row m3e-select,
 .lb-dt-toolbar m3e-select { flex: 0 1 auto; min-width: 130px; }
-/* Wave 85 typography: every text element rides the typescale tokens;
+/* Typography: every text element rides the typescale tokens;
    supporting text is body-small (12px), no off-scale sizes. */
 .lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
 .lb-curl { font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); opacity: 0.75; }
 
 /* ---- Search autocomplete (custom, matches the theme) ---- */
 .lb-ac-wrap { position: relative; margin-left: auto; margin-right: auto; }
-/* Wave 77: the suggestion list now lives INSIDE the
+/* The suggestion list now lives INSIDE the
    m3e-search-view results panel (contained variant), so the panel
    provides the surface, elevation and positioning; this list only
    shapes its rows and its scrollbox. */
@@ -680,11 +680,11 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-loadchip { position: absolute; top: 0; left: 50%; z-index: 6; pointer-events: none; display: flex; justify-content: center; padding: var(--md-sys-measurement-space150, 12px) 0; opacity: 0; transform: translate(-50%, -100%); transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1), transform 240ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-loadchip-on { opacity: 1; transform: translate(-50%, 0); }
 .lb-loadchip m3e-loading-indicator { width: 56px; height: 56px; }
-/* Wave 77: the row's engine brand mark (the real logo SVG from
+/* The row's engine brand mark (the real logo SVG from
    simple-icons) leads the suggestion text; the .lb-ac-item flex gap
    provides the required space after it. */
 .lb-engine-mark { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
-/* Wave 77: the black skeleton page (m3e-skeleton painting pulse
+/* The black skeleton page (m3e-skeleton painting pulse
    shapes over an invisible mock layout) that covers the content
    area while a navigation's first paint has not committed - a new
    URL, a new tab, a restored session - and never while a committed
@@ -703,8 +703,8 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   to { opacity: 1; }
 }
 .lb-sk m3e-skeleton { display: block; width: 100%; height: 100%; }
-/* The mock layout the skeleton shapes are painted over. Wave 79:
-   full-size, so the skeleton reads as the entire frame instead of a
+/* The mock layout the skeleton shapes are painted over: full-size,
+   so the skeleton reads as the entire frame instead of a
    small centered box. */
 .lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; }
 .lb-sk-head { width: 42%; height: 24px; border-radius: 8px; flex: 0 0 auto; }
@@ -905,10 +905,10 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   max-height: 300px;
   overflow-y: auto;
 }
-/* #232 (user request 2026-11-07): the toolbar dropdown is frosted
+/* #232: the toolbar dropdown is frosted
    glass like the surfaces it floats over - translucent surface tint
-   plus backdrop blur, hairline ring and inset highlight. Wave 85:
-   overlays frost regardless of the Enhanced UI setting. */
+   plus backdrop blur, hairline ring and inset highlight. Overlays
+   frost regardless of the Enhanced UI setting. */
 .lb-tb-ac {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);
   border-color: transparent;
@@ -935,7 +935,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 }
 .lb-tb-ac-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* DevToolsLegacy panel (rollback copy, user request 2026-11-07):
+/* DevToolsLegacy panel (rollback copy):
    styles for the UNIMPORTED legacy floating card
    (pages/DevToolsLegacy.tsx), kept so a rollback is a one-file swap.
    The live DevTools is the bottom sheet below. */
@@ -971,7 +971,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-inspect-id { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); word-break: break-all; }
 .lb-inspect-label { font-size: var(--md-sys-typescale-body-small-font-size, 12px); font-variation-settings: "wght" var(--lb-wght-medium); margin-top: var(--md-sys-measurement-space50); opacity: 0.75; }
 
-/* DevTools bottom sheet (user request 2026-11-07): the live DevTools
+/* DevTools bottom sheet: the live DevTools
    mounts in an m3e-bottom-sheet; each section renders its mini
    surfaces as m3e-cards (content above a divider, inline action
    buttons under it). The sheet body owns scrolling. */
@@ -979,8 +979,7 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* #239: the sub-tool picker is a bottom-bar style row; the active
    sub-tool is the tonal rounded pill (variant), the inactive ones
    are text buttons. */
-/* Wave 89: the sub-tool picker centers under the sheet (user report
-   2026-11-08). */
+/* The sub-tool picker centers under the sheet. */
 .lb-dt-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--md-sys-measurement-space50); }
 .lb-dt-nav-btn { flex: 0 1 auto; }
 .lb-dt-card { width: 100%; }
@@ -1236,7 +1235,7 @@ border-radius: var(--m3e-shape-lg);
 /* The card's slotted rows need their own padding: the m3e-card
    surface has none, and unpadded rows (especially the two long
    action buttons) previously escaped the card outline entirely.
-   Wave 85: the card headers are m3e-app-bar top bars now, so the old
+   The card headers are m3e-app-bar top bars now, so the old
    lb-site-head/lb-site-ctitle rules are gone; title text sizes come
    from the app-bar typescale. */
 .lb-site-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space75); width: 100%; padding: 0 var(--md-sys-measurement-space200) var(--md-sys-measurement-space150); box-sizing: border-box; }
@@ -1337,7 +1336,7 @@ border-radius: var(--m3e-shape-lg);
   cursor: pointer;
 }
 .lb-diag-tb-chip m3e-icon { font-size: 16px; }
-/* Real frosted glass (user request 2026-11-07): every surface that
+/* Real frosted glass: every surface that
    floats over other content gets a translucent surface tint plus
    backdrop blur and saturation. The m3e-bottom-sheet host paints its
    own container background (verified in the @m3e/web 2.8.2 dist), so
@@ -1348,7 +1347,7 @@ border-radius: var(--m3e-shape-lg);
    path to a backdrop filter, so dialogs keep their solid surface. */m3e-bottom-sheet {
   --m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);
   --m3e-bottom-sheet-max-width: 560px;
-  /* Wave 88 fix: the component clamps its JS-computed height to
+  /* The component clamps its JS-computed height to
      innerHeight minus this top-space token. Keep the JS clamp
      equal to the CSS max-height so a tall sheet stays anchored
      to the viewport bottom instead of floating above it. */
@@ -1366,10 +1365,9 @@ m3e-menu {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
-/* Wave 89: plain items in the toolbar overflow menu indent to the
-   same start line as the checkbox items - the checkbox graphic
-   shifts checked labels 4px left of plain ones (user report
-   2026-11-08). */
+/* Plain items in the toolbar overflow menu indent to the same start
+   line as the checkbox items - the checkbox graphic shifts checked
+   labels 4px left of plain ones. */
 #lb-overflow-menu m3e-menu-item {
   --m3e-menu-item-padding-start: var(--md-sys-measurement-space100);
 }
@@ -1383,7 +1381,7 @@ m3e-menu {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
-/* ---- Wave 88: frosted glass everywhere (user request 2026-11-08).
+/* ---- Frosted glass everywhere.
    Every surface that used to paint an opaque grey or black container
    now reads as glass: a translucent surface tint over a blurred
    backdrop, a hairline ring and an inset highlight. Shared tokens
@@ -1394,7 +1392,7 @@ m3e-menu {
   --lb-glass-sheet-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 52%, transparent);
   --lb-glass-blur: blur(18px) saturate(160%);
   --lb-glass-ring: 1px solid rgb(255 255 255 / .08);
-  /* Wave 91 (#243): in-sheet sub-cards lift lighter than the sheet
+  /* #243: in-sheet sub-cards lift lighter than the sheet
      surface; a transparent or same-tint card over the uniform frost
      reads as a flat grey panel, not glass. */
   --lb-glass-lift: color-mix(in srgb, #ffffff 7%, transparent);
@@ -1425,29 +1423,29 @@ m3e-menu {
    host-paints-frost chain as the sheets. 20px radius per the
    settings-card spec; the settings search results that shared
    this rule were removed in #269. */
-/* Wave 91 (issue #243, reopened): the DevTools cards sit on the
+/* #243 (reopened): the DevTools cards sit on the
    uniform sheet frost, so a fully transparent card was invisible
-   as glass (user report: cards still not frosted). In-sheet
+   as glass. In-sheet
    sub-cards instead lift lighter than the sheet surface - a 7%
    white glass fill plus an inset top highlight reads as a glass
    panel over the frost. */
 .lb-dt-card {
   --m3e-card-container-color: var(--lb-glass-lift);
   --m3e-card-shape: 20px;
-  /* Wave 89: the frost halo rides the host, so the host carries the
-     card shape too - a square host painted a square grey outline
-     behind the rounded card (user report 2026-11-08). */
+  /* The frost halo rides the host, so the host carries the card
+     shape too - a square host painted a square grey outline behind
+     the rounded card. */
   border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 .lb-ext-tile {
-  /* Wave 91 (#243): in-sheet tiles lift like the other sub-cards. */
+  /* #243: in-sheet tiles lift like the other sub-cards. */
   --m3e-card-container-color: var(--lb-glass-lift);
   --m3e-card-shape: 20px;
-  /* Wave 89: the host carries the card shape so the frost halo is
-     rounded, not square (user report 2026-11-08). */
+  /* The host carries the card shape so the frost halo is rounded,
+     not square. */
   border-radius: 20px;
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
@@ -1461,7 +1459,7 @@ m3e-menu {
   box-sizing: border-box;
   border-radius: 20px;
   border: var(--lb-glass-ring);
-  /* Wave 91 (#243): the in-sheet row lifts over the sheet frost. */
+  /* #243: the in-sheet row lifts over the sheet frost. */
   background: var(--lb-glass-lift);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
@@ -1500,7 +1498,7 @@ m3e-snackbar {
   .lb-set-inline .lb-setting-desc { font-size: 13px; }
 }
 
-/* Basic top bars (user request 2026-11-07): every top bar is an
+/* Basic top bars: every top bar is an
    m3e-app-bar with only a back button and a title. The bar paints a
    transparent container: in bottom sheets the frosted sheet surface
    shows through (the header slot would otherwise inherit the sheet
@@ -1511,10 +1509,10 @@ m3e-snackbar {
   --m3e-app-bar-container-elevation: none;
   --m3e-app-bar-container-elevation-on-scroll: none;
 }
-/* Tab switcher (user request 2026-11-07): a modal m3e-bottom-sheet;
+/* Tab switcher: a modal m3e-bottom-sheet;
    the sheet owns position, scrim and open/close motion. One row per
    tab: frosted avatar favicon, title, close X. */
-/* One tab per row (user request 2026-11-07): frosted avatar favicon,
+/* One tab per row: frosted avatar favicon,
    site title, close X. The list scrolls vertically; a dying row
    collapses vertically so the rows below slide up smoothly. */
 .lb-tabs-row {
@@ -1526,14 +1524,13 @@ m3e-snackbar {
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
-  /* Wave 89: no inline padding of its own - the sheet body already
-     pads 16px inline, so the rows align with every other sheet card
-     instead of running 16px past the sheet's right edge (user report
-     2026-11-08). */
+  /* No inline padding of its own - the sheet body already pads 16px
+     inline, so the rows align with every other sheet card instead
+     of running 16px past the sheet's right edge. */
   padding: var(--md-sys-measurement-space50) 0 16px;
 }
 /* Rows are plain buttons (not cards): the active tab reads as a
-   rounded tonal pill behind the whole row (the wave-84 active-marker
+   rounded tonal pill behind the whole row (the active-marker
    language), the inactive rows stay transparent until hovered. */
 .lb-tab-row {
   display: flex;
@@ -1571,9 +1568,9 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
 /* The favicon sits inside a frosted m3e-avatar: translucent surface
    tint plus backdrop blur, so the glass reads behind the icon. */
 .lb-tab-avatar {
-  /* Wave 89: the frost rides the host element, so the host needs the
+  /* The frost rides the host element, so the host needs the
      avatar's circular shape too - a square host boxed the favicon in
-     a frosted square (user report 2026-11-08). */
+     a frosted square. */
   border-radius: 9999px;
   --m3e-avatar-size: 40px;
   --m3e-avatar-color: color-mix(in srgb, var(--md-sys-color-surface-container, #f3edf7) 55%, transparent);
@@ -1583,7 +1580,7 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   flex-shrink: 0;
 }
 .lb-tab-avatar m3e-icon { font-size: 20px; }
-/* Wave 90 (issue #240): the avatar's internal ::slotted(img) rule
+/* #240: the avatar's internal ::slotted(img) rule
    paints the favicon at 100%/100% cover, which hides the frosted
    glass ring entirely. A document rule outranks ::slotted() for
    slotted light-DOM elements, so the favicon sits inside the frost
@@ -1836,7 +1833,7 @@ background: var(--lb-glass-tint);
   .lb-cmdk { animation: none; }
 }
 
-/* ---- Beta UI wave: wordmark scale, dock grip, incognito badge,
+/* ---- Beta UI polish: wordmark scale, dock grip, incognito badge,
    recent sites, tile row, shared panel surface, layout fixes
    (#82 #83 #85 #86 #88 #91 #92 #93 #94 #95 #96). Additive layer;
    baseline rules above stay untouched. ---- */
@@ -1987,7 +1984,7 @@ body .lb-ext-panel {
 .lb-ai-under { display: flex; align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100, 8px); max-width: 760px; width: 100%; margin: 0 auto; padding: 0 0 var(--md-sys-measurement-space100, 8px); flex: none; }
 .lb-ai-under .lb-ai-quota { margin-left: 0; }
 /* Frosted glass: same treatment as the Home bar (tint + blur + ring
-   + gloss). Wave 85: the chat bar floats over the scrolling chat, so
+   + gloss). The chat bar floats over the scrolling chat, so
    it frosts regardless of the Enhanced UI setting. */
 .lb-ai-bar m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
@@ -2369,14 +2366,13 @@ border-radius: 20px;
   flex-direction: column;
   gap: 18px;
   width: 100%;
-  /* Wave 89: no inline padding of its own - the sheet body already
-     pads 16px inline, so the hero and the hosts card share the same
-     left line (user report 2026-11-08). */
+  /* No inline padding of its own - the sheet body already pads 16px
+     inline, so the hero and the hosts card share the same left
+     line. */
   padding: 0 0 var(--md-sys-measurement-space150);
   box-sizing: border-box;
 }
-/* Wave 89: the shield circle sits above the count (user choice
-   2026-11-08). Wave 90 (issue #241): the whole hero column is
+/* The shield circle sits above the count. #241: the whole hero column is
    horizontally centered inside the sheet instead of left-aligned. */
 .lb-ad-hero { display: flex; flex-direction: column; align-items: center; gap: var(--md-sys-measurement-space100); }
 .lb-ad-hero-ic {
@@ -2417,7 +2413,7 @@ background: var(--lb-glass-tint);
        card, above the build chips. Pixel art: nearest-neighbour
        upscaling keeps the edges crisp. ---- */
 
-/* AgentChat (21st.dev) error part, wave 96: a failed turn renders
+/* AgentChat (21st.dev) error part: a failed turn renders
    as an inline error card in the conversation (with Try again),
    so the failure stays in context instead of a transient toast. */
 .lb-ai-error {
@@ -2444,7 +2440,7 @@ background: var(--lb-glass-tint);
 }
 .lb-ai-error-retry:hover { text-decoration: underline; }
 
-/* ---- #262 site-wide polish wave ---- */
+/* ---- #262 site-wide polish ---- */
 /* Omnibox suggestion rows on m3e-list-item: transparent container,
    the old hover/active tint moves onto the M3E container token. */
 .lb-tb-ac m3e-list-item.lb-tb-ac-item { --m3e-list-item-container-color: transparent; cursor: pointer; }
@@ -2474,19 +2470,19 @@ background: var(--lb-glass-tint);
 }
 
 /* DevTools pages stay mounted; the sub-tool switch toggles [hidden]
-   (user request 2026-11-13): no unmount/remount churn between
-   sub-tools. The old height cap moves to the page sections. */
+   No unmount/remount churn between sub-tools; the old height cap
+   moves to the page sections. */
 .lb-dt-page { display: flex; flex-direction: column; gap: 18px; }
 .lb-dt-page[hidden] { display: none; }
 .lb-dt-page .lb-console, .lb-dt-page .lb-net { max-height: 38vh; }
 
-/* Disabled tool buttons grey out (user request 2026-11-11): the
+/* Disabled tool buttons grey out: the
    Eruda button in DevTools is disabled when /eruda.js is not
    available; the class makes the grey-out explicit regardless of the
    component's own disabled styling. */
 .lb-tool-disabled { opacity: 0.38; pointer-events: none; }
 
-/* Morphing thinking shape (AI tool row, user request 2026-11-12):
+/* Morphing thinking shape (AI tool row):
    one morphing element per view, decorative (aria-hidden in TSX);
    reduced motion freezes every morph by dropping the transition. */
 .lb-ai-tool-shape {

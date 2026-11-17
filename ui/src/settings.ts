@@ -165,9 +165,8 @@ export type Settings = {
   /* #213: the toolbar pill tint from the active tab's favicon hue
      is always on (the Settings toggle was removed; dark scheme only). */
   /* Enhanced UI: photographic hero background on the home view
-     instead of the flat surface (wave 92, issue #245: the wave 78
-     liquid-metal shader was removed fully and replaced by the hero
-     image). On by default. */
+     instead of the flat surface (#245: the liquid-metal shader was
+     removed fully and replaced by the hero image). On by default. */
   fancyBackground: boolean;
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
@@ -214,8 +213,8 @@ export function loadSettings(): Settings {
           ? (parsed.engine as EngineId)
           : DEFAULT_SETTINGS.engine,
       /* The Lobster scheme was removed: migrate stored picks to Baseline. */
-      /* Wave 101 (#256): the stored old default migrates to the new
-     product seed; a deliberately picked color is kept. */
+      /* #256: the stored old default migrates to the new product
+     seed; a deliberately picked color is kept. */
       seed: !parsed.seed || parsed.seed === "#E8552F" || parsed.seed === "#6750A4" ? DEFAULT_SETTINGS.seed : parsed.seed,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),

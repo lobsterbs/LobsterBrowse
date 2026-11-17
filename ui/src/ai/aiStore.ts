@@ -493,7 +493,7 @@ export const WEB_SEARCH_TOOL = {
   },
 } as const;
 
-/* Sub agents (wave B): the main model delegates self-contained
+/* Sub agents: the main model delegates self-contained
    subtasks to Nemotron or Gemma through the spawn_agent tool. The
    sub agent gets the same web_search tool; its text is NEVER shown
    to the user - only its final answer returns to the main model as
@@ -692,7 +692,7 @@ export async function* streamChat(opts: {
   yield { type: "finish", reason: finish || "stop", usage };
 }
 
-/* ---- sub agents (wave B) ----
+/* ---- sub agents ----
    Runs one sub agent turn: up to three stream/tool rounds with the
    same web_search tool. Its reasoning and text never render in the
    page; only the final answer returns to the main model as the tool

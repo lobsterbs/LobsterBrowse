@@ -1,5 +1,5 @@
-/* KDL serialization for the DevTools Diagnostics Copy logs button
-   (user request 2026-10-29): the same content the JSON export carries,
+/* KDL serialization for the DevTools Diagnostics Copy logs button:
+   the same content the JSON export carries,
    emitted as a KDL document in the style of the engine's KDL exports.
    Structurally typed against the DevTools console and failure rows so
    this module owns no state and has no import cycle with the page. */

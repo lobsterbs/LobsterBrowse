@@ -1,4 +1,4 @@
-/* Wave 91 UI regression checks: the glass lift sub-cards and the
+/* UI regression checks: the glass lift sub-cards and the
    animation audit fixes.
    - Cards (#243, reopened): in-sheet sub-cards (DevTools cards,
      extension tiles, ad rows) lift lighter than the sheet surface
@@ -32,7 +32,7 @@ ok(theme.includes("--lb-glass-lift: color-mix(in srgb, #ffffff 7%, transparent);
 ok(theme.split("--lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2b2f);").length - 1 === 2, "both opaque fallbacks define the lift token");
 
 /* 2. In-sheet sub-cards lift. */
-const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
+const dt91 = theme.lastIndexOf(".lb-dt-card {");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the lift");
 ok(dtWin.includes("box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);"), "DevTools card host carries the inset top highlight");

@@ -1,4 +1,4 @@
-/* Engine logo marks for the suggest rows (wave 77): real brand SVG
+/* Engine logo marks for the suggest rows: real brand SVG
    path data from the simple-icons set (CC0), keyed by the engine's
    lowercase display name - the same name the /suggest endpoint
    reports as the row source. Bing has no simple-icons entry, so it

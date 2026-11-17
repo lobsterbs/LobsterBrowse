@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS, ENGINES } from '../../ui/src/settings.ts';
 
-/* The default search engine is Brave (user request 2026-11-04).
+/* The default search engine is Brave.
    DEFAULT_SETTINGS.engine is the single default knob: fresh profiles
    and invalid stored values fall back to it, so this line decides
    what a brand-new user searches with. */

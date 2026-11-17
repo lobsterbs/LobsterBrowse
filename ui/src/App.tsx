@@ -253,7 +253,7 @@ export default function App() {
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         zlAnnounceContentOrigin(co);
         if (co) zlContentRegister(co);
-        /* #477 wave 3: keep the guest-host realm open on the app and
+        /* #477: keep the guest-host realm open on the app and
            content origins so proxied-page service-worker registrations
            can spawn their isolated guest realms. */
         zlGuestHost(co);
@@ -849,10 +849,10 @@ export default function App() {
           renders on home and AI (#261 removed Settings: a work
           surface wants a quiet background): the rail and dock
           frost what is really adjacent to them.
-          Wave 92 (issue #245): the liquid-metal ribbon shader was
-          removed fully and replaced by the static photographic hero
-          image (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule
-          in theme.css). Away from those views = not rendered. */}
+          #245: the liquid-metal ribbon shader was removed fully
+          and replaced by the static photographic hero image
+          (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
+          theme.css). Away from those views = not rendered. */}
       {settings.fancyBackground && (view === "home" || view === "ai") &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,

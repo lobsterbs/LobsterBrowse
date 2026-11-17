@@ -173,9 +173,9 @@
 /* Extension identity badge: a plain div with the add-on's initials.
    m3e-avatar ignores external width/height (the component owns its
    box, the same quirk class as the rail), so the avatar never
-   rendered inside these 28px rows. Wave 89: the engine-reported
-   iconPath (zl:listExt) renders as the real icon; initials stay as
-   the fallback. */
+   rendered inside these 28px rows. The engine-reported iconPath
+   (zl:listExt) renders as the real icon; initials stay as the
+   fallback. */
 .lb-ext-ava {
   flex-shrink: 0;
   width: 28px;
@@ -190,8 +190,8 @@
   color: var(--md-sys-color-on-surface, #e6e1e5);
   user-select: none;
 }
-/* Wave 89: the real extension icon inside the badge - circle-cropped
-   like the badge itself, contained so nothing distorts. */
+/* The real extension icon inside the badge - circle-cropped like
+   the badge itself, contained so nothing distorts. */
 .lb-ext-ava-img {
   width: 100%;
   height: 100%;
@@ -256,8 +256,8 @@
 .lb-ext-optbtn,
 .lb-ext-delbtn { width: 100%; }
 
-/* Wave 91 (#244): reduced-motion users get the detail card without
-   the pop entrance (theme.css covers the other animation families). */
+/* #244: reduced-motion users get the detail card without the pop
+   entrance (theme.css covers the other animation families). */
 @media (prefers-reduced-motion: reduce) {
   .lb-ext-detail { animation: none; }
 }

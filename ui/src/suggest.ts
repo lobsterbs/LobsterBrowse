@@ -1,6 +1,6 @@
 import { looksLikeUrl, normalizeUrl } from "./settings.ts";
 
-/* Wave 77: the suggestor stays completely shut until the query clears
+/* The suggestor stays completely shut until the query clears
    the minimum character count search engines accept for completion
    requests (2). Below it the menu never opens, so a single stray
    keystroke cannot flash an empty panel. */
@@ -8,7 +8,7 @@ export const SUGGEST_MIN_CHARS = 2;
 
 export type Suggestion = { icon: string; text: string; url: string; src?: string };
 
-/* Suggestion order (wave 77): relevance-ranked engine suggestions
+/* Suggestion order: relevance-ranked engine suggestions
    lead - the most probable completion is the first row - then the
    direct search row, then a URL row. The
    engine relevance ranking itself: prefix hits, then substring

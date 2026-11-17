@@ -1,4 +1,4 @@
-/* Wave 88 UI regression checks: frosted glass everywhere.
+/* UI regression checks: frosted glass everywhere.
    - The Home suggestor popover paints nothing itself: the .lb-ac
      glass card is the suggestion surface (no grey panel under it),
      and the keyboard hint row is gone.
@@ -14,7 +14,7 @@
    - Opaque Material fallbacks for no-backdrop-filter support and
      prefers-reduced-transparency.
    No setting, option or behavior was removed: the only deleted UI
-   is the suggestor keyboard hint (user request 2026-11-08). */
+   is the suggestor keyboard hint. */
 import { readFileSync } from "node:fs";
 const ui = new URL("../../ui/", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ui), "utf8");
@@ -79,7 +79,7 @@ const histIdx = theme.indexOf(".lb-ai-hist-row {");
 ok(histIdx !== -1 && theme.slice(histIdx, histIdx + 700).includes("var(--lb-glass-tint)"), "AI history rows are glass");
 const hostsIdx = theme.indexOf(".lb-ad-hosts {");
 ok(hostsIdx !== -1 && theme.slice(hostsIdx, hostsIdx + 700).includes("background: var(--lb-glass-tint);"), "ad hosts block is glass");
-ok(theme.includes(".lb-ad-row {") && theme.slice(theme.indexOf(".lb-ad-row {", theme.indexOf("Wave 88"))).includes("backdrop-filter"), "ad toggle row is a glass setting-row card");
+ok(theme.includes(".lb-ad-row {") && theme.slice(theme.indexOf(".lb-ad-row {")).includes("backdrop-filter"), "ad toggle row is a glass setting-row card");
 ok(theme.includes("gap: 18px;"), "18px sub-card spacing present");
 ok(theme.includes(".lb-xpi-card," + NL + ".lb-site-card {"), "xpi and site cards share the glass rule");
 ok(theme.includes(".lb-ext-note {") && theme.slice(theme.indexOf(".lb-ext-note {")).includes("backdrop-filter: var(--lb-glass-blur);"), "extension notes are glass");

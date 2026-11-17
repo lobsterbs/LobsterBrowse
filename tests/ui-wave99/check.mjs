@@ -1,4 +1,4 @@
-/* Regression check for wave 99 idle tab unloading (issue #249):
+/* Regression check for idle tab unloading (#249):
    background proxied tabs free their documents from the shared
    renderer process after an idle deadline. Run from the repo root:
    node --experimental-strip-types tests/ui-wave99/check.mjs */
@@ -41,13 +41,13 @@ assert.ok(b.includes("tabActiveAt.current.set(tab.id, Date.now());"), "navigatio
 assert.ok(b.includes("tabActiveAt.current.delete(id);"), "tab close cleans the idle map");
 assert.ok(b.includes("sleeping.current.delete(id);"), "tab close cleans the sleeping set");
 
-/* Wave 100: the content column must include its own padding
+/* The content column must include its own padding
    (issue #251): content-box made .app-content poke 48px past the
    viewport and clip the right edge of every view. */
 const theme = read("../../ui/src/theme.css");
 assert.ok(/\.app-content \{[^}]*box-sizing: border-box;/.test(theme), "the app content column is border-box so padding cannot overflow the viewport");
 
-/* Wave 100b: mobile bottom nav items must stretch, not clip
+/* Mobile bottom nav items must stretch, not clip
    (#254), and Settings descriptions must wrap on phones (#255). */
 assert.ok(theme.includes(".lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }"), "mobile bottom nav items stretch across the bar");
 assert.ok(/@media \(max-width: 600px\)[\s\S]*?\.lb-setting-desc, \.lb-setp-sub \{ white-space: normal; \}/.test(theme), "settings descriptions wrap on small screens");
@@ -56,7 +56,7 @@ assert.ok(/@media \(max-width: 600px\)[\s\S]*?\.lb-setting-desc, \.lb-setp-sub \
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
 
 
-/* Wave 101g (issue #267): a session restore must restore activeId
+/* #267: a session restore must restore activeId
    along with the tabs. Restored tabs keep their persisted ids while
    App used to initialize activeId to 0, which matches no real tab:
    the DevTools mount effect keyed off dt[props.activeId].open, so the
@@ -68,7 +68,7 @@ assert.ok(
 );
 assert.ok(!appSrc.includes("useState<number>(0)"), "activeId no longer initializes to the unmatched sentinel 0");
 
-/* Wave 101h (issue #250): the custom WISP server picker. The setting
+/* #250: the custom WISP server picker. The setting
    persists validated, the presets ship, the Settings panel carries
    the third-party trust warning, and App pushes the effective
    endpoint to the engine worker on boot, on change and on every
@@ -83,13 +83,13 @@ assert.ok(settingsPage.includes("terminates the upstream TLS"), "the third-party
 assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
 assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
 
-/* Wave 101h (issue #259): the active view rides the URL hash so a
+/* #259: the active view rides the URL hash so a
    reload restores it; switches use replaceState so no history spam. */
 assert.ok(appSrc.includes("const [view, setView] = useState<View>(viewFromHash);"), "the initial view is read from the URL hash (#259)");
 assert.ok(appSrc.includes('const h = "#view=" + view;') && appSrc.includes("window.history.replaceState(null, \"\", h);"), "view switches update the hash without history entries (#259)");
 
 
-/* Wave 101i (issue #268): the wispSel display mapping must match the
+/* #268: the wispSel display mapping must match the
    preset URL (element 0 of the [url, name] pairs), not the name; the
    old ([, u]) destructure compared "MercuryWork" to the stored URL,
    so every stored preset displayed as "Custom endpoint" after a

@@ -100,8 +100,8 @@ export default function AdBlockCard(props: {
         {current ? (
           <>
             {/* #236: hero column - the shield sits in a tonal circle
-                above the count (user choice 2026-11-08), so the hero
-                text aligns with the hosts card. */}
+                above the count, so the hero text aligns with the
+                hosts card. */}
             <div className="lb-ad-hero">
               <div className="lb-ad-hero-ic">
                 <m3e-icon name="shield" aria-hidden={true} />
