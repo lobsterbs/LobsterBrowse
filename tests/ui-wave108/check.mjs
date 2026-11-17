@@ -32,6 +32,9 @@ ok(theme.includes("backdrop-filter: blur(24px) saturate(1.4);"), "the nav rail i
 ok(theme.includes(".lb-set-nav-item.active {"), "the active nav item carries its pill");
 ok(theme.includes(".lb-set-page { display: grid;"), "the page is the sidenav grid");
 ok(theme.includes("@media (max-width: 720px)"), "narrow screens collapse the rail");
+ok(theme.includes("lb-set-section-in"), "section switches animate in");
+ok(theme.includes(".lb-set-nav-item { transition:"), "the nav pill crossfades its container colors");
+ok(theme.includes(".lb-set-section > * { animation: none; }"), "reduced motion collapses the section entrance");
 
 const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
 ok(ci.includes("ui-wave108"), "CI runs the wave 108 check");
