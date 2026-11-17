@@ -350,6 +350,20 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   .lb-set-nav { position: static; flex-direction: row; overflow-x: auto; }
   .lb-set-nav-item { width: auto; white-space: nowrap; }
 }
+/* Motion (wave 108): a section switch remounts the section children,
+   so this entrance animation fires per switch; the nav pill crossfades
+   its container colors. Composite-only properties; reduced motion
+   collapses both. */
+@keyframes lb-set-section-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.lb-set-section > * { animation: lb-set-section-in 180ms cubic-bezier(0.2, 0, 0, 1) both; }
+.lb-set-nav-item { transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .lb-set-section > * { animation: none; }
+  .lb-set-nav-item { transition: none; }
+}
+
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
