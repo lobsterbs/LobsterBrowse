@@ -18,7 +18,6 @@ import {
 import * as store from "./store";
 import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
 import { parseNavTab } from "./frameNav";
-import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
 import { StarsBackground } from "./components/ui/stars";
@@ -53,8 +52,6 @@ export default function App() {
     return restored;
   });
   const [activeId, setActiveId] = useState<number>(0);
-  /* #81: Ctrl+K command palette. */
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [cloaked, setCloaked] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
@@ -389,8 +386,7 @@ export default function App() {
     sjInit().catch((e: unknown) => console.error("scramjet init failed", e));
   }, [settings.proxyEngine]);
 
-  /* #81: reopen the last closed tab - shared by Alt+Shift+T and
-     the command palette. */
+  /* Reopen the last closed tab (Alt+Shift+T). */
   const reopenTab = useCallback(() => {
     const last = closedTabs.current[closedTabs.current.length - 1];
     if (!last) return;
@@ -406,13 +402,6 @@ export default function App() {
      therefore left alone. Documented in Settings. ---- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      /* #81: Ctrl+K (Cmd+K) toggles the palette. Checked before the
-         Alt gate because Ctrl+K carries no altKey. */
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-        return;
-      }
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       const k = e.key.toUpperCase();
       if (e.shiftKey) {
@@ -787,56 +776,6 @@ export default function App() {
      are gone. ---- */
   const railRef = useRef<HTMLElement | null>(null);
 
-  /* #99: clearing a site's cookies is irreversible, so it asks first.
-     The palette command only sets the target; this m3e-dialog (the
-     Settings pattern) confirms. Hooks stay above the cloak return. */
-  const [clearSiteUrl, setClearSiteUrl] = useState<string | null>(null);
-  const clearSiteRef = useRef<(HTMLElement & { show: () => Promise<void>; returnValue: string }) | null>(null);
-  const clearSiteTarget = useRef<string | null>(null);
-  clearSiteTarget.current = clearSiteUrl;
-  useEffect(() => {
-    const el = clearSiteRef.current;
-    if (!el) return;
-    const onClosed = () => {
-      const target = clearSiteTarget.current;
-      const confirmed = el.returnValue === "clear";
-      el.returnValue = "";
-      setClearSiteUrl(null);
-      if (!confirmed || !target) return;
-      /* Scoped jar clear (Zeolite #41 zl:clearJar): the active
-         jar profile, one origin - cookies only, honest counts. */
-      void zlSend({ type: "zl:clearJar", origin: target }).then((reply) => {
-        if (typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-        if (reply && reply.ok) {
-          M3eSnackbar.open("Cleared " + (reply.cookies ?? 0) + " cookies for this site", {
-            duration: 4000,
-          });
-        } else {
-          M3eSnackbar.open(
-            "Clear failed: " + ((reply && reply.error) || "engine did not answer"),
-            { duration: 5000 },
-          );
-        }
-      });
-    };
-    el.addEventListener("closed", onClosed);
-    return () => el.removeEventListener("closed", onClosed);
-  }, [cloaked]);
-  useEffect(() => {
-    const el = clearSiteRef.current;
-    if (!clearSiteUrl || !el) return;
-    el.returnValue = "";
-    void el.show();
-  }, [clearSiteUrl]);
-  let clearSiteHost = "this site";
-  if (clearSiteUrl) {
-    try {
-      clearSiteHost = new URL(clearSiteUrl).hostname;
-    } catch {
-      /* keep the generic label */
-    }
-  }
-
   if (cloaked) {
     return (
       <div className="lb-cloak">
@@ -855,75 +794,6 @@ export default function App() {
       </div>
     );
   }
-
-  /* ---- #81 command palette actions. Browser.tsx-owned surfaces
-     (extensions panel, toolbar omnibox) are reached through window
-     events so App stays decoupled from Browser internals; the
-     timeout lets the browser view mount before the event fires. ---- */
-  const activeTab = tabs.find((t) => t.id === activeId);
-  const commands: Command[] = [
-    { id: "new-tab", group: "Tabs", label: "New tab", run: () => newTab() },
-    {
-      id: "close-tab",
-      group: "Tabs",
-      label: "Close tab",
-      run: () => {
-        if (activeTab) closeTab(activeTab.id);
-      },
-    },
-    { id: "reopen-tab", group: "Tabs", label: "Reopen last closed tab", run: reopenTab },
-    { id: "go-home", group: "Go", label: "Home", run: () => setView("home") },
-    { id: "go-settings", group: "Go", label: "Settings", run: () => setView("settings") },
-    { id: "go-logs", group: "Go", label: "Logs", run: () => setView("logs") },
-    {
-      id: "toggle-engine",
-      group: "Engine",
-      label:
-        settings.proxyEngine === "scramjet"
-          ? "Switch engine to Zeolite"
-          : "Switch engine to ScramJet",
-      run: () =>
-        update({ proxyEngine: settings.proxyEngine === "scramjet" ? "zeolite" : "scramjet" }),
-    },
-    {
-      id: "open-extensions",
-      group: "Tools",
-      label: "Open extensions",
-      run: () => {
-        setView("browser");
-        /* The Browser chunk may not be downloaded on the first use.
-           Dispatch after it is loaded and mounted, preserving the
-           command-palette bridge used before code splitting. */
-        void import("./pages/Browser").then(() => {
-          window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-open-extensions")), 60);
-        });
-      },
-    },
-    {
-      id: "focus-omnibox",
-      group: "Tools",
-      label: "Focus omnibox",
-      run: () => {
-        if (view === "browser") {
-          void import("./pages/Browser").then(() => {
-            window.setTimeout(() => window.dispatchEvent(new CustomEvent("lb-focus-omnibox")), 60);
-          });
-          return;
-        }
-        const el = document.getElementById("lb-search-input") as HTMLInputElement | null;
-        el?.focus();
-      },
-    },
-    {
-      id: "clear-site",
-      group: "Privacy",
-      label: "Clear cookies for this site",
-      run: () => {
-        if (!activeTab?.url) return;
-        setClearSiteUrl(activeTab.url);
-      },
-    },
-  ];
 
   /* #642: show the access gate once the 403 landed. */
   useEffect(() => {
@@ -1083,24 +953,6 @@ export default function App() {
           </div>
         </div>
       </div>
-      {/* #81: rendered at the root so Ctrl+K works in every view. */}
-      <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
-      {/* #99: confirm before deleting cookies (irreversible). Cancel,
-          Escape and the scrim all close with no action. */}
-      <m3e-dialog {...{ ref: clearSiteRef }} alert="">
-        <span slot="header">Clear cookies?</span>
-        <p>
-          Cookies stored for {clearSiteHost} in the active profile will be deleted. This cannot be undone.
-        </p>
-        <div slot="actions">
-          <m3e-button autofocus>
-            <m3e-dialog-action return-value="cancel">Cancel</m3e-dialog-action>
-          </m3e-button>
-          <m3e-button variant="filled">
-            <m3e-dialog-action return-value="clear">Clear cookies</m3e-dialog-action>
-          </m3e-button>
-        </div>
-      </m3e-dialog>
       {/* #642: access-password gate for the trusted-egress
           credential arming. A correct password sets the lb_access
           cookie and reloads so the boot arming retry runs. */}

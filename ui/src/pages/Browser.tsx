@@ -1093,29 +1093,6 @@ export default function BrowserView(props: Props) {
     const t = setTimeout(() => setExtPanelMounted(false), 200);
     return () => clearTimeout(t);
   }, [extPanelOpen]);
-  /* #81 command palette decoupling: the palette lives in App, the
-     extensions panel and the toolbar pill live here. Window events
-     bridge the two without threading more props through Browser. */
-  useEffect(() => {
-    const onOpenExt = () => setExtPanelOpen(true);
-    const onFocusOmnibox = () => {
-      setTbExpanded(true);
-      /* The tucked dock is unmounted: reveal it so the field exists
-         to focus (the grip instant reveal, no 3s hold). hideSoon is
-         armed too: its focus guard defers (and re-arms) while the
-         URL field holds focus, so the dock tucks again once the
-         user leaves the pill instead of staying up forever. */
-      setDockTucked(false);
-      window.setTimeout(() => urlInputRef.current?.focus(), 80);
-      hideSoon();
-    };
-    window.addEventListener("lb-open-extensions", onOpenExt);
-    window.addEventListener("lb-focus-omnibox", onFocusOmnibox);
-    return () => {
-      window.removeEventListener("lb-open-extensions", onOpenExt);
-      window.removeEventListener("lb-focus-omnibox", onFocusOmnibox);
-    };
-  }, []);
   const [extBusy, setExtBusy] = useState(false);
   const [extList, setExtList] = useState<ExtInfo[] | null>(null);
 
