@@ -3781,7 +3781,7 @@ async fn main() {
         // fallback (see extension_route_not_found).
         .route("/zl-ext/*path", any(extension_route_not_found))
         .route("/zl-cs/*path", any(extension_route_not_found));
-    /* Wave A (LB): the content origin runs the same Docker image but
+    /* The content origin runs the same Docker image but
     never serves the SPA. With ZL_STATUS_ORIGIN set the SPA fallback
     answers a minimal inline status page instead of index.html; every
     engine route above (/zlsw, /bootstrap.js, /build, /zl, wisp) is an
@@ -3885,7 +3885,7 @@ async fn zl_sw_js() -> Response {
 
 /// Zeolite guest-host page (vendored build, zlsw/guest-host.html): the
 /// engine-origin realm that spawns guest service-worker workers for
-/// the kernel (#477 wave 3). Served at the origin root so the same
+/// the kernel (#477). Served at the origin root so the same
 /// worker scope controls it; no-store so pin updates are picked up
 /// promptly.
 async fn zl_guest_host() -> Response {
@@ -3922,7 +3922,7 @@ async fn sj_sw_js() -> Response {
         .expect("static response build")
 }
 
-/// Wave A (LB): minimal status page for the content origin
+/// Minimal status page for the content origin
 /// (ZL_STATUS_ORIGIN): replaces the SPA fallback there. No script,
 /// no SPA JavaScript: a status card with the live endpoint list.
 async fn zl_status_page() -> axum::response::Html<&'static str> {

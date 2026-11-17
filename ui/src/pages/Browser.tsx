@@ -191,7 +191,7 @@ type ZlMenuItem = {
    on close and viewport-edge flipping all come from the component.
    The menu anchors to a zero-size fixed element at the pointer (the
    component's anchoring math accepts any rect, including a zero-size
-   one; if that ever regressed, the fallback per the issue is to keep
+   one; if that ever regressed, the fallback is to keep
    pointer positioning with these same item components). Checkbox and
    radio entries use the real menu-item shapes, no Unicode markers, and
    parentId nesting renders as m3e submenus. */
@@ -1212,7 +1212,7 @@ export default function BrowserView(props: Props) {
      (.lb-dock-pill): applying it to the m3e-toolbar host did
      nothing (custom element host display), which left the bar
      frozen in place covering page content. The tucked pill now
-     UNMOUNTS entirely (user request): hidden means not rendered,
+     UNMOUNTS entirely: hidden means not rendered,
      the grip line alone stays as the reveal handle. */
   const [dockTucked, setDockTucked] = useState(false);
   const dockHoverRef = useRef(false);
@@ -2553,7 +2553,7 @@ export default function BrowserView(props: Props) {
           }}
         />
         {/* Tucked = fully unmounted, not translated: hidden means
-            not rendered (user request); the grip line alone stays
+            not rendered; the grip line alone stays
             mounted as the reveal handle. */}
         {!dockTucked && (
         <div className="lb-dock-pill">
