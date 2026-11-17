@@ -126,7 +126,7 @@ const ok = (name, cond) => {
   const theme = read("src/theme.css");
   const pIdx = theme.indexOf(".lb-set-page m3e-expansion-panel {");
   ok("settings: panel surface tokens defined", pIdx !== -1 && theme.slice(pIdx, pIdx + 300).includes("--m3e-expansion-panel-container-color"));
-  ok("settings: rhythm wrapper rule", theme.includes(".lb-set-page { display: flex"));
+  ok("settings: sidenav grid wrapper rule (wave 108)", theme.includes(".lb-set-page { display: grid"));
   ok("settings: row labels evened inside panels", theme.includes(".lb-setp-body .lb-setting-label { margin: 0; }"));
   const rIdx = theme.indexOf("m3e-nav-rail {");
   ok("rail: outline ring removed", rIdx !== -1 && !theme.slice(rIdx, rIdx + 500).includes("0 0 0 1px"));

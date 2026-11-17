@@ -334,7 +334,22 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
-.lb-set-page { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
+.lb-set-page { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }
+.lb-set-bar { grid-column: 1 / -1; }
+/* Wave 108 (settings redesign, user request 2026-11-17): the sticky
+   frosted navigation rail. Same glass language as the sheets; the
+   active item is the secondary-container pill. */
+.lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); padding: var(--md-sys-measurement-space100); background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); border-radius: 20px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent); }
+.lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; min-height: 48px; padding: 0 var(--md-sys-measurement-space150); border: 0; border-radius: 999px; background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
+.lb-set-nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font-variation-settings: "wght" var(--lb-wght-medium); }
+.lb-set-section { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
+/* Narrow screens: the page collapses to one column and the rail
+   becomes a horizontal scroller above the section content. */
+@media (max-width: 720px) {
+  .lb-set-page { grid-template-columns: minmax(0, 1fr); }
+  .lb-set-nav { position: static; flex-direction: row; overflow-x: auto; }
+  .lb-set-nav-item { width: auto; white-space: nowrap; }
+}
 /* Wave 101 (#256) redesign: the page title carries a supporting
    line and every group reads as one M3 section: an icon tile on
    primary-container (corner-large shape), a title heading and a
