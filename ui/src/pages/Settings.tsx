@@ -1,15 +1,12 @@
+/* Settings (wave 108 redesign, user request 2026-11-17): a sticky
+   frosted side navigation with one section visible at a time. The
+   page keeps the wave-80 component language (SetPanel expansion
+   panels, SetInline row cards, Row switches inside an
+   m3e-content-pane) and every option, anchor and control of the
+   pre-redesign page; the wave-80 field oracle and the wave-108
+   anchor scan pin that. While ScramJet is the current proxy engine,
+   every Zeolite-only option is greyed out. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-/* Settings (global redesign, user request 2026-11-07): the whole page
-   is one @m3e/web surface. The page title lives in an m3e-content-pane;
-   every settings sub-card is an m3e-expansion-panel whose header
-   carries the headline and supporting text (the @m3e/web shape of the
-   example markup), and every toggle row uses the normal m3e-switch
-   (no icon-on-switch variant). While ScramJet is the current proxy
-   engine, every Zeolite-only option is greyed out. The previous
-   md-card components are gone; no option was lost.
-   Follow-up (user request 2026-11-07): a sub option whose entire
-   payload is one control renders as an inline row card, not an
-   expansion panel - one switch behind a chevron is a wasted click. */
 import {
   ENGINES,
   WISP_PRESETS,
@@ -48,7 +45,11 @@ const SEEDS: Array<[string, string]> = [
    select; the real custom value lives in settings.wispServer. */
 const WISP_CUSTOM = "__custom__";
 
-const SECTION_TITLES: Record<string, string> = {
+/* Wave 108: the sections the side navigation switches between. One
+   section renders at a time; the nav carries the icon and title. */
+type SectionId = "search" | "privacy" | "appearance" | "extensions" | "advanced";
+
+const SECTION_TITLES: Record<SectionId, string> = {
   search: "Search & browse",
   privacy: "Privacy",
   extensions: "Extensions",
@@ -58,7 +59,7 @@ const SECTION_TITLES: Record<string, string> = {
 
 /* Wave 101 (#256): each section reads as one M3 group: an icon tile
    on primary-container, a title heading and a supporting line. */
-const SECTION_META: Record<string, { icon: string; sub: string }> = {
+const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
   search: { icon: "search", sub: "Engine and omnibox behavior" },
   privacy: { icon: "shield", sub: "Blocking and connection upgrades" },
   extensions: { icon: "extension", sub: "Add-ons from the catalog or local files" },
@@ -66,7 +67,9 @@ const SECTION_META: Record<string, { icon: string; sub: string }> = {
   advanced: { icon: "tune", sub: "Engines, data and diagnostics" },
 };
 
-function SectionHead(props: { section: string }) {
+const NAV_ORDER: SectionId[] = ["search", "privacy", "appearance", "extensions", "advanced"];
+
+function SectionHead(props: { section: SectionId }) {
   const meta = SECTION_META[props.section];
   return (
     <div className="lb-set-section-head">
@@ -211,6 +214,7 @@ function TextInput(props: {
 }
 
 
+
 export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
      several open at once. All panels start closed; the single-control
@@ -218,6 +222,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      start. */
   const [openP, setOpenP] = useState<Record<string, boolean>>({});
   const toggleP = (id: string) => setOpenP((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  /* Wave 108: the active section. One section renders at a time; the
+     sticky side navigation switches between them. */
+  const [section, setSection] = useState<SectionId>("search");
 
   /* ScramJet is the current engine: every Zeolite-only option greyes
      out. The options keep their stored values and come back when the
@@ -303,11 +311,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     <section className="lb-view-content" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
           surface the component provides. */}
-      <m3e-content-pane {...{ class: "lb-set-pane" }}>
+<m3e-content-pane {...{ class: "lb-set-pane" }}>
         {/* The wrapper carries the page rhythm: the pane's scroll
             container sits inside the component's shadow root, so
             the column spacing must live on the page content. */}
-        <div className="lb-set-page">
+<div className="lb-set-page">
           {/* The classical app top bar (issue #269): the same basic
               m3e-app-bar the Logs page and the AI history sheet use,
               title only. */}
@@ -315,319 +323,355 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <span slot="title">Settings</span>
           </m3e-app-bar>
 
-              <SectionHead section="search" />
-              <SetInline
-                anchorId="set-search-engine"
+          {/* Wave 108: the sticky frosted side rail. One section is
+              visible at a time; the active item carries the M3 pill
+              and aria-current. */}
+          <nav className="lb-set-nav" aria-label="Settings sections">
+            {NAV_ORDER.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={"lb-set-nav-item" + (section === id ? " active" : "")}
+                aria-current={section === id ? "true" : undefined}
+                onClick={() => setSection(id)}
+              >
+                <m3e-icon name={SECTION_META[id].icon} aria-hidden={true} />
+                <span>{SECTION_TITLES[id]}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="lb-set-section">
+            {section === "search" && (
+              <>
+            <SectionHead section="search" />
+            <SetInline
+              anchorId="set-search-engine"
+              label="Search engine"
+              desc="The engine the omnibox, Home and new tabs search with"
+            >
+              {/* #237: six long engine names cannot share one
+                  segmented row; a dropdown select is the M3E control
+                  for this cardinality. */}
+              <M3eSelect
                 label="Search engine"
-                desc="The engine the omnibox, Home and new tabs search with"
-              >
-                {/* #237: six long engine names cannot share one
-                    segmented row; a dropdown select is the M3E control
-                    for this cardinality. */}
-                <M3eSelect
-                  label="Search engine"
-                  value={settings.engine}
-                  options={(Object.keys(ENGINES) as EngineId[]).map((id) => [id, ENGINES[id].name])}
-                  onChange={(v) => onChange({ engine: v as EngineId })}
-                />
-              </SetInline>
-              <SetInline
-                anchorId="set-search-suggest"
-                label="Engine search suggestions"
-                desc="Completions from the search engine while you type"
-                on={settings.suggestQueries}
-                toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
+                value={settings.engine}
+                options={(Object.keys(ENGINES) as EngineId[]).map((id) => [id, ENGINES[id].name])}
+                onChange={(v) => onChange({ engine: v as EngineId })}
               />
-
-              <SectionHead section="appearance" />
-              <SetPanel
-                id="p-theme-color"
-                headline="Theme color"
-                sub="The seed color the whole UI palette derives from"
-                anchorId="set-theme-color"
-                open={!!openP["p-theme-color"]}
-                toggle={() => toggleP("p-theme-color")}
-              >
-                <div className="lb-seed-row">
-                  <input
-                    type="color"
-                    aria-label="Theme color"
-                    value={settings.seed}
-                    onChange={(e) => onChange({ seed: e.target.value })}
-                    className="lb-color-input"
-                  />
-                  <m3e-chip-set>
-                    {SEEDS.map(([hex, name]) => (
-                      <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
-                        {/* Wave 89: a colored swatch in the chip's icon slot
-                           (the plain m3e-chip exposes no avatar slot) so
-                           every seed option shows its color (user report
-                           2026-11-08). */}
-                        <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
-                        {name}
-                      </m3e-chip>
-                    ))}
-                  </m3e-chip-set>
-                </div>
-              </SetPanel>
-              <SetPanel
-                id="p-fancy"
-                headline="Enhanced UI (hero background image)"
-                sub="The photographic hero background on Home and AI"
-                open={!!openP["p-fancy"]}
-                toggle={() => toggleP("p-fancy")}
-              >
-                <Row
-                  id="set-fancy"
-                  label="Enhanced UI (hero background image)"
-                  on={settings.fancyBackground}
-                  toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
+            </SetInline>
+            <SetInline
+              anchorId="set-search-suggest"
+              label="Engine search suggestions"
+              desc="Completions from the search engine while you type"
+              on={settings.suggestQueries}
+              toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
+            />
+              </>
+            )}
+            {section === "privacy" && (
+              <>
+            <SectionHead section="privacy" />
+            <SetInline
+              anchorId="set-adblock"
+              label="Ad & tracker blocking"
+              desc="Block ads and trackers at the engine level"
+              on={settings.adblock}
+              toggle={() => onChange({ adblock: !settings.adblock })}
+              disabled={zlOff}
+            />
+            {zlOff && zlNote}
+              </>
+            )}
+            {section === "appearance" && (
+              <>
+            <SectionHead section="appearance" />
+            <SetPanel
+              id="p-theme-color"
+              headline="Theme color"
+              sub="The seed color the whole UI palette derives from"
+              anchorId="set-theme-color"
+              open={!!openP["p-theme-color"]}
+              toggle={() => toggleP("p-theme-color")}
+            >
+              <div className="lb-seed-row">
+                <input
+                  type="color"
+                  aria-label="Theme color"
+                  value={settings.seed}
+                  onChange={(e) => onChange({ seed: e.target.value })}
+                  className="lb-color-input"
                 />
-                <p className="lb-muted">
-                  Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
-                  wave 92 #245; extended to AI and Settings in wave 96; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
-                </p>
-              </SetPanel>
-
-              <SectionHead section="privacy" />
-              <SetInline
-                anchorId="set-adblock"
-                label="Ad & tracker blocking"
-                desc="Block ads and trackers at the engine level"
-                on={settings.adblock}
-                toggle={() => onChange({ adblock: !settings.adblock })}
-                disabled={zlOff}
+                <m3e-chip-set>
+                  {SEEDS.map(([hex, name]) => (
+                    <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
+                      {/* Wave 89: a colored swatch in the chip's icon slot
+                         (the plain m3e-chip exposes no avatar slot) so
+                         every seed option shows its color (user report
+                         2026-11-08). */}
+                      <span slot="icon" className="lb-seed-dot" style={{ background: hex }} />
+                      {name}
+                    </m3e-chip>
+                  ))}
+                </m3e-chip-set>
+              </div>
+            </SetPanel>
+            <SetPanel
+              id="p-fancy"
+              headline="Enhanced UI (hero background image)"
+              sub="The photographic hero background on Home and AI"
+              open={!!openP["p-fancy"]}
+              toggle={() => toggleP("p-fancy")}
+            >
+              <Row
+                id="set-fancy"
+                label="Enhanced UI (hero background image)"
+                on={settings.fancyBackground}
+                toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
               />
+              <p className="lb-muted">
+                Replaces the flat background with the photographic hero image (the Half-Life wallpaper,
+                wave 92 #245; extended to AI and Settings in wave 96; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
+              </p>
+            </SetPanel>
+              </>
+            )}
+            {section === "extensions" && (
+              <>
+            <SectionHead section="extensions" />
+            <SetPanel
+              id="p-manage-ext"
+              headline="Manage installed"
+              sub="Enable, disable, configure or remove installed add-ons"
+              anchorId="set-manage-ext"
+              open={!!openP["p-manage-ext"]}
+              toggle={() => toggleP("p-manage-ext")}
+            >
               {zlOff && zlNote}
-              <SectionHead section="extensions" />
-              <SetPanel
-                id="p-manage-ext"
-                headline="Manage installed"
-                sub="Enable, disable, configure or remove installed add-ons"
-                anchorId="set-manage-ext"
-                open={!!openP["p-manage-ext"]}
-                toggle={() => toggleP("p-manage-ext")}
-              >
-                {zlOff && zlNote}
-                <div className={zlOff ? "lb-zl-guard" : undefined}>
-                  {/* #230: the extension configuration UI moved here from
-                      the toolbar extension card; the toolbar card now
-                      launches the extension UI directly. */}
-                  <ExtManage />
+              <div className={zlOff ? "lb-zl-guard" : undefined}>
+                {/* #230: the extension configuration UI moved here from
+                    the toolbar extension card; the toolbar card now
+                    launches the extension UI directly. */}
+                <ExtManage />
+              </div>
+            </SetPanel>
+            <SetPanel
+              id="p-amo"
+              headline="Find and install add-ons"
+              sub="Search the Mozilla add-on catalog and install from it"
+              anchorId="set-amo"
+              open={!!openP["p-amo"]}
+              toggle={() => toggleP("p-amo")}
+            >
+              {zlOff && zlNote}
+              <div className={zlOff ? "lb-zl-guard" : undefined}>
+                {/* AMO web pages are blocked from this deployment's
+                    egress; the public API is not, so search and install
+                    run over the API instead of the store site. */}
+                <AmoSearch />
+              </div>
+            </SetPanel>
+            <SetPanel
+              id="p-import"
+              headline="Import locally"
+              sub="Install a packed extension from a .xpi or .zip file"
+              anchorId="set-import"
+              open={!!openP["p-import"]}
+              toggle={() => toggleP("p-import")}
+            >
+              {zlOff && zlNote}
+              {/* Exactly one import action: our button triggers the
+                  picker; the input itself stays hidden. */}
+              <label className="lb-import-row">
+                <input
+                  type="file"
+                  accept=".xpi,.zip"
+                  className="lb-import-file"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) importZip(f);
+                    e.target.value = "";
+                  }}
+                />
+                <m3e-button disabled={zlOff ? true : undefined} onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}>
+                  <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
+                </m3e-button>
+              </label>
+              {extImporting && (
+                <div className="lb-import-progress">
+                  <m3e-linear-progress-indicator mode="indeterminate" aria-label="Importing extension" />
                 </div>
-              </SetPanel>
-              <SetPanel
-                id="p-amo"
-                headline="Find and install add-ons"
-                sub="Search the Mozilla add-on catalog and install from it"
-                anchorId="set-amo"
-                open={!!openP["p-amo"]}
-                toggle={() => toggleP("p-amo")}
-              >
-                {zlOff && zlNote}
-                <div className={zlOff ? "lb-zl-guard" : undefined}>
-                  {/* AMO web pages are blocked from this deployment's
-                      egress; the public API is not, so search and install
-                      run over the API instead of the store site. */}
-                  <AmoSearch />
-                </div>
-              </SetPanel>
-              <SetPanel
-                id="p-import"
-                headline="Import locally"
-                sub="Install a packed extension from a .xpi or .zip file"
-                anchorId="set-import"
-                open={!!openP["p-import"]}
-                toggle={() => toggleP("p-import")}
-              >
-                {zlOff && zlNote}
-                {/* Exactly one import action: our button triggers the
-                    picker; the input itself stays hidden. */}
-                <label className="lb-import-row">
-                  <input
-                    type="file"
-                    accept=".xpi,.zip"
-                    className="lb-import-file"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) importZip(f);
-                      e.target.value = "";
-                    }}
+              )}
+              <p className="lb-muted" style={{ marginTop: 4 }}>
+                Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
+                (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
+                The engine validates the manifest and permission grants; a bad package only lands that
+                extension in an error state.
+              </p>
+            </SetPanel>
+              </>
+            )}
+            {section === "advanced" && (
+              <>
+            <SectionHead section="advanced" />
+            <SetPanel
+              id="p-proxy"
+              headline="Proxy engine"
+              sub="Zeolite (rewriter proxy) or ScramJet (client-side rewrite)"
+              anchorId="set-proxy"
+              open={!!openP["p-proxy"]}
+              toggle={() => toggleP("p-proxy")}
+            >
+              <div className="lb-seg-wrap">
+                <m3e-segmented-button aria-label="Proxy engine">
+                  <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
+                    Zeolite (default)
+                  </m3e-button-segment>
+                  <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+                    ScramJet
+                  </m3e-button-segment>
+                </m3e-segmented-button>
+              </div>
+              <p className="lb-muted" style={{ marginTop: 6 }}>
+                ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only and grey out above while ScramJet is the current engine. Applied on the next navigation.
+              </p>
+            </SetPanel>
+            <SetPanel
+              id="p-transport"
+              headline="Transport engine"
+              sub="How the Zeolite engine terminates TLS upstream"
+              anchorId="set-transport"
+              open={!!openP["p-transport"]}
+              toggle={() => toggleP("p-transport")}
+            >
+              <div className="lb-seg-wrap">
+                <m3e-segmented-button aria-label="Transport engine" disabled={zlOff ? true : undefined}>
+                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
+                    libcurl (default)
+                  </m3e-button-segment>
+                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
+                    epoxy (experimental)
+                  </m3e-button-segment>
+                </m3e-segmented-button>
+              </div>
+              {zlOff && zlNote}
+              <p className="lb-muted" style={{ marginTop: 6 }}>
+                epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
+              </p>
+            </SetPanel>
+            <SetPanel
+              id="p-wisp"
+              headline="WISP server"
+              sub="Upstream transit endpoint override"
+              anchorId="set-wisp"
+              open={!!openP["p-wisp"]}
+              toggle={() => toggleP("p-wisp")}
+            >
+              {zlOff && zlNote}
+              <div className={zlOff ? "lb-zl-guard" : undefined}>
+                <M3eSelect
+                  label="WISP server"
+                  value={wispSel}
+                  options={[
+                    ["default", "Deployment default"],
+                    ...WISP_PRESETS,
+                    [WISP_CUSTOM, "Custom endpoint"],
+                  ]}
+                  onChange={(v) => {
+                    if (v === WISP_CUSTOM) {
+                      setWispCustom(true);
+                      return;
+                    }
+                    setWispCustom(false);
+                    onChange({ wispServer: v === "default" ? "" : v });
+                  }}
+                />
+                {wispSel === WISP_CUSTOM && (
+                  <TextInput
+                    label="Custom WISP endpoint"
+                    value={settings.wispServer}
+                    placeholder="wss://your-server.example/wisp/"
+                    hint="Must start with wss://"
+                    onChange={(v) => onChange({ wispServer: v })}
                   />
-                  <m3e-button disabled={zlOff ? true : undefined} onClick={(e) => (e.currentTarget.parentElement?.querySelector<HTMLInputElement>(".lb-import-file")?.click())}>
-                    <m3e-icon name="archive" aria-hidden={true} /> Import package (.xpi / .zip)
-                  </m3e-button>
-                </label>
-                {extImporting && (
-                  <div className="lb-import-progress">
-                    <m3e-linear-progress-indicator mode="indeterminate" aria-label="Importing extension" />
-                  </div>
                 )}
-                <p className="lb-muted" style={{ marginTop: 4 }}>
-                  Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
-                  (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
-                  The engine validates the manifest and permission grants; a bad package only lands that
-                  extension in an error state.
+                <p className="lb-muted">
+                  A WISP server terminates the upstream TLS for proxied traffic: a third-party endpoint can see
+                  and modify everything you load. Use only servers you trust. Deployment default keeps transit on
+                  this deployment&apos;s own endpoint.
                 </p>
-              </SetPanel>
-
-              <SectionHead section="advanced" />
-              <SetPanel
-                id="p-proxy"
-                headline="Proxy engine"
-                sub="Zeolite (rewriter proxy) or ScramJet (client-side rewrite)"
-                anchorId="set-proxy"
-                open={!!openP["p-proxy"]}
-                toggle={() => toggleP("p-proxy")}
+              </div>
+            </SetPanel>
+            <SetInline
+              anchorId="set-data"
+              danger
+              label="Data"
+              desc="Clear the proxied page cache, or delete every stored session and setting"
+            >
+              <m3e-button onClick={() => setConfirmDelete(true)}>
+                <m3e-icon name="delete" aria-hidden={true} /> Manage data
+              </m3e-button>
+              {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
+                  handling and alertdialog semantics (alert attribute). */}
+              <m3e-dialog
+                {...{ ref: deleteDialogRef }}
+                alert=""
+                dismissible=""
+                close-label="Cancel"
               >
-                <div className="lb-seg-wrap">
-                  <m3e-segmented-button aria-label="Proxy engine">
-                    <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
-                      Zeolite (default)
-                    </m3e-button-segment>
-                    <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
-                      ScramJet
-                    </m3e-button-segment>
-                  </m3e-segmented-button>
-                </div>
-                <p className="lb-muted" style={{ marginTop: 6 }}>
-                  ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only and grey out above while ScramJet is the current engine. Applied on the next navigation.
-                </p>
-              </SetPanel>
-              <SetPanel
-                id="p-transport"
-                headline="Transport engine"
-                sub="How the Zeolite engine terminates TLS upstream"
-                anchorId="set-transport"
-                open={!!openP["p-transport"]}
-                toggle={() => toggleP("p-transport")}
-              >
-                <div className="lb-seg-wrap">
-                  <m3e-segmented-button aria-label="Transport engine" disabled={zlOff ? true : undefined}>
-                    <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
-                      libcurl (default)
-                    </m3e-button-segment>
-                    <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
-                      epoxy (experimental)
-                    </m3e-button-segment>
-                  </m3e-segmented-button>
-                </div>
-                {zlOff && zlNote}
-                <p className="lb-muted" style={{ marginTop: 6 }}>
-                  epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
-                </p>
-              </SetPanel>
-              <SetPanel
-                id="p-wisp"
-                headline="WISP server"
-                sub="Upstream transit endpoint override"
-                anchorId="set-wisp"
-                open={!!openP["p-wisp"]}
-                toggle={() => toggleP("p-wisp")}
-              >
-                {zlOff && zlNote}
-                <div className={zlOff ? "lb-zl-guard" : undefined}>
-                  <M3eSelect
-                    label="WISP server"
-                    value={wispSel}
-                    options={[
-                      ["default", "Deployment default"],
-                      ...WISP_PRESETS,
-                      [WISP_CUSTOM, "Custom endpoint"],
-                    ]}
-                    onChange={(v) => {
-                      if (v === WISP_CUSTOM) {
-                        setWispCustom(true);
-                        return;
-                      }
-                      setWispCustom(false);
-                      onChange({ wispServer: v === "default" ? "" : v });
-                    }}
-                  />
-                  {wispSel === WISP_CUSTOM && (
-                    <TextInput
-                      label="Custom WISP endpoint"
-                      value={settings.wispServer}
-                      placeholder="wss://your-server.example/wisp/"
-                      hint="Must start with wss://"
-                      onChange={(v) => onChange({ wispServer: v })}
-                    />
-                  )}
-                  <p className="lb-muted">
-                    A WISP server terminates the upstream TLS for proxied traffic: a third-party endpoint can see
-                    and modify everything you load. Use only servers you trust. Deployment default keeps transit on
-                    this deployment&apos;s own endpoint.
-                  </p>
-                </div>
-              </SetPanel>
-              <SetInline
-                anchorId="set-data"
-                danger
-                label="Data"
-                desc="Clear the proxied page cache, or delete every stored session and setting"
-              >
-                <m3e-button onClick={() => setConfirmDelete(true)}>
-                  <m3e-icon name="delete" aria-hidden={true} /> Manage data
-                </m3e-button>
-                {/* Real modal: m3e-dialog owns the scrim, focus trap, Escape
-                    handling and alertdialog semantics (alert attribute). */}
-                <m3e-dialog
-                  {...{ ref: deleteDialogRef }}
-                  alert=""
-                  dismissible=""
-                  close-label="Cancel"
-                >
-                  <span slot="header">Manage data</span>
-                  <p>Clear the Zeolite page cache, or delete all data on this device?</p>
-                  <div slot="actions">
-                    <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
-                    <m3e-button
-                      onClick={() => {
-                        deleteDialogRef.current?.hide();
-                        (async () => {
-                          try {
-                            const keys = await caches.keys();
-                            await Promise.all(keys.map((k) => caches.delete(k)));
-                            if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                              M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
-                            }
-                          } catch {
-                            /* caches unavailable */
+                <span slot="header">Manage data</span>
+                <p>Clear the Zeolite page cache, or delete all data on this device?</p>
+                <div slot="actions">
+                  <m3e-button autofocus onClick={() => deleteDialogRef.current?.hide()}>Cancel</m3e-button>
+                  <m3e-button
+                    onClick={() => {
+                      deleteDialogRef.current?.hide();
+                      (async () => {
+                        try {
+                          const keys = await caches.keys();
+                          await Promise.all(keys.map((k) => caches.delete(k)));
+                          if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                            M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
                           }
-                        })();
-                      }}
-                    >
-                      Clear cache
-                    </m3e-button>
-                    <m3e-button
-                      variant="filled"
-                      onClick={() => {
-                        onDeleteAll();
-                        deleteDialogRef.current?.hide();
-                        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                          M3eSnackbar.open("All data deleted on this device", { duration: 3000 });
+                        } catch {
+                          /* caches unavailable */
                         }
-                      }}
-                    >
-                      Delete all data
-                    </m3e-button>
-                  </div>
-                </m3e-dialog>
-              </SetInline>
-              <SetInline
-                anchorId="set-logs"
-                label="Logs"
-                desc="App-level diagnostics and console history"
-              >
-                {/* Diagnostic mode is always on (the toggle was removed on
-                    purpose): every failed resource, page console message and
-                    proxy intervention (CSP/SRI stripping) is logged in full to
-                    the app log and DevTools. */}
-                <m3e-button onClick={onOpenLogs}>
-                  <m3e-icon name="history" aria-hidden={true} /> Open Logs
-                </m3e-button>
-              </SetInline>
-
+                      })();
+                    }}
+                  >
+                    Clear cache
+                  </m3e-button>
+                  <m3e-button
+                    variant="filled"
+                    onClick={() => {
+                      onDeleteAll();
+                      deleteDialogRef.current?.hide();
+                      if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+                        M3eSnackbar.open("All data deleted on this device", { duration: 3000 });
+                      }
+                    }}
+                  >
+                    Delete all data
+                  </m3e-button>
+                </div>
+              </m3e-dialog>
+            </SetInline>
+            <SetInline
+              anchorId="set-logs"
+              label="Logs"
+              desc="App-level diagnostics and console history"
+            >
+              {/* Diagnostic mode is always on (the toggle was removed on
+                  purpose): every failed resource, page console message and
+                  proxy intervention (CSP/SRI stripping) is logged in full to
+                  the app log and DevTools. */}
+              <m3e-button onClick={onOpenLogs}>
+                <m3e-icon name="history" aria-hidden={true} /> Open Logs
+              </m3e-button>
+            </SetInline>
+              </>
+            )}
+          </div>
         </div>
       </m3e-content-pane>
     </section>
