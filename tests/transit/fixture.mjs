@@ -170,6 +170,99 @@ const CSS_PROBES = [
   ".data { background: url(\"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7\"); }",
 ].join("\n");
 
+/* Tier-11 (xpi interception): a real, minimal, VALID add-on package,
+   hand-built so every byte is deterministic (STORE method, fixed date,
+   CRC32 below). The manifest carries a gecko id so the engine package
+   validator accepts it, and /dl.html links it the way a real add-on
+   site would. */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+const crc32 = (buf) => {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+const ZIP_DATE = 0x5021; /* 2020-01-01, fixed */
+const zipEntry = (name, data) => {
+  const lh = Buffer.alloc(30);
+  lh.writeUInt32LE(0x04034b50, 0);
+  lh.writeUInt16LE(20, 4);
+  lh.writeUInt16LE(0, 6);
+  lh.writeUInt16LE(0, 8);
+  lh.writeUInt16LE(0, 10);
+  lh.writeUInt16LE(ZIP_DATE, 12);
+  lh.writeUInt32LE(crc32(data), 14);
+  lh.writeUInt32LE(data.length, 18);
+  lh.writeUInt32LE(data.length, 22);
+  lh.writeUInt16LE(Buffer.byteLength(name), 26);
+  lh.writeUInt16LE(0, 28);
+  return Buffer.concat([lh, Buffer.from(name, "utf8"), data]);
+};
+const buildZip = (entries) => {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [name, data] of entries) {
+    const local = zipEntry(name, data);
+    locals.push(local);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(0, 8);
+    ch.writeUInt16LE(0, 10);
+    ch.writeUInt16LE(0, 12);
+    ch.writeUInt16LE(ZIP_DATE, 14);
+    ch.writeUInt32LE(crc32(data), 16);
+    ch.writeUInt32LE(data.length, 20);
+    ch.writeUInt32LE(data.length, 24);
+    ch.writeUInt16LE(Buffer.byteLength(name), 28);
+    ch.writeUInt16LE(0, 30);
+    ch.writeUInt16LE(0, 32);
+    ch.writeUInt16LE(0, 34);
+    ch.writeUInt16LE(0, 36);
+    ch.writeUInt32LE(0, 38);
+    ch.writeUInt32LE(offset, 42);
+    centrals.push(Buffer.concat([ch, Buffer.from(name, "utf8")]));
+    offset += local.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...locals, cd, eocd]);
+};
+export const xpiBytes = buildZip([[
+  "manifest.json",
+  Buffer.from(JSON.stringify({
+    manifest_version: 2,
+    name: "XPI Probe",
+    version: "1.0",
+    description: "Tier-11 download interception probe",
+    browser_specific_settings: { gecko: { id: "xpi-probe@fixture.example" } },
+  }), "utf8"),
+]]);
+const XPI_HTML = [
+  "<!doctype html><html><head><meta charset=\"utf-8\">",
+  "<title>downloads</title></head><body>",
+  "<h1>download page</h1>",
+  "<a id=\"xpi-link\" href=\"/probe.xpi\" download>install probe.xpi</a>",
+  "</body></html>",
+].join("");
+
 function handler(req, res) {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/" && req.method === "GET") {
@@ -402,6 +495,20 @@ function handler(req, res) {
   if (p === "/query") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ method: req.method, url: req.url }));
+  }
+  /* Tier-11 (xpi interception): the download page and the probe
+     package it links. */
+  if (p === "/dl.html" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(XPI_HTML);
+  }
+  if (p === "/probe.xpi" && req.method === "GET") {
+    res.writeHead(200, {
+      "content-type": "application/x-xpinstall",
+      "content-disposition": "attachment; filename=probe.xpi",
+      "content-length": String(xpiBytes.length),
+    });
+    return res.end(xpiBytes);
   }
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");

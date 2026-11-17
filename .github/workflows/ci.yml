@@ -69,6 +69,8 @@ jobs:
         run: node --experimental-strip-types ../tests/command-palette-removed/check.mjs
       - name: Extension launch regression check
         run: node --experimental-strip-types ../tests/ext-launch/check.mjs
+      - name: XPI download interception regression check
+        run: node --experimental-strip-types ../tests/xpi-intercept/check.mjs
       - name: UI expressive type and shape regression check
         run: node --experimental-strip-types ../tests/ui-wave80/check.mjs
 
@@ -99,7 +101,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/beta/zeolite-nativetransit'
     env:
       FIXTURE_ORIGIN: https://lobsterbrowse-fixture-okp6.onrender.com
-      LB_ORIGIN: https://lobsterbrowse-beta-9bct.onrender.com
+      LB_ORIGIN: https://lobsterbrowse-beta.onrender.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
