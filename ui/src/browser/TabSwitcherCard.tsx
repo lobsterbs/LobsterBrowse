@@ -87,7 +87,7 @@ export default function TabSwitcherCard(props: {
             >
               {/* The favicon sits inside a frosted m3e-avatar: the
                   translucent avatar surface blurs the sheet content
-                  behind it (user request 2026-11-07). */}
+                  behind it. */}
               <m3e-avatar {...{ class: "lb-tab-avatar" }} aria-hidden={true}>
                 {props.icons[t.id] ? (
                   <img src={props.icons[t.id]} alt="" />

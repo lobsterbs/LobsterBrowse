@@ -1,4 +1,4 @@
-/* Wave 85 UI regression checks: real frosted glass on every
+/* UI regression checks: real frosted glass on every
    overlay surface (sheets, menus, palette, floating cards, suggestors),
    the tab switcher row redesign (frosted avatar favicon, title, close
    X, preview windows gone), basic m3e-app-bar top bars everywhere,
@@ -48,8 +48,8 @@ ok(!theme.includes("lb-tab-preview"), "preview rules gone");
 ok(theme.includes(".lb-tab-row, .lb-dock-pill { transition: none; }"), "reduced-motion covers rows");
 
 /* Typography: no off-scale raw sizes remain in the stylesheet. */
-/* Wave 88: the only raw 13px/15px sizes are the narrow-screen steps
-   inside the Wave 88 glass section (the user settings-card spec). */
+/* The only raw 13px/15px sizes are the narrow-screen steps inside
+   the narrow glass section (the user settings-card spec). */
 const w88 = theme.indexOf("Narrow screens: tighter sub-card padding");
 ok(w88 !== -1, "narrow glass block exists");
 ok(!theme.slice(0, w88).includes("font-size: 13px;") && theme.slice(w88).indexOf("font-size: 13px;") === theme.slice(w88).lastIndexOf("font-size: 13px;"), "raw 13px only in the narrow glass block");

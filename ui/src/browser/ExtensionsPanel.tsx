@@ -28,8 +28,8 @@ export type ExtInfo = {
   version: string;
   state: string;
   enabled: boolean;
-  /* Wave 89: the engine reports the extension's icon route
-     (zl:listExt iconPath); absent on older engine pins. */
+  /* The engine reports the extension's icon route (zl:listExt
+     iconPath); absent on older engine pins. */
   iconPath?: string | null;
   lastError: string | null;
 };
@@ -216,9 +216,9 @@ export default function ExtensionsPanel(props: {
             >
               <div slot="content" className="lb-ext-tile-inner">
                 <div className="lb-ext-ava" aria-hidden={true}>
-                {/* Wave 89: the real icon when the engine reports one,
-                   initials otherwise. Wave 90 (issue #242): a failed
-                   load falls back to initials, never a broken glyph. */}
+                {/* The real icon when the engine reports one, initials
+                   otherwise. #242: a failed load falls back to initials,
+                   never a broken glyph. */}
                 {e.iconPath && !badIcons[e.id] ? (
                   <img
                     className="lb-ext-ava-img"

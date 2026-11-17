@@ -1312,7 +1312,7 @@ const AI_RATE_WINDOW_SECS: u64 = 6 * 3600;
 const AI_TOTAL_DEADLINE_SECS: u64 = 600;
 /// The upstream max_tokens for every /ai/chat turn. Cloudflare
 /// defaults max_tokens to 256, which truncated long answers
-/// mid-sentence (2026-11-04 user report); 16384 keeps full answers
+/// mid-sentence; 16384 keeps full answers
 /// inside the model's 128k context.
 const AI_MAX_TOKENS: u32 = 16384;
 
@@ -1651,7 +1651,7 @@ async fn ai_chat_endpoint(
 
 /// The upstream chat-completions body for one turn. max_tokens is
 /// explicit: Cloudflare defaults it to 256, which truncated long
-/// answers mid-sentence (2026-11-04 user report). Cloudflare has no
+/// answers mid-sentence. Cloudflare has no
 /// "none" reasoning effort: low is the lightest the gpt-oss models
 /// accept; only the reasoning families take the parameter (scout
 /// rejects it).
@@ -4949,7 +4949,7 @@ async fn zl_sw_js() -> Response {
 
 /// Zeolite guest-host page (vendored build, zlsw/guest-host.html): the
 /// engine-origin realm that spawns guest service-worker workers for
-/// the kernel (#477 wave 3). Served at the origin root so the same
+/// the kernel (#477). Served at the origin root so the same
 /// worker scope controls it; no-store so pin updates are picked up
 /// promptly.
 async fn zl_guest_host() -> Response {
@@ -5787,9 +5787,9 @@ mod ai_tests {
 
     #[test]
     fn ai_upstream_body_sets_max_tokens() {
-        /* Cloudflare's 256 default truncated real answers mid-sentence
-        (2026-11-04 user report); the explicit cap must ride every
-        upstream body, and scout must not carry reasoning_effort. */
+        /* Cloudflare's 256 default truncated real answers
+        mid-sentence; the explicit cap must ride every upstream body,
+        and scout must not carry reasoning_effort. */
         let body = ai_upstream_body(
             "@cf/openai/gpt-oss-120b",
             vec![msg("user", "hi".into())],

@@ -1,4 +1,4 @@
-/* Wave 90 UI regression checks: the four reported visual items.
+/* UI regression checks: the four reported visual items.
    - Tab sheet (#240): the slotted favicon is constrained inside the
      frosted avatar instead of covering the whole 40px base, so the
      glass ring stays visible (the avatar's internal ::slotted(img)
@@ -48,10 +48,10 @@ ok(extPanel.includes("onError={"), "the icon img handles load failure");
 ok(extPanel.includes("iconRefreshedRef.current = true;"), "the error path refreshes the list once per mount");
 ok(/useEffect\(\(\) => \{\s*setBadIcons\(\{\}\);\s*\}, \[props\.list\]\);/.test(extPanel), "a fresh list clears the failed marks");
 
-/* 4. DevTools card glass (#243; wave 91 moved the contract from a
+/* 4. DevTools card glass (#243 moved the contract from a
    fully transparent container, which was invisible as glass over the
    uniform sheet frost, to the light glass lift token). */
-const dt91 = theme.indexOf("Wave 91 (issue #243, reopened)");
+const dt91 = theme.lastIndexOf(".lb-dt-card {");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the light glass lift");
 ok(dtWin.includes("border-radius: 20px;") && dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "the DevTools card host keeps the halo and the blur");

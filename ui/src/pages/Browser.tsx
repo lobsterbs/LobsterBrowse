@@ -55,7 +55,7 @@ import M3eSelect from "../M3eSelect";
 import { pollAction } from "../browser/pollRecovery";
 import { faviconBlob, faviconCandidates, faviconRoute } from "../browser/favicon";
 
-/* ---- Toolbar scroll tuck/reveal (user request 2026-11-07):
+/* ---- Toolbar scroll tuck/reveal:
    scrolling down inside the proxied page tucks the dock away, exactly
    like the timed auto-retract; scrolling back up to the very top of
    the page reveals it again without touching the toolbar. Frames are
@@ -505,7 +505,7 @@ export default function BrowserView(props: Props) {
 
   /* #249 idle tab unloading: every tab keeps one same-origin engine
      iframe mounted in the single tab renderer process, so background
-     tabs hold their whole document trees in RAM (wave-96 probe: 3
+     tabs hold their whole document trees in RAM (probe: 3
      heavy subframes grew renderer RSS from 257 MB to 1709 MB while
      the JS heap stayed flat at 15 MB). After this deadline a
      background tab frame unloads to about:blank; returning
@@ -520,7 +520,7 @@ export default function BrowserView(props: Props) {
   activeIdRef.current = active?.id ?? 0;
   const tabsRef = useRef<Tab[]>(tabs);
   tabsRef.current = tabs;
-  /* Wave 77 skeleton: per-tab first-paint commitment. The black
+  /* Per-tab first-paint commitment. The black
      skeleton overlay covers the content area while the active tab
      loads a navigation that has not committed its first paint yet
      (a fresh URL or a fresh tab); once the frame's load event fires
@@ -1392,7 +1392,7 @@ export default function BrowserView(props: Props) {
     setDockTucked(false);
     hideSoon();
   };
-  /* Scroll tuck/reveal (user request 2026-11-07): a down-scroll in
+  /* Scroll tuck/reveal: a down-scroll in
      the active page tucks the dock like the timed retract; scrolling
      back to the very top reveals it. The live-ref indirection keeps
      the per-frame hook stable across renders. */
@@ -2557,7 +2557,7 @@ export default function BrowserView(props: Props) {
   }
 
   const st = status[active.id] ?? { loading: false };
-  /* Wave 77: the skeleton shows only for uncommitted navigations of
+  /* The skeleton shows only for uncommitted navigations of
      the active tab - never for a committed site's asset loads. */
   const skeletonOn = st.loading && !committed[active.id];
   const activeDt = dtOf(active.id);
@@ -2715,7 +2715,7 @@ export default function BrowserView(props: Props) {
                          fires load here; it is not a first paint and
                          must not commit the tab. */
                       if (sleeping.current.has(t.id)) { sleeping.current.delete(t.id); return; }
-                      /* Wave 77: first paint committed - the skeleton
+                      /* First paint committed - the skeleton
                          goes away and stays away while this document
                          loads its own assets in place. */
                       setCommitted(t.id, true);
@@ -2767,7 +2767,7 @@ export default function BrowserView(props: Props) {
           <m3e-loading-indicator variant="contained" aria-label="Loading page" />
         </div>
 
-        {/* Wave 77 skeleton: the black skeleton page covers the
+        {/* The black skeleton page covers the
             content area while the active tab's navigation has not
             committed its first paint. The m3e-skeleton paints pulse
             shapes over each mock layout div's box (the slotted mock
@@ -2820,10 +2820,9 @@ export default function BrowserView(props: Props) {
           hideSoon();
         }}
       >
-        {/* Tab switcher: a modal m3e-bottom-sheet (user request
-            2026-11-07) with one preview card per tab (favicon, title,
-            live tile). Extracted to browser/TabSwitcherCard; state
-            stays here. */}
+        {/* Tab switcher: a modal m3e-bottom-sheet with one preview
+            card per tab (favicon, title, live tile). Extracted to
+            browser/TabSwitcherCard; state stays here. */}
         <TabSwitcherCard
           tabs={tabs}
           activeId={active.id}

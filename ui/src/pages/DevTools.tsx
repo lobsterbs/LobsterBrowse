@@ -2,7 +2,7 @@
    selected proxy tab, in an @m3e/web bottom sheet. Each tab keeps its
    own state.
 
-   Redesign (user request 2026-11-07): the old floating card lives on
+   Redesign: the old floating card lives on
    as DevToolsLegacy.tsx (not imported; kept for rollback). This
    implementation hosts the panel in the m3e-bottom-sheet, the
    sub-tool picker (Console / Network / Diagnostics) is a connected
@@ -10,9 +10,9 @@
    m3e-card components: a card per concern, content above a divider
    with inline action buttons under it.
 
-   Wave 100 (user request 2026-11-13): console and network render
-   bare like diagnostics, the level filter chips are gone, and all
-   three pages stay mounted ([hidden] toggle, no remount churn).
+   Console and network render bare like diagnostics, the level
+   filter chips are gone, and all three pages stay mounted ([hidden]
+   toggle, no remount churn).
 
    Proxied pages ride the engine's split content origin, so the frame
    is usually cross-origin to the app: iframe.contentWindow.eval then
@@ -231,9 +231,9 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
   /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
   useEffect(() => {
-    /* Poll only while the Diagnostics page is open (user request
-       2026-11-13): a hidden 5 s loop burns control-plane round trips
-       for a page the user is not looking at. */
+    /* Poll only while the Diagnostics page is open: a hidden 5 s
+       loop burns control-plane round trips for a page the user is
+       not looking at. */
     if (!active) return;
     return pollDocumentDiagnostics(
       diagnosticsScope(clientId, source), zlSend, zlContentQuery,
@@ -392,7 +392,7 @@ function ZeoliteEngineTools({ frame }: { frame: () => HTMLIFrameElement | null }
       M3eSnackbar.open(msg, { duration: 4000 });
     }
   };
-  /* Eruda availability (user request 2026-11-11): the tool greys out
+  /* Eruda availability: the tool greys out
      and stops responding when /eruda.js cannot be fetched. HEAD
      first; a static layer that refuses HEAD falls back to a one-byte
      ranged GET. */
@@ -503,11 +503,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the document diagnostics as KDL (user
-     request 2026-10-29): header, stats, console errors and warnings,
-     resource failures, and the full retained event ring. It is the
-     single export path since Export and Share to MCP were removed
-     (user request 2026-10-30). */
+  /* Copy logs serializes the document diagnostics as KDL: header,
+     stats, console errors and warnings, resource failures, and the
+     full retained event ring. It is the single export path since
+     Export and Share to MCP were removed. */
   const copyLogs = async () => {
     const snapshot = snapshotForScope(snapshotRef.current, scope);
     const statusLine = snapshot

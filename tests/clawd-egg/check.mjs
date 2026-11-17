@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/* The Clawd sleeping gif (user request 2026-11-04) is vendored as a
+/* The Clawd sleeping gif is vendored as a
    local public asset: exactly the upstream bytes, GIF magic intact.
-   #269 (user request 2026-11-12) removed the Settings About panel,
+   #269 removed the Settings About panel,
    so the gif is no longer rendered anywhere; the asset stays
    vendored and the removal is gated here. */
 const gif = readFileSync(join(root, 'ui', 'public', 'clawd-sleep.gif'));

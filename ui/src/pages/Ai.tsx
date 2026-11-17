@@ -122,7 +122,7 @@ function useTypewriter(target: string, active: boolean): string {
         const nl = t.indexOf("\n\n", posRef.current);
         const drain = Math.max(1, Math.ceil(backlog / 8));
         posRef.current += nl !== -1 && nl + 2 - posRef.current <= Math.max(48, drain * 4) ? nl + 2 - posRef.current : drain;
-        /* Wave 91 (#244): the typewriter emits at most ~30 updates
+        /* #244: the typewriter emits at most ~30 updates
            per second. A setShown every frame drove a full Markdown
            parse + sanitize per frame during streams; text at 30fps
            reads the same as 60fps and the backlog drain still keeps
@@ -187,7 +187,7 @@ export default function AiPage() {
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
-  /* The model picker is gone (user request 2026-11-06): GPT-OSS is
+  /* The model picker is gone: GPT-OSS is
      the fixed main agent; Nemotron and Gemma stay reachable to it
      as sub agents (spawn_agent). A stored pick of a now-hidden
      model migrates back to the default on load (loadModelId). */
@@ -201,7 +201,7 @@ export default function AiPage() {
     if (nearBottom || phase !== "streaming") el.scrollTop = el.scrollHeight;
   }, [messages, phase]);
 
-  /* Wave 79: the history sheet is non-modal (the M3E bottom sheet
+  /* The history sheet is non-modal (the M3E bottom sheet
      handles Escape only in modal mode and has no light dismiss), so
      the page wires the dismiss itself: a pointer press outside the
      sheet and the Escape key both close it. Capture-phase listeners

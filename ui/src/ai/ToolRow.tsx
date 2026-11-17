@@ -4,7 +4,7 @@
    done; the detail area expands under it. Shared by the reasoning
    stream and by tool calls such as the Exa web search, so every
    assistant step renders with the same anatomy. The morphing shape
-   (user request 2026-11-12) is functional feedback: it cycles while
+   is functional feedback: it cycles while
    the step runs and settles once done. Only the main thinking row
    passes shape, so the AI view keeps one morphing element. */
 import { useEffect, useRef, useState, type ReactNode } from "react";

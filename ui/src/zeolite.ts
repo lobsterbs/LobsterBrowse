@@ -772,7 +772,7 @@ export function zlContentRegister(co: string): void {
   document.body.appendChild(f);
 }
 
-/* #477 wave 3: the Zeolite SW cannot create workers itself, so guest
+/* #477: the Zeolite SW cannot create workers itself, so guest
    service-worker realms spawn on the engine-origin guest-host page.
    Keep one hidden guest-host iframe open per engine origin (app plus
    content when split-origin is active). The page connects itself to

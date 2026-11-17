@@ -1,5 +1,5 @@
-/* Regression check for wave 100: DevTools sheet declutter and the
-   Settings hero engine badge (user request 2026-11-13).
+/* Regression check: DevTools sheet declutter and the Settings hero
+   engine badge.
    - Console and Network render bare like Diagnostics: the filled
      cards are gone, content sits directly in the sheet.
    - The console log-level filter chips are removed (text filter only).

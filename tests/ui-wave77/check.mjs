@@ -1,6 +1,7 @@
-/* Regression check for the wave 77 UI batch: the gated suggestor
+/* Regression check for the suggestor batch: the gated suggestor
    (SUGGEST_MIN_CHARS + buildSuggests ordering and sources) and the
-   engine brand marks. Wave 79: the search-history row assertions are gone (history left the UI stack). Wave 78/92: the ASCII-art background helper
+   engine brand marks. The search-history row assertions are gone
+   (history left the UI stack). The ASCII-art background helper
    assertions were replaced by source checks for the background
    layer, now the photographic hero image (the .tsx files carry
    JSX, which node cannot import, so they are read from disk
@@ -47,7 +48,7 @@ assert.equal(rows[1].text, "wildcats", "substring rank preserves provider order"
 assert.equal(rows[2].text, "concatenate", "substring rank preserves provider order");
 assert.equal(rows[3].text, "cat · Brave search", "the direct search row follows the engine rows");
 assert.equal(rows[3].src, "Brave", "the direct search row carries the engine source");
-/* Wave 79 removed search history from the UI stack: buildSuggests takes no history field, so no history row can appear. */
+/* Search history left the UI stack: buildSuggests takes no history field, so no history row can appear. */
 assert.equal(rows.length, 4, "engine rows plus the direct search row only");
 assert.ok(rows.every((r) => r.url.length > 0), "every row carries a URL");
 
@@ -72,10 +73,10 @@ for (const [id, e] of Object.entries(ENGINES)) {
 }
 assert.deepEqual([...MARKED_ENGINES].sort(), ["brave", "duckduckgo", "google", "mojeek", "startpage"], "marked engine set");
 
-/* ---- Wave 78/92 background: the ASCII canvas and the wave 78
-   liquid-metal shader are both gone; the home hero is the static
-   photographic image (issue #245), and the search bar carries one
-   globe icon with a focus-gated suggestor. ---- */
+/* ---- Background: the ASCII canvas and the liquid-metal shader
+   are both gone; the home hero is the static photographic image
+   (#245), and the search bar carries one globe icon with a
+   focus-gated suggestor. ---- */
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const appSrc = read("../../ui/src/App.tsx");
 const homeSrc = read("../../ui/src/pages/Home.tsx");
@@ -86,9 +87,8 @@ assert.ok(homeSrc.includes('slot="search-icon"'), "the search bar carries the si
 assert.ok(!homeSrc.includes('slot="closed-leading"') && !homeSrc.includes('slot="open-leading"'), "no duplicate leading icons in the search bar");
 assert.ok(homeSrc.includes('"beforetoggle"'), "the suggestor is gated until rows exist");
 
-/* Wave 78 follow-up: the frosted search-view host must pill-clip
-   its backdrop blur, or it paints blurred square corners outside the
-   rounded bar. */
+/* The frosted search-view host must pill-clip its backdrop blur,
+   or it paints blurred square corners outside the rounded bar. */
 const themeSrc = read("../../ui/src/theme.css");
 assert.ok(
   /\.lb-home m3e-search-view \{[^}]*border-radius: 9999px/s.test(themeSrc),

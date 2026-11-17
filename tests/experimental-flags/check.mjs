@@ -39,4 +39,4 @@ assert.deepEqual(loadDebugOverrides(), {});
 clearDebugOverrides();
 assert.deepEqual(loadDebugOverrides(), { experimental: {} });
 
-console.log("experimental-flags: per-flag defaults (hybridLocation ON, operator flip 2026-11-01), stored-override wins, migration, validation, reset passed");
+console.log("experimental-flags: per-flag defaults (hybridLocation ON by default), stored-override wins, migration, validation, reset passed");

@@ -2,11 +2,10 @@
    Experimental selections are NOT evidence that unfinished features run.
    Zeolite reports requested/effective separately; effective remains false
    until each independent feature is implemented and verified.
-   Defaults are per flag: hybridLocation is ON (operator flip
-   2026-11-01, mirroring the Zeolite engine default; #456 wires it,
+   Defaults are per flag: hybridLocation is ON (mirroring the
+   Zeolite engine default; #456 wires it,
    explicit per-site rules still win); every other experimental flag
-   stays ON by default (user request 2026-10-28). Stored per-flag
-   overrides still win. */
+   stays ON by default. Stored per-flag overrides still win. */
 export const EXPERIMENTAL_KEYS = [
   "adaptiveTransit", "hybridLocation", "cspTranslation", "virtualSW",
 ] as const;
