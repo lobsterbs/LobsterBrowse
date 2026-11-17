@@ -2346,7 +2346,18 @@ FROM debian:bookworm-slim AS zl-builder
 # unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
 # 5073f316 (no zeolite-server crate change in the wave). Deploy with a
 # cleared Render build cache.
-ARG ZEOLITE_COMMIT=da4dbaa257aecf41252e26397e52df852cfeb46c
+# Pin 175 (2026-11-17): dist 0448e765 (Zeolite main f67b1f79, CI run
+# 44195669245). Fix wave: CaptchaFox site= virtualization (#672, the
+# config site= and challenge host= seams) and VK Open API url=/location=
+# virtualization (#669, the widget_*.php and act=openapi shapes), both
+# from the #112 reCAPTCHA co= class. CI green across rust, wasm, app,
+# browser and compat; one test-fixture iteration on 1629e5e7 (the
+# nav-handle fixture dropped the page query from the visible route
+# suffix).
+# sw 764f36ef694ac9a8 -> 6ef96471895945be (899332 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=0448e765650bcb7600684b77a93ee50b8e58dfc4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2413,7 +2424,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=764f36ef694ac9a8 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=6ef96471895945be ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
