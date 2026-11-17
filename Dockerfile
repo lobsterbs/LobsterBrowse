@@ -2311,7 +2311,17 @@ FROM debian:bookworm-slim AS zl-builder
 # OAuth iframerpc origin= virtualization (#653/#654), CI gate fixes (#652).
 # sw 75c2427e835506a3, bootstrap unchanged 0ddd6edd9485c8ab. Cargo-side
 # zeolite-server rev unchanged (no server-crate changes in the wave).
-ARG ZEOLITE_COMMIT=fdec33ae477fbf44e9c3d936db641fff8fb9c85b
+# Pin 173 (2026-11-17): dist da4dbaa (Zeolite main 1163c3db, CI run 44173326999).
+# Fix wave: googlevideo.com allow so YouTube watch streams survive the ad
+# filters (#647), post-first-byte idle bound for long-poll bodies, first-party
+# subresources exempt from engine-side CSP gating (github chunk loads),
+# flat-asset recovery candidates bounded by a real 8s race (the old flag-only
+# bound never unblocked the await), plus comment cleanup.
+# sw 75c2427e835506a3 -> 764f36ef694ac9a8 (895726 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (no zeolite-server crate change in the wave). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=da4dbaa257aecf41252e26397e52df852cfeb46c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2378,7 +2388,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=75c2427e835506a3 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=764f36ef694ac9a8 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
