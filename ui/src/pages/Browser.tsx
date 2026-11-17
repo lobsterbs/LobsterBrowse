@@ -2870,10 +2870,7 @@ export default function BrowserView(props: Props) {
             id="lb-tabs-pill"
             toggle
             aria-label={"Open tab list (" + tabs.length + " tabs)"}
-            onClick={() => {
-              setTabsOpen((v) => !v);
-              setDlOpen(false);
-            }}
+            onClick={() => setTabsOpen((v) => !v)}
             {...{ ref: tabsBtnRef }}
           >
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
