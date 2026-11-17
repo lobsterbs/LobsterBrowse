@@ -73,7 +73,7 @@ const SEEDS: Array<[string, string]> = [
 
 /* #198: settings search index. One entry per findable setting; the
    targets are the id attributes set on the rows and groups below. */
-type SetEntry = { section: string; label: string; terms?: string; target: string };
+type SetEntry = { section: SectionId; label: string; terms?: string; target: string };
 const SETTING_INDEX: SetEntry[] = [
   { section: "search", label: "Search engine", terms: "default engine google bing duckduckgo brave startpage", target: "set-search-engine" },
   { section: "search", label: "Engine search suggestions", terms: "suggest omnibox autocomplete", target: "set-search-suggest" },
@@ -236,7 +236,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       )
     : [];
   const jumpTo = (entry: SetEntry) => {
-    setSection(entry.section as SectionId);
+    setSection(entry.section);
     setQ("");
     /* Let the section remount before scrolling to the target. */
     setTimeout(() => {
@@ -403,12 +403,10 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </m3e-card>
 
 
-      {/* Real M3E accordion coordinating the panels. multi keeps the
-          current behavior (several panels open at once); without it
-          the accordion would collapse all but one. */}
-      {/* #198: search-first Settings. A query swaps the accordion for
-          a flat result list; picking a result expands the owning
-          panel, clears the query and scrolls the row into view. */}
+      {/* #198: search-first Settings. A query swaps the section page
+          for a flat result list; picking a result switches to the
+          owning section, clears the query and scrolls the row into
+          view. */}
       <div className="lb-set-search">
         <TextInput label="Search settings" value={q} onChange={setQ} />
       </div>
@@ -428,7 +426,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           )}
         </div>
       ) : (
-            <div className="lb-set-page">
+      <div className="lb-set-page">
         {/* Wave 108 (settings redesign, user request 2026-11-17): the
             sticky frosted side rail replaces the accordion. One section
             renders at a time; the active item carries the M3 pill and
