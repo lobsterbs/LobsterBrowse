@@ -129,17 +129,27 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
 .lb-view { animation: lb-view-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard-decelerate, ease-out); width: 100%; }
 .lb-view-content { max-width: 720px; margin: var(--md-sys-measurement-space300) auto 0; width: 100%; }
 .lb-home { text-align: center; }
+/* Home hero: the wordmark card and the search bar center vertically
+   in the viewport-height shell (the :has rule above fixes the shell
+   height; .lb-view fills the chain below). */
+.lb-shell:has(.lb-home) .lb-view { height: 100%; }
+.lb-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--md-sys-measurement-space300);
+}
 /* Enhanced UI (stars): portaled to <body> by Home, so the fixed
    layer can never be trapped or resized by a view ancestor. Negative
    z-index covers the plain body background yet stays under the app.
    The starfield component owns its own dark radial background and
    fills this layer at 100%. */
 .lb-stars-bg { position: fixed; inset: 0; z-index: -1; }
-/* Frosted glass under Enhanced UI: the Home search bar and the nav
-   rail get a translucent surface tint plus backdrop blur, so their
-   contents stay readable over the animated background. Scoped to the
-   body class App toggles with the setting; off = untouched chrome. */
-body.lb-fancy .lb-home m3e-search-bar {
+/* Frosted glass on the Home search bar: translucent surface tint plus
+   backdrop blur keeps the bar readable over any background (Enhanced
+   UI or plain), matching the always-on rail. */
+.lb-home m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host: backdrop-filter blurs the whole host
      rectangle, and the fully rounded bar leaves blurred corner
@@ -175,20 +185,18 @@ m3e-nav-rail {
   background: color-mix(in srgb, var(--md-sys-color-surface) 60%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
 }
-/* ASCII wordmark: the same frosted glass as the rail and search bar,
-   so the art stays readable over the animated gradient. Scoped to
-   the fancy setting; the plain background keeps the bare pre. */
-body.lb-fancy .lb-home pre.lb-ascii {
+/* Wordmark card: the same frosted glass as the rail and search bar,
+   always on. The outlined m3e-card variant paints no fill of its
+   own (the card's padding and border own the chrome), so the
+   translucent host surface plus the blur is what shows. */
+.lb-home .lb-wordmark-card {
   display: inline-block;
   max-width: 100%;
-  box-sizing: border-box;
-  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
   background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent);
-  border-radius: var(--m3e-shape-lg);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
+.lb-home .lb-wordmark-card pre.lb-ascii { max-width: 100%; }
 
 /* Settings */
 .lb-panel-header { cursor: pointer; }

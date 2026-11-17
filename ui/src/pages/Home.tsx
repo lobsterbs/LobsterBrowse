@@ -168,18 +168,23 @@ export default function HomePage({ settings, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
+      {/* Frosted glass: the outlined card variant paints no fill of
+          its own, so the translucent host surface plus the backdrop
+          blur is what shows - the same recipe as the always-on rail. */}
+      <m3e-card variant="outlined" {...{ class: "lb-wordmark-card" }}>
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"
         /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
-            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
+          style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: 0, opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
   / /   / __ \/ __ \/ ___/ __/ _ \/ ___/ __  / ___/ __ \ | /| / / ___/ _ \
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
                                                                            `}</pre>
-      <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
+      </m3e-card>
+      <div className="lb-ac-wrap" style={{ maxWidth: 640, width: "100%" }}>
         <m3e-search-bar clearable>
           <m3e-icon name="travel_explore" slot="leading" aria-hidden={true} />
           <input

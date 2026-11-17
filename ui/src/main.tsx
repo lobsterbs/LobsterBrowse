@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
    register their own components when their chunks load. */
 import "@m3e/web/button";
 import "@m3e/web/button-group";
+import "@m3e/web/card";
 import "@m3e/web/chips";
 import "@m3e/web/dialog";
 import "@m3e/web/icon";
