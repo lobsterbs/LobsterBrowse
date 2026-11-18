@@ -342,21 +342,47 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
-.lb-set-page { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }
+/* Page width: unlike Home and Logs, which read best inside the
+   narrow .lb-view-content column, Settings is a two-column layout -
+   the shared 720px cap squeezed the whole page into a small centered
+   card that ignored 80% of a wide screen. The settings override
+   widens the column and still caps it, so a very wide monitor gets
+   breathing room, not newspaper-wide control rows. */
+.lb-view-content.lb-settings { max-width: 1360px; }
+.lb-set-page { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }
 .lb-set-bar { grid-column: 1 / -1; }
-/* Settings side rail: the sticky
-   frosted navigation rail. Same glass language as the sheets; the
-   active item is the secondary-container pill. */
-.lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); padding: var(--md-sys-measurement-space100); background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); border-radius: 20px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent); }
-.lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); width: 100%; min-height: 48px; padding: 0 var(--md-sys-measurement-space150); border: 0; border-radius: 999px; background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
-.lb-set-nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font-variation-settings: "wght" var(--lb-wght-medium); }
+/* Settings side rail, Android Settings port: every category is its
+   own sub-card (a rounded glass row, the card family of the page),
+   and inside each card the icon sits in an M3E shape - the same
+   corner-large icon tile the section heads use - with measurement-
+   token padding around the tile, then the category name with its
+   supporting line under it. The rail container goes bare: a list of
+   cards, not a pane inside a pane. The active card keeps the app's
+   secondary-container accent and inverts its icon tile. */
+.lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
+.lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); border: var(--lb-glass-ring); border-radius: 20px; background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
+.lb-set-nav-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none;
+  border-radius: var(--md-sys-shape-corner-large, 16px);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.lb-set-nav-ico m3e-icon { font-size: 20px; }
+.lb-set-nav-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lb-set-nav-title { font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
+.lb-set-nav-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
+.lb-set-nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; font-variation-settings: "wght" var(--lb-wght-medium); }
+.lb-set-nav-item.active .lb-set-nav-sub { color: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 80%, transparent); }
+.lb-set-nav-item.active .lb-set-nav-ico { background: var(--md-sys-color-on-secondary-container); color: var(--md-sys-color-secondary-container); }
 .lb-set-section { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
 /* Narrow screens: the page collapses to one column and the rail
    becomes a horizontal scroller above the section content. */
 @media (max-width: 720px) {
   .lb-set-page { grid-template-columns: minmax(0, 1fr); }
   .lb-set-nav { position: static; flex-direction: row; overflow-x: auto; }
-  .lb-set-nav-item { width: auto; white-space: nowrap; }
+  .lb-set-nav-item { width: auto; flex: none; white-space: nowrap; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
+  .lb-set-nav-sub { display: none; }
 }
 /* Motion: a section switch remounts the section children,
    so this entrance animation fires per switch; the nav pill crossfades

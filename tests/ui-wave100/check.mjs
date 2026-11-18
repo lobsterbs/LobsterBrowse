@@ -37,7 +37,7 @@ ok(!theme.includes(".lb-hero-engine"), "engine badge css removed (#272, #273)");
 ok(!theme.includes(".lb-dt-chips"), "chip css removed");
 ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }"), "panel headers carry the compact 12px rhythm (#274)");
 ok(theme.includes("min-height: 56px;"), "inline rows match the collapsed panel header rhythm (#274)");
-ok(theme.includes(".lb-set-page { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }"), "settings sidenav grid keeps the space200 rhythm (wave 108)");
+ok(theme.includes(".lb-set-page { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--md-sys-measurement-space200); align-items: start; }"), "settings sidenav grid keeps the space200 rhythm (wave 108; the Android sub-card wave widened the nav track to 300px)");
 
 const ciwf = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
 ok(ciwf.includes("ui-wave100"), "ci.yml runs the wave 100 check");

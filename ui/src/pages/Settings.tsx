@@ -307,7 +307,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   };
 
   return (
-    <section className="lb-view-content" aria-label="Settings">
+    <section className="lb-view-content lb-settings" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
           surface the component provides. */}
 <m3e-content-pane {...{ class: "lb-set-pane" }}>
@@ -334,8 +334,17 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 aria-current={section === id ? "true" : undefined}
                 onClick={() => setSection(id)}
               >
-                <m3e-icon name={SECTION_META[id].icon} aria-hidden={true} />
-                <span>{SECTION_TITLES[id]}</span>
+                {/* Android Settings sub-card, ported: the icon inside
+                    an M3E shape (the corner-large tile the section
+                    heads use), then the category name with its
+                    supporting line under it. */}
+                <span className="lb-set-nav-ico" aria-hidden={true}>
+                  <m3e-icon name={SECTION_META[id].icon} />
+                </span>
+                <span className="lb-set-nav-txt">
+                  <span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>
+                  <span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>
+                </span>
               </button>
             ))}
           </nav>
