@@ -20,7 +20,8 @@ import {
 } from "./settings";
 import * as store from "./store";
 import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
-import { parseNavTab } from "./frameNav";
+import { parseNavTab, shellGuardCancel, shellGuardDest, type ShellNavApi, type ShellNavEvent } from "./frameNav";
+import { sanitizeUrl } from "./sanitize";
 import CommandPalette, { type Command } from "./CommandPalette";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
@@ -485,6 +486,42 @@ export default function App() {
     window.addEventListener("message", onFrameNav);
     return () => window.removeEventListener("message", onFrameNav);
   }, [navigateTo]);
+
+  /* Shell-side navigation guard (the engine lockdown follow-up,
+     mounted at the app root so every view is covered, not just the
+     browser page): the engine worker recapture only answers
+     fetch-driven shell navigations whose FetchEvent carries the
+     source client, and the ESTS-style pane breakout assigns
+     top.location directly, so the shell guards its own window too.
+     The Navigation API sees every cross-document top navigation
+     before commit: a script-initiated push or replace is cancelled
+     and its destination reopens as an in-app tab, exactly like the
+     worker zlescape recapture. User navigations, reloads, hash
+     moves and history traverses are userInitiated, reload/traverse
+     or same-document and always pass. The live ref keeps the
+     listener registered once for the whole app run. */
+  const navGuard = useRef({ tabs, activeId, newTab });
+  navGuard.current = { tabs, activeId, newTab };
+  useEffect(() => {
+    const navapi = (window as unknown as { navigation?: ShellNavApi }).navigation;
+    if (!navapi) return;
+    const onNavigate = (ev: ShellNavEvent) => {
+      if (!shellGuardCancel(ev)) return;
+      ev.preventDefault();
+      const raw = ev.destination.url;
+      const G = navGuard.current;
+      const known = G.tabs.find((t) => t.id === G.activeId)?.url ?? null;
+      const real = shellGuardDest(raw, known, location.origin);
+      if (real) {
+        G.newTab(real);
+        store.pushLog("info", "shell navigate guard recaptured to a new tab: " + sanitizeUrl(real));
+      } else {
+        store.pushLog("warn", "shell navigate guard blocked a navigation without recapture: " + sanitizeUrl(raw));
+      }
+    };
+    navapi.addEventListener("navigate", onNavigate);
+    return () => navapi.removeEventListener("navigate", onNavigate);
+  }, []);
 
   /* ---- Zeolite service worker: it IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The

@@ -34,7 +34,6 @@ import { loadDebugOverrides } from "../debug";
 import { dominantHue } from "../siteTint";
 import { sjFrame } from "../scramjet";
 import { pushLog, type Tab } from "../store";
-import { shellGuardCancel, shellGuardDest, type ShellNavApi, type ShellNavEvent } from "../frameNav";
 /* Central diagnostics sanitizer: every untrusted page string that
    enters DevTools state or the app log passes through these (P0
    secret-leak fix). Replaces the old local redactUrl. */
@@ -2505,36 +2504,6 @@ export default function BrowserView(props: Props) {
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* Shell-side navigation guard (the engine lockdown follow-up): the
-     engine worker recapture only answers fetch-driven shell
-     navigations whose FetchEvent carries the source client, and the
-     ESTS-style pane breakout assigns top.location directly, so the
-     shell guards its own window too. The Navigation API sees every
-     cross-document top navigation before commit: a script-initiated
-     push or replace is cancelled and its destination reopens as an
-     in-app tab, exactly like the worker zlescape recapture above.
-     User navigations, reloads, hash moves and history traverses are
-     userInitiated, reload/traverse or same-document and always pass. */
-  useEffect(() => {
-    const navapi = (window as unknown as { navigation?: ShellNavApi }).navigation;
-    if (!navapi) return;
-    const onNavigate = (ev: ShellNavEvent) => {
-      if (!shellGuardCancel(ev)) return;
-      ev.preventDefault();
-      const raw = ev.destination.url;
-      const known = live.current.tabs.find((t) => t.id === activeIdRef.current)?.url ?? null;
-      const real = shellGuardDest(raw, known, location.origin);
-      if (real) {
-        live.current.newTab(real);
-        pushLog("info", "shell navigate guard recaptured to a new tab: " + sanitizeUrl(real));
-      } else {
-        pushLog("warn", "shell navigate guard blocked a navigation without recapture: " + sanitizeUrl(raw));
-      }
-    };
-    navapi.addEventListener("navigate", onNavigate);
-    return () => navapi.removeEventListener("navigate", onNavigate);
   }, []);
 
   const draft = active ? (drafts[active.id] ?? active.url) : "";
