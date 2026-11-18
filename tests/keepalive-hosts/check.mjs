@@ -22,7 +22,7 @@ const need = (cond, msg) => {
 const LIVE = [
   "https://lobsterbrowse-server.onrender.com/healthz",
   "https://lobsterbrowse-beta.onrender.com/healthz",
-  "https://lobsterbrowse-fixture.onrender.com/healthz",
+  "https://lobsterbrowse-fixture.onrender.com/data.json",
 ];
 for (const u of LIVE) need(wf.includes(u), "missing live origin " + u);
 

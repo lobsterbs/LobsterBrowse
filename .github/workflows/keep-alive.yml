@@ -21,7 +21,7 @@ jobs:
           for url in \
             https://lobsterbrowse-server.onrender.com/healthz \
             https://lobsterbrowse-beta.onrender.com/healthz \
-            https://lobsterbrowse-fixture.onrender.com/healthz ; do
+            https://lobsterbrowse-fixture.onrender.com/data.json ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::error::keep-alive ping failed: $url"
               exit 1
