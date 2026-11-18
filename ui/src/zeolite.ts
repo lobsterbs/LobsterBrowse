@@ -9,7 +9,7 @@
    scope. With no controller on the page (Home, Settings,
    plain tabs) this module is the control plane client. */
 
-import { loadDebugOverrides } from "./debug";
+import { loadDebugOverrides } from "./debug.ts";
 
 async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
@@ -167,13 +167,22 @@ export function zlWaitActive(timeoutMs = 10000): Promise<void> {
   if (!zlActiveWait) {
     zlActiveWait = (async () => {
       if (!("serviceWorker" in navigator)) return;
-      try {
-        await navigator.serviceWorker.register("/zlsw/sw.js", {
-          scope: "/",
-          type: "module",
-        });
-      } catch {
-        return;
+      /* LB#260: a page a worker already controls has a registration
+         by definition; register() is then only a byte-check of the
+         ~900 KB worker script, and on a slow origin that single
+         round trip stalled the whole boot for over ten seconds
+         while a ready worker answered mints in milliseconds. The
+         browser's own update checks keep the registration fresh.
+         First-ever visits (no controller) still need the register. */
+      if (!navigator.serviceWorker.controller) {
+        try {
+          await navigator.serviceWorker.register("/zlsw/sw.js", {
+            scope: "/",
+            type: "module",
+          });
+        } catch {
+          return;
+        }
       }
       await Promise.race([
         navigator.serviceWorker.ready,
@@ -202,6 +211,15 @@ export function zlWaitActive(timeoutMs = 10000): Promise<void> {
 export async function zlNavHandle(dest: string, timeoutMs = 5000): Promise<string | null> {
   const r = await zlSend({ type: "zl:navHandle", dest }, timeoutMs);
   return r && r.ok === true && typeof r.url === "string" ? r.url : null;
+}
+
+/* A minted initial route hides the destination in one of two shipped
+   shapes: the /__zl_navh__/<keyed token> path form and the query form
+   "/?zlNavh=<keyed token>" (ZL_QUERY_ROUTES deployments). Both are the
+   keyed mint. The engine nav log line only recognized the path form
+   and mislabeled every successful query mint as "legacy". */
+export function zlHandleRoute(href: string): boolean {
+  return href.startsWith("/__zl_navh__/") || /[?&]zlNavh=/.test(href);
 }
 
 /* Zeolite #137 embedder fetch relay. The engine asks the embedder

@@ -29,7 +29,7 @@ import {
   type SiteRule,
   type UaPresetId,
 } from "../settings";
-import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentQuery, zlContentReady, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
+import { engineSwSource, zlContentHref, zlContentAnnounced, zlContentOrigin, zlContentQuery, zlContentReady, zlHandleRoute, zlNavHandle, zlSend, zlWaitActive } from "../zeolite";
 import { loadDebugOverrides } from "../debug";
 import { dominantHue } from "../siteTint";
 import { sjFrame } from "../scramjet";
@@ -1698,7 +1698,7 @@ export default function BrowserView(props: Props) {
       if (f) f.src = href;
       /* Route form in the log (#168): handle routes are opaque, the
          legacy b64u fallback is not. */
-      const form = href.startsWith("/__zl_navh__/") ? "handle" : settings.proxyEngine === "scramjet" ? "scramjet" : "legacy";
+      const form = zlHandleRoute(href) ? "handle" : settings.proxyEngine === "scramjet" ? "scramjet" : "legacy";
       pushLog("info", "engine nav " + url + " (" + nid + ", route mint " + hopMs + " ms, " + form + ")");
     });
   };
