@@ -2368,7 +2368,16 @@ FROM debian:bookworm-slim AS zl-builder
 # sw 6ef96471895945be -> b8e515023cdc4814 (900649 bytes); bootstrap
 # unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=8e16b6f9198055a332ef26f8f9dea2e20afc08f4
+# Pin 177 (2026-11-18): dist 7576c60 (Zeolite main bf8ff950, CI run 44262982308).
+# WebSocket open-attempt DIAG row (#664/#511 triage): every page websocket
+# that reaches the ws bridge lands an info event immediately, so a
+# never-settling handshake or a page-side failure is triagable from a
+# diagnostics export instead of only via the abnormal close after the 20s
+# open deadline. CI green across rust/wasm/app/browser/compat. sw
+# b8e515023cdc4814 -> 27c5adc6eb706dd5 (900793 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=7576c6030b0a83024e71d16147f76d8fcdf8dc47
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2435,7 +2444,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=b8e515023cdc4814 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=27c5adc6eb706dd5 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
