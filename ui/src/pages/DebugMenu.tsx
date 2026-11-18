@@ -45,8 +45,12 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
   useEffect(() => {
     if (!open) return;
     void (async () => {
+      /* LB#260: an 8 s abort keeps the row honest even when a cold
+         worker queues same-origin passthrough fetches. */
+      const ctrl = new AbortController();
+      const kill = setTimeout(() => ctrl.abort(), 8000);
       try {
-        const r = await fetch("/build?cb=" + Date.now(), { cache: "no-store" });
+        const r = await fetch("/build?cb=" + Date.now(), { cache: "no-store", signal: ctrl.signal });
         const b = await r.json();
         setBuild(
           "lb " + (b?.lb ?? "?") +
@@ -57,20 +61,27 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         );
         setQr(b?.zlQueryRoutes === true);
       } catch {
-        setBuild("(/build fetch failed)");
+        setBuild("(/build fetch failed or timed out)");
+      } finally {
+        clearTimeout(kill);
       }
     })();
-    void zlSend({ type: "zl:ping" }, 6000).then((p) => {
+    /* LB#260: zlSend settles only after the worker registration
+       handshake, which can strand the row on a cold origin. A 9 s
+       race keeps the readout honest either way. */
+    void Promise.race([zlSend({ type: "zl:ping" }, 6000), new Promise((resolve) => setTimeout(() => resolve(null), 9000))]).then((p) => {
       setPing(
-        p && p.ok
-          ? "zl " + (p.version ?? "?") +
-            " | prefix " + (p.prefix ?? "?") +
-            " | scheme " + (p.scheme ?? "?") +
-            " | queryRoutes " + String(p.queryRoutes === true) +
-            " | httpsUpgrade " + String(p.httpsUpgrade === true) +
-            " | imageLazy " + String(p.imageLazy === true) +
-            (p.degraded ? " | DEGRADED" : "")
-          : "(zl:ping failed)",
+        p
+          ? p.ok
+            ? "zl " + (p.version ?? "?") +
+              " | prefix " + (p.prefix ?? "?") +
+              " | scheme " + (p.scheme ?? "?") +
+              " | queryRoutes " + String(p.queryRoutes === true) +
+              " | httpsUpgrade " + String(p.httpsUpgrade === true) +
+              " | imageLazy " + String(p.imageLazy === true) +
+              (p.degraded ? " | DEGRADED" : "")
+            : "(zl:ping failed)"
+          : "(zl:ping timed out: worker busy)",
       );
     });
   }, [open]);

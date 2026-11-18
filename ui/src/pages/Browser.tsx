@@ -42,6 +42,7 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
 /* Extracted browser feature panels (ui/src/browser/): all state stays
    in this page; the components are presentational. */
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
+import { createPopupGate } from "../browser/popupGate";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
 import AdBlockCard from "../browser/AdBlockCard";
 import FileViewer from "../browser/FileViewer";
@@ -2175,11 +2176,18 @@ export default function BrowserView(props: Props) {
          window.open inside the proxied page must open LB tabs, not
          escape to a real browser tab (the frame is same-origin, so
          the default would open a new top-level context on our
-         origin with no relay channel). Nested subframes of the page
+         origin with no relay channel). Scripted window.open is
+         burst-capped by the popup gate so a looping page cannot
+         mint a tab storm (LB#260). Nested subframes of the page
          are not covered - honest gap. */
       if (!tabWired.current.has(doc)) {
         tabWired.current.add(doc);
-        const openInTab = (raw: string): boolean => {
+        const popupGate = createPopupGate();
+        const openInTab = (raw: string, scripted = false): boolean => {
+          if (scripted && !popupGate.allow(true, Date.now())) {
+            if (popupGate.denied() === 1) pushLog("warn", "popup guard: scripted popups from this page got capped (LB#260)");
+            return false;
+          }
           if (!raw || raw.startsWith("javascript:") || raw.startsWith("blob:") || raw.startsWith("data:")) return false;
           let real = decodeRoute(raw);
           if (!real && /^https?:/i.test(raw)) real = raw;
@@ -2221,7 +2229,7 @@ export default function BrowserView(props: Props) {
           const orig = win.open.bind(win);
           win.open = ((url?: string | URL, target?: string, features?: string) => {
             const raw = url == null ? "" : String(url);
-            if (openInTab(raw)) return null;
+            if (openInTab(raw, true)) return null;
             return orig(url, target, features);
           }) as typeof window.open;
         }
