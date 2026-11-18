@@ -60,6 +60,7 @@ ok("markup: title and sub inside the text column", page.includes('<span classNam
 /* Active accent and narrow screens. */
 ok("active card keeps the app accent", theme.includes(".lb-set-nav-item.active { background: var(--md-sys-color-secondary-container);"));
 ok("active card inverts its icon tile", theme.includes(".lb-set-nav-item.active .lb-set-nav-ico {"));
+ok("nav cards carry press feedback", theme.includes(".lb-set-nav-item:active { scale: 0.97; transition-duration: 90ms; }"));
 ok("narrow screens collapse the cards and drop the sub line", theme.indexOf('@media (max-width: 720px)') !== -1 && theme.includes(".lb-set-nav-sub { display: none; }"));
 
 const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
