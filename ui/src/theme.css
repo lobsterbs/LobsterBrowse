@@ -148,7 +148,14 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    layers blur it as their real backdrop. Layer order: dark scrim,
    remote wallpaper, local lb-hero.jpg, surface token, so an
    unreachable or hotlink-blocked remote degrades to the previous
-   backdrop instead of a bare surface. */
+   backplate instead of a bare surface. The fx layer is portaled to
+   <body>, which sits OUTSIDE <m3e-theme>: every --md-sys-color-*
+   token comes solely from that element and its descendants, so the
+   token reads empty here. An unsubstituted var() inside a
+   multi-layer background shorthand makes the WHOLE declaration
+   invalid at computed-value time (dropping every image layer too,
+   live-proven: computed background-image none while /lb-hero.jpg
+   serves 200), so the base color carries its own fallback. */
 .lb-fx-bg {
   position: fixed;
   inset: 0;
@@ -157,7 +164,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
     linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35)),
     url("https://images4.alphacoders.com/134/thumb-1920-1341558.png") center / cover no-repeat,
     url("/lb-hero.jpg") center / cover no-repeat,
-    var(--md-sys-color-surface);
+    var(--md-sys-color-surface, #1c1b1f);
 }
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
