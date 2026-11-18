@@ -2432,7 +2432,22 @@ FROM debian:bookworm-slim AS zl-builder
 # sw 4215194e8ecb1a45 -> 9ad13002dce949d0 (902727 bytes); bootstrap
 # unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=693aebdc36b81562ec1b81f2d2da4332c9f02b9c
+# Pin 181 (2026-11-18): dist 5d22c2a4 (Zeolite main d5b3cf3c, CI run
+# 44406213985, all five jobs green). Carries the double-HTML-rewrite
+# fixpoint (#681): the second rewrite pass re-wrapped the injected
+# bootstrap into a site route and double-booted the page, the class
+# behind the outlook.com ESTS authorize white tab and its MSAL tab
+# spam (pin 180 predates #681; the user repro shipped before any pin
+# could carry it). Also rides the #683 site-repros wave: wasm traps
+# classify connect-class so a poisoned transport singleton resets
+# and self-heals, and videoplayback numeric fields round-trip
+# byte-exact through the MAC-verified codec. sw
+# 9ad13002dce949d0 -> eba962f01a855b69 (934511 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (engine bundle only; the #556 v1-grant zeolite-server
+# change still needs its own verified lock-regen wave). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=5d22c2a4f24d8536bfc5262b64b542bfc7caff24
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2499,7 +2514,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9ad13002dce949d0 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=eba962f01a855b69 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
