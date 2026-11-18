@@ -22,7 +22,7 @@
    directly. Console and network events arrive over the engine's
    control plane for every proxied document either way. */
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { type Tab } from "../store";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
@@ -504,7 +504,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
-  useEffect(() => {
+  /* #260 user report: a LAYOUT effect, not a passive one. On a
+     wedged main thread passive effects starve far behind the
+     commit, so the checkbox said open while the sheet never showed.
+     The layout effect runs in the commit task itself: state and
+     sheet can no longer diverge. */
+  useLayoutEffect(() => {
     const el = sheetRef.current;
     if (!el) return;
     if (open) el.show();
