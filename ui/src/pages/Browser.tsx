@@ -2270,6 +2270,32 @@ export default function BrowserView(props: Props) {
       /* Schema validation: {lb: string, data?: object}. Anything else
          (including unknown lb types) is dropped. */
       if (!data || typeof data.lb !== "string" || data.lb.length > 32) return;
+      /* Shell escape recapture (the engine navigation lockdown): the
+         engine service worker aborted a top-level navigation a
+         proxied page aimed at the shell document itself, so the app
+         window keeps its own URL and no website can navigate this
+         window away, only the app can. The worker posts the real
+         destination it decoded; it reopens here as a new in-app tab.
+         The frame-matching below is deliberately skipped: the sender
+         is the service worker, not a proxied frame, and the schema,
+         length bound and scheme gate keep the payload in the same
+         trust class as the newTab facade a proxied page already
+         holds. */
+      if (data.lb === "zlescape") {
+        const raw = (data.data as { dest?: unknown } | undefined)?.dest;
+        const dest = typeof raw === "string" ? raw.slice(0, 4096) : "";
+        let safe = false;
+        try {
+          safe = /^https?:$/i.test(new URL(dest).protocol);
+        } catch {
+          safe = false;
+        }
+        if (safe) {
+          live.current.newTab(dest);
+          pushLog("info", "shell escape recaptured to a new tab: " + sanitizeUrl(dest));
+        }
+        return;
+      }
       const process = (
         ev: { lb?: string; data?: Record<string, unknown> },
         source: MessageEventSource | null,
