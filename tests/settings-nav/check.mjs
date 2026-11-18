@@ -30,6 +30,7 @@ const ok = (name, cond) => {
 ok("section carries the lb-settings override", page.includes('className="lb-view-content lb-settings"'));
 ok("theme defines the wide settings column", theme.includes(".lb-view-content.lb-settings { max-width: 1360px; }"));
 ok("nav grid track widened to 300px", theme.includes("grid-template-columns: 300px minmax(0, 1fr);"));
+ok("settings shell lifts the 1100px reading cap", theme.includes('.app-content[data-view="settings"] { max-width: none; }'));
 
 /* Each category is an Android-style sub-card. */
 ok("nav is bare cards, not a pane", theme.includes(".lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }"));

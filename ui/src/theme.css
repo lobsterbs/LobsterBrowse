@@ -131,6 +131,13 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    recent-sites row scrolls horizontally, the suggestion card
    internally). */
 .app-content[data-view="home"] { overflow: hidden; }
+/* Settings occupies a two-column workspace, not the 1100px reading
+   column: lift the shell cap like the browser view does. The inner
+   .lb-view-content.lb-settings carries its own 1360px budget and auto
+   margins, so the page still centers and never newspaper-stretches;
+   without this rule the shell handed the section only 1100px (1052px
+   of content) and the 1360px budget was dead code. */
+.app-content[data-view="settings"] { max-width: none; }
 
 /* View transition: subtle fade + slide, fast enough to never distract. */
 @keyframes lb-view-in {
