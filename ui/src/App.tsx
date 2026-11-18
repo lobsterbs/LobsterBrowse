@@ -23,6 +23,7 @@ import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zl
 import { parseNavTab, shellGuardCancel, shellGuardDest, type ShellNavApi, type ShellNavEvent } from "./frameNav";
 import { sanitizeUrl } from "./sanitize";
 import CommandPalette, { type Command } from "./CommandPalette";
+import { createPopupGate } from "./browser/popupGate";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
@@ -505,6 +506,9 @@ export default function App() {
   useEffect(() => {
     const navapi = (window as unknown as { navigation?: ShellNavApi }).navigation;
     if (!navapi) return;
+    /* Scripted recaptures are burst-capped so a looping page cannot
+       mint a tab storm through the guard either (LB#260). */
+    const gate = createPopupGate(5, 10000, 30);
     const onNavigate = (ev: ShellNavEvent) => {
       if (!shellGuardCancel(ev)) return;
       ev.preventDefault();
@@ -513,6 +517,10 @@ export default function App() {
       const known = G.tabs.find((t) => t.id === G.activeId)?.url ?? null;
       const real = shellGuardDest(raw, known, location.origin);
       if (real) {
+        if (!gate.allow(true, Date.now())) {
+          if (gate.denied() === 1) store.pushLog("warn", "shell guard: scripted navigation burst capped: " + sanitizeUrl(raw));
+          return;
+        }
         G.newTab(real);
         store.pushLog("info", "shell navigate guard recaptured to a new tab: " + sanitizeUrl(real));
       } else {
