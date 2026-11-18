@@ -2377,7 +2377,22 @@ FROM debian:bookworm-slim AS zl-builder
 # b8e515023cdc4814 -> 27c5adc6eb706dd5 (900793 bytes); bootstrap unchanged
 # 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316 (app TS
 # only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=7576c6030b0a83024e71d16147f76d8fcdf8dc47
+# Pin 178 (2026-11-18): dist 31dad9ca (Zeolite main 639ac8be, CI run
+# 44275927339, all five jobs green). Microsoft OAuth redirect_uri fix
+# (#634, two arms): referrerOrigin and referrerPageUrl now recover
+# EXPIRED nav-handle and query-shape referrers (the {expired: true}
+# mirror of the #633 Referer seam), so a page parked past NAVH_TTL_MS
+# keeps its authorize redirect_uri virtualization; and both authorize
+# seams fail closed when the recovered parent is itself a Microsoft
+# login host (the auto-replayed sso_reload flow minted a
+# login.live.com/mail/ parent the ESTS hop rejected invalid_request,
+# the captured crash). DevTools gained an "Export all KDL" button: one
+# zeolite-devtools-all.kdl artifact holding netlog, tracing,
+# diagnostics and the last doctor report. sw 27c5adc6eb706dd5 ->
+# 1fb45966860c501c (900961 bytes); bootstrap unchanged 0ddd6edd9485c8ab
+# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy
+# with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=31dad9caeb3506b8029d30e553bfbb8561b8daba
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2444,7 +2459,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=27c5adc6eb706dd5 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=1fb45966860c501c ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
