@@ -27,8 +27,8 @@ import { type Tab } from "../store";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
-  diagnosticsScope, snapshotForScope, pollDocumentDiagnostics,
-  type DiagnosticsSnapshot, type DiagnosticsStatus, type EngineSource, type ZlDiagEvent,
+  diagnosticsScope, snapshotForScope, pollDocumentDiagnostics, mergeDiagHistory,
+  type DiagnosticsSnapshot, type DiagnosticsStatus, type DiagHistoryEvent, type EngineSource,
 } from "../browser/diagnosticsScope";
 import { diagKdl } from "../kdl";
 
@@ -197,9 +197,13 @@ const PAGES: Array<[DtState["page"], string, string]> = [
 
 /* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
 /* This document's retained request/diagnostic rings from its owning
-   worker. Unattributed engine lifecycle events remain in Engine DevTools. */
-const zlNotable = (e: ZlDiagEvent) =>
-  e.severity === "error" || e.severity === "warning" || e.stage === "TRANSPORT_FALLBACK";
+   worker. Unattributed engine lifecycle events remain in Engine DevTools.
+   LB#260 (beta): the panel shows EVERY retained event, not only
+   errors and warnings, and keeps events from PREVIOUS navigations
+   of this tab: each navigation is a new document identity whose
+   rings start empty, so a mount-level history (mergeDiagHistory)
+   carries the older navigation's events across the boundary while
+   the panel is open. */
 
 /* #220: explicit collection statuses replace the eternal "Awaiting..."
    placeholders. A valid empty scoped log renders as a normal snapshot
@@ -227,6 +231,11 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
 }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [status, setStatus] = useState<DiagnosticsStatus | null>(null);
+  /* LB#260: the mount-level merged history survives the clientId
+     changes that every pane navigation causes; the ref is the
+     accumulator, the state just re-renders. */
+  const historyRef = useRef<DiagHistoryEvent[]>([]);
+  const [history, setHistory] = useState<DiagHistoryEvent[]>([]);
   const scope = diagnosticsScope(clientId, source);
   /* Hide the preceding document before effect cleanup. */
   const current = snapshotForScope(snapshot, scope);
@@ -240,6 +249,9 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
       (next, why) => {
         snapshotRef.current = next;
         setSnapshot(next);
+        const merged = mergeDiagHistory(historyRef.current, next);
+        historyRef.current = merged;
+        setHistory(merged);
         const s = why ?? (next ? "ok" : "unavailable");
         statusRef.current = s;
         setStatus(s);
@@ -253,33 +265,43 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
   if (!current) {
     return <p className="lb-muted">{DIAG_STATUS_TEXT[status ?? "starting"]}</p>;
   }
-  const { stats, events } = current;
-  const notable = events.filter(zlNotable).slice(-25).reverse();
+  const { stats } = current;
+  /* Newest first, every event, with a visible boundary between
+     navigations so the previous navigation's rows read as history. */
+  const rows = [...history].reverse();
   return (
     <div className="lb-net">
       <div className="lb-diag-counts">
         <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
         <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
       </div>
-      {notable.length === 0 && (
-        <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No retained transport or rewrite failures for this document.</p>
+      {rows.length === 0 && (
+        <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No engine events for this tab yet. Navigate and keep this page open to retain every event across navigations.</p>
       )}
-      {notable.map((e) => (
-        <details key={current.generation + ":" + e.seq} className="lb-net-row">
-          <summary className="lb-net-summary">
-            <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
-            <span className="lb-net-method">{e.category}</span>
-            <span className="lb-net-url">{e.message}</span>
-            <span className="lb-net-dur">{ts(e.ts)}</span>
-          </summary>
-          <div className="lb-net-detail">
-            {e.stage && <div>Stage: {e.stage}</div>}
-            {e.url && <div>URL: {e.url}</div>}
-            {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
-            {e.traceId && <div>Trace: {e.traceId}</div>}
+      {rows.map((e, i) => {
+        const boundary = i > 0 && rows[i - 1].clientId !== e.clientId;
+        return (
+          <div key={e.clientId + ":" + e.seq}>
+            {boundary && (
+              <p className="lb-muted" style={{ margin: "10px 8px 2px", fontSize: "0.75em" }}>previous navigation</p>
+            )}
+            <details className="lb-net-row">
+              <summary className="lb-net-summary">
+                <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
+                <span className="lb-net-method">{e.category}</span>
+                <span className="lb-net-url">{e.message}</span>
+                <span className="lb-net-dur">{ts(e.ts)}</span>
+              </summary>
+              <div className="lb-net-detail">
+                {e.stage && <div>Stage: {e.stage}</div>}
+                {e.url && <div>URL: {e.url}</div>}
+                {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
+                {e.traceId && <div>Trace: {e.traceId}</div>}
+              </div>
+            </details>
           </div>
-        </details>
-      ))}
+        );
+      })}
     </div>
   );
 }

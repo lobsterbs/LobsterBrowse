@@ -568,13 +568,19 @@ export default function App() {
              commit the same route shape (/zl/) instead of the content
              worker keeping its default prefix. Warn on no ack
              (the LB#15 lesson). */
-          void zlContentConfig(mkMsg()).then((ok) => {
-            if (!ok)
-              store.pushLog(
-                "warn",
-                "content-origin zl:config did not ack; proxied routes on the content origin may keep the default prefix until the app is reloaded",
-              );
-          });
+          /* LB#260: only a deployment with a provisioned content
+             origin (/build contentOrigin) can ack the parity push;
+             zlContentConfig always answers false when there is
+             none, so the warn fired on every boot as pure noise. */
+          if (zlContentOrigin()) {
+            void zlContentConfig(mkMsg()).then((ok) => {
+              if (!ok)
+                store.pushLog(
+                  "warn",
+                  "content-origin zl:config did not ack; proxied routes on the content origin may keep the default prefix until the app is reloaded",
+                );
+            });
+          }
           return true;
         }
       }

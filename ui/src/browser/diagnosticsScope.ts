@@ -22,6 +22,29 @@ export function diagnosticsScope(clientId?: string, source?: EngineSource): Diag
   return clientId && (source === "app" || source === "content") ? { clientId, source } : null;
 }
 
+/* LB#260 (beta): the scoped rings reset on every pane navigation,
+   because each navigation is a new document identity with its own
+   clientId. A per-navigation snapshot alone loses the previous
+   navigation's events, so the Diagnostics panel keeps a merged
+   running history, one entry per (clientId, seq), capped. Events
+   from previous navigations of this tab stay visible while the
+   panel is open. Pure so the regression check can pin it without
+   React. */
+export type DiagHistoryEvent = ZlDiagEvent & { clientId: string };
+
+export function mergeDiagHistory(
+  prev: DiagHistoryEvent[],
+  snap: DiagnosticsSnapshot | null,
+  cap = 1000,
+): DiagHistoryEvent[] {
+  if (!snap) return prev;
+  const seen = new Set(prev.map((e) => e.clientId + ":" + e.seq));
+  const add = snap.events
+    .map((e) => ({ ...e, clientId: snap.scope.clientId }))
+    .filter((e) => !seen.has(e.clientId + ":" + e.seq));
+  return [...prev, ...add].slice(-cap);
+}
+
 export function snapshotForScope(snapshot: DiagnosticsSnapshot | null, scope: DiagnosticsScope | null): DiagnosticsSnapshot | null {
   return snapshot && scope && snapshot.scope.clientId === scope.clientId && snapshot.scope.source === scope.source ? snapshot : null;
 }
