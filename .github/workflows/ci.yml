@@ -107,6 +107,8 @@ jobs:
         run: node ../tests/keepalive-hosts/check.mjs
       - name: Popup spam guard regression check
         run: node --experimental-strip-types ../tests/popup-gate/check.mjs
+      - name: Sheet exclusivity regression check
+        run: node --experimental-strip-types ../tests/sheet-exclusivity/check.mjs
 
   # #130: fixture-only self-test of the transit router against the
   # in-repo fixtures; it never exercises a deployed pair (that is

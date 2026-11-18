@@ -11,7 +11,7 @@
    trash affordance per card here plus the Delete button in Settings,
    both asking first in a m3e-dialog (#99). */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import EmptyState from "../components/ui/EmptyState";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
@@ -121,7 +121,9 @@ export default function ExtensionsPanel(props: {
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
-  useEffect(() => {
+  /* #260: layout effect so the sheet cannot lag the state commit
+     on a wedged main thread (see DevTools). */
+  useLayoutEffect(() => {
     const el = sheetRef.current;
     if (!el) return;
     if (props.open) el.show();

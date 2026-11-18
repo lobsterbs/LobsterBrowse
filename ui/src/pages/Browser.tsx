@@ -1206,13 +1206,25 @@ export default function BrowserView(props: Props) {
      page wins; otherwise the vendored worker at /zlsw/sw.js is
      registered and used as a control plane (no page control). */
   const [extPanelOpen, setExtPanelOpen] = useState(false);
+  /* Sheet exclusivity (#260 user report): exactly ONE bottom sheet
+     may be up at a time. The m3e sheet layer hides the previous
+     sheet itself, but that hide chain rides passive effects, and on
+     a wedged main thread (engine storms) the chain can lag far
+     behind the new sheet. The LB state must be exclusive on its
+     own: every open site closes all other sheets first. */
+  const closeSheets = (except: "tabs" | "ext" | "ad" | "dt") => {
+    if (except !== "tabs") setTabsOpen(false);
+    if (except !== "ext") setExtPanelOpen(false);
+    if (except !== "ad") setAdOpen(false);
+    if (except !== "dt") setDt(props.activeId, { open: false });
+  };
   /* #234: the extensions bottom sheet stays mounted; it owns its open
      state (show/hide, the closing event), like the tab switcher. */
   /* #81 command palette decoupling: the palette lives in App, the
      extensions panel and the toolbar pill live here. Window events
      bridge the two without threading more props through Browser. */
   useEffect(() => {
-    const onOpenExt = () => setExtPanelOpen(true);
+    const onOpenExt = () => { closeSheets("ext"); setExtPanelOpen(true); };
     const onFocusOmnibox = () => {
       setTbExpanded(true);
       /* The tucked dock is unmounted: reveal it so the field exists
@@ -2904,7 +2916,11 @@ export default function BrowserView(props: Props) {
             id="lb-tabs-pill"
             toggle
             aria-label={"Open tab list (" + tabs.length + " tabs)"}
-            onClick={() => setTabsOpen((v) => !v)}
+            onClick={() => {
+              const next = !tabsOpen;
+              if (next) closeSheets("tabs");
+              setTabsOpen(next);
+            }}
             {...{ ref: tabsBtnRef }}
           >
             <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
@@ -3048,7 +3064,10 @@ export default function BrowserView(props: Props) {
               className="lb-diag-tb-chip"
               aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
               title={activeDt.fails.length + " load failures - open diagnostics"}
-              onClick={() => setDt(active.id, { open: true, page: "diagnostics" })}
+              onClick={() => {
+                closeSheets("dt");
+                setDt(active.id, { open: true, page: "diagnostics" });
+              }}
             >
               <m3e-icon name="warning" aria-hidden={true} />
               {activeDt.fails.length}
@@ -3103,7 +3122,11 @@ export default function BrowserView(props: Props) {
           <m3e-menu id="lb-overflow-menu" aria-label="More actions">
             <m3e-menu-item-checkbox
               checked={activeDt.open ? "" : undefined}
-              onClick={() => setDt(active.id, { open: !activeDt.open })}
+              onClick={() => {
+                const next = !activeDt.open;
+                if (next) closeSheets("dt");
+                setDt(active.id, { open: next });
+              }}
             >
               Developer tools
             </m3e-menu-item-checkbox>
@@ -3111,6 +3134,7 @@ export default function BrowserView(props: Props) {
               checked={extPanelOpen ? "" : undefined}
               onClick={() => {
                 const next = !extPanelOpen;
+                if (next) closeSheets("ext");
                 setExtPanelOpen(next);
                 if (next) loadExtensions();
               }}
@@ -3119,8 +3143,8 @@ export default function BrowserView(props: Props) {
             </m3e-menu-item-checkbox>
             <m3e-menu-item
               onClick={() => {
+                closeSheets("ad");
                 setAdOpen(true);
-                setTabsOpen(false);
               }}
             >
               AdBlocking

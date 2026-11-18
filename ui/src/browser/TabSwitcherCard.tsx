@@ -6,7 +6,7 @@
    mounted; open/close rides the sheet's own show()/hide() methods
    with the `closing` event flowing back into Browser state.
    Presentational: tab state and selection stay in pages/Browser.tsx. */
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
 
@@ -37,7 +37,9 @@ export default function TabSwitcherCard(props: {
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
-  useEffect(() => {
+  /* #260: layout effect so the sheet cannot lag the state commit
+     on a wedged main thread (see DevTools). */
+  useLayoutEffect(() => {
     const el = sheetRef.current;
     if (!el) return;
     if (props.open) el.show();
