@@ -1,10 +1,12 @@
 # Keep the free-tier Render services awake. They spin down after
-# 15 idle minutes; a cold app or content service kills the engine
-# transport paths (the relay channel rides the app service; the
-# engine assets ride the content origin), and a cold beta flakes the
-# transit-live CI job. Workspace moved 2026-11-08; the old
-# account origins are dead (503 suspended). Public repo: the
-# scheduled runner is free.
+# 15 idle minutes; a cold app service stalls every pane mint and
+# the Microsoft sign-in chains worst of all, and a cold beta
+# flakes the transit-live CI job. Render rotates the
+# *.onrender.com hostnames whenever the workspace is recreated,
+# and a warning-only failure let a fully dead list stay green
+# for weeks, so every session began on a cold instance. A failed
+# ping now fails the job, and tests/keepalive-hosts pins this
+# list to the live services. Public repo: the runner is free.
 name: Keep-alive
 on:
   schedule:
@@ -17,10 +19,11 @@ jobs:
       - name: Ping free-tier services
         run: |
           for url in \
-            https://lobsterbrowse-saha.onrender.com/healthz \
-            https://lobsterbrowse-beta-hcld.onrender.com/healthz \
-            https://lobsterbrowse-content-udk3.onrender.com/healthz ; do
+            https://lobsterbrowse-server.onrender.com/healthz \
+            https://lobsterbrowse-beta.onrender.com/healthz \
+            https://lobsterbrowse-fixture.onrender.com/healthz ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
-              echo "::warning::keep-alive ping failed: $url"
+              echo "::error::keep-alive ping failed: $url"
+              exit 1
             fi
           done
