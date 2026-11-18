@@ -69,7 +69,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     /* LB#260: zlSend settles only after the worker registration
        handshake, which can strand the row on a cold origin. A 9 s
        race keeps the readout honest either way. */
-    void Promise.race([zlSend({ type: "zl:ping" }, 6000), new Promise((resolve) => setTimeout(() => resolve(null), 9000))]).then((p) => {
+    void Promise.race([zlSend({ type: "zl:ping" }, 6000), new Promise<null>((resolve) => setTimeout(() => resolve(null), 9000))]).then((p) => {
       setPing(
         p
           ? p.ok
