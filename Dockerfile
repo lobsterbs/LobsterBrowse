@@ -2409,7 +2409,30 @@ FROM debian:bookworm-slim AS zl-builder
 # 1fb45966860c501c -> 4215194e8ecb1a45 (902068 bytes); bootstrap
 # unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
 # 5073f316 (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=81dc0ab4381834813203ba6ffa525fcf6de78042
+# Pin 180 (2026-11-18): dist 693aebdc (Zeolite main 5486164b, CI run
+# 44348977127, all five jobs green). Shell navigation lockdown
+# (#416 slice 2). The pin 179 worker gate proved blind to the real
+# ESTS breakout class: a pane script assigns top.location and the
+# navigate-document fetch consults the gate without the fields it
+# needs, so the gate answers null and the shell commits the hijack
+# (probe-reproduced independently on live beta). This closes the
+# class with a second layer: the LB shell now guards its own window
+# with the Navigation API (ui/src/frameNav.ts shellGuardCancel and
+# shellGuardDest, wired in pages/Browser.tsx): a script-initiated
+# cross-document push or replace of the top document is cancelled
+# before commit and its destination reopens as an in-app tab,
+# mirroring the worker zlescape recapture; user navigations,
+# reloads, hash moves and history traverses pass untouched (live
+# probe verified both the discriminator fields and the
+# cancellation). The Zeolite side adds gate evidence rows: every
+# navigate-document consultation now emits an escape-gate cid/rid/dec
+# netLog row naming the exact decision, so any residual escape is
+# diagnosable from one exported KDL. Regression check:
+# tests/shell-navguard/check.mjs in the ci ui job. sw
+# 4215194e8ecb1a45 -> 9ad13002dce949d0 (902727 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=693aebdc36b81562ec1b81f2d2da4332c9f02b9c
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2476,7 +2499,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4215194e8ecb1a45 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9ad13002dce949d0 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
