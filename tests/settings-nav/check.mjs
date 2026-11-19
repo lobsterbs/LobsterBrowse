@@ -42,7 +42,7 @@ const item = theme.indexOf(".lb-set-nav-item {");
 ok("nav item rule exists", item !== -1);
 const itemRule = theme.slice(item, theme.indexOf("}", item));
 ok("nav item real padding (12dp/16dp tokens)", itemRule.includes("padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);"));
-ok("nav item is a rounded glass card", itemRule.includes("border-radius: 20px;") && itemRule.includes("background: var(--lb-glass-tint);"));
+ok("nav item is a rounded glass card", itemRule.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);") && itemRule.includes("background: var(--lb-glass-tint);"));
 ok("nav item keeps the frost", itemRule.includes("backdrop-filter: blur(24px) saturate(1.4);"));
 
 /* The icon shape inside the card, then the text column. */

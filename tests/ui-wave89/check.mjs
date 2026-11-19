@@ -43,7 +43,7 @@ const settings = read("src/pages/Settings.tsx");
 const tabsRow = block(theme, ".lb-tabs-row {");
 ok(tabsRow.includes("box-sizing: border-box;"), "tab rows size inside the sheet");
 ok(tabsRow.includes("padding: var(--md-sys-measurement-space50) 0 16px;"), "tab rows carry no inline padding");
-ok(block(theme, ".lb-tab-avatar {").includes("border-radius: 9999px;"), "tab avatar frost halo is circular");
+ok(block(theme, ".lb-tab-avatar {").includes("border-radius: var(--md-sys-shape-corner-full, 999px);"), "tab avatar frost halo is circular");
 ok(tabs.includes('<span slot="title">Tabs</span>'), "tab sheet title is plain Tabs");
 ok(!tabs.includes("Tabs ({"), "count marker removed from the title");
 
@@ -51,11 +51,11 @@ ok(!tabs.includes("Tabs ({"), "count marker removed from the title");
 ok(block(theme, ".lb-dt-nav {").includes("justify-content: center;"), "DevTools sub-tool picker is centered");
 const dt91 = theme.lastIndexOf(".lb-dt-card {");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
-ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("border-radius: 20px;"), "DevTools card frost halo is rounded");
+ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "DevTools card frost halo is rounded");
 ok(dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "frost card halo keeps the blur");
 
 /* 3. Settings. */
-ok(block(theme, ".lb-set-page m3e-expansion-panel {").includes("border-radius: 20px;"), "settings panel frost halo is rounded");
+ok(block(theme, ".lb-set-page m3e-expansion-panel {").includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "settings panel frost halo is rounded");
 ok(settings.includes('slot="icon"') && settings.includes("lb-seed-dot"), "seed chips carry colored swatches in the icon slot");
 ok(block(theme, ".lb-seed-dot {").includes("border-radius: 50%;"), "seed swatch is a circle");
 
@@ -64,7 +64,7 @@ const ascii = block(theme, ".lb-home pre.lb-ascii {");
 ok(ascii.includes("background: var(--lb-glass-sheet-tint);"), "wordmark uses the sheet tint");
 ok(ascii.includes("blur(28px) saturate(180%) brightness(.66)"), "wordmark uses the sheet frost");
 ok(ascii.includes("border: var(--lb-glass-ring);"), "wordmark uses the glass ring");
-ok(ascii.includes("border-radius: 20px;"), "wordmark is rounded like the sheet cards");
+ok(ascii.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "wordmark is rounded like the sheet cards");
 
 /* 5. Ad sheet. */
 ok(block(theme, ".lb-ad-body {").includes("padding: 0 0 var(--md-sys-measurement-space150);"), "ad body carries no inline padding");
@@ -78,7 +78,7 @@ ok(adHero.includes("flex-direction: column;") && adHero.includes("align-items: c
 ok(block(theme, "#lb-overflow-menu m3e-menu-item {").includes("--m3e-menu-item-padding-start:"), "plain overflow items indent to the checkbox start line");
 
 /* 7. Extensions. */
-ok(block(theme, ".lb-ext-tile {").includes("border-radius: 20px;"), "extension tile frost halo is rounded");
+ok(block(theme, ".lb-ext-tile {").includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "extension tile frost halo is rounded");
 ok(extPanel.includes("iconPath?: string | null;"), "ExtInfo carries the engine icon route");
 /* #242 added the badIcons guard in front of the
    same conditional: the real icon renders only while it has not
