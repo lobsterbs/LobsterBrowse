@@ -54,7 +54,7 @@ ok(/useEffect\(\(\) => \{\s*setBadIcons\(\{\}\);\s*\}, \[props\.list\]\);/.test(
 const dt91 = theme.lastIndexOf(".lb-dt-card {");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the light glass lift");
-ok(dtWin.includes("border-radius: 20px;") && dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "the DevTools card host keeps the halo and the blur");
+ok(dtWin.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);") && dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "the DevTools card host keeps the halo and the blur");
 
 if (fails > 0) {
   console.log(fails + " failing check(s)");

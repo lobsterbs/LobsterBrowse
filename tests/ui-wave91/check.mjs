@@ -40,7 +40,7 @@ const tile = block(theme, ".lb-ext-tile {");
 ok(tile.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "extension tiles paint the lift");
 const adRow = block(theme, ".lb-ad-row {");
 ok(adRow.includes("background: var(--lb-glass-lift);"), "the ad row paints the lift");
-ok(dtWin.includes("border-radius: 20px;"), "the DevTools card host keeps the rounded halo");
+ok(dtWin.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "the DevTools card host keeps the rounded halo");
 
 /* 3. Typewriter 30fps cap (#244). */
 ok(ai.includes("const lastEmitRef = useRef(0);"), "the typewriter tracks its last emit time");
