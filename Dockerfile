@@ -2447,7 +2447,29 @@ FROM debian:bookworm-slim AS zl-builder
 # 5073f316 (engine bundle only; the #556 v1-grant zeolite-server
 # change still needs its own verified lock-regen wave). Deploy with a
 # cleared Render build cache.
-ARG ZEOLITE_COMMIT=5d22c2a4f24d8536bfc5262b64b542bfc7caff24
+# Pin 182 (2026-11-19): dist a175b10e (Zeolite main 812e34ee, CI run
+# 44485767626, all five jobs green). Closes the #681 follow-up class
+# that pin 181 could not
+# fix: pin 181 ended the double-rewrite white tab (the authorize
+# document that never reached the pipe), but a relayed authorize
+# document whose head LANDS can still die mid-body (the 15 s
+# keep-alive re-registration replaces the embedder MessagePort
+# mid-fetch, or the host page freezes), and the body pull had no
+# liveness bound: the tab sat white forever with zero events past
+# the head and no DIAG evidence (the favicon never even issued; user
+# KDL trace zl-tmwn8jmg8-7p). The engine now races every body pull
+# against RELAY_BODY_IDLE_MS = 20 s: a breach errors the stream
+# honestly, emits a TRANSPORT DIAG row naming the dead channel and
+# cancels the embedder upstream, so every silent white-tab subclass
+# becomes an honest failure with observable evidence instead of an
+# eternal hang; relayRegister also pins the last eight registered
+# ports so a re-registration cannot orphan an in-flight relay
+# channel to the GC in the first place (regressions: the relayfetch
+# body-idle watchdog and port-pinning suites). sw
+# eba962f01a855b69 -> e1009108f092d41f (934908 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=a175b10e39975abdd4b0f14c35cc2c1dd405a9ce
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2514,7 +2536,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=eba962f01a855b69 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e1009108f092d41f ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
