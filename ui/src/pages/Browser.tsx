@@ -3149,7 +3149,6 @@ export default function BrowserView(props: Props) {
             >
               AdBlocking
             </m3e-menu-item>
-            <m3e-menu-item onClick={() => props.onOpenSettings()}>Settings</m3e-menu-item>
           </m3e-menu>
         </m3e-toolbar>
           {xpiPrompt && (

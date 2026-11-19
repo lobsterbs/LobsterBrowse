@@ -264,7 +264,6 @@ m3e-nav-rail {
    header carries the headline and supporting text. */
 .lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }
 .lb-setp-headline { font-variation-settings: "wght" var(--lb-wght-medium); }
-.lb-setp-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-setp-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
 .lb-set-anchor { scroll-margin-block: 96px; }
 /* Settings renders over the home
@@ -342,10 +341,6 @@ border-radius: 20px;
 }
 .lb-set-inline .lb-setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
 .lb-set-inline .lb-setting-label { margin: 0; font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
-.lb-set-inline .lb-setting-desc {
-font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var(--md-sys-typescale-body-medium-line-height, 20px);
-  color: var(--md-sys-color-on-surface-variant);
-}
 /* Page rhythm: the pane's scroll container lives inside the
    component's shadow root, so the page content carries its own
    column rhythm. */
@@ -360,28 +355,39 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-set-bar { grid-column: 1 / -1; }
 /* Settings side rail, Android Settings port: every category is its
    own sub-card (a rounded glass row, the card family of the page),
-   and inside each card the icon sits in an M3E shape - the same
-   corner-large icon tile the section heads use - with measurement-
-   token padding around the tile, then the category name with its
-   supporting line under it. The rail container goes bare: a list of
+   and inside each card the icon sits in a real m3e-shape (the
+   expressive 4-sided cookie, sized and tinted through the component
+   tokens) with measurement-token padding around the tile, then the
+   category name. The rail container goes bare: a list of
    cards, not a pane inside a pane. The active card keeps the app's
    secondary-container accent and inverts its icon tile. */
 .lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
 .lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); border: var(--lb-glass-ring); border-radius: 20px; background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
-.lb-set-nav-ico {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; flex: none;
-  border-radius: var(--md-sys-shape-corner-large, 16px);
-  background: var(--md-sys-color-primary-container);
+/* The m3e-shape icon tile: the host sizes via the component's
+   --m3e-shape-size token and the wrapper clips to the cookie path;
+   the slotted m3e-icon is absolutely pinned inside the wrapper
+   (light DOM, positioned against the wrapper's relative) and
+   flex-centered, so no shadow-DOM styling is needed. The clip-path
+   and container color are the component's. */
+.lb-set-nav-item m3e-shape {
+  --m3e-shape-size: 40px;
+  --m3e-shape-container-color: var(--md-sys-color-primary-container);
+  flex: none;
+  position: relative;
   color: var(--md-sys-color-on-primary-container);
 }
-.lb-set-nav-ico m3e-icon { font-size: 20px; }
+.lb-set-nav-item m3e-shape m3e-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
 .lb-set-nav-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-set-nav-title { font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
-.lb-set-nav-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 .lb-set-nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; font-variation-settings: "wght" var(--lb-wght-medium); }
-.lb-set-nav-item.active .lb-set-nav-sub { color: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 80%, transparent); }
-.lb-set-nav-item.active .lb-set-nav-ico { background: var(--md-sys-color-on-secondary-container); color: var(--md-sys-color-secondary-container); }
+.lb-set-nav-item.active m3e-shape { --m3e-shape-container-color: var(--md-sys-color-on-secondary-container); color: var(--md-sys-color-secondary-container); }
 .lb-set-section { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space200); }
 /* Narrow screens: the page collapses to one column and the rail
    becomes a horizontal scroller above the section content. */
@@ -389,7 +395,6 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   .lb-set-page { grid-template-columns: minmax(0, 1fr); }
   .lb-set-nav { position: static; flex-direction: row; overflow-x: auto; }
   .lb-set-nav-item { width: auto; flex: none; white-space: nowrap; padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space150); }
-  .lb-set-nav-sub { display: none; }
 }
 /* Motion: a section switch remounts the section children,
    so this entrance animation fires per switch; the nav pill crossfades
@@ -410,10 +415,9 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   .lb-set-nav-item { transition: none; }
 }
 
-/* #256 redesign: the page title carries a supporting
-   line and every group reads as one M3 section: an icon tile on
-   primary-container (corner-large shape), a title heading and a
-   body-small supporting line. All color stays on tokens. */
+/* #256 redesign: every group reads as one M3 section: an icon
+   tile on primary-container (corner-large shape) and a title
+   heading. All color stays on tokens. */
 .lb-set-section-head { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); margin: var(--md-sys-measurement-space250) 0 0; }
 .lb-set-section-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -425,7 +429,6 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
 .lb-set-section-icon m3e-icon { font-size: 20px; }
 .lb-set-section-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-set-section-text m3e-heading { margin: 0; font-variation-settings: "wght" var(--lb-wght-emph); }
-.lb-set-section-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
 /* #257: one orchestrated entrance for the redesigned
    page: the title block leads, the section tiles follow on the
    emphasized curve. Transform + opacity only, so it stays on the
@@ -822,10 +825,12 @@ font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var
   --m3e-toolbar-size: 44px;
   --m3e-toolbar-rounded-padding: 4px;
   --m3e-toolbar-spacing: var(--md-sys-measurement-space100, 8px);
-  /* Neutral frosted pill: overrides the component's container tokens
-     (vibrant would paint it with primaryContainer, i.e. red). */
-  --m3e-toolbar-standard-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
-  --m3e-toolbar-vibrant-container-color: color-mix(in srgb, var(--md-sys-color-surface) 40%, transparent);
+  /* Neutral frosted pill: the host paints the glass, so the
+     shadow container stays transparent; otherwise the shadow
+     state-layer paints a full rect over the rounded host. */
+  --m3e-toolbar-standard-container-color: transparent;
+  --m3e-toolbar-vibrant-container-color: transparent;
+  overflow: hidden;
   opacity: 1;
   width: fit-content;
   max-width: calc(100vw - 16px);
@@ -1533,14 +1538,13 @@ m3e-snackbar {
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
 /* Narrow screens: tighter sub-card padding, one size step down on
-   setting titles and descriptions (the user settings-card spec;
-   these are the only raw 13px/15px sizes in the stylesheet). */
+   setting titles (the user settings-card spec; this is the only
+   raw 15px size in the stylesheet). */
 @media (max-width: 640px) {
   .lb-tab-row,
   .lb-ad-hosts,
   .lb-ad-row { padding: 10px 12px; }
   .lb-set-inline .lb-setting-label { font-size: 15px; }
-  .lb-set-inline .lb-setting-desc { font-size: 13px; }
 }
 
 /* Basic top bars: every top bar is an
@@ -1799,9 +1803,6 @@ m3e-snackbar {
      clip 29px off both edges on a 390px phone. Stretch the slotted
      items across the bar instead (verified live by injection). */
   .lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }
-  /* Issue #255: panel headers inherit nowrap from the m3e shadow
-     header; let the descriptions wrap on phones. */
-  .lb-setting-desc, .lb-setp-sub { white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-devtools.lb-devtools-out,

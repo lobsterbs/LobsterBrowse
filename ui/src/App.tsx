@@ -165,13 +165,6 @@ export default function App() {
     saveSiteRules(next);
   }, []);
 
-  /* Enhanced UI flag on <body>: theme.css scopes the frosted-glass
-     search bar treatment to this class; the nav rail frosted-glass
-     treatment is always on (#226). */
-  useEffect(() => {
-    document.body.classList.toggle("lb-fancy", settings.fancyBackground);
-  }, [settings.fancyBackground]);
-
   /* #96: incognito gets a persistent body class so the chrome can
      carry a subtle, unmistakable identity the whole time it is on. */
   useEffect(() => {
@@ -756,42 +749,7 @@ export default function App() {
     window.location.replace("/");
   };
 
-  /* ---- Rail: expansion is deliberate and user-controlled
-     (#87 removed the old enter-Browse auto-retract because the
-     rail width became unpredictable), with ONE user-requested
-     exception: an expanded rail left untouched for 5 seconds
-     collapses back to the compact state. The collapse rides a
-     dispatched click on the component's own m3e-nav-rail-toggle
-     (the exact expand/collapse code path, so the menu icon's
-     selected state stays in sync); every rail interaction
-     re-arms the timer. ---- */
-  const railRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const rail = railRef.current as (HTMLElement & { currentMode?: string }) | null;
-    if (!rail) return;
-    let timer = 0;
-    const arm = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        /* Fire-time check: a rail the user already collapsed (or
-           one that never expanded) must not be touched. */
-        if (rail.currentMode !== "expanded") return;
-        const toggle = rail.querySelector("m3e-nav-rail-toggle");
-        if (toggle) toggle.dispatchEvent(new MouseEvent("click"));
-        else rail.currentMode = "compact";
-      }, 5000);
-    };
-    arm();
-    const evts = ["pointerenter", "pointermove", "pointerdown", "click", "keydown", "focusin"] as const;
-    for (const t of evts) rail.addEventListener(t, arm, { passive: true });
-    return () => {
-      window.clearTimeout(timer);
-      for (const t of evts) rail.removeEventListener(t, arm);
-    };
-  }, []);
-
-
-  /* ---- #81 command palette actions. Browser.tsx-owned surfaces
+  /* #81 command palette actions. Browser.tsx-owned surfaces
      (extensions panel, toolbar omnibox) are reached through window
      events so App stays decoupled from Browser internals; the
      timeout lets the browser view mount before the event fires. ---- */
@@ -895,35 +853,29 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
-      {/* Enhanced UI setting: the home hero background is portaled to
-          <body> so no view ancestor can trap the fixed layer. It
-          renders on home and AI (#261 removed Settings: a work
-          surface wants a quiet background): the rail and dock
-          frost what is really adjacent to them.
+      {/* The home hero background is portaled to
+          <body> so no view ancestor can trap the fixed layer.
+          It renders always on home and AI (#261 removed Settings:
+          a work surface wants a quiet background): the rail and
+          dock frost what is really adjacent to them.
           #245: the liquid-metal ribbon shader was removed fully
           and replaced by the static photographic hero image
           (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
           theme.css). Away from those views = not rendered. */}
-      {settings.fancyBackground && (view === "home" || view === "ai") &&
+      {(view === "home" || view === "ai") &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
         )}
       <div className="lb-shell">
-        {/* Expressive wide rail: the M3E defaults are the spec
-           (96dp collapsed with persistent labels, 44dp top inset);
-           the menu button expands and collapses it. */}
+        {/* Compact-only rail: the M3E defaults are the spec
+           (48dp collapsed with icons only, 44dp top inset); the
+           hamburger expansion was removed with the mode="auto"
+           machinery. */}
         <m3e-nav-rail
           id="nav-rail"
-          mode="auto"
           aria-label="LobsterBrowse"
-          {...{ ref: railRef }}
         >
-          <m3e-icon-button toggle aria-label="Expand or collapse the navigation rail">
-            <m3e-icon name="menu" aria-hidden={true} />
-            <m3e-icon slot="selected" name="menu_open" aria-hidden={true} />
-            <m3e-nav-rail-toggle for="nav-rail" />
-          </m3e-icon-button>
           <m3e-nav-item
             id="nav-home"
             selected={view === "home" ? "" : undefined}

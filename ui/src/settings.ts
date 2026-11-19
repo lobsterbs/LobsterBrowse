@@ -164,10 +164,8 @@ export type Settings = {
   autoHideChrome: boolean;
   /* #213: the toolbar pill tint from the active tab's favicon hue
      is always on (the Settings toggle was removed; dark scheme only). */
-  /* Enhanced UI: photographic hero background on the home view
-     instead of the flat surface (#245: the liquid-metal shader was
-     removed fully and replaced by the hero image). On by default. */
-  fancyBackground: boolean;
+  /* The photographic hero background (#245) is always on; the
+     Enhanced UI toggle was removed. */
   /* M3E density, pinned to normal since the Settings option removal. */
   density: "normal" | "compact";
 };
@@ -189,7 +187,6 @@ export const DEFAULT_SETTINGS: Settings = {
   prefetchLinks: true,
   autoHideChrome: true,
   density: "normal",
-  fancyBackground: true,
 };
 
 const KEY = "lobsterbrowse-settings";

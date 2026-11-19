@@ -832,7 +832,7 @@ export default function AiPage() {
         <div className="lb-ai-hist">
           {histChats.length === 0 && (
             <div className="lb-ai-hist-empty">
-              No saved conversations yet. Chats are saved encrypted on this device.
+              No saved conversations yet.
             </div>
           )}
           {histChats.map((c) => (
