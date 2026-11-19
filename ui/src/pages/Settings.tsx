@@ -1,10 +1,9 @@
 /* Settings: a sticky frosted side navigation with one section
    visible at a time. The page keeps the component language (SetPanel
-   expansion panels, SetInline row cards, Row switches inside an
-   m3e-content-pane) and every option, anchor and control of the
-   pre-redesign page; the ui-wave80 field oracle and the ui-wave108
-   anchor scan pin that. While ScramJet is the current proxy engine,
-   every Zeolite-only option is greyed out. */
+   expansion panels, SetInline row cards) and every option, anchor and
+   control of the pre-redesign page; the ui-wave80 field oracle and
+   the ui-wave108 anchor scan pin that. While ScramJet is the current
+   proxy engine, every Zeolite-only option is greyed out. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ENGINES,
@@ -56,14 +55,15 @@ const SECTION_TITLES: Record<SectionId, string> = {
   advanced: "Advanced",
 };
 
-/* #256: each section reads as one M3 group: an icon tile
-   on primary-container, a title heading and a supporting line. */
-const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
-  search: { icon: "search", sub: "Engine and omnibox behavior" },
-  privacy: { icon: "shield", sub: "Blocking and connection upgrades" },
-  extensions: { icon: "extension", sub: "Add-ons from the catalog or local files" },
-  appearance: { icon: "palette", sub: "Seed color and hero background" },
-  advanced: { icon: "tune", sub: "Engines, data and diagnostics" },
+/* Each section reads as one M3 group: an icon tile
+   on primary-container and a title heading (the supporting lines and
+   every item description were removed on request). */
+const SECTION_META: Record<SectionId, { icon: string }> = {
+  search: { icon: "search" },
+  privacy: { icon: "shield" },
+  extensions: { icon: "extension" },
+  appearance: { icon: "palette" },
+  advanced: { icon: "tune" },
 };
 
 const NAV_ORDER: SectionId[] = ["search", "privacy", "appearance", "extensions", "advanced"];
@@ -79,20 +79,18 @@ function SectionHead(props: { section: SectionId }) {
       )}
       <span className="lb-set-section-text">
         <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES[props.section]}</m3e-heading>
-        {meta && <span className="lb-set-section-sub">{meta.sub}</span>}
       </span>
     </div>
   );
 }
 
 /* One settings sub-card = one expansion panel. The header carries the
-   headline and supporting text; the body carries the controls. Only the
-   header span toggles open state, so using a control inside the body
-   never collapses the panel. */
+   headline; the body carries the controls. Only the header span toggles
+   open state, so using a control inside the body never collapses the
+   panel. */
 function SetPanel(props: {
   id: string;
   headline: string;
-  sub: string;
   open: boolean;
   toggle: () => void;
   anchorId?: string;
@@ -102,7 +100,6 @@ function SetPanel(props: {
     <m3e-expansion-panel id={props.id} open={props.open ? "" : undefined}>
       <span slot="header" className="lb-setp-head" onClick={props.toggle}>
         <span className="lb-setp-headline">{props.headline}</span>
-        <span className="lb-setp-sub">{props.sub}</span>
       </span>
       <div className="lb-setp-body">
         {props.anchorId && <div className="lb-set-anchor" id={props.anchorId} tabIndex={-1} />}
@@ -115,14 +112,13 @@ function SetPanel(props: {
 /* Single-control sub-card: a sub option
    whose entire payload is one control renders as an inline row card,
    not an expansion panel - one switch behind a chevron is a wasted
-   click. The headline and supporting text sit beside the control;
+   click. The headline sits beside the control;
    on/toggle render the switch, children any other single control.
    Sub options with several controls or an explanatory body keep
    their panels. */
 function SetInline(props: {
   anchorId?: string;
   label: string;
-  desc?: string;
   on?: boolean;
   toggle?: () => void;
   disabled?: boolean;
@@ -138,7 +134,6 @@ function SetInline(props: {
     >
       <span className="lb-setting-text">
         <span className="lb-setting-label">{props.label}</span>
-        {props.desc ? <span className="lb-setting-desc">{props.desc}</span> : null}
       </span>
       {props.on !== undefined ? (
         <m3e-switch
@@ -149,27 +144,6 @@ function SetInline(props: {
       ) : (
         props.children
       )}
-    </div>
-  );
-}
-
-/* Toggle row: the setting title, then the NORMAL m3e-switch (no icon
-   variant). `disabled` greyes the whole row out (Zeolite-only options
-   while ScramJet is the current engine). */
-function Row(props: { id?: string; label: string; on: boolean; toggle: () => void; disabled?: boolean }) {
-  return (
-    <div
-      className={"lb-setting-row" + (props.disabled ? " lb-zl-off" : "")}
-      id={props.id}
-      tabIndex={props.id ? -1 : undefined}
-      aria-disabled={props.disabled ? "true" : undefined}
-    >
-      <span className="lb-setting-label">{props.label}</span>
-      <m3e-switch
-        checked={props.on ? "" : undefined}
-        disabled={props.disabled ? true : undefined}
-        onClick={props.disabled ? undefined : props.toggle}
-      />
     </div>
   );
 }
@@ -225,6 +199,21 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   /* The active section. One section renders at a time; the
      sticky side navigation switches between them. */
   const [section, setSection] = useState<SectionId>("search");
+
+  /* Switching categories glides the pane's scroll container back to
+     the top instead of leaving the previous category's scroll offset
+     on the new (possibly shorter) content. The scroll container lives
+     inside the m3e-content-pane shadow root (.scroll-container), so
+     the reset reaches through it; reduced-motion users get the
+     instant jump from `auto`. */
+  const paneRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const pane = paneRef.current;
+    const sc = pane?.shadowRoot?.querySelector<HTMLElement>(".scroll-container");
+    if (!sc) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    sc.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  }, [section]);
 
   /* ScramJet is the current engine: every Zeolite-only option greyes
      out. The options keep their stored values and come back when the
@@ -310,7 +299,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     <section className="lb-view-content lb-settings" aria-label="Settings">
       {/* The page lives in an m3e-content-pane: the shaped scroll
           surface the component provides. */}
-<m3e-content-pane {...{ class: "lb-set-pane" }}>
+<m3e-content-pane {...{ class: "lb-set-pane", ref: paneRef }}>
         {/* The wrapper carries the page rhythm: the pane's scroll
             container sits inside the component's shadow root, so
             the column spacing must live on the page content. */}
@@ -334,16 +323,15 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 aria-current={section === id ? "true" : undefined}
                 onClick={() => setSection(id)}
               >
-                {/* Android Settings sub-card, ported: the icon inside
-                    an M3E shape (the corner-large tile the section
-                    heads use), then the category name with its
-                    supporting line under it. */}
-                <span className="lb-set-nav-ico" aria-hidden={true}>
+                {/* Android Settings sub-card, ported: the icon sits
+                    inside a real m3e-shape (the expressive 4-sided
+                    cookie), then the category name. The supporting
+                    lines under the names were removed on request. */}
+                <m3e-shape name="4-sided-cookie" aria-hidden={true}>
                   <m3e-icon name={SECTION_META[id].icon} />
-                </span>
+                </m3e-shape>
                 <span className="lb-set-nav-txt">
                   <span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>
-                  <span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>
                 </span>
               </button>
             ))}
@@ -353,11 +341,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             {section === "search" && (
               <>
             <SectionHead section="search" />
-            <SetInline
-              anchorId="set-search-engine"
-              label="Search engine"
-              desc="The engine the omnibox, Home and new tabs search with"
-            >
+            <SetInline anchorId="set-search-engine" label="Search engine">
               {/* #237: six long engine names cannot share one
                   segmented row; a dropdown select is the M3E control
                   for this cardinality. */}
@@ -371,7 +355,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetInline
               anchorId="set-search-suggest"
               label="Engine search suggestions"
-              desc="Completions from the search engine while you type"
               on={settings.suggestQueries}
               toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
             />
@@ -383,7 +366,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetInline
               anchorId="set-adblock"
               label="Ad & tracker blocking"
-              desc="Block ads and trackers at the engine level"
               on={settings.adblock}
               toggle={() => onChange({ adblock: !settings.adblock })}
               disabled={zlOff}
@@ -397,7 +379,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-theme-color"
               headline="Theme color"
-              sub="The seed color the whole UI palette derives from"
               anchorId="set-theme-color"
               open={!!openP["p-theme-color"]}
               toggle={() => toggleP("p-theme-color")}
@@ -423,23 +404,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </m3e-chip-set>
               </div>
             </SetPanel>
-            <SetPanel
-              id="p-fancy"
-              headline="Enhanced UI (hero background image)"
-              sub="The photographic hero background on Home and AI"
-              open={!!openP["p-fancy"]}
-              toggle={() => toggleP("p-fancy")}
-            >
-              <Row
-                id="set-fancy"
-                label="Enhanced UI (hero background image)"
-                on={settings.fancyBackground}
-                toggle={() => onChange({ fancyBackground: !settings.fancyBackground })}
-              />
-              <p className="lb-muted">
-                Replaces the flat background with the photographic hero image (the Half-Life wallpaper, #245; #261 removed it from Settings) on Home and AI. Off keeps the plain flat background.
-              </p>
-            </SetPanel>
               </>
             )}
             {section === "extensions" && (
@@ -448,7 +412,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-manage-ext"
               headline="Manage installed"
-              sub="Enable, disable, configure or remove installed add-ons"
               anchorId="set-manage-ext"
               open={!!openP["p-manage-ext"]}
               toggle={() => toggleP("p-manage-ext")}
@@ -464,7 +427,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-amo"
               headline="Find and install add-ons"
-              sub="Search the Mozilla add-on catalog and install from it"
               anchorId="set-amo"
               open={!!openP["p-amo"]}
               toggle={() => toggleP("p-amo")}
@@ -480,7 +442,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-import"
               headline="Import locally"
-              sub="Install a packed extension from a .xpi or .zip file"
               anchorId="set-import"
               open={!!openP["p-import"]}
               toggle={() => toggleP("p-import")}
@@ -508,12 +469,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   <m3e-linear-progress-indicator mode="indeterminate" aria-label="Importing extension" />
                 </div>
               )}
-              <p className="lb-muted" style={{ marginTop: 4 }}>
-                Allowed files: manifest.json (required), .js scripts, .css, .html, .json, and images
-                (.png, .svg, .webp, .jpg, .ico). No native code (no binaries, no .exe/.dll/.so).
-                The engine validates the manifest and permission grants; a bad package only lands that
-                extension in an error state.
-              </p>
             </SetPanel>
               </>
             )}
@@ -523,7 +478,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-proxy"
               headline="Proxy engine"
-              sub="Zeolite (rewriter proxy) or ScramJet (client-side rewrite)"
               anchorId="set-proxy"
               open={!!openP["p-proxy"]}
               toggle={() => toggleP("p-proxy")}
@@ -538,14 +492,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   </m3e-button-segment>
                 </m3e-segmented-button>
               </div>
-              <p className="lb-muted" style={{ marginTop: 6 }}>
-                ScramJet is the upstream MercuryWorkshop engine, client-side rewriting through its own /sj/ worker. Engine options like adblock, fingerprint spoof and lazy images are Zeolite-only and grey out above while ScramJet is the current engine. Applied on the next navigation.
-              </p>
             </SetPanel>
             <SetPanel
               id="p-transport"
               headline="Transport engine"
-              sub="How the Zeolite engine terminates TLS upstream"
               anchorId="set-transport"
               open={!!openP["p-transport"]}
               toggle={() => toggleP("p-transport")}
@@ -561,14 +511,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </m3e-segmented-button>
               </div>
               {zlOff && zlNote}
-              <p className="lb-muted" style={{ marginTop: 6 }}>
-                epoxy terminates TLS with rustls instead of libcurl&apos;s mbedTLS, so the TLS fingerprint sites see changes - that is its purpose. Experimental: keep libcurl if a site misbehaves. WebSockets and cookie capture are supported on both engines. Applied when the engine next loads; no mid-session swap.
-              </p>
             </SetPanel>
             <SetPanel
               id="p-wisp"
               headline="WISP server"
-              sub="Upstream transit endpoint override"
               anchorId="set-wisp"
               open={!!openP["p-wisp"]}
               toggle={() => toggleP("p-wisp")}
@@ -601,19 +547,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     onChange={(v) => onChange({ wispServer: v })}
                   />
                 )}
-                <p className="lb-muted">
-                  A WISP server terminates the upstream TLS for proxied traffic: a third-party endpoint can see
-                  and modify everything you load. Use only servers you trust. Deployment default keeps transit on
-                  this deployment&apos;s own endpoint.
-                </p>
               </div>
             </SetPanel>
-            <SetInline
-              anchorId="set-data"
-              danger
-              label="Data"
-              desc="Clear the proxied page cache, or delete every stored session and setting"
-            >
+            <SetInline anchorId="set-data" danger label="Data">
               <m3e-button onClick={() => setConfirmDelete(true)}>
                 <m3e-icon name="delete" aria-hidden={true} /> Manage data
               </m3e-button>
@@ -662,11 +598,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </div>
               </m3e-dialog>
             </SetInline>
-            <SetInline
-              anchorId="set-logs"
-              label="Logs"
-              desc="App-level diagnostics and console history"
-            >
+            <SetInline anchorId="set-logs" label="Logs">
               {/* Diagnostic mode is always on (the toggle was removed on
                   purpose): every failed resource, page console message and
                   proxy intervention (CSP/SRI stripping) is logged in full to

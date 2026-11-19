@@ -176,8 +176,12 @@ export default function HomePage({ settings, onNavigate }: Props) {
           {/* One icon only. The view ships its own default
               magnifier in the leading area; overriding the search-icon
               slot replaces it, and the old duplicated leading slots
-              (closed + open) showed two icons in the closed state. */}
+              (closed + open) showed two icons in the closed state.
+              The close-icon override keeps the same explore icon in
+              the open (docked) state, where the component's default
+              would swap in a back-arrow. */}
           <m3e-icon name="travel_explore" slot="search-icon" aria-hidden={true} />
+          <m3e-icon name="travel_explore" slot="close-icon" aria-hidden={true} />
           <input
             slot="input"
             id="lb-search-input"

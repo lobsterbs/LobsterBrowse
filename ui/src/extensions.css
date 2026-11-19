@@ -121,11 +121,6 @@
   justify-content: space-between;
   padding: var(--md-sys-measurement-space50, 4px) 0;
 }
-.lb-ext-foot {
-  display: flex;
-  justify-content: center;
-  padding: var(--md-sys-measurement-space50, 4px);
-}
 
 /* AMO add-on search (public AMO API v5): query row + result hits. */
 .lb-ext-search {

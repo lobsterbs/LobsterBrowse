@@ -254,13 +254,6 @@ export default function ExtensionsPanel(props: {
         </div>
       )}
       {props.launchError && <p className="lb-ext-err">{props.launchError}</p>}
-      {props.onFindAddons && (
-        <div className="lb-ext-foot">
-          <m3e-button onClick={props.onFindAddons}>
-            <m3e-icon name="settings" aria-hidden={true} /> Manage in Settings
-          </m3e-button>
-        </div>
-      )}
       </div>
     </m3e-bottom-sheet>
   );
