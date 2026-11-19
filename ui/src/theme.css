@@ -173,6 +173,27 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
     url("/lb-hero.jpg") center / cover no-repeat,
     var(--md-sys-color-surface, #1c1b1f);
 }
+/* Hero flash: a one-shot fullscreen flare of the hero image fired by
+   the lb-flash-hero event after a cache clear or a data wipe. It is
+   pointer-transparent, sits under the top layer (dialogs stay
+   above), and fades out on its own. Same image layers as the resting
+   background so the flare never introduces a new asset. */
+.lb-fx-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35)),
+    url("/lb-hero.jpg") center / cover no-repeat,
+    var(--md-sys-color-surface, #1c1b1f);
+  animation: lb-hero-flash 650ms var(--md-sys-motion-easing-standard, ease) forwards;
+}
+@keyframes lb-hero-flash {
+  0% { opacity: 0; }
+  14% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
 /* Frosted glass under Enhanced UI: the Home search bar gets a
    translucent surface tint plus backdrop blur so its contents stay
    readable over the animated background. Unconditional - every
@@ -183,7 +204,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
      rectangle, and the fully rounded bar leaves blurred corner
      squares outside the pill. Matching corner radius clips the
      blurred backdrop to the pill shape. */
-  border-radius: 9999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
@@ -198,7 +219,7 @@ m3e-nav-rail m3e-icon-button { transition: background-color var(--md-sys-motion-
    the suggestion surface. */
 .lb-home m3e-search-view {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
-  border-radius: 9999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
@@ -242,6 +263,17 @@ m3e-nav-rail {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 10%, transparent);
+}
+/* Runtime rail tint: while a site tab is active in Browse, its
+   favicon hue reaches the document root (Browser.tsx sets the same
+   --lb-site-hue the toolbar pill uses), and the rail frost carries a
+   faint layer of that site color - the same dynamic-color cue the
+   toolbar already gives, extended to the outermost chrome. Neutral
+   when no hue is set. */
+.lb-site-tint-root m3e-nav-rail {
+  background:
+    linear-gradient(hsl(var(--lb-site-hue) 62% 55% / 0.10), hsl(var(--lb-site-hue) 62% 55% / 0.10)),
+    color-mix(in srgb, var(--md-sys-color-surface) 38%, transparent);
 }/* ASCII wordmark: the banner follows the exact sheet frost
    spec (52% surface-container-high tint behind blur(28px)
    saturate(180%) brightness(.66) plus the shared glass ring), so the
@@ -256,7 +288,7 @@ m3e-nav-rail {
   backdrop-filter: blur(28px) saturate(180%) brightness(.66);
   -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(.66);
   border: var(--lb-glass-ring);
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 }
 
 /* Settings (global redesign): the page is a
@@ -306,7 +338,7 @@ m3e-nav-rail {
   /* The panel surface is frosted glass like every other card. The
      host carries the panel shape so the frost halo is rounded, not
      a square grey outline. */
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
@@ -328,7 +360,7 @@ m3e-nav-rail {
   min-height: 56px;
   padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);
 background: var(--lb-glass-tint);
-border-radius: 20px;
+border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   box-sizing: border-box;
   border: var(--lb-glass-ring);
   backdrop-filter: var(--lb-glass-blur);
@@ -368,7 +400,7 @@ border-radius: 20px;
    cards, not a pane inside a pane. The active card keeps the app's
    secondary-container accent and inverts its icon tile. */
 .lb-set-nav { position: sticky; top: var(--md-sys-measurement-space100); display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-.lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); border: var(--lb-glass-ring); border-radius: 20px; background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
+.lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); border: var(--lb-glass-ring); border-radius: var(--md-sys-shape-corner-large-increased, 20px); background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
 /* The m3e-shape icon tile: the host sizes via the component's
    --m3e-shape-size token and the wrapper clips to the cookie path.
    The slotted m3e-icon has an intrinsic box size, so absolute
@@ -761,8 +793,8 @@ border-radius: 20px;
    so the skeleton reads as the entire frame instead of a
    small centered box. */
 .lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; }
-.lb-sk-head { width: 42%; height: 24px; border-radius: 8px; flex: 0 0 auto; }
-.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: 12px; }
+.lb-sk-head { width: 42%; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); flex: 0 0 auto; }
+.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: var(--md-sys-shape-corner-medium, 12px); }
 .lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; }
 .lb-sk-short { width: 62%; }
 @media (prefers-reduced-motion: reduce) {
@@ -1030,8 +1062,12 @@ border-radius: 20px;
 /* DevTools bottom sheet: the live DevTools
    mounts in an m3e-bottom-sheet; each section renders its mini
    surfaces as m3e-cards (content above a divider, inline action
-   buttons under it). The sheet body owns scrolling. */
-.lb-dt-content {gap: 18px; }
+   buttons under it). The sheet body owns scrolling. The sheet is
+   detents="fit", so its height follows the visible sub-tool's
+   content and the sheet visibly resizes on every tool switch; the
+   38vh floor matches the console/network scroll cap, so every tool
+   presents inside the same steady sheet height. */
+.lb-dt-content {gap: 18px; min-height: 38vh; }
 /* #239: the sub-tool picker is a bottom-bar style row; the active
    sub-tool is the tonal rounded pill (variant), the inactive ones
    are text buttons. */
@@ -1089,7 +1125,7 @@ border-radius: 20px;
   max-height: 320px;
   overflow: auto;
 border: var(--lb-glass-ring);
-border-radius: 20px;
+border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   background: var(--lb-glass-tint);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
@@ -1177,11 +1213,55 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-ac-item { transition: background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), padding-left var(--md-sys-motion-duration-short-2, 100ms) var(--m3e-spring); }
 .lb-ac-item:hover, .lb-ac-item.active { padding-left: var(--md-sys-measurement-space275); }
 
+/* Tab switch frost flash: a one-shot class on the toolbar traces a
+   brightness wave across the glass when the active tab changes, so
+   switching reads as a deliberate action on the toolbar surface.
+   Opacity only; the class is removed by the JS timeout. */
+.lb-toolbar.lb-flash { position: relative; }
+.lb-toolbar.lb-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--md-sys-color-primary, #6750a4);
+  pointer-events: none;
+  animation: lb-frost-flash 240ms var(--md-sys-motion-easing-standard, ease) forwards;
+}
+@keyframes lb-frost-flash { from { opacity: 0.26; } to { opacity: 0; } }
+
+/* Suggestion rows enter with a short rise, staggered by 25ms for
+   the first three rows so the list reads top-down; items below the
+   fold arrive together. Opacity + transform only. */
+@keyframes lb-ac-item-in { from { opacity: 0; transform: translateY(4px); } }
+.lb-tb-ac-item { animation: lb-ac-item-in 140ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)) backwards; }
+.lb-tb-ac-item:nth-child(2) { animation-delay: 25ms; }
+.lb-tb-ac-item:nth-child(3) { animation-delay: 50ms; }
+
+/* Omnibox load wave: while the active tab is loading, a two-pixel
+   wavy line runs along the bottom of the identity pill - an
+   indeterminate progress flare instead of a spinner. The SVG icon
+   tiles at 50% and slides, so the seam never shows. */
+.lb-tb-wave {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  color: var(--md-sys-color-primary, #6750a4);
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 0 0 999px 999px;
+}
+.lb-tb-wave svg { display: block; width: 200%; height: 100%; animation: lb-wave-slide 1.1s linear infinite; }
+@keyframes lb-wave-slide { to { transform: translateX(-50%); } }
+
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
   m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-tb-pill { transition: none; }
   .lb-view, .lb-tb-ac { animation: none; }
+  .lb-tb-ac-item { animation: none; }
+  .lb-toolbar.lb-flash::after { animation: none; opacity: 0; }
+  .lb-tb-wave { display: none; }
+  .lb-fx-flash { display: none; }
   .lb-tab:active, m3e-icon-button:active { transform: none; }
 }
 
@@ -1409,6 +1489,15 @@ border-radius: var(--m3e-shape-lg);
      to the viewport bottom instead of floating above it. */
   --m3e-bottom-sheet-compact-top-space: calc(100dvh - min(76dvh, 780px));
   --m3e-bottom-sheet-top-space: calc(100dvh - min(76dvh, 780px));
+  /* Exit shape: a non-modal sheet drops its open attribute the
+     instant hide() runs, and the component snaps the host radius
+     to the minimized shape (corner.none by default) while the
+     slide-down animation is still running - the sheet exits with
+     square top corners. Pinning the minimized shape to the same
+     extra-large top corners as the open shape keeps the exit
+     round for the AI conversations and DevTools sheets; modal
+     sheets never show this state while visible either way. */
+  --m3e-bottom-sheet-minimized-container-shape: var(--md-sys-shape-corner-extra-large, 28px);
   max-height: min(76dvh, 780px);
   backdrop-filter: blur(28px) saturate(180%) brightness(.66);
   -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(.66);
@@ -1491,7 +1580,7 @@ m3e-menu {
   /* The frost halo rides the host, so the host carries the card
      shape too - a square host painted a square grey outline behind
      the rounded card. */
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
@@ -1502,7 +1591,7 @@ m3e-menu {
   --m3e-card-shape: 20px;
   /* The host carries the card shape so the frost halo is rounded,
      not square. */
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
 }
@@ -1513,7 +1602,7 @@ m3e-menu {
   padding: 12px 16px;
   min-height: 64px;
   box-sizing: border-box;
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   border: var(--lb-glass-ring);
   /* #243: the in-sheet row lifts over the sheet frost. */
   background: var(--lb-glass-lift);
@@ -1527,7 +1616,7 @@ m3e-menu {
 .lb-site-card {
   background: var(--lb-glass-tint);
   border: var(--lb-glass-ring);
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
@@ -1585,6 +1674,14 @@ m3e-snackbar {
      of running 16px past the sheet's right edge. */
   padding: var(--md-sys-measurement-space50) 0 16px;
 }
+/* Close-all, the sheet bar's trailing action: quiet while idle
+   (transparent over the bar), error-toned once armed, so the
+   second tap shows what the second tap does without a dialog. */
+.lb-tabs-closeall { --m3e-button-container-color: transparent; }
+.lb-tabs-closeall.armed {
+  --m3e-button-container-color: var(--md-sys-color-error-container);
+  --m3e-button-label-text-color: var(--md-sys-color-on-error-container);
+}
 /* Rows are plain buttons (not cards): the active tab reads as a
    rounded tonal pill behind the whole row (the active-marker
    language), the inactive rows stay transparent until hovered. */
@@ -1598,7 +1695,7 @@ min-height: 64px;
 padding: 12px 16px;
   box-sizing: border-box;
 border: var(--lb-glass-ring);
-border-radius: 20px;
+border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 background: var(--lb-glass-tint);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);
@@ -1627,7 +1724,7 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   /* The frost rides the host element, so the host needs the
      avatar's circular shape too - a square host boxed the favicon in
      a frosted square. */
-  border-radius: 9999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   --m3e-avatar-size: 40px;
   --m3e-avatar-color: color-mix(in srgb, var(--md-sys-color-surface-container, #f3edf7) 55%, transparent);
   --m3e-avatar-label-color: var(--md-sys-color-on-surface-variant, #49454f);
@@ -1997,7 +2094,7 @@ body .lb-ext-panel {
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
 .lb-ai { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
 
-.lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
+.lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
 .lb-ai-quota-out { color: var(--md-sys-color-error, #f2b8b5); }
 /* Parent-company mark at text height, before the model name. */
 .lb-ai-mark { display: inline-flex; width: 19px; height: 14px; flex: none; }
@@ -2028,11 +2125,11 @@ body .lb-ext-panel {
 .lb-ai-assistant .lb-ai-bubble { background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 55%, transparent); border-end-start-radius: var(--md-sys-shape-corner-extra-small, 4px); backdrop-filter: var(--lb-glass-blur); -webkit-backdrop-filter: var(--lb-glass-blur); border: var(--lb-glass-ring); }
 .lb-ai-think-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #cac4d0); }
 .lb-ai-sources { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); }
-.lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lb-ai-src { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-primary, #7f9cf5); text-decoration: none; padding: 2px 10px; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-primary, #7f9cf5) 12%, transparent); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .lb-ai-src:hover { text-decoration: underline; }
 .lb-ai-files { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space50, 4px); justify-content: flex-end; }
 /* (.lb-ai-att removed: the attachment preview lives inside the chatbar; see .lb-ai-att-peek.) */
-.lb-ai-file-chip { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); padding: 2px 10px; border-radius: 9999px; background: color-mix(in srgb, var(--md-sys-color-secondary, #b8c4d8) 16%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-ai-file-chip { display: inline-flex; align-items: center; gap: var(--md-sys-measurement-space50, 4px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); padding: 2px 10px; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-secondary, #b8c4d8) 16%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ai-file-x { border: none; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
 
 /* Chatbar: the plus button rides the search bar's leading slot. */
@@ -2050,7 +2147,7 @@ body .lb-ext-panel {
 .lb-ai-bar m3e-search-bar {
   --m3e-search-bar-container-color: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 38%, transparent);
   /* Pill-clip the host so the blurred corners match the pill shape. */
-  border-radius: 9999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
@@ -2328,7 +2425,7 @@ body .lb-ext-panel {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 9999px;
+  border-radius: var(--md-sys-shape-corner-full, 999px);
   font-size: var(--md-sys-typescale-label-large-font-size, 14px);
   line-height: 1;
   flex: none;
@@ -2373,7 +2470,7 @@ gap: 18px;
   display: flex;
   align-items: center;
   gap: var(--md-sys-measurement-space50, 4px);
-border-radius: 20px;
+border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   background: var(--lb-glass-tint);
   border: var(--lb-glass-ring);
   backdrop-filter: var(--lb-glass-blur);
@@ -2463,7 +2560,7 @@ border-radius: 20px;
   max-height: 140px;
   overflow-y: auto;
 padding: 12px 16px;
-border-radius: 20px;
+border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   border: var(--lb-glass-ring);
   backdrop-filter: var(--lb-glass-blur);
   -webkit-backdrop-filter: var(--lb-glass-blur);

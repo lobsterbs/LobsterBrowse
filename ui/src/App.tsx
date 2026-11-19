@@ -58,6 +58,26 @@ export default function App() {
     return m ? (m[1] as View) : "home";
   };
   const [view, setView] = useState<View>(viewFromHash);
+  /* Hero flash: Settings fires a one-shot lb-flash-hero event after a
+     cache clear or a wipe, and the response is a brief fullscreen
+     flare of the hero image - a visible confirmation that something
+     big just changed on this device. The overlay lives on <body>,
+     ignores pointer events, and fades itself out. */
+  const [heroFlash, setHeroFlash] = useState(false);
+  useEffect(() => {
+    let t = 0;
+    const onFlash = () => {
+      setHeroFlash(false);
+      requestAnimationFrame(() => setHeroFlash(true));
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setHeroFlash(false), 650);
+    };
+    window.addEventListener("lb-flash-hero", onFlash);
+    return () => {
+      window.removeEventListener("lb-flash-hero", onFlash);
+      window.clearTimeout(t);
+    };
+  }, []);
   useEffect(() => {
     const h = "#view=" + view;
     if (window.location.hash !== h) window.history.replaceState(null, "", h);
@@ -865,6 +885,11 @@ export default function App() {
       {(view === "home" || view === "ai") &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
+          document.body
+        )}
+      {heroFlash &&
+        createPortal(
+          <div className="lb-fx-flash" aria-hidden={true} />,
           document.body
         )}
       <div className="lb-shell">
