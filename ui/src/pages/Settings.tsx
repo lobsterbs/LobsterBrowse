@@ -598,6 +598,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                         try {
                           const keys = await caches.keys();
                           await Promise.all(keys.map((k) => caches.delete(k)));
+                          window.dispatchEvent(new CustomEvent("lb-flash-hero"));
                           if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
                             M3eSnackbar.open("Zeolite cache cleared", { duration: 3000 });
                           }
@@ -614,6 +615,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     onClick={() => {
                       onDeleteAll();
                       deleteDialogRef.current?.hide();
+                      window.dispatchEvent(new CustomEvent("lb-flash-hero"));
                       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
                         M3eSnackbar.open("All data deleted on this device", { duration: 3000 });
                       }

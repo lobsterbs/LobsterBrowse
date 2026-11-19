@@ -423,6 +423,12 @@ export default function BrowserView(props: Props) {
     const tb = toolbarRef.current;
     if (!tb) return;
     tb.classList.remove("lb-site-tint");
+    /* The same hue also reaches the document root so surfaces
+       outside the toolbar (the navigation rail frost) can carry a
+       faint tint of the active site; the root flag is cleared with
+       the toolbar flag whenever no usable favicon exists. */
+    document.documentElement.classList.remove("lb-site-tint-root");
+    document.documentElement.style.removeProperty("--lb-site-hue");
     /* Always on: the Settings toggle was removed. */
     const src = icons[active.id];
     if (!src || !active.url) return;
@@ -444,6 +450,8 @@ export default function BrowserView(props: Props) {
         if (!hue) return;
         el.style.setProperty("--lb-site-hue", String(hue.hue));
         el.classList.add("lb-site-tint");
+        document.documentElement.style.setProperty("--lb-site-hue", String(hue.hue));
+        document.documentElement.classList.add("lb-site-tint-root");
       } catch {
         /* unreadable or tainted canvas: stay untinted */
       }
@@ -685,6 +693,25 @@ export default function BrowserView(props: Props) {
   useEffect(() => {
     incognitoBtnRef.current?.toggleAttribute("selected", !!props.incognito);
   }, [props.incognito]);
+  /* Tab switch frost flash: one class for 240ms traces a brightness
+     wave across the toolbar glass (theme.css) whenever the active
+     tab changes, so switching reads as a deliberate action on the
+     toolbar surface. Skipped once for the initial mount. */
+  const flashPrimedRef = useRef(true);
+  useEffect(() => {
+    if (flashPrimedRef.current) {
+      flashPrimedRef.current = false;
+      return;
+    }
+    const el = toolbarRef.current;
+    if (!el) return;
+    el.classList.add("lb-flash");
+    const t = window.setTimeout(() => el.classList.remove("lb-flash"), 240);
+    return () => {
+      window.clearTimeout(t);
+      el.classList.remove("lb-flash");
+    };
+  }, [props.activeId]);
   /* The tab switcher card stays mounted all the time (its preview
      iframes must stay alive or tiles show blank frames, not pages);
      the .open class animates and gates interaction instead. */
@@ -2879,6 +2906,14 @@ export default function BrowserView(props: Props) {
           onClose={() => setTabsOpen(false)}
           onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
           onCloseTab={closeTabSmooth}
+          onCloseAll={() => {
+            /* Every non-active tab collapses through the same
+               .closing animation as a single close, so the sheet
+               empties in one choreographed wave instead of one
+               row snapping out; closeTabSmooth owns the per-tab
+               cleanup and the guarded state drop. */
+            for (const t of tabs) if (t.id !== active.id) closeTabSmooth(t.id);
+          }}
         />
         {/* #86: the tucked dock hides fully; the grip line is the
             only hint. Hold the pointer on it 3s to reveal, or
@@ -2933,8 +2968,15 @@ export default function BrowserView(props: Props) {
           {/* Back / Forward are plain icon buttons (#227): the
               m3e-button-group expressive press choreography slid the
               grouped buttons into each other on every press. Tooltips
-              anchor by for= id exactly as before. */}
-          <m3e-icon-button id="lb-back-btn" aria-label="Back" onClick={back}>
+              anchor by for= id exactly as before. Back is disabled at
+              the bottom of the stack: the earliest entry has nothing
+              to go back to, and a dead press reads as broken. */}
+          <m3e-icon-button
+            id="lb-back-btn"
+            aria-label="Back"
+            onClick={back}
+            disabled={active.idx > 0 ? undefined : true}
+          >
             <m3e-icon name="arrow_back" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
@@ -3050,6 +3092,29 @@ export default function BrowserView(props: Props) {
               >
                 {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
               </button>
+            )}
+            {/* Load wave: while this tab is loading, a thin wavy line
+                runs along the pill's bottom edge. Pure inline SVG, two
+                identical copies so the 50% slide loop never shows a
+                seam. Hidden entirely under reduced motion. */}
+            {st.loading && (
+              <span className="lb-tb-wave" aria-hidden={true}>
+                <svg viewBox="0 0 120 6" preserveAspectRatio="none">
+                  <path
+                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  />
+                  <path
+                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    transform="translate(60)"
+                  />
+                </svg>
+              </span>
             )}
           </span>
           {/* Developer tools live in the three-dot overflow menu only
