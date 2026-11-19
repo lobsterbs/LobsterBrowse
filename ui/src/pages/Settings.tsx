@@ -56,14 +56,15 @@ const SECTION_TITLES: Record<SectionId, string> = {
 };
 
 /* Each section reads as one M3 group: an icon tile
-   on primary-container and a title heading (the supporting lines and
-   every item description were removed on request). */
-const SECTION_META: Record<SectionId, { icon: string }> = {
-  search: { icon: "search" },
-  privacy: { icon: "shield" },
-  extensions: { icon: "extension" },
-  appearance: { icon: "palette" },
-  advanced: { icon: "tune" },
+   on primary-container, a title heading, and one plain supporting
+   line that says what the section holds. Descriptions stay short and
+   human: they explain the thing itself, never the changelog. */
+const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
+  search: { icon: "search", sub: "Choose your engine and its suggestions." },
+  privacy: { icon: "shield", sub: "Block ads and trackers on the pages you open." },
+  extensions: { icon: "extension", sub: "Add-ons: install, search and manage." },
+  appearance: { icon: "palette", sub: "Set the colors and feel of the interface." },
+  advanced: { icon: "tune", sub: "Engines, network and stored data." },
 };
 
 const NAV_ORDER: SectionId[] = ["search", "privacy", "appearance", "extensions", "advanced"];
@@ -79,6 +80,7 @@ function SectionHead(props: { section: SectionId }) {
       )}
       <span className="lb-set-section-text">
         <m3e-heading variant="title" size="small" level={3}>{SECTION_TITLES[props.section]}</m3e-heading>
+        {meta && <span className="lb-set-section-sub">{meta.sub}</span>}
       </span>
     </div>
   );
@@ -91,6 +93,7 @@ function SectionHead(props: { section: SectionId }) {
 function SetPanel(props: {
   id: string;
   headline: string;
+  sub?: string;
   open: boolean;
   toggle: () => void;
   anchorId?: string;
@@ -100,6 +103,7 @@ function SetPanel(props: {
     <m3e-expansion-panel id={props.id} open={props.open ? "" : undefined}>
       <span slot="header" className="lb-setp-head" onClick={props.toggle}>
         <span className="lb-setp-headline">{props.headline}</span>
+        {props.sub && <span className="lb-setp-sub">{props.sub}</span>}
       </span>
       <div className="lb-setp-body">
         {props.anchorId && <div className="lb-set-anchor" id={props.anchorId} tabIndex={-1} />}
@@ -119,6 +123,7 @@ function SetPanel(props: {
 function SetInline(props: {
   anchorId?: string;
   label: string;
+  desc?: string;
   on?: boolean;
   toggle?: () => void;
   disabled?: boolean;
@@ -134,6 +139,7 @@ function SetInline(props: {
     >
       <span className="lb-setting-text">
         <span className="lb-setting-label">{props.label}</span>
+        {props.desc && <span className="lb-setting-desc">{props.desc}</span>}
       </span>
       {props.on !== undefined ? (
         <m3e-switch
@@ -325,13 +331,14 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               >
                 {/* Android Settings sub-card, ported: the icon sits
                     inside a real m3e-shape (the expressive 4-sided
-                    cookie), then the category name. The supporting
-                    lines under the names were removed on request. */}
+                    cookie), then the category name with one plain
+                    line under it saying what the section holds. */}
                 <m3e-shape name="4-sided-cookie" aria-hidden={true}>
                   <m3e-icon name={SECTION_META[id].icon} />
                 </m3e-shape>
                 <span className="lb-set-nav-txt">
                   <span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>
+                  <span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>
                 </span>
               </button>
             ))}
@@ -341,7 +348,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             {section === "search" && (
               <>
             <SectionHead section="search" />
-            <SetInline anchorId="set-search-engine" label="Search engine">
+            <SetInline anchorId="set-search-engine" label="Search engine" desc="The engine the address bar searches with.">
               {/* #237: six long engine names cannot share one
                   segmented row; a dropdown select is the M3E control
                   for this cardinality. */}
@@ -355,6 +362,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetInline
               anchorId="set-search-suggest"
               label="Engine search suggestions"
+              desc="Completions from the engine while you type."
               on={settings.suggestQueries}
               toggle={() => onChange({ suggestQueries: !settings.suggestQueries })}
             />
@@ -366,6 +374,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetInline
               anchorId="set-adblock"
               label="Ad & tracker blocking"
+              desc="Filters known ad and tracker hosts."
               on={settings.adblock}
               toggle={() => onChange({ adblock: !settings.adblock })}
               disabled={zlOff}
@@ -379,6 +388,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-theme-color"
               headline="Theme color"
+              sub="The palette grows from this seed."
               anchorId="set-theme-color"
               open={!!openP["p-theme-color"]}
               toggle={() => toggleP("p-theme-color")}
@@ -412,6 +422,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-manage-ext"
               headline="Manage installed"
+              sub="Turn add-ons on or off, or remove them."
               anchorId="set-manage-ext"
               open={!!openP["p-manage-ext"]}
               toggle={() => toggleP("p-manage-ext")}
@@ -427,6 +438,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-amo"
               headline="Find and install add-ons"
+              sub="Search the Firefox add-on catalog."
               anchorId="set-amo"
               open={!!openP["p-amo"]}
               toggle={() => toggleP("p-amo")}
@@ -442,6 +454,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-import"
               headline="Import locally"
+              sub="Install an add-on from a file on this device."
               anchorId="set-import"
               open={!!openP["p-import"]}
               toggle={() => toggleP("p-import")}
@@ -469,6 +482,9 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   <m3e-linear-progress-indicator mode="indeterminate" aria-label="Importing extension" />
                 </div>
               )}
+              <p className="lb-muted" style={{ marginTop: 4 }}>
+                Allowed: manifest.json, scripts, styles, JSON and images. No binaries. A broken package only puts that add-on in an error state.
+              </p>
             </SetPanel>
               </>
             )}
@@ -478,6 +494,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             <SetPanel
               id="p-proxy"
               headline="Proxy engine"
+              sub="How pages are fetched and rewritten."
               anchorId="set-proxy"
               open={!!openP["p-proxy"]}
               toggle={() => toggleP("p-proxy")}
@@ -492,10 +509,14 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   </m3e-button-segment>
                 </m3e-segmented-button>
               </div>
+              <p className="lb-muted" style={{ marginTop: 6 }}>
+                ScramJet rewrites pages client-side through its own worker. Engine options like adblock and fingerprint spoof are Zeolite-only. Applied on the next navigation.
+              </p>
             </SetPanel>
             <SetPanel
               id="p-transport"
               headline="Transport engine"
+              sub="The network client the engine uses underneath."
               anchorId="set-transport"
               open={!!openP["p-transport"]}
               toggle={() => toggleP("p-transport")}
@@ -511,14 +532,19 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </m3e-segmented-button>
               </div>
               {zlOff && zlNote}
+              <p className="lb-muted" style={{ marginTop: 6 }}>
+                epoxy shows sites a different TLS fingerprint; that is its purpose. Experimental: keep libcurl if a site misbehaves. Applied on the next engine load.
+              </p>
             </SetPanel>
             <SetPanel
               id="p-wisp"
               headline="WISP server"
+              sub="Send engine traffic through your own server."
               anchorId="set-wisp"
               open={!!openP["p-wisp"]}
               toggle={() => toggleP("p-wisp")}
             >
+              <p className="lb-muted">A third-party WISP server sees your traffic decrypted before sending it on. Use only servers you trust.</p>
               {zlOff && zlNote}
               <div className={zlOff ? "lb-zl-guard" : undefined}>
                 <M3eSelect
@@ -549,7 +575,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 )}
               </div>
             </SetPanel>
-            <SetInline anchorId="set-data" danger label="Data">
+            <SetInline anchorId="set-data" danger label="Data" desc="Clear the page cache or wipe this device's data.">
               <m3e-button onClick={() => setConfirmDelete(true)}>
                 <m3e-icon name="delete" aria-hidden={true} /> Manage data
               </m3e-button>
@@ -598,7 +624,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 </div>
               </m3e-dialog>
             </SetInline>
-            <SetInline anchorId="set-logs" label="Logs">
+            <SetInline anchorId="set-logs" label="Logs" desc="Every load failure and page message, kept to inspect.">
               {/* Diagnostic mode is always on (the toggle was removed on
                   purpose): every failed resource, page console message and
                   proxy intervention (CSP/SRI stripping) is logged in full to

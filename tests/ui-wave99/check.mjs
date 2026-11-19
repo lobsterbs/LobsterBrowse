@@ -48,11 +48,11 @@ const theme = read("../../ui/src/theme.css");
 assert.ok(/\.app-content \{[^}]*box-sizing: border-box;/.test(theme), "the app content column is border-box so padding cannot overflow the viewport");
 
 /* Mobile bottom nav items must stretch, not clip
-   (#254). The #255 description wrap rule is gone with the wave 109
-   description removal: no settings description classes may remain
-   in the stylesheet at all. */
+   (#254). The #255 description wrap rule is back as part of the
+   settings description restoration: the description classes exist
+   again and the inline desc wraps on its own rule. */
 assert.ok(theme.includes(".lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }"), "mobile bottom nav items stretch across the bar");
-assert.ok(!theme.includes(".lb-setting-desc") && !theme.includes(".lb-setp-sub"), "settings description classes are fully removed (wave 109)");
+assert.ok(theme.includes(".lb-set-inline .lb-setting-desc {") && theme.includes(".lb-setp-sub {"), "settings description classes are restored (post wave 109)");
 
 /* The ci ui job runs this check. */
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
@@ -81,9 +81,10 @@ assert.ok(setSrc.includes("wispServer: string;"), "Settings carries the wispServ
 assert.ok(setSrc.includes('typeof parsed.wispServer === "string"'), "a stored wispServer value is validated on load (#250)");
 assert.ok(setSrc.includes('"wss://anura.pro"') && setSrc.includes('"wss://wisp.mercurywork.shop"'), "the WISP presets ship (#250)");
 assert.ok(settingsPage.includes('headline="WISP server"'), "Settings exposes the WISP server panel (#250)");
-/* Wave 109 removed every settings item description, including the
-   WISP panel sub that carried the third-party trust warning. */
-assert.ok(!settingsPage.includes("terminates the upstream TLS"), "the WISP trust sub line is gone with the wave 109 description removal");
+/* The description restoration kept the WISP trust warning, in the
+   plain-copy form: no issue references, no request provenance. */
+assert.ok(settingsPage.includes("A third-party WISP server sees your traffic decrypted"), "the WISP trust warning is back in plain copy");
+assert.ok(!settingsPage.includes("terminates the upstream TLS"), "the old issue-era trust phrasing is gone");
 assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
 assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
 
