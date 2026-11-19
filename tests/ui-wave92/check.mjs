@@ -22,7 +22,8 @@ assert.equal(heroBytes[2], 0xff, "hero magic byte 2 is ff");
 assert.ok(!existsSync(new URL("../../ui/src/components/ui/shader-metal.tsx", import.meta.url)), "shader-metal.tsx is deleted");
 const appSrc = read("../../ui/src/App.tsx");
 assert.ok(!appSrc.includes("ShaderMetal"), "App no longer mounts the shader component");
-assert.ok(appSrc.includes('settings.fancyBackground && (view === "home" || view === "ai")'), "the hero layer stays gated on the fancy setting, on Home and AI (#261)");
+assert.ok(appSrc.includes('(view === "home" || view === "ai") &&'), "the hero layer renders on Home and AI");
+assert.ok(!appSrc.includes("fancyBackground"), "the hero layer is always on (wave 109 removed the Enhanced UI gate)");
 assert.ok(appSrc.includes("lb-fx-bg"), "the fx background layer class is unchanged");
 
 /* The CSS paints the image; no shader or aurora remnants. */
@@ -32,13 +33,15 @@ assert.ok(themeSrc.includes("center / cover no-repeat"), "the hero image covers 
 assert.ok(!themeSrc.includes("shader-metal"), "no shader-metal CSS remains");
 assert.ok(!themeSrc.includes("lb-fx-bg::after"), "the aurora bloom overlay is gone with the shader");
 
-/* Settings copy describes the photographic hero. #269 removed the
-   Settings search index, which carried the third occurrence; the
-   panel headline and the toggle row label remain. */
+/* Settings copy: the wave 109 work order removed the Enhanced UI
+   option together with its panel, headline, toggle row and sub
+   descriptions, so none of that copy may return. */
 const settingsPageSrc = read("../../ui/src/pages/Settings.tsx");
-assert.equal(settingsPageSrc.split("Enhanced UI (hero background image)").length - 1, 2, "both remaining Settings labels describe the hero image");
-assert.ok(settingsPageSrc.includes("The photographic hero background on Home and AI"), "the panel sub describes the hero (wave 96)");
+assert.ok(!settingsPageSrc.includes("Enhanced UI"), "the Enhanced UI panel copy is gone");
+assert.ok(!settingsPageSrc.includes("hero background image"), "the hero toggle row copy is gone");
 assert.ok(!settingsPageSrc.includes("liquid-metal"), "no liquid-metal copy remains in Settings");
-assert.ok(read("../../ui/src/settings.ts").includes("photographic hero background"), "the settings comment describes the hero");
+const settingsModelSrc = read("../../ui/src/settings.ts");
+assert.ok(!settingsModelSrc.includes("fancyBackground"), "the settings model dropped the fancyBackground flag");
+assert.ok(settingsModelSrc.includes("photographic hero background") || settingsModelSrc.includes("photographic hero"), "the settings comment still describes the always-on hero");
 
 console.log("ui-wave92 check: all assertions passed");
