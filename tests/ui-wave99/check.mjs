@@ -48,9 +48,11 @@ const theme = read("../../ui/src/theme.css");
 assert.ok(/\.app-content \{[^}]*box-sizing: border-box;/.test(theme), "the app content column is border-box so padding cannot overflow the viewport");
 
 /* Mobile bottom nav items must stretch, not clip
-   (#254), and Settings descriptions must wrap on phones (#255). */
+   (#254). The #255 description wrap rule is gone with the wave 109
+   description removal: no settings description classes may remain
+   in the stylesheet at all. */
 assert.ok(theme.includes(".lb-bottom-nav m3e-nav-item { min-width: 0; flex: 1 1 0; }"), "mobile bottom nav items stretch across the bar");
-assert.ok(/@media \(max-width: 600px\)[\s\S]*?\.lb-setting-desc, \.lb-setp-sub \{ white-space: normal; \}/.test(theme), "settings descriptions wrap on small screens");
+assert.ok(!theme.includes(".lb-setting-desc") && !theme.includes(".lb-setp-sub"), "settings description classes are fully removed (wave 109)");
 
 /* The ci ui job runs this check. */
 assert.ok(ci.includes("../tests/ui-wave99/check.mjs"), "ci.yml runs the wave 99 check");
@@ -79,7 +81,9 @@ assert.ok(setSrc.includes("wispServer: string;"), "Settings carries the wispServ
 assert.ok(setSrc.includes('typeof parsed.wispServer === "string"'), "a stored wispServer value is validated on load (#250)");
 assert.ok(setSrc.includes('"wss://anura.pro"') && setSrc.includes('"wss://wisp.mercurywork.shop"'), "the WISP presets ship (#250)");
 assert.ok(settingsPage.includes('headline="WISP server"'), "Settings exposes the WISP server panel (#250)");
-assert.ok(settingsPage.includes("terminates the upstream TLS"), "the third-party trust warning is shown (#250)");
+/* Wave 109 removed every settings item description, including the
+   WISP panel sub that carried the third-party trust warning. */
+assert.ok(!settingsPage.includes("terminates the upstream TLS"), "the WISP trust sub line is gone with the wave 109 description removal");
 assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
 assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
 

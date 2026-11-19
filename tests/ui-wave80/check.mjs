@@ -31,9 +31,13 @@ const ok = (name, cond) => {
     "adblock",
     "transport",
     "suggestQueries",
-    "fancyBackground",
   ];
   for (const f of fields) ok("settings: option " + f + " kept", page.includes("settings." + f));
+
+  /* Wave 109: the Enhanced UI option is gone by user order; the
+     hero background is always on, so the option must not survive
+     anywhere in the settings page or the settings model. */
+  ok("settings: enhanced UI option removed", !page.includes("fancyBackground") && !read("src/settings.ts").includes("fancyBackground"));
 
   ok("settings: ScramJet greyout present", page.includes('proxyEngine === "scramjet"'));
   ok("settings: guard wrapper present", page.includes("lb-zl-guard"));
@@ -92,10 +96,11 @@ const ok = (name, cond) => {
   ok("devtools: legacy copy imported nowhere", stray === 0);
 }
 
-/* --- App: the hero background renders on home and AI. --- */
+/* --- App: the hero background renders on home and AI, always on
+   since the Wave 109 Enhanced UI option removal. --- */
 {
   const a = read("src/App.tsx");
-  ok("app: fx background on home and AI (#261)", a.includes('settings.fancyBackground && (view === "home" || view === "ai")'));
+  ok("app: fx background always on home and AI (wave 109)", a.includes('(view === "home" || view === "ai") &&') && !a.includes("fancyBackground"));
 }
 
 /* --- m3e.d.ts: the md-card intrinsic is gone and the live elements
