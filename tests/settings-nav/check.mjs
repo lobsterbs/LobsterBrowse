@@ -9,8 +9,11 @@
    wide column, the 300px nav grid track, and every category being an
    Android-style sub-card with the icon inside a real M3E shape (the
    expressive 4-sided cookie, sized and tinted through the m3e-shape
-   component tokens), then the category name: the wave 109 work order
-   removed the icon-owner span tile and the supporting sub lines. */
+   component tokens), then the category name and one plain supporting
+   line. The wave 109 follow-up fixed the icon tile: the slotted
+   m3e-icon has an intrinsic size, so it is centered by making the
+   shape host a flex container, not by absolute inset pinning (which
+   collapsed the glyph into the wrapper's corner). */
 import { readFileSync } from "node:fs";
 
 const ui = new URL("../../ui/", import.meta.url);
@@ -49,11 +52,17 @@ const tile = theme.slice(ico, ico + 400);
 ok("icon tile is sized through the shape token", tile.includes("--m3e-shape-size: 40px;"));
 ok("icon tile colors on tokens", tile.includes("--m3e-shape-container-color: var(--md-sys-color-primary-container);") && tile.includes("color: var(--md-sys-color-on-primary-container);"));
 const iconIn = theme.indexOf(".lb-set-nav-item m3e-shape m3e-icon {");
-ok("icon pinned inside the shape wrapper", iconIn !== -1);
+ok("icon rule inside the shape exists", iconIn !== -1);
+const iconRule = theme.slice(iconIn, theme.indexOf("}", iconIn) + 1);
+ok("icon is statically sized, not absolutely pinned", iconRule.includes("font-size: 20px;") && !iconRule.includes("position: absolute") && !iconRule.includes("inset:"));
+ok("shape host flex-centers the intrinsic-size icon", tile.includes("display: flex;") && tile.includes("align-items: center;") && tile.includes("justify-content: center;") && !tile.includes("position: relative;") && !tile.includes("position: absolute"));
 const txt = theme.indexOf(".lb-set-nav-txt {");
 ok("nav text column rule exists", txt !== -1);
 ok("nav title uses the typescale tokens", theme.includes(".lb-set-nav-title { font-size: var(--md-sys-typescale-body-large-font-size, 16px);"));
-ok("nav sub line removed (wave 109)", !theme.includes(".lb-set-nav-sub {") && !page.includes("lb-set-nav-sub"));
+ok("nav sub line rule restored", theme.includes(".lb-set-nav-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px)"));
+ok("active nav sub line recolors", theme.includes(".lb-set-nav-item.active .lb-set-nav-sub { color: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 80%, transparent); }"));
+ok("markup: nav sub line rendered", page.includes('<span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>'));
+ok("narrow screens hide the nav sub line", theme.includes(".lb-set-nav-sub { display: none; }"));
 
 /* The markup wires the shape, the icon and the name. */
 ok("markup: icon inside the m3e-shape", page.includes('<m3e-shape name="4-sided-cookie" aria-hidden={true}>'));
@@ -65,7 +74,15 @@ ok("markup: the old span tile is gone", !page.includes("lb-set-nav-ico"));
 ok("active card keeps the app accent", theme.includes(".lb-set-nav-item.active { background: var(--md-sys-color-secondary-container);"));
 ok("active card inverts its icon tile", theme.includes(".lb-set-nav-item.active m3e-shape { --m3e-shape-container-color: var(--md-sys-color-on-secondary-container);"));
 ok("nav cards carry press feedback", theme.includes(".lb-set-nav-item:active { scale: 0.97; transition-duration: 90ms; }"));
-ok("narrow screens collapse the cards", theme.indexOf('@media (max-width: 720px)') !== -1 && !theme.includes(".lb-set-nav-sub { display: none; }"));
+ok("narrow screens collapse the cards", theme.indexOf('@media (max-width: 720px)') !== -1);
+
+/* Description copy policy: every supporting line is plain, human and
+   short. Descriptions explain the thing itself; issue references and
+   request provenance never appear in user-visible copy. */
+const descStrings = [...page.matchAll(/(?:sub|desc)="([^"]*)"/g)].map((m) => m[1]);
+const metaSubs = [...page.matchAll(/sub: "([^"]*)"/g)].map((m) => m[1]);
+ok("every category carries a supporting line", metaSubs.length >= 5);
+ok("descriptions never cite issues or requests", [...descStrings, ...metaSubs].every((s) => !/#\d/.test(s) && !/request/i.test(s)));
 
 const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
 ok("CI runs the settings nav check", ci.includes("tests/settings-nav/check.mjs"));

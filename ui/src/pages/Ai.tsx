@@ -833,6 +833,7 @@ export default function AiPage() {
           {histChats.length === 0 && (
             <div className="lb-ai-hist-empty">
               No saved conversations yet.
+              <span className="lb-ai-hist-empty-sub">Chats stay encrypted on this device.</span>
             </div>
           )}
           {histChats.map((c) => (
