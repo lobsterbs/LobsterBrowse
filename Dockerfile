@@ -2371,7 +2371,32 @@ FROM debian:bookworm-slim AS zl-builder
 # unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
 # 5073f316 (app TS only). Same engine build as the beta pin 182.
 # Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=a175b10e39975abdd4b0f14c35cc2c1dd405a9ce
+# Pin 183 (2026-11-19): dist d85d24bf (Zeolite main c1b2fa22, CI run
+# 44532038965, all five jobs green; the #556 replay-spool step
+# reports its documented bounded RSPOOL 124 continue-on-error row,
+# non-blocking by design). Restores engine mediation for the
+# reCAPTCHA widget release scripts (#451 sorry-wall press class):
+# the #449 anchored-origin-pinning skip swept recaptcha__*.js in
+# with the gapi loader it was built for, so the widget kept its
+# single RPC-base literal verbatim
+# ("https://www.google.com/recaptcha/api2/"), every anchor/reload
+# call escaped to a real cross-origin google.com iframe outside the
+# SW, the #112 co= seam never fired, and each press carried the
+# deployment origin into the site-key domain check: the "Error:
+# Invalid API parameter(s). Try reloading the page." failure on the
+# Google sorry wall (user KDL trace zl-tmwn95ire-ak, pin 182).
+# Release scripts keyed by their own URL
+# (gstatic/google/recaptcha.net /recaptcha/releases/<v>/recaptcha__
+# *.js) now keep the literal pass at both serve arms (fresh +
+# page-cache) and the wasm origin-pinning skip lifts for them, so
+# the widget rides the engine again and co= virtualizes to the owner
+# page origin; gapi-class scripts keep the full #449 protection
+# (regressions: the pinned-script predicate suite + the
+# location-transform relaxation wiring). sw e1009108f092d41f ->
+# f8ef86785761ffc6 (935150 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
+# (app TS only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=d85d24bf4417cfdbb7b9b7554baa26742d712a37
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2438,7 +2463,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e1009108f092d41f ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f8ef86785761ffc6 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
