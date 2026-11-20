@@ -12,7 +12,7 @@ import {
   streamChat,
   stripStreamTokens,
   splitHarmony,
-  SUB_AGENT_MODELS,
+  SUB_AGENT_MODEL,
   WEB_SEARCH_TOOL,
   RateLimitError,
   type AiChat,
@@ -187,9 +187,9 @@ export default function AiPage() {
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
-  /* The model picker is gone: GPT-OSS is
-     the fixed main agent; Nemotron and Gemma stay reachable to it
-     as sub agents (spawn_agent). A stored pick of a now-hidden
+  /* The model picker is gone: NEMOTRON is the fixed main
+     agent (W5); Gemma runs as the sub agent model
+     (spawn_agent). A stored pick of a now-hidden
      model migrates back to the default on load (loadModelId). */
   const model: AiModel = AI_MODELS[0];
 
@@ -363,8 +363,9 @@ export default function AiPage() {
       "You are the assistant inside LobsterBrowse, a private web proxy browser. Be concise and accurate. " +
       "You can call the web_search tool whenever the question benefits from current web information " +
       "(news, prices, releases, anything recent or uncertain); answer citing the results by number. " +
-      "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Nemotron or Gemma) " +
-      "that can search the web itself; its answer returns to you as the tool result. " +
+      "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Gemma) " +
+      "that can search the web itself; each answer returns to you as its tool result. " +
+      "Spawn multiple sub agents in parallel when the work splits into independent research threads. " +
       "Skip the tools when the answer needs no web lookup.";
     /* #235: image-only turns send parts with no text element; the
        server accepts part arrays without a text part. */
@@ -445,22 +446,18 @@ export default function AiPage() {
         apiMessages.push({ role: "assistant", content: "", tool_calls: calls });
         for (const call of calls) {
           if (call.function.name === "spawn_agent") {
-            let subModel = "";
             let task = text;
             try {
-              const a = JSON.parse(call.function.arguments) as { model?: unknown; task?: unknown };
-              subModel = String(a.model ?? "");
-              task = String(a.task ?? text);
+              task = String(JSON.parse(call.function.arguments).task ?? text);
             } catch {
               /* malformed arguments: fall back to the turn text */
             }
-            if (!(SUB_AGENT_MODELS as readonly string[]).includes(subModel)) subModel = SUB_AGENT_MODELS[0];
             setPhase("subagent");
             subRuns = [...subRuns, { task: task.slice(0, 100), ms: 0, status: "working" }];
             setSubs(subRuns);
             const subStart = Date.now();
             try {
-              const r = await runSubAgent({ model: subModel, task, signal: ac.signal });
+              const r = await runSubAgent({ model: SUB_AGENT_MODEL, task, signal: ac.signal });
               apiMessages.push({
                 role: "tool",
                 tool_call_id: call.id,
