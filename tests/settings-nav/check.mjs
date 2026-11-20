@@ -10,10 +10,13 @@
    Android-style sub-card with the icon inside a real M3E shape (the
    expressive 4-sided cookie, sized and tinted through the m3e-shape
    component tokens), then the category name and one plain supporting
-   line. The wave 109 follow-up fixed the icon tile: the slotted
-   m3e-icon has an intrinsic size, so it is centered by making the
-   shape host a flex container, not by absolute inset pinning (which
-   collapsed the glyph into the wrapper's corner). */
+   line. Icon centering: the slotted m3e-icon lives inside the
+   component's shadow .wrapper (a relative block) through the
+   slot, so no page-level flex can reach it (live-probed: the icon
+   pinned 20x20 in the 40px wrapper's top-left corner while the
+   host was display:flex). The icon host carries an intrinsic 1em
+   box, so absolute inset 0 + margin auto is the one centering
+   route that works. */
 import { readFileSync } from "node:fs";
 
 const ui = new URL("../../ui/", import.meta.url);
@@ -48,14 +51,14 @@ ok("nav item keeps the frost", itemRule.includes("backdrop-filter: blur(24px) sa
 /* The icon shape inside the card, then the text column. */
 const ico = theme.indexOf(".lb-set-nav-item m3e-shape {");
 ok("icon tile rule exists (m3e-shape, wave 109)", ico !== -1);
-const tile = theme.slice(ico, ico + 400);
+const tile = theme.slice(ico, theme.indexOf(".lb-set-nav-txt", ico));
 ok("icon tile is sized through the shape token", tile.includes("--m3e-shape-size: 40px;"));
 ok("icon tile colors on tokens", tile.includes("--m3e-shape-container-color: var(--md-sys-color-primary-container);") && tile.includes("color: var(--md-sys-color-on-primary-container);"));
 const iconIn = theme.indexOf(".lb-set-nav-item m3e-shape m3e-icon {");
 ok("icon rule inside the shape exists", iconIn !== -1);
 const iconRule = theme.slice(iconIn, theme.indexOf("}", iconIn) + 1);
-ok("icon is statically sized, not absolutely pinned", iconRule.includes("font-size: 20px;") && !iconRule.includes("position: absolute") && !iconRule.includes("inset:"));
-ok("shape host flex-centers the intrinsic-size icon", tile.includes("display: flex;") && tile.includes("align-items: center;") && tile.includes("justify-content: center;") && !tile.includes("position: relative;") && !tile.includes("position: absolute"));
+ok("icon absolutely centered inside the shadow wrapper", iconRule.includes("font-size: 20px;") && iconRule.includes("position: absolute;") && iconRule.includes("inset: 0;") && iconRule.includes("margin: auto;"));
+ok("shape host carries no fake flex centering", !tile.includes("display: flex;") && !tile.includes("align-items: center;"));
 const txt = theme.indexOf(".lb-set-nav-txt {");
 ok("nav text column rule exists", txt !== -1);
 ok("nav title uses the typescale tokens", theme.includes(".lb-set-nav-title { font-size: var(--md-sys-typescale-body-large-font-size, 16px);"));
