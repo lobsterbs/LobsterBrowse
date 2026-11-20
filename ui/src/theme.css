@@ -403,21 +403,23 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 .lb-set-nav-item { display: flex; align-items: center; gap: var(--md-sys-measurement-space150); width: 100%; padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200); border: var(--lb-glass-ring); border-radius: var(--md-sys-shape-corner-large-increased, 20px); background: var(--lb-glass-tint); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); color: var(--md-sys-color-on-surface); cursor: pointer; font: inherit; text-align: left; }
 /* The m3e-shape icon tile: the host sizes via the component's
    --m3e-shape-size token and the wrapper clips to the cookie path.
-   The slotted m3e-icon has an intrinsic box size, so absolute
-   inset: 0 cannot stretch it (it collapses into the wrapper's
-   top-left corner); instead the host itself flexes and the icon
-   stays statically centered. The clip-path and container color are
-   the component's. */
+   The slotted icon is NOT a child of anything the page can flex:
+   it renders inside the component's shadow .wrapper (a plain
+   block, position: relative) through the slot, so host-level
+   flex centering never reaches it (live-probed: the icon pinned
+   20x20 at the wrapper's top-left, host display flex
+   notwithstanding). The icon host has an intrinsic 1em box, so
+   absolute inset 0 + margin auto centers it inside the wrapper
+   (the W1 break was absolute positioning WITHOUT margin auto,
+   which over-constrains to the corner). The clip-path and
+   container color are the component's. */
 .lb-set-nav-item m3e-shape {
   --m3e-shape-size: 40px;
   --m3e-shape-container-color: var(--md-sys-color-primary-container);
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--md-sys-color-on-primary-container);
 }
-.lb-set-nav-item m3e-shape m3e-icon { font-size: 20px; }
+.lb-set-nav-item m3e-shape m3e-icon { font-size: 20px; position: absolute; inset: 0; margin: auto; }
 .lb-set-nav-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-set-nav-title { font-size: var(--md-sys-typescale-body-large-font-size, 16px); line-height: var(--md-sys-typescale-body-large-line-height, 24px); }
 .lb-set-nav-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
