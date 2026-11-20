@@ -38,7 +38,7 @@ async function zlRegFresh(): Promise<ServiceWorkerRegistration | null> {
   }
 }
 
-/* #142 (LB): engine handoff broadcasts (zl:downloadOp, zl:notifyOp,
+/* Engine handoff broadcasts (zl:downloadOp, zl:notifyOp,
    zl:engineUpdate, zl:relayLost) arrive as container message events,
    and the ServiceWorkerContainer is an EventTarget any same-origin
    frame can dispatch synthetic events on. Accept them only when the
@@ -52,7 +52,7 @@ export const engineSwSource = (ev: MessageEvent): boolean => {
   return s instanceof ServiceWorker && new URL(s.scriptURL).pathname === "/zlsw/sw.js";
 };
 
-/* #61: zlSend fires every few seconds (DevTools polls netLog/diag
+/* zlSend fires every few seconds (DevTools polls netLog/diag
    at 5s, downloads at 2s), and register() + update() on every call
    meant a sw.js revalidation request each time. One acquisition per
    app boot is enough: the registration handle stays live. A null
@@ -153,7 +153,7 @@ export function zlSend(
   });
 }
 
-/* LB#66 cold-start gate: the engine only serves a doc route once an
+/* Cold-start gate: the engine only serves a doc route once an
    ACTIVE worker intercepts it. On the first app load the worker is
    still installing, so the nav-handle mint times out and the tab
    falls back to the legacy b64u route - which lands the SW-less
@@ -202,7 +202,7 @@ export function zlWaitActive(timeoutMs = 10000): Promise<void> {
   return zlActiveWait;
 }
 
-/* #53 (#63 adoption): ask the Zeolite worker for an opaque
+/* Initial navigation handle: ask the Zeolite worker for an opaque
    initial-navigation handle. The engine (Zeolite #63) answers
    { ok, url } where url is /__zl_navh__/<keyed token> - a route that
    carries the destination nowhere decodable, unlike the legacy
@@ -252,7 +252,7 @@ function u8ToB64(u: Uint8Array): string {
 type RelayChannel = {
   controllers: Map<number, AbortController>;
   creditSinks: Map<number, (bytes: number) => void>;
-  /* #511: page-WebSocket conns ride the same per-channel scope (#218):
+  /* Page-WebSocket conns ride the same per-channel scope:
      a rid from one registration can never route into another's socket. */
   wsConns: Map<number, WebSocket>;
 };
@@ -278,7 +278,7 @@ async function zlRelayFetch(
      mid-flight instead of streaming it to nobody. */
   const ac = new AbortController();
   chan.controllers.set(rid, ac);
-  /* #470: the credit sink must be live BEFORE the first await: the
+  /* The credit sink must be live BEFORE the first await: the
      engine posts its upfront grant as soon as zl:fetchRelay lands,
      which can precede the /zlrelay response. */
   let credit = 0;
@@ -325,7 +325,7 @@ async function zlRelayFetch(
       ...(typeof m.body === "string" ? { body } : {}),
       ...(typeof body === "string" && typeof m.body !== "string" ? { body_b64: body } : {}),
     });
-    /* #157: a 429 rate-window or 503 concurrency rejection is transient;
+    /* A 429 rate-window or 503 concurrency rejection is transient;
        retry with backoff instead of failing the rid, which would drop the
        engine fetch onto the doomed wisp fallback. Bounded so the honest
        error still fires; other statuses fail immediately as before. */
@@ -395,7 +395,7 @@ async function zlRelayFetch(
   }
 }
 
-/* #511: WebSocket-over-relay, app-origin half. The engine bridges page
+/* WebSocket-over-relay, app-origin half. The engine bridges page
    WebSockets onto the registered relay port; each opens one /zlws
    browser socket here (JSON text frames control, binary frames carry
    binary data, so page text can never collide with control frames).
@@ -495,7 +495,7 @@ export function zlRelayInit(): void {
       } else if (m && m.type === "zl:relayCancel" && typeof m.rid === "number") {
         chan.controllers.get(m.rid)?.abort();
       } else if (m && m.type === "zl:relayCredit" && typeof m.rid === "number") {
-        /* #470: grant frames from the engine; bytes are advisory. */
+        /* Grant frames from the engine; bytes are advisory. */
         chan.creditSinks.get(m.rid)?.(Number((m as { bytes?: unknown }).bytes) || 0);
       } else if (m && m.type === "zl:wsRelay" && typeof m.rid === "number") {
         zlWsRelayOpen(ev.data as ZlWsRelayMsg, ch.port1, chan);
@@ -520,7 +520,7 @@ export function zlRelayInit(): void {
         const ws = chan.wsConns.get(m.rid);
         if (ws) {
           chan.wsConns.delete(m.rid);
-          /* #511 close parity: send the close envelope before closing so
+          /* Close parity: send the close envelope before closing so
              /zlws echoes {op:"close"} and the engine close event fires
              on handshake completion, not on its fallback timer. */
           try {
@@ -592,7 +592,7 @@ export async function zlWispAuthArm(creds: ZlWispAuthCreds): Promise<void> {
   void zlContentQuery(msg, 8000);
 }
 
-/* #107: the provisioned content origin for proxied documents
+/* The provisioned content origin for proxied documents
    (ZL_CONTENT_ORIGIN on the server, announced by /build). Empty
    until the operator provisions a second hostname for this service;
    the UI keeps its same-origin frame design until then, and the
@@ -641,7 +641,7 @@ export function zlContentAnnounced(): Promise<string> {
    across worker restarts. Idempotent. */
 let contentReady: Promise<void> | null = null;
 
-/* Split-origin navigation readiness (#107): resolves when the
+/* Split-origin navigation readiness: resolves when the
    register page acks, or after a 30s bound (a free-tier cold start
    or an outage) so a pending navigation degrades to an honest load
    instead of hanging the tab. Resolves, never rejects. */
@@ -649,7 +649,7 @@ export function zlContentReady(): Promise<void> {
   return contentReady ?? Promise.resolve();
 }
 
-/* #107: prefix a same-origin engine route with the provisioned
+/* Prefix a same-origin engine route with the provisioned
    content origin for frame sources, so proxied documents never
    render on the app origin. Non-relative hrefs pass through. */
 export function zlContentHref(href: string): string {
@@ -681,7 +681,7 @@ export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boo
   const co = contentOrigin;
   const w = contentFrameWin;
   if (!co || !w) return false;
-  /* The LB#15 installing-worker drop class applies to the content
+  /* The installing-worker drop class applies to the content
      worker too (a cold free-tier boot can outlast one shot), so
      retry until an explicit ok ack or the bound is spent. */
   for (const d of [0, 3000, 8000]) {
@@ -777,7 +777,7 @@ export function zlContentRegister(co: string): void {
       const d = ev.data as { zlReg?: boolean; ok?: boolean } | null;
       if (!d || d.zlReg !== true) return;
       if (d.ok !== true) { done(false); return; }
-      /* #107 phase 2: introduce the app to the boot page; its worker
+      /* Phase 2: introduce the app to the boot page; its worker
          stores the embedder origin so proxied frames can sync URL and
          title (the boot page re-registers it on its relayLost heal). */
       try { f.contentWindow?.postMessage({ zlRegAsk: true }, co); } catch { /* cold frame: the heal covers it */ }
@@ -790,7 +790,7 @@ export function zlContentRegister(co: string): void {
   document.body.appendChild(f);
 }
 
-/* #477: the Zeolite SW cannot create workers itself, so guest
+/* The Zeolite SW cannot create workers itself, so guest
    service-worker realms spawn on the engine-origin guest-host page.
    Keep one hidden guest-host iframe open per engine origin (app plus
    content when split-origin is active). The page connects itself to

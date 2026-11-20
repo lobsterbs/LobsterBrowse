@@ -29,7 +29,7 @@ function readJson<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
-    /* #149: corrupted storage can hold any shape; when the
+    /* Corrupted storage can hold any shape; when the
        caller expects an array (history, tabs, logs), a
        non-array value would throw in the first downstream
        .filter/.find during render. */
@@ -77,7 +77,7 @@ export function saveSessionTabs(tabs: Tab[]) {
 /* ---- Client-side technical log ring ---- */
 
 const LOGS_KEY = "lobsterbrowse-logs";
-/* Incognito mode (#108): page diagnostics (console lines, resfail
+/* Incognito mode: page diagnostics (console lines, resfail
    entries) reach pushLog while an incognito session is active. They
    go to a SEPARATE throwaway ring that is discarded the moment
    incognito ends - they can NEVER reach localStorage, not even after
@@ -111,7 +111,7 @@ let logRing: LogEntry[] = readJson<LogEntry[]>(LOGS_KEY, []).filter(
 const LOG_LIMIT = 300;
 
 function persistLogs() {
-  /* #108: only the normal ring is ever written. incognitoRing is
+  /* Only the normal ring is ever written. incognitoRing is
      unreachable here by construction: private entries go to it only
      while incognitoMode is on, and this never reads activeRing(). */
   writeJson(LOGS_KEY, logRing);
@@ -137,7 +137,7 @@ try {
   /* no window; persist immediately instead */
 }
 export function pushLog(level: LogEntry["level"], msg: string) {
-  /* #111: redaction is centralized at this boundary, so no call site
+  /* Redaction is centralized at this boundary, so no call site
      can persist a raw destination URL: secret query values, URL
      user-info credentials and JWT-shaped values are stripped here
      (mirror of main.rs redact_secrets; see ui/src/sanitize.ts). */

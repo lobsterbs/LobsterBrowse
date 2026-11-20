@@ -162,7 +162,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
         className="lb-ascii"
         aria-label="LobsterBrowse"
         onClick={markWordmark}
-        /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
+        /* The wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
         style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: "0 0 4px", opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
