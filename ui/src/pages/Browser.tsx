@@ -2942,6 +2942,10 @@ export default function BrowserView(props: Props) {
             alone remains the reveal handle. */}
         <div className="lb-dock-pill" ref={dockPillRef}>
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar", ref: toolbarRef }}>
+          {/* Lead zone (wave 112): tabs, new tab and navigation
+              travel together on the left; the omnibox centers and
+              the secondary actions close the bar on the right. */}
+          <span className="lb-tb-zone lb-tb-lead">
           {/* Compaction 1: tabs live in the toolbar too. The count
               button opens the tab list card (same anchoring pattern
               as the site info card). Real m3e-icon-button with toggle
@@ -2970,7 +2974,11 @@ export default function BrowserView(props: Props) {
               grouped buttons into each other on every press. Tooltips
               anchor by for= id exactly as before. Back is disabled at
               the bottom of the stack: the earliest entry has nothing
-              to go back to, and a dead press reads as broken. */}
+              to go back to, and a dead press reads as broken. Wave
+              112: the pair carries the tonal container (see
+              .lb-tb-nav), so the disabled back button reads as a
+              dimmed physical button, not a ghost. */}
+          <span className="lb-tb-nav">
           <m3e-icon-button
             id="lb-back-btn"
             aria-label="Back"
@@ -2984,6 +2992,7 @@ export default function BrowserView(props: Props) {
           </m3e-icon-button>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
           <m3e-tooltip for="lb-forward-btn" position="above">Forward</m3e-tooltip>
+          </span>
           {/* Reload: one plain icon button, visually identical to its
               neighbours (the split-button look and its bypass menu
               were removed; the engine's zl:reloadBypass stays on the
@@ -2996,6 +3005,7 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-reload-btn" position="above">Reload</m3e-tooltip>
+          </span>
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
@@ -3117,6 +3127,10 @@ export default function BrowserView(props: Props) {
               </span>
             )}
           </span>
+          {/* Trail zone (wave 112): diagnostics chip, right-side
+              compact keyboard hint, full screen, pinned-tab state
+              and the overflow menu close the bar on the right. */}
+          <span className="lb-tb-zone lb-tb-trail">
           {/* Developer tools live in the three-dot overflow menu only
               (the toolbar button was removed: no duplicated chrome). */}
           {/* Compaction 3: the diagnostics summary lives on the
@@ -3215,6 +3229,7 @@ export default function BrowserView(props: Props) {
               AdBlocking
             </m3e-menu-item>
           </m3e-menu>
+          </span>
         </m3e-toolbar>
           {xpiPrompt && (
             <XpiPrompt

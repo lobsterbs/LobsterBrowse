@@ -62,7 +62,7 @@ ok("nav title uses the typescale tokens", theme.includes(".lb-set-nav-title { fo
 ok("nav sub line rule restored", theme.includes(".lb-set-nav-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px)"));
 ok("active nav sub line recolors", theme.includes(".lb-set-nav-item.active .lb-set-nav-sub { color: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 80%, transparent); }"));
 ok("markup: nav sub line rendered", page.includes('<span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>'));
-ok("narrow screens hide the nav sub line", theme.includes(".lb-set-nav-sub { display: none; }"));
+ok("narrow screens swap the card rail for the section dropdown", theme.includes(".lb-set-nav { display: none; }") && theme.includes(".lb-set-nav-drop { display: block; grid-column: 1 / -1; }") && theme.includes(".lb-set-nav-sub { display: none; }") === false);
 
 /* The markup wires the shape, the icon and the name. */
 ok("markup: icon inside the m3e-shape", page.includes('<m3e-shape name="4-sided-cookie" aria-hidden={true}>'));
