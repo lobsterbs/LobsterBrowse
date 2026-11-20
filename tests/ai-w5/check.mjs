@@ -1,6 +1,9 @@
 /* W5 regression check: the AI model roles after the Workers AI
-   go-live. Nemotron 3 is the fixed MAIN agent (AI_MODELS[0], the
-   model picker is gone), Gemma 4 is the single SUB agent model
+   go-live. The fixed MAIN agent is AI_MODELS[0] (the model picker
+   is gone); the 2026-11-20 Cloudflare deprecation wave killed the
+   operator-requested nemotron-3 main, so the seat stays on
+   gpt-oss-120b, and the dead nemotron entry stays in the list with
+   its deprecation note. Gemma 4 is the single SUB agent model
    (spawn_agent carries no model parameter anymore; one call per
    sub agent, several calls per turn allowed), scout stays the
    silent vision backend, and the server whitelist still accepts
@@ -19,10 +22,13 @@ const page = read("../../ui/src/pages/Ai.tsx");
 const server = read("../../server/bin/server/src/main.rs");
 const ci = read("../../.github/workflows/ci.yml");
 
-/* 1. The main agent is Nemotron; the page pins the fixed model. */
+/* 1. The main agent: gpt-oss-120b, the model the account serves
+   after the 2026-11-20 deprecation wave killed the requested
+   nemotron; the nemotron entry stays, honestly marked dead. */
 const m0 = /export const AI_MODELS: AiModel\[\] = \[[\s\S]*?\{ id: "([^"]+)"/.exec(store);
 assert.ok(m0, "AI_MODELS list found");
-assert.ok(m0[1] === "@cf/nvidia/nemotron-3-120b-a12b", "Nemotron 3 is AI_MODELS[0] (the fixed main agent)");
+assert.ok(m0[1] === "@cf/openai/gpt-oss-120b", "GPT-OSS 120b is AI_MODELS[0] (the fixed main agent)");
+assert.ok(/nemotron[\s\S]*deprecated by Cloudflare 2026-11-20/.test(store), "the dead nemotron entry carries its deprecation note");
 assert.ok(page.includes("const model: AiModel = AI_MODELS[0];"), "the page pins the fixed main agent");
 assert.ok(!page.includes("loadModelId("), "the model picker is gone from the page");
 

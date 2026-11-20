@@ -56,12 +56,17 @@ const META_MARK =
 
 /* Order carries the W5 roles: the FIRST entry is the fixed main
    agent (the model picker is gone); gemma is the sub agent model;
-   scout is the silent vision backend image turns re-route to. */
+   scout is the silent vision backend image turns re-route to.
+   The 2026-11-20 Cloudflare deprecation wave killed the requested
+   nemotron-3 main (410 deprecated, live-probed; qwen3, glm-5.3-flash,
+   deepseek and kimi fell the same day, and glm-5.3 is paid-plan
+   only), so the main seat stays on gpt-oss-120b, the model the
+   account already serves, with reasoning + function calling. */
 export const AI_MODELS: AiModel[] = [
-  { id: "@cf/nvidia/nemotron-3-120b-a12b", name: "Nemotron 3", version: "NVIDIA", params: "120B-A12B", note: "256k context, reasoning, function calling", thinking: true, vision: false, mark: NVIDIA_MARK },
+  { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, vision: false, mark: OPENAI_MARK },
   { id: "@cf/google/gemma-4-26b-a4b-it", name: "Gemma 4", version: "Google", params: "26B-A4B", note: "256k context, reasoning, function calling", thinking: true, vision: false, picker: false, mark: GOOGLE_MARK },
   { id: "@cf/meta/llama-4-scout-17b-16e-instruct", name: "Scout", version: "Llama 4", params: "17B", note: "vision backend: reads your images", thinking: false, vision: true, picker: false, mark: META_MARK },
-  { id: "@cf/openai/gpt-oss-120b", name: "GPT-OSS", version: "1", params: "120B", note: "128k context, reasoning, function calling", thinking: true, vision: false, picker: false, mark: OPENAI_MARK },
+  { id: "@cf/nvidia/nemotron-3-120b-a12b", name: "Nemotron 3", version: "NVIDIA", params: "120B-A12B", note: "deprecated by Cloudflare 2026-11-20", thinking: true, vision: false, picker: false, mark: NVIDIA_MARK },
 ];
 
 export function loadModelId(): string {

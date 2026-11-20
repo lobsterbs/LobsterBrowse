@@ -187,9 +187,10 @@ export default function AiPage() {
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
-  /* The model picker is gone: NEMOTRON is the fixed main
-     agent (W5); Gemma runs as the sub agent model
-     (spawn_agent). A stored pick of a now-hidden
+  /* The model picker is gone: GPT-OSS is the fixed main
+     agent (the requested nemotron-3 main died in the 2026-11-20
+     Cloudflare deprecation wave); Gemma runs as the sub agent
+     model (spawn_agent). A stored pick of a now-hidden
      model migrates back to the default on load (loadModelId). */
   const model: AiModel = AI_MODELS[0];
 
