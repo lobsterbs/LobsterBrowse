@@ -932,11 +932,15 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
-          {/* #262: view names on the collapsed rail. */}
-          <m3e-tooltip for="nav-home" position="right">Home</m3e-tooltip>
-          <m3e-tooltip for="nav-browse" position="right">Browse</m3e-tooltip>
-          <m3e-tooltip for="nav-ai" position="right">AI</m3e-tooltip>
-          <m3e-tooltip for="nav-settings" position="right">Settings</m3e-tooltip>
+          {/* #262: view names on the collapsed rail. m3e-tooltip
+             accepts above/below/before/after only and silently
+             resets anything else to below, so the side position is
+             "after" (inline after = right in LTR); "right" is
+             exactly the bug that put them over the next button. */}
+          <m3e-tooltip for="nav-home" position="after">Home</m3e-tooltip>
+          <m3e-tooltip for="nav-browse" position="after">Browse</m3e-tooltip>
+          <m3e-tooltip for="nav-ai" position="after">AI</m3e-tooltip>
+          <m3e-tooltip for="nav-settings" position="after">Settings</m3e-tooltip>
         </m3e-nav-rail>
 
         {/* Small screens (#76): the M3E nav bar replaces the wide
