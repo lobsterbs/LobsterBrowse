@@ -2396,7 +2396,29 @@ FROM debian:bookworm-slim AS zl-builder
 # f8ef86785761ffc6 (935150 bytes); bootstrap unchanged
 # 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
 # (app TS only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=d85d24bf4417cfdbb7b9b7554baa26742d712a37
+# Pin 184 (2026-11-20): dist 5e0d7ca9 (Zeolite main 7d3c0a6, CI run
+# 44723856533, all five jobs green; runs 1860/1861 on the fix series
+# landed red on tsc and generated-docs row order, repaired by
+# 93dcfe5 + 7d3c0a6, both inside this build). Ships the Tampermonkey
+# options-page fix (#697): the argument validator rejected
+# explicitly forwarded trailing undefined arguments
+# (setIcon(details, undefined) died as "expected at most 1
+# argument(s), got 2"), which killed the TM background init and
+# queued every runtime.onMessage behind registerLateCallback = the
+# fully white /options.html page; resolveCallArgs now trims trailing
+# undefined above min and honors exactly one trailing function
+# beyond max as the optional response callback, and the runtime
+# surface gained the inert onUpdateAvailable member (regressions:
+# the arg-schemas arity suite). Also rides: antiframe replace passes
+# gated on pattern presence (#693/#664 speedtest.net black screen),
+# location-pass caps raised to 8 MiB so duck.ai keeps location
+# virtualization (#691/#663), and the inline cZone relabeled to
+# location.hostname in cf-mitigated challenge docs so the Turnstile
+# widget mounts (#692/#685). sw f8ef86785761ffc6 ->
+# c226a03d40fe414e (937667 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
+# (app TS + rewriter only). Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=5e0d7ca989c835963f6faade01a014a95e146975
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2463,7 +2485,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f8ef86785761ffc6 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c226a03d40fe414e ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
