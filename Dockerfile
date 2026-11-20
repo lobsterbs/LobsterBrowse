@@ -2535,7 +2535,20 @@ FROM debian:bookworm-slim AS zl-builder
 # (937682 bytes); bootstrap unchanged 0ddd6edd9485c8ab (51030 bytes).
 # Cargo-side pin stays 5073f316 (app TS + rewriter only). Deploy with
 # a cleared Render build cache.
-ARG ZEOLITE_COMMIT=f07c68e48f806d6249e729597e9eeded6ba7f61e
+# Pin 186 (2026-11-20): dist 5f14b734 (Zeolite main 2d1b489, CI run
+# 44784026869, all five jobs green). Ships the extension i18n parity
+# fixes from the #523 lane that surfaced in Tampermonkey 5.5.0's
+# options header: getMessage falls back per key to the default_locale
+# catalog (nb does not define v0version0; en does), and __MSG_*__
+# manifest strings resolve onto the raw manifest copy that
+# runtime.getManifest and the pagejs bridge expose, including records
+# that predate the fix, which get the same treatment at serve time.
+# The header now reads Tampermonkey by Jan Biniok and v5.5.0 instead
+# of __MSG_extName__ and v0version0. sw ea5a26979fc5bccd ->
+# 39f3f86a873eee80 (938155 bytes); bootstrap unchanged 0ddd6edd9485c8ab
+# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy
+# with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=5f14b7349c69cd4f0ccb0bd963669ac1e86136b8
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2602,7 +2615,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ea5a26979fc5bccd ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=39f3f86a873eee80 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
