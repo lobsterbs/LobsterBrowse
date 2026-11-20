@@ -157,9 +157,8 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
   const [incognito, setIncognito] = useState(false);
-  /* P0 data-flow: while incognito is on, the technical log ring stays
-     in memory only - page diagnostics must not be persisted into the
-     normal profile's localStorage. */
+  /* While incognito is on, nothing must land in the normal profile's
+     localStorage: the log ring stays memory-only. */
   useEffect(() => {
     store.setIncognitoLogging(incognito);
   }, [incognito]);
@@ -180,9 +179,9 @@ export default function App() {
       );
     }
   }, [incognito]);
-  /* Welcome Back: one snackbar on boot for returning profiles; the
-     very first visit only sets the marker. Local-only, never sent
-     server-side; storage failures behave like a first visit. */
+  /* One boot snackbar for returning profiles; the first visit only
+     sets the marker. Local-only; storage failures count as a first
+     visit. */
   useEffect(() => {
     try {
       if (localStorage.getItem("lb_visited")) {
@@ -196,15 +195,15 @@ export default function App() {
       /* localStorage unavailable: behave like a first visit. */
     }
   }, []);
-  /* #80: the engine worker broadcasts zl:engineUpdate (updates.ts)
-     to every window client once it activates; the UI itself is a
-     client of the same worker, so the update surfaces as a snackbar
-     with a manual reload action. Nothing reloads on its own. */
+  /* The engine worker broadcasts zl:engineUpdate (updates.ts) to
+     every window client once it activates; the UI is a client of the
+     same worker, so the update surfaces as a snackbar with a manual
+     reload action. Nothing reloads on its own. */
   const lastEngineKey = useRef("");
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const onMsg = (ev: MessageEvent) => {
-      /* #142: engine broadcasts only from the engine worker itself. */
+      /* Engine broadcasts only from the engine worker itself. */
       if (!engineSwSource(ev)) return;
       const d = ev.data as { type?: string; sha?: string | null; version?: unknown } | null;
       if (!d || d.type !== "zl:engineUpdate") return;
@@ -213,9 +212,8 @@ export default function App() {
       lastEngineKey.current = key;
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
         /* duration 0 = never auto-dismiss: the notice stays until the
-           user reloads (picking up the new engine) or presses Reload
-           now. The old 8s timeout silently dropped the notice while
-           the old worker kept serving. */
+           user reloads or presses Reload now. The old 8s timeout
+           dropped the notice while the old worker kept serving. */
         M3eSnackbar.open("Engine updated - reload to pick it up", "Reload now", {
           actionCallback: () => window.location.reload(),
           duration: 0,
@@ -240,29 +238,27 @@ export default function App() {
     saveSiteRules(next);
   }, []);
 
-  /* #96: incognito gets a persistent body class so the chrome can
-     carry a subtle, unmistakable identity the whole time it is on. */
+  /* Incognito gets a persistent body class so the chrome carries a
+     subtle, unmistakable identity the whole time it is on. */
   useEffect(() => {
     document.body.classList.toggle("lb-incognito", incognito);
   }, [incognito]);
 
-  /* Zeolite #137/#168: register the embedder fetch-relay channel and
-     announce the wisp transit endpoint at APP level. Any view can
-     start a /zl/ navigation (Home search, view switches); when only
-     the Browser view registered the channel, fetches that raced the
-     mount fell back to the wisp transport and died on this
-     deployment password-authed wisp ("tls handshake eof" 502s).
-     A worker restart drops the engine stored port, so re-register
-     on controller change. Registration is idempotent. */
+  /* Register the embedder fetch-relay channel at app level: any view
+     can start a /zl/ navigation, and when only the Browser view
+     registered it, fetches racing the mount fell back to wisp and
+     died on this password-authed deployment wisp ("tls handshake
+     eof" 502s). The channel lives in worker memory, so re-register
+     on controller change; registration is idempotent. */
   /* Injector phase 2: the query-shape state from /build (the server
      env ZL_QUERY_ROUTES is the opt-out; on by default); read per
      config-push attempt so a slow /build fetch cannot pin a stale
      value into a long retry loop. The ref starts true so a push
      before /build resolves never disables the always-on injector. */
   const queryRoutesRef = useRef(true);
-  /* #642: trusted-egress credential arming + the access-password
-     gate. The ref holds the armed credentials so controllerchange
-     can re-arm after a worker restart (the engine keeps them
+  /* Trusted-egress credential arming + the access-password gate.
+     The ref holds the armed credentials so controllerchange can
+     re-arm after a worker restart (the engine keeps them
      memory-only). */
   const wispAuthRef = useRef<{ endpoint: string; username: string; password: string } | null>(null);
   /* #250: the deployment's own wisp endpoint (the /build sjWisp
@@ -295,15 +291,15 @@ export default function App() {
           const w = effectiveWisp();
           if (w) zlWispInit(w);
         }
-        /* #107: a provisioned content origin (ZL_CONTENT_ORIGIN on
-           the server) is inert configuration until the operator
-           provisions it; when present, remember it and register the
-           engine worker on that origin. */
+        /* A provisioned content origin (ZL_CONTENT_ORIGIN on the
+           server) is inert until the operator provisions it; when
+           present, remember it and register the engine worker on
+           that origin. */
         queryRoutesRef.current = b && b.zlQueryRoutes === true;
-        /* #642: arm the trusted-egress wisp credentials when the
-           deployment provisions them. A 403 means the access
-           password gate is up and this visitor has not passed it;
-           the small dialog offers the one-time unlock. */
+        /* Arm the trusted-egress wisp credentials when the deployment
+           provisions them. A 403 means the access gate is up and
+           this visitor has not passed it; the small dialog offers
+           the one-time unlock. */
         if (b && b.wispAuth === true) {
           void fetch("/wispauth", { cache: "no-store" })
             .then(async (r) => {
@@ -323,9 +319,9 @@ export default function App() {
         const co = b && typeof b.contentOrigin === "string" ? b.contentOrigin : "";
         zlAnnounceContentOrigin(co);
         if (co) zlContentRegister(co);
-        /* #477: keep the guest-host realm open on the app and
-           content origins so proxied-page service-worker registrations
-           can spawn their isolated guest realms. */
+        /* Keep the guest-host realm open on the app and content
+           origins so proxied-page SW registrations can spawn their
+           isolated guest realms. */
         zlGuestHost(co);
         /* Cold content origin: the Render service sleeps, so the first
            real registration pays the whole dyno boot. Warm it at app
@@ -344,8 +340,8 @@ export default function App() {
          restart never resurrects a withdrawn endpoint. */
       const w = effectiveWisp();
       if (w) zlWispInit(w);
-      /* #642: a worker restart drops the memory-only wisp
-         credentials; re-arm with the same creds. */
+      /* A worker restart drops the memory-only wisp credentials;
+         re-arm with the same creds. */
       if (wispAuthRef.current) void zlWispAuthArm(wispAuthRef.current);
     };
     navigator.serviceWorker?.addEventListener("controllerchange", re);
@@ -354,12 +350,12 @@ export default function App() {
        then fall back to wisp and fail with error 35. Re-register on a
        timer; the registration itself is cached, so this is cheap. */
     const keep = window.setInterval(zlRelayInit, 15000);
-    /* Zeolite #354: the timer heals within 15s; the engine also asks
-       directly (zl:relayLost broadcast) when a relay fetch finds no
-       channel, and we re-register at once so the wait resolves
-       without falling back to wisp. */
+    /* The timer heals within 15s; the engine also asks directly
+       (zl:relayLost broadcast) when a relay fetch finds no channel,
+       and we re-register at once so the wait resolves without
+       falling back to wisp. */
     const onRelayLost = (ev: MessageEvent) => {
-      /* #142: relay-loss broadcasts only from the engine worker. */
+      /* Relay-loss broadcasts only from the engine worker. */
       if (!engineSwSource(ev)) return;
       if ((ev.data as { type?: string } | null)?.type === "zl:relayLost") re();
     };
@@ -428,7 +424,7 @@ export default function App() {
     (v: boolean) => {
       setIncognito(v);
       if (v) {
-        /* Fresh cookie jar per incognito window (#1): the server-side
+        /* Fresh cookie jar per incognito window: the server-side
            session client is keyed by sid, so a new sid = an empty jar. */
         resetIncognitoSid();
         suspendedTabs.current = tabs;
@@ -467,10 +463,9 @@ export default function App() {
     [tabs, activeId, newTab]
   );
 
-  /* ---- ScramJet engine option: init the upstream controller
-     worker (idempotent, ui/src/scramjet.ts) when the Proxy engine
-     setting picks it. Zeolite is the default and initializes through
-     its own registration path. ---- */
+  /* ScramJet engine option: the upstream controller worker
+     (idempotent, ui/src/scramjet.ts) inits when the Proxy engine
+     setting picks it; Zeolite registers through its own path. */
   useEffect(() => {
     if (settings.proxyEngine !== "scramjet") return;
     sjInit().catch((e: unknown) => console.error("scramjet init failed", e));
@@ -487,10 +482,9 @@ export default function App() {
     setView("browser");
   }, []);
 
-  /* ---- Keyboard shortcuts (#5). Browser-reserved combos (Ctrl+T,
-     Ctrl+W) are never delivered to the page, so the tab shortcuts
-     live on Alt combos. AltGr is reported as ctrlKey+altKey and is
-     therefore left alone. Documented in Settings. ---- */
+  /* Keyboard shortcuts. Ctrl+T/Ctrl+W are browser-reserved and
+     never reach the page, so the tab shortcuts ride Alt combos.
+     AltGr reports as ctrlKey+altKey and is left alone. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       /* #81: Ctrl+K (Cmd+K) toggles the palette. Checked before the
@@ -523,15 +517,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tabs, activeId, newTab, closeTab, reopenTab]);
 
-  /* Zeolite #558: a target=_top activation inside a proxied frame
-     must not commit the top document on the content origin (the
-     first-party worker partition there cannot decode the embedded
-     realm's keyed route and serves the SPA shell, losing the
-     session). The engine hands the destination over with a bounded
-     ack; ack first so a silent host keeps its native fallback, then
-     navigate the active tab - the sender is a frame of this window,
-     and a click-driven activation can only come from the visible
-     tab. */
+  /* A target=_top activation inside a proxied frame must not commit
+     the top document on the content origin: the first-party worker
+     partition there cannot decode the embedded realm's keyed route
+     and serves the SPA shell, losing the session. The engine hands
+     the destination over with a bounded ack; ack first so a silent
+     host keeps its native fallback, then navigate the active tab -
+     the sender is a frame of this window, and a click-driven
+     activation can only come from the visible tab. */
   useEffect(() => {
     const onFrameNav = (ev: MessageEvent) => {
       const d = ev.data as { lb?: string; data?: unknown } | null;
@@ -599,39 +592,37 @@ export default function App() {
     return () => navapi.removeEventListener("navigate", onNavigate);
   }, []);
 
-  /* ---- Zeolite service worker: it IS the engine (client-side
+  /* The Zeolite service worker IS the engine (client-side
      interception, native wisp transport, in-worker rewriting). The
-     legacy v3 page-cache worker is gone: it owned the "/" scope and
-     kept the Zeolite worker from ever registering, so unregister it
-     and drop its caches when found, then push the engine route prefix -
-     the prefix is runtime state in the worker and resets to /j/ on
-     every worker restart, so this runs on every boot. ---- */
+     legacy v3 page-cache worker owned the "/" scope and kept the
+     Zeolite worker from ever registering, so unregister it and drop
+     its caches when found. The route prefix is worker runtime state
+     that resets to /j/ on every restart, so the push below runs on
+     every boot. */
   useEffect(() => {
-    /* LB#15: the first zl:config can land on a still-installing
-       worker and be silently dropped; a null reply means the engine
-       never got the route prefix. Retry with backoff (a cold
-       free-tier worker can take tens of seconds to evaluate its
-       bundle) and only trust an explicit ok ack - the engine
-       replies { ok: true }. Mid-session restarts need no re-push:
-       since Zeolite#17 the worker persists the route shape and
-       restores it before the first fetch. */
+    /* The first zl:config can land on a still-installing worker and
+       be dropped; a null reply means the engine never got the route
+       prefix. Retry with backoff (a cold free-tier worker can take
+       tens of seconds to evaluate its bundle) and only trust an
+       explicit ok ack - the engine replies { ok: true }.
+       Mid-session restarts need no re-push: since Zeolite#17 the
+       worker persists the route shape and restores it before the
+       first fetch. */
     const push = async () => {
       const mkMsg = () => ({
         type: "zl:config" as const,
         prefix: engineRoutePrefix(),
         scheme: "b64u",
-        /* LB#53 (Zeolite#63): refuse the plaintext ?url= embed shape
-           on this deployment - initial navigations ride opaque
-           zl:navHandle routes (Browser.tsx initialRoute). A worker
-           predating #63 ignores the field, so the push stays
-           compatible. */
+        /* Refuse the plaintext ?url= embed shape on this deployment -
+           initial navigations ride opaque zl:navHandle routes
+           (Browser.tsx initialRoute). A worker predating Zeolite#63
+           ignores the field, so the push stays compatible. */
         navHandles: true,
-        /* Injector phase 2 (query-shape committed routes): the
-           opt-in rides server configuration (/build relays
-           ZL_QUERY_ROUTES) and is read per attempt so a slow /build
-           fetch cannot pin a stale value into this retry loop.
-           The hidden debug menu (beta) can override the choice at
-           runtime; the override wins when set. */
+        /* Query-shape committed routes: the opt-in rides server
+           configuration (/build relays ZL_QUERY_ROUTES) and is read
+           per attempt so a slow /build fetch cannot pin a stale value
+           into this retry loop. The hidden debug menu can override
+           the choice at runtime; the override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
         experimental: { ...defaultExperimental(), ...loadDebugOverrides().experimental },
       });
@@ -639,11 +630,10 @@ export default function App() {
         if (d) await new Promise((res) => setTimeout(res, d));
         const r = await zlSend(mkMsg(), 8000);
         if (r && r.ok) {
-          /* Per-origin config parity: the content origin's worker gets
-             the same push through its boot page, so both origins
-             commit the same route shape (/zl/) instead of the content
-             worker keeping its default prefix. Warn on no ack
-             (the LB#15 lesson). */
+          /* Config parity: the content origin's worker gets the same
+             push through its boot page, so both origins commit the
+             same route shape instead of the content worker keeping
+             its default prefix. Warn on a missing ack. */
           /* LB#260: only a deployment with a provisioned content
              origin (/build contentOrigin) can ack the parity push;
              zlContentConfig always answers false when there is
@@ -667,9 +657,9 @@ export default function App() {
     };
     void (async () => {
       try {
-        /* #68: unregister any worker that is not the engine bundle, so a
-           stale registration (whatever its script) cannot hold the "/"
-           scope and silently block the Zeolite SW. */
+        /* Unregister any worker that is not the engine bundle: a
+           stale registration, whatever its script, must not hold the
+           "/" scope and silently block the Zeolite SW. */
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const p = r.active || r.installing || r.waiting;
@@ -681,37 +671,33 @@ export default function App() {
         /* best effort: the Zeolite push below still runs */
       }
       await push();
-      /* #204: the #66 example.com/robots.txt boot warm is gone:
-         transit is relay-only on this deployment, so the pre-dial
-         warmed nothing - it raced SW control on cold profiles and
-         stamped example.com/robots.txt rows into every session's
-         diagnostics (and the user-visible logs) on each boot. */
+      /* The example.com/robots.txt boot warm is gone: transit is
+         relay-only on this deployment, so the pre-dial warmed
+         nothing and just stamped robots.txt rows into every
+         session's diagnostics on each boot. */
     })();
   }, []);
 
-  /* ---- Zeolite adblock + per-site rules: the engine's /rules.json
-       (the migrated ad/tracker host lists) is evaluated client-side in
-       its worker; keep the toggle in sync with the Ad & tracker
-       blocking setting. The per-site rules (rules chip / Settings:
-       host-scoped adblock switch, UA preset) ride along as a zl:rules
-       push built from the same loadSiteRules() store the Settings and
-       lock-card UI read, so the engine applies them per target host
-       with the same semantics (adblock can only disable per site; the
-       global setting still wins). The
-       worker resets both on restart, so re-send on boot and on
-       change. ---- */
+  /* Zeolite adblock + per-site rules: the engine evaluates
+       /rules.json client-side, so keep the toggle in sync with the
+       Ad & tracker blocking setting. Per-site rules (rules chip,
+       Settings host switches, UA preset) ride along as a zl:rules
+       push built from the loadSiteRules() store Settings reads;
+       adblock can only disable per site, the global setting still
+       wins. The worker resets both on restart, so re-send on boot
+       and on change. */
   useEffect(() => {
-    /* #60: same controllerchange re-push pattern as the jarProfile /
-       sameSite / transport effects below - the worker resets adblock
-       and the rules on restart, so a mid-session restart must
-       re-send both, not just the next settings edit. */
+    /* Controllerchange re-push, same pattern as the effects below -
+       the worker resets adblock and the rules on restart, so a
+       mid-session restart must re-send both, not just the next
+       settings edit. */
     const post = () => {
       void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
       void zlSend(
         {
           type: "zl:rules",
-          /* Global UA default: hosts without a rule get the resolved
-             global UA (resolveUa with no rule hit). */
+          /* Hosts without a rule get the resolved global UA
+             (resolveUa with no rule hit). */
           ua: resolveUa(settings, rules, "") ?? undefined,
           rules: rules.map((r) => ({
             host: r.domain,
@@ -727,15 +713,12 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings, rules]);
 
-  /* ---- Zeolite incognito jar: while incognito is on, the engine's
-       cookie jar must be a throwaway (the zl:jarProfile push):
-       requests and document.cookie reads/writes
-       use a session profile that never touches IndexedDB and dies the
-       moment incognito ends. The SW resets the profile to default on
-       restart, so re-send on the incognito toggle and on
-       controllerchange (a restart mid-incognito can briefly admit
-       cookies into the default jar until this re-push lands; known,
-       documented in docs/cookies.md). ---- */
+  /* Incognito jar: the zl:jarProfile push makes requests and
+       document.cookie use a session profile that never touches
+       IndexedDB and dies when incognito ends. The SW resets the
+       profile on restart, so re-send on the toggle and on
+       controllerchange; a restart mid-incognito can briefly admit
+       cookies into the default jar (docs/cookies.md). */
   useEffect(() => {
     const post = () => {
       void zlSend({ type: "zl:jarProfile", profile: incognito ? incognitoSid() : null }, 8000);
@@ -745,10 +728,9 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [incognito]);
 
-  /* ---- Zeolite engine page options: HTTPS upgrade (Zeolite #53) and
-     lazy images are worker-global zl:config fields that reset on
-     restart, so re-send on change and on controllerchange (the
-     jarProfile pattern above). ---- */
+  /* Engine page options (HTTPS upgrade, lazy images) are worker-global
+     zl:config fields that reset on restart; re-send on change and on
+     controllerchange like the jarProfile above. */
   useEffect(() => {
     const post = () => {
       const msg = {
@@ -758,17 +740,16 @@ export default function App() {
         /* #76: lazy images are always on (the toggle is gone);
            the hidden debug menu (beta) can override this. */
         imageLazy: loadDebugOverrides().imageLazy ?? true,
-        /* Injector phase 2: the query-shape opt-in is ephemeral worker
-           state, same class as httpsUpgrade; keep it in the parity
-           push. The hidden debug menu (beta) can override the
-           choice at runtime; the override wins when set. */
+        /* The query-shape opt-in is ephemeral worker state, same
+           class as httpsUpgrade; keep it in the parity push. The
+           hidden debug menu can override the choice at runtime; the
+           override wins when set. */
         queryRoutes: loadDebugOverrides().queryRoutes ?? queryRoutesRef.current,
         experimental: { ...defaultExperimental(), ...loadDebugOverrides().experimental },
       };
       void zlSend(msg, 8000);
-      /* Per-origin parity: the content worker rewrites and serves the
-         proxied documents, so the engine page options must reach it
-         too (the per-origin config gap). */
+      /* The content worker rewrites and serves the proxied
+         documents, so the engine page options must reach it too. */
       void zlContentConfig(msg);
     };
     post();
@@ -776,19 +757,18 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.httpsUpgrade]);
 
-  /* ---- Zeolite jar knobs (#48): SameSite policy on the engine cookie
-     jar, and document-surface fingerprint spoofing on engine-routed
-     pages. Both are worker-global and reset on restart, so re-send on
-     change and on controllerchange (the jarProfile pattern above). The
-     spoof profile is a single field - the same UA the engine sends
-     on requests - and the engine derives platform, languages and the
-     canvas seed from it; timezone and hardware stay native so local
-     times and page layout keep working. ---- */
+  /* Jar knobs: SameSite policy on the engine cookie jar and
+     document-surface fingerprint spoofing. Worker-global, reset on
+     restart, re-sent like the jarProfile above. The spoof profile is
+     one field - the same UA the engine sends on requests - and the
+     engine derives platform, languages and the canvas seed from it;
+     timezone and hardware stay native so pages keep laying out
+     sanely. */
   useEffect(() => {
     const post = () => {
       void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
-      /* #76: the fingerprint profile picker is gone from Settings;
-         the default match-the-User-Agent profile is always on. */
+      /* The fingerprint profile picker is gone from Settings; the
+         default match-the-User-Agent profile is always on. */
       const profile = { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent };
       void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
         /* A rejected profile must not silently read as spoofed: the
@@ -804,11 +784,10 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
   }, [settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, rules]);
 
-  /* ---- Zeolite transport engine (#54): push the persisted choice
-     (zl:transport). The engine switches on the NEXT transport init,
-     not mid-session, and resets to the deployment default on worker
-     restart, so re-send on change and on controllerchange (the
-     jarProfile pattern above). ---- */
+  /* Transport engine: push the persisted choice (zl:transport). The
+     engine switches on the NEXT transport init, not mid-session, and
+     resets to the deployment default on restart; re-send on change
+     and on controllerchange like the jarProfile above. */
   useEffect(() => {
     const post = () => {
       void zlSend({ type: "zl:transport", engine: settings.transport }, 8000);
@@ -901,7 +880,7 @@ export default function App() {
     },
   ];
 
-  /* #642: show the access gate once the 403 landed. */
+  /* Show the access gate once the 403 landed. */
   useEffect(() => {
     if (!accessGateOpen) return;
     const el = accessGateRef.current;
@@ -1085,9 +1064,9 @@ export default function App() {
       </div>
       {/* #81: rendered at the root so Ctrl+K works in every view. */}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
-      {/* #642: access-password gate for the trusted-egress
-          credential arming. A correct password sets the lb_access
-          cookie and reloads so the boot arming retry runs. */}
+      {/* Access-password gate for the trusted-egress credential
+          arming: a correct password sets the lb_access cookie and
+          reloads so the boot arming retry runs. */}
       {accessGateOpen && (
         <m3e-dialog {...{ ref: accessGateRef }} alert="">
           <span slot="header">Access password</span>

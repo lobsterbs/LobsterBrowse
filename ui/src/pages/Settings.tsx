@@ -28,7 +28,7 @@ type Props = {
   onDeleteAll: () => void;
 };
 
-/* #256: the default seed was the indigo-violet default
+/* The default seed was the indigo-violet default
    every generated interface ships. The default is now derived from
    the product (a lobster red-orange); the old baseline stays as
    "Violet" for anyone attached to it. */
@@ -39,7 +39,7 @@ const SEEDS: Array<[string, string]> = [
   ["#6750A4", "Violet"],
 ];
 
-/* #250: pseudo-id of the "Custom endpoint" option in the WISP server
+/* Pseudo-id of the "Custom endpoint" option in the WISP server
    select; the real custom value lives in settings.wispServer. */
 const WISP_CUSTOM = "__custom__";
 
@@ -285,7 +285,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
     </div>
   );
 
-  /* #250: WISP server picker. "" is the deployment default; a stored
+  /* WISP server picker. "" is the deployment default; a stored
      value that is neither empty nor a preset opens the custom input
      (it may also have been typed there directly). */
   const [wispCustom, setWispCustom] = useState(false);
@@ -320,7 +320,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      parser and registration. Import results report through the
      snackbar (the inline status line and the other transient status
      cards are gone). */
-  /* #262: visible busy state for the import. The engine zl:installExt
+  /* Visible busy state for the import. The engine zl:installExt
      call is one-shot (no progress events), so the progress is honestly
      indeterminate, never a fake percentage. */
   const [extImporting, setExtImporting] = useState(false);
@@ -337,7 +337,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
         M3eSnackbar.open("Installed " + String(rep.id) + (warnings.length ? " (warnings: " + warnings.join(", ") + ")" : ""), { duration: 5000 });
       }
-      /* #230: the manage list in this panel re-lists when an install
+      /* The manage list in this panel re-lists when an install
          lands. */
       window.dispatchEvent(new CustomEvent("lb-ext-changed"));
     } else {
@@ -361,7 +361,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             container sits inside the component's shadow root, so
             the column spacing must live on the page content. */}
 <div className="lb-set-page">
-          {/* The classical app top bar (issue #269): the same basic
+          {/* The classical app top bar: the same basic
               m3e-app-bar the Logs page and the AI history sheet use,
               title only. */}
           <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
@@ -439,7 +439,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               <>
             <SectionHead section="search" />
             <SetInline anchorId="set-search-engine" label="Search engine" desc="The engine the address bar searches with.">
-              {/* #237: six long engine names cannot share one
+              {/* Six long engine names cannot share one
                   segmented row; a dropdown select is the M3E control
                   for this cardinality. */}
               <M3eSelect
