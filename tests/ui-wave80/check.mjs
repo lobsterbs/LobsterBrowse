@@ -165,8 +165,11 @@ const ok = (name, cond) => {
   for (const t of inline) ok("settings: " + t + " is an inline card", page.includes('anchorId="' + t + '"'));
   const gone = ["p-search-engine", "p-search-suggest", "p-adblock", "p-https", "p-cloak-enabled", "p-data", "p-logs"];
   for (const p of gone) ok("settings: panel " + p + " removed", !page.includes('id="' + p + '"'));
-  /* #269: the #198 search index left with the search bar. */
-  ok("settings: search index removed", !page.includes("SETTING_INDEX") && !page.includes('target: "set-'));
+  /* #269: the #198 search index left with the search bar. Wave 112
+     brings back a search index deliberately (SETTING_INDEX lives
+     again in Settings.tsx); the #198 jump pattern (target: "set-"
+     props) stays gone. */
+  ok("settings: old #198 target-jump pattern removed", !page.includes('target: "set-'));
   const theme = read("src/theme.css");
   ok("settings: inline card surface defined", theme.includes(".lb-set-inline {"));
   ok("settings: inline cards join the jump focus ring", theme.includes(".lb-set-inline:focus-visible"));
