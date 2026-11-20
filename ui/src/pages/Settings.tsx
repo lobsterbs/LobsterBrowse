@@ -71,7 +71,7 @@ const SEEDS: Array<[string, string]> = [
 /* Display name for a per-site rule UA. The "Server default" wording was
    removed from Settings; the id stays functional in stored rules. */
 
-/* #198: settings search index. One entry per findable setting; the
+/* Settings search index. One entry per findable setting; the
    targets are the id attributes set on the rows and groups below. */
 type SetEntry = { section: SectionId; label: string; terms?: string; target: string };
 const SETTING_INDEX: SetEntry[] = [
@@ -112,7 +112,7 @@ const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
 };
 
 function Row(props: { label: string; icon: string; on: boolean; toggle: () => void; id?: string }) {
-  /* #116: the visible label names the switch and toggles it too. */
+  /* The visible label names the switch and toggles it too. */
   const labelId = useId();
   return (
     <m3e-list-item>
@@ -218,7 +218,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
      sticky side navigation switches between them. */
   const [section, setSection] = useState<SectionId>("search");
 
-  /* #198: searchable Settings - all local, no persistence change. */
+  /* Searchable Settings - all local, no persistence change. */
   const [q, setQ] = useState("");
   const SECTION_TITLES: Record<SectionId, string> = {
     search: "Search & browse",
@@ -285,7 +285,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
     const bytes = new Uint8Array(await file.arrayBuffer());
     const rep = await zlSend({ type: "zl:installExt", bytes }, 20000);
     if (rep && rep.ok) {
-      /* #230: the manage list in this panel re-lists when an install
+      /* The manage list in this panel re-lists when an install
          lands. */
       window.dispatchEvent(new CustomEvent("lb-ext-changed"));
     }
@@ -403,7 +403,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
       </m3e-card>
 
 
-      {/* #198: search-first Settings. A query swaps the section page
+      {/* Search-first Settings. A query swaps the section page
           for a flat result list; picking a result switches to the
           owning section, clears the query and scrolls the row into
           view. */}
@@ -481,7 +481,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
             <>
               <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-manage-ext" tabIndex={-1}>
                 <div className="lb-setting-label">Manage installed</div>
-                {/* #230: the extension configuration UI moved here from the
+                {/* The extension configuration UI moved here from the
                     toolbar extension card; the toolbar card now launches the
                     extension UI directly. */}
                 <ExtManage />
@@ -525,7 +525,7 @@ export default function SettingsPanel({ settings, onChange, rules, onRulesChange
           {section === "appearance" && (
             <>
               <md-card variant="filled" {...{ class: "lb-setting-group" }} id="set-theme-color" tabIndex={-1}>
-                {/* #102: a visible, associated label for the colour input. */}
+                {/* A visible, associated label for the colour input. */}
                 <label htmlFor="lb-theme-color" className="lb-setting-label" style={{ display: "block" }}>
                   Theme color
                 </label>

@@ -102,7 +102,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
       return;
     }
     const ac = new AbortController();
-    /* #113: the previous query's suggestions never stay visible under
+    /* The previous query's suggestions never stay visible under
        the new query - the list clears when this query's fetch starts,
        and the cleanup abort below kills any out-of-order reply before
        it lands, so a failed or stale fetch cannot show wrong rows. */
@@ -175,7 +175,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"
-        /* #85: the wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
+        /* The wordmark font-size lives in theme.css (viewport-clamped) so the art scales down on narrow screens. */
           style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.05, margin: 0, opacity: 0.85, overflowX: "auto", whiteSpace: "pre" }}
       >{String.raw`    __          __         __            ____                             
    / /   ____  / /_  _____/ /____  _____/ __ )_________ _      __________ 
@@ -206,7 +206,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
             onKeyDown={onKey}
             placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
             autoComplete="off"
-            /* #100: the input is a combobox that owns the suggestion
+            /* The input is a combobox that owns the suggestion
                listbox; focus stays here, so the highlighted option is
                exposed through aria-activedescendant. */
             role="combobox"
@@ -216,7 +216,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
             aria-activedescendant={listShown && suggestions[idx] ? "lb-home-opt-" + idx : undefined}
           />
         </m3e-search-bar>
-        {/* #120: polite count announcement; the listbox itself stays
+        {/* Polite count announcement; the listbox itself stays
             quiet so rapid typing does not read every option. */}
         <div className="lb-sr-only" role="status" aria-live="polite">
           {listShown
@@ -233,7 +233,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
               pointerEvents: spring.progress > 0.5 ? "auto" : "none",
             }}
           >
-            {/* #100: the listbox holds only options; the hint sits
+            {/* The listbox holds only options; the hint sits
                 outside it so every child is a valid option. */}
             <div id="lb-home-suggest" role="listbox" aria-label="Suggestions">
               {suggestions.map((s, i) => (

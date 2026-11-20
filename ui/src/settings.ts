@@ -2,7 +2,7 @@
    sent to the server through routes. Settings that shape engine
    behavior reach the engine through the zl:rules push. */
 
-/* Cookie-session id (issue #1): the server keeps one cookie jar per
+/* Cookie-session id: the server keeps one cookie jar per
    lb_sid, so deployment users no longer share a single jar. Stable per
    browser profile for normal browsing (cookies survive reloads), fresh
    and in-memory for each incognito window (its jar dies with the sid). */
@@ -124,22 +124,22 @@ export type Settings = {
   adblock: boolean;
   uaPreset: UaPresetId;
   uaCustom: string;
-  /* Zeolite engine jar SameSite policy (#48): "approx" has the
+  /* Engine jar SameSite policy: "approx" has the
      engine jar emit SameSite hints it cannot know natively. */
   sameSitePolicy: "off" | "approx";
-  /* Zeolite document-surface spoofing on engine-routed pages (#48).
+  /* Document-surface spoofing on engine-routed pages.
      Profile picker: "native" spoofs nothing, "ua" follows the
      User-Agent setting (custom string and per-site rules included),
      a preset id pins the fingerprint to that UA string instead. */
   fingerprintProfile: "native" | "ua" | Exclude<UaPresetId, "custom" | "server-default">;
-  /* Zeolite engine-side HTTPS upgrade (Zeolite #53): opt in; a
+  /* Engine-side HTTPS upgrade: opt in; a
      target that cannot be fetched over https fails honestly, no
      silent fallback to plain http. */
   httpsUpgrade: boolean;
   /* Engine-side lazy images: add loading="lazy" to page images so
      off-screen images load on approach, not at first paint. */
   imageLazy: boolean;
-  /* Zeolite transport engine (#54): libcurl (default wasm stack) or
+  /* Transport engine: libcurl (default wasm stack) or
      epoxy (rustls+hyper, different TLS fingerprint). Applied on the
      next engine init; no mid-session swap. */
   transport: "libcurl" | "epoxy";
@@ -153,7 +153,7 @@ export type Settings = {
   prefetchLinks: boolean;
   /* Tuck the toolbar and tab strip when the app is idle. */
   autoHideChrome: boolean;
-  /* #213: tint the toolbar pill from the active tab's favicon hue
+  /* Tint the toolbar pill from the active tab's favicon hue
      (dark scheme only; LB has no light scheme). */
   siteTint: boolean;
   /* Enhanced UI: animated starfield background in every view
@@ -198,7 +198,7 @@ export function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      /* #149: hasOwnProperty guards the record lookup - a stored
+      /* hasOwnProperty guards the record lookup - a stored
          "constructor" or "toString" hits Object.prototype and passed the
          old truthiness check, then searchUrl crashed on the
          undefined entry during render. */
@@ -221,7 +221,7 @@ export function loadSettings(): Settings {
       uaPreset:
         !parsed.uaPreset || parsed.uaPreset === "server-default"
           ? DEFAULT_SETTINGS.uaPreset
-          : /* #149: hasOwnProperty, not truthiness -
+          : /* hasOwnProperty, not truthiness -
              "toString" passed the old UA_PRESETS check. */
             parsed.uaPreset === "custom" ||
             Object.prototype.hasOwnProperty.call(UA_PRESETS, parsed.uaPreset)
@@ -261,7 +261,7 @@ export function loadSiteRules(): SiteRule[] {
     const raw = localStorage.getItem(RULES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    /* #149: null or malformed entries would throw in
+    /* Null or malformed entries would throw in
        rules.find((r) => r.domain ...) during render. */
     return Array.isArray(parsed)
       ? parsed.filter((r): r is SiteRule => !!r && typeof (r as SiteRule).domain === "string")
@@ -350,7 +350,7 @@ export function routeUrl(target: string): string {
 /* Recover the real URL from an engine route pathname ("" when
    invalid). */
 export function decodeRoute(pathname: string): string {
-  /* Only /zl/ is an engine route (#67): the legacy /r/ and /lj/
+  /* Only /zl/ is an engine route: the legacy /r/ and /lj/
      prefixes are gone, so they decode to "" and the poll sync falls
      back to the caller tab URL. */
   /* ScramJet routes (codec: encodeURIComponent; the controller and
@@ -382,7 +382,7 @@ export function decodeRoute(pathname: string): string {
   seg = seg.split("?")[0].split("#")[0];
   try {
     const url = b64urlDecode(seg);
-    /* #58: keyed (encrypted) route tails b64-decode into binary
+    /* Keyed (encrypted) route tails b64-decode into binary
        garbage. Fail closed unless the result is a plain http(s)
        URL with no control characters, so the poll sync falls
        back to the caller tab-URL instead of re-navigating to
@@ -421,7 +421,7 @@ export function normalizeUrl(input: string): string {
 /* Heuristic: a URL has a scheme, or looks like a bare domain/host
    (contains a dot, no spaces). Everything else is a search query. */
 export function looksLikeUrl(s: string): boolean {
-  /* #140: the address bar only navigates http(s). Any other scheme
+  /* The address bar only navigates http(s). Any other scheme
      (javascript:, file:, data:) is treated as a search query,
      never a navigation target; both call sites gate through this
      helper, so the allowlist lives here once. */
