@@ -40,15 +40,33 @@ let tabSeq = 1;
 const HERO_BACKDROP_URL =
   "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
 let heroBackdropWarm: Promise<void> | null = null;
+let heroBackdropSettled = false;
 function heroBackdropReady(): Promise<void> {
   heroBackdropWarm ??= new Promise<void>((resolve) => {
     const img = new Image();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
+    img.onload = () => {
+      heroBackdropSettled = true;
+      resolve();
+    };
+    img.onerror = () => {
+      heroBackdropSettled = true;
+      resolve();
+    };
     img.src = HERO_BACKDROP_URL;
   });
   return heroBackdropWarm;
 }
+/* Start the pre-warm at module scope, NOT in a mount effect: the fetch
+   and decode now race the first render instead of following it. The
+   browser heuristically caches the image (no Cache-Control, 3-year-old
+   Last-Modified), so on a warm reload the promise usually settles
+   BEFORE React commits, and the hero layer paints with the first
+   frame instead of one cache round trip + decode behind it. Until the
+   layer mounts, the frost reads as flat dark glass, which is exactly
+   the "frosted glass takes its 100ms" symptom this removes. The cold
+   path is unchanged: the layer still waits for the load, so the local
+   lb-hero.jpg backplate never flashes. */
+heroBackdropReady();
 
 function freshTab(url = ""): Tab {
   return {
@@ -81,8 +99,11 @@ export default function App() {
      fetch window before the current one landed on top. The layer now
      mounts only once the remote image has loaded (or errored: a
      blocked/unreachable hotlink still reveals the documented
-     backplate degrade instead of a bare surface). */
-  const [heroBgReady, setHeroBgReady] = useState(false);
+     backplate degrade instead of a bare surface). The state
+     initializes from the settled flag, not from false: a pre-warm
+     that finished before mount (warm reload) puts the hero layer in
+     the very first commit, so the glass is frosted at first paint. */
+  const [heroBgReady, setHeroBgReady] = useState(heroBackdropSettled);
   useEffect(() => {
     let on = true;
     heroBackdropReady().then(() => {

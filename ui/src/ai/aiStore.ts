@@ -501,7 +501,7 @@ export const WEB_SEARCH_TOOL = {
   },
 } as const;
 
-/* Sub agents (W5): the main model (Nemotron) delegates
+/* Sub agents (W5): the main model (gpt-oss-120b) delegates
    self-contained subtasks to GEMMA through the spawn_agent tool.
    The sub agent gets the same web_search tool; its text is NEVER
    shown to the user - only its final answer returns to the main
