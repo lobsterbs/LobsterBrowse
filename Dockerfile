@@ -2516,7 +2516,26 @@ FROM debian:bookworm-slim AS zl-builder
 # c226a03d40fe414e (937667 bytes); bootstrap unchanged
 # 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
 # (app TS + rewriter only). Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=5e0d7ca989c835963f6faade01a014a95e146975
+# Pin 185 (2026-11-20): dist f07c68e4 (Zeolite main 4b61a836 over the
+# 36932d2 fix, CI run 44758879429, all five jobs green; run 1864 on the
+# fix head landed red only on the standing torture large-document
+# wedge - single victim, record docs/ci-torture-wedge-1864.md).
+# Ships the second half of the Tampermonkey options-page fix (#697):
+# pin 184's arity repair was necessary but not sufficient. The engine
+# storage.get answered never-set keys with {[key]: null}; Chrome and
+# Firefox omit missing keys. Tampermonkey's storage-backend probe
+# fell through its "n in items" guard, unpacked the null as a packed
+# record (reads .value) and threw TypeError inside the storage
+# callback, wedging the background boot before bg:ready; late stayed
+# false and every options-page runtime.onMessage ping was deferred
+# forever = the fully white /options.html. storage.get now omits
+# never-set keys (object-form defaults still answer; regressions:
+# the storage-parity suite, sprite-verified 30/30 across the
+# extensions suites). sw c226a03d40fe414e -> ea5a26979fc5bccd
+# (937682 bytes); bootstrap unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Cargo-side pin stays 5073f316 (app TS + rewriter only). Deploy with
+# a cleared Render build cache.
+ARG ZEOLITE_COMMIT=f07c68e48f806d6249e729597e9eeded6ba7f61e
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2583,7 +2602,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=c226a03d40fe414e ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=ea5a26979fc5bccd ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
