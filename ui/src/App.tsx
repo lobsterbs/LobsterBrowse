@@ -33,6 +33,23 @@ import "./extensions.css";
 type View = "home" | "browser" | "ai" | "settings" | "logs";
 
 let tabSeq = 1;
+/* The remote hero wallpaper (same URL as the top .lb-fx-bg layer in
+   theme.css; keep the two in sync). Pre-warmed once per session: the
+   hero only paints when this image is decoded, so the local
+   lb-hero.jpg backplate never flashes through on a cold cache. */
+const HERO_BACKDROP_URL =
+  "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
+let heroBackdropWarm: Promise<void> | null = null;
+function heroBackdropReady(): Promise<void> {
+  heroBackdropWarm ??= new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = HERO_BACKDROP_URL;
+  });
+  return heroBackdropWarm;
+}
+
 function freshTab(url = ""): Tab {
   return {
     id: tabSeq++,
@@ -58,6 +75,23 @@ export default function App() {
     return m ? (m[1] as View) : "home";
   };
   const [view, setView] = useState<View>(viewFromHash);
+  /* Hero load gate (2026-11-20 prompt item): .lb-fx-bg paints the
+     remote wallpaper OVER the local lb-hero.jpg backplate, so a
+     reload after a data wipe showed the old local wallpaper for the
+     fetch window before the current one landed on top. The layer now
+     mounts only once the remote image has loaded (or errored: a
+     blocked/unreachable hotlink still reveals the documented
+     backplate degrade instead of a bare surface). */
+  const [heroBgReady, setHeroBgReady] = useState(false);
+  useEffect(() => {
+    let on = true;
+    heroBackdropReady().then(() => {
+      if (on) setHeroBgReady(true);
+    });
+    return () => {
+      on = false;
+    };
+  }, []);
   /* Hero flash: Settings fires a one-shot lb-flash-hero event after a
      cache clear or a wipe, and the response is a brief fullscreen
      flare of the hero image - a visible confirmation that something
@@ -882,7 +916,7 @@ export default function App() {
           and replaced by the static photographic hero image
           (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
           theme.css). Away from those views = not rendered. */}
-      {(view === "home" || view === "ai") &&
+      {(view === "home" || view === "ai") && heroBgReady &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
