@@ -1,7 +1,8 @@
 /* UI regression checks: the seven reported visual bugs.
    - Tab sheet: the row list carries no inline padding of its own (the
      sheet body already pads 16px inline; the rows ran 16px past the
-     sheet's right edge), the favicon avatar's frost halo is circular,
+     sheet's right edge), the favicon tile is a real shape (the old
+     avatar frost halo rules are retired),
      and the sheet title carries no open-tab count.
    - DevTools: the sub-tool picker (Console / Network / Diagnostics)
      is centered, and the in-sheet cards' frost halo is rounded to the
@@ -43,7 +44,8 @@ const settings = read("src/pages/Settings.tsx");
 const tabsRow = block(theme, ".lb-tabs-row {");
 ok(tabsRow.includes("box-sizing: border-box;"), "tab rows size inside the sheet");
 ok(tabsRow.includes("padding: var(--md-sys-measurement-space50) 0 16px;"), "tab rows carry no inline padding");
-ok(block(theme, ".lb-tab-avatar {").includes("border-radius: var(--md-sys-shape-corner-full, 999px);"), "tab avatar frost halo is circular");
+ok(theme.includes(".lb-tab-shape {") && theme.includes("--m3e-shape-size: 44px;"), "tab favicon tile uses the shape token");
+ok(!theme.includes(".lb-tab-avatar"), "the old avatar frost halo rules are gone");
 ok(tabs.includes('<span slot="title">Tabs</span>'), "tab sheet title is plain Tabs");
 ok(!tabs.includes("Tabs ({"), "count marker removed from the title");
 

@@ -15,7 +15,13 @@ import { dirname, join } from "node:path";
    the settled flag, so a warm reload (browser-heuristic-cached image)
    can paint the hero layer in the very first commit instead of one
    cache round trip + decode behind the app - the "frosted glass takes
-   its 100ms" symptom. */
+   its 100ms" symptom.
+   2026-11-21 update: the expressive pass retired the wallpaper
+   behind a false HERO_BG flag (the theme surface token carries
+   the background now). The warm/gate machinery stays armed, so
+   flipping the flag back on keeps this flash protection, and the
+   mount assert pins both flags so the gate cannot be dropped
+   silently. */
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const app = readFileSync(join(root, "ui", "src", "App.tsx"), "utf8");
@@ -49,8 +55,12 @@ assert.strictEqual(
 /* 3. The hero portal is gated on the backdrop being ready (the
    view gate from ui-wave92 stays intact). */
 assert.ok(
-  app.includes('{(view === "home" || view === "ai") && heroBgReady &&'),
+  app.includes('{HERO_BG && (view === "home" || view === "ai") && heroBgReady &&'),
   "the hero layer mounts only after the backdrop is ready"
+);
+assert.ok(
+  app.includes("const HERO_BG = false;"),
+  "the wallpaper stays retired behind the HERO_BG flag (2026-11-21 expressive pass)"
 );
 assert.ok(
   /heroBackdropReady\(\)\.then\(\(\) => \{[\s\S]*?setHeroBgReady\(true\);/.test(app),

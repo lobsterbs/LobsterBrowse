@@ -1,8 +1,8 @@
 /* UI regression checks: the four reported visual items.
    - Tab sheet (#240): the slotted favicon is constrained inside the
-     frosted avatar instead of covering the whole 40px base, so the
-     glass ring stays visible (the avatar's internal ::slotted(img)
-     rule paints 100%/100% cover; a document rule outranks it).
+     shape tile instead of covering the whole 44px base, so the
+     cookie ring stays visible (a document rule outranks any
+     internal ::slotted(img) cover rule).
    - AdBlock sheet (#241): the hero column and its text are
      horizontally centered instead of left-aligned.
    - Extensions sheet (#242): a failed icon load falls back to the
@@ -31,9 +31,9 @@ const theme = read("src/theme.css");
 const extPanel = read("src/browser/ExtensionsPanel.tsx");
 
 /* 1. Tab sheet favicon (#240). */
-const avaImg = block(theme, ".lb-tab-avatar img {");
-ok(avaImg.includes("width: 20px;") && avaImg.includes("height: 20px;"), "slotted favicon is constrained to 20px");
-ok(avaImg.includes("object-fit: contain;"), "favicon keeps its aspect inside the frost ring");
+const shapeIcon = block(theme, ".lb-tab-shape .lb-tab-shape-icon {");
+ok(shapeIcon.includes("width: 22px;") && shapeIcon.includes("height: 22px;"), "slotted favicon is constrained to 22px");
+ok(shapeIcon.includes("object-fit: contain;"), "favicon keeps its aspect inside the shape tile");
 
 /* 2. AdBlock hero (#241). */
 const adHero = block(theme, ".lb-ad-hero {");

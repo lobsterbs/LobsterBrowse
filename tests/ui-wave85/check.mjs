@@ -1,6 +1,6 @@
 /* UI regression checks: real frosted glass on every
    overlay surface (sheets, menus, palette, floating cards, suggestors),
-   the tab switcher row redesign (frosted avatar favicon, title, close
+   the tab switcher row redesign (shape favicon tile, title, close
    X, preview windows gone), basic m3e-app-bar top bars everywhere,
    Settings card uniformity, and typescale-token typography. Static
    source asserts; live visual verification rides the deploy check. */
@@ -38,11 +38,12 @@ for (const gone of [".lb-site-head", ".lb-site-ctitle", ".lb-dt-sheet-head", ".l
   ok(!theme.includes(gone), "old header rule removed: " + gone);
 }
 
-/* Tabs sheet: rows, not tiles; avatar favicon; no preview windows. */
+/* Tabs sheet: rows, not tiles; shape favicon; no preview windows. */
 ok(theme.includes(".lb-tab-row {"), "tab row rule exists");
 ok(theme.includes(".lb-tab-row.active {"), "active row pill exists");
-ok(theme.includes(".lb-tab-avatar {"), "frosted avatar rule exists");
-ok(theme.includes("--m3e-avatar-size: 40px;"), "avatar size token set");
+ok(theme.includes(".lb-tab-shape {"), "tab favicon shape rule exists");
+ok(theme.includes("--m3e-shape-size: 44px;"), "shape size token set");
+ok(!theme.includes(".lb-tab-avatar"), "the dead avatar rules are gone");
 ok(!theme.includes("lb-tabs-tile"), "tile rules gone");
 ok(!theme.includes("lb-tab-preview"), "preview rules gone");
 ok(theme.includes(".lb-tab-row, .lb-dock-pill { transition: none; }"), "reduced-motion covers rows");
@@ -66,8 +67,8 @@ ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2
 ok(theme.includes("min-height: 56px;"), "inline card min-height matches the collapsed panel header (#274, wave 107)");
 
 const tabs = read("src/browser/TabSwitcherCard.tsx");
-ok(tabs.includes("<m3e-avatar"), "tab rows use m3e-avatar");
-ok(tabs.includes('class: "lb-tab-avatar"'), "avatar carries the frost class");
+ok(tabs.includes('<m3e-shape name="9-sided-cookie"'), "tab rows use the shape favicon tile");
+ok(tabs.includes('class: "lb-tab-shape"'), "the tile carries the shape class");
 ok(tabs.includes("<m3e-app-bar"), "tabs sheet header is an app bar");
 ok(tabs.includes('<span slot="title">Tabs'), "tabs sheet title in title slot");
 ok(!tabs.includes("zlContentHref"), "preview route import gone");

@@ -68,8 +68,8 @@ ok("markup: nav sub line rendered", page.includes('<span className="lb-set-nav-s
 ok("narrow screens swap the card rail for the section dropdown", theme.includes(".lb-set-nav { display: none; }") && theme.includes(".lb-set-nav-drop { display: block; grid-column: 1 / -1; }") && theme.includes(".lb-set-nav-sub { display: none; }") === false);
 
 /* The markup wires the shape, the icon and the name. */
-ok("markup: icon inside the m3e-shape", page.includes('<m3e-shape name="4-sided-cookie" aria-hidden={true}>'));
-ok("markup: the shape wraps the section icon", page.indexOf('<m3e-shape name="4-sided-cookie"') !== -1 && page.indexOf('<m3e-shape name="4-sided-cookie"') < page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') && page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') < page.indexOf('<span className="lb-set-nav-txt">'));
+ok("markup: icon inside the m3e-shape", page.includes('name={section === id ? "sunny" : "4-sided-cookie"}'));
+ok("markup: the shape wraps the section icon", page.indexOf("<m3e-shape") < page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') && page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') < page.indexOf('<span className="lb-set-nav-txt">'));
 ok("markup: title inside the text column", page.includes('<span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>'));
 ok("markup: the old span tile is gone", !page.includes("lb-set-nav-ico"));
 

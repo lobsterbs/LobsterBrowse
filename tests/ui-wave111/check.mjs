@@ -1,7 +1,7 @@
 /* Regression check for the W2-W4 UI wave:
-   (1) the tabs sheet carries a two-step-confirm Close-all action
-       and Browser closes every non-active tab through the same
-       .closing animation as single closes;
+   (1) the tabs sheet carries an immediate Close-all action and
+       Browser closes every non-active tab through the same
+       .closing animation as single closes, then offers Undo;
    (2) non-modal bottom sheets keep their top-corner radius during
        the hide() slide (the minimized-shape token fixes the square
        exit the AI conversations and DevTools sheets showed);
@@ -35,18 +35,19 @@ const rule = (src, sel) => {
   return src.slice(i, src.indexOf("}", i) + 1);
 };
 
-/* 1. Close-all: the tab sheet header carries the trailing action,
-   the confirm arm is transient and the sheet disarms on close. */
+/* 1. Close-all: the tab sheet header carries the trailing action;
+   the press fires immediately and an Undo snackbar restores the
+   closed tabs once the collapse lands (timer confirm removed). */
 assert.ok(tsc.includes("onCloseAll?: () => void;"), "TabSwitcherCard accepts onCloseAll");
-assert.ok(tsc.includes("closeAllArmed"), "Close-all carries a two-step confirm arm");
-assert.ok(tsc.includes("window.setTimeout(() => setCloseAllArmed(false), 4000)"), "the arm disarms itself after 4s");
-assert.ok(tsc.includes("if (!props.open) setCloseAllArmed(false);"), "closing the sheet disarms the button");
+assert.ok(!tsc.includes("closeAllArmed"), "the two-step confirm arm is gone");
+assert.ok(tsc.includes("onClick={props.onCloseAll}"), "the press fires immediately");
 assert.ok(tsc.includes('slot="trailing"') && tsc.includes("lb-tabs-closeall"), "the action sits in the sheet bar trailing slot");
-assert.ok(tsc.includes("Tap again to confirm"), "the armed label states the stakes");
 assert.ok(tsc.includes("closableCount > 0"), "the action hides when nothing is closable");
 assert.ok(browser.includes("onCloseAll="), "Browser wires the Close-all callback");
-assert.ok(browser.includes("for (const t of tabs) if (t.id !== active.id) closeTabSmooth(t.id);"), "Close-all runs every non-active tab through the animated close");
-assert.ok(rule(theme, ".lb-tabs-closeall.armed {").includes("var(--md-sys-color-error-container)"), "the armed state reads error-toned");
+assert.ok(browser.includes("const ids = tabs.filter((t) => t.id !== active.id).map((t) => t.id);"), "Close-all collects every non-active tab");
+assert.ok(browser.includes("for (const id of ids) closeTabSmooth(id);"), "Close-all runs every collected tab through the animated close");
+assert.ok(browser.includes('"Undo"') && browser.includes("props.restoreClosedTabs(ids)"), "an Undo snackbar restores the closed tabs");
+assert.ok(!theme.includes(".lb-tabs-closeall.armed"), "the dead armed style is gone");
 
 /* 2. Square-exit fix: the minimized shape token keeps the top
    corners round while the open attribute is already gone. */
@@ -66,13 +67,15 @@ assert.ok(theme.includes("@keyframes lb-ac-item-in"), "the suggestion entry keyf
 assert.ok(rule(theme, ".lb-tb-ac-item:nth-child(2) {").includes("animation-delay: 25ms;"), "row two staggers by 25ms");
 assert.ok(rule(theme, ".lb-tb-ac-item:nth-child(3) {").includes("animation-delay: 50ms;"), "row three staggers by 50ms");
 
-/* 5. Omnibox load wave: pure inline SVG, seam-free loop. */
+/* 5. Omnibox load wave: the real wavy progress indicator runs
+   along the pill's bottom edge (the hand-drawn SVG slide is gone). */
 assert.ok(browser.includes("lb-tb-wave"), "the loading tab renders the wave element");
 assert.ok(browser.includes("st.loading && ("), "the wave is bound to the tab loading state");
+assert.ok(browser.includes('<m3e-linear-progress-indicator variant="wavy" mode="indeterminate" />'), "the wave is the real wavy indicator");
 const waveRule = rule(theme, ".lb-tb-wave {");
-assert.ok(waveRule.includes("height: 3px;") && waveRule.includes("bottom: 0;"), "the wave is a thin line at the pill edge");
-assert.ok(rule(theme, ".lb-tb-wave svg {").includes("width: 200%;"), "the SVG is double-wide so the 50% slide tiles");
-assert.ok(browser.includes('transform="translate(60)"'), "the second SVG copy shifts by one copy: the loop is seamless");
+assert.ok(waveRule.includes("height: 6px;") && waveRule.includes("bottom: 0;"), "the wave hugs the pill edge");
+const waveInd = rule(theme, ".lb-tb-wave m3e-linear-progress-indicator {");
+assert.ok(waveInd.includes("--m3e-linear-progress-indicator-thickness: 2px;"), "the wave line stays a thin 2px");
 
 /* 6. DevTools steady sheet height. */
 assert.ok(rule(theme, ".lb-dt-content {").includes("min-height: 38vh;"), "the DevTools body holds a steady floor");
