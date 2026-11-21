@@ -1092,7 +1092,10 @@ export default function App() {
                 its iframe alive) whenever tabs exist, so a running or
                 downloading tab keeps running while the user visits
                 Settings, Home or Logs; returning shows the intact
-                frame. The other views remount per switch as before. */}
+                frame. The other views remount per switch as before.
+                The visible prop is the gate: a hidden view starts no
+                navigation, a restored tab loads only when the user
+                actually goes to it. */}
             {tabs.length > 0 && (
               <div className="lb-view" hidden={view === "browser" ? undefined : true}>
                 <BrowserView
@@ -1109,6 +1112,7 @@ export default function App() {
                   onOpenLogs={() => setView("logs")}
                   onOpenSettings={() => setView("settings")}
                   onRulesChange={updateRules}
+                  visible={view === "browser"}
                 />
               </div>
             )}

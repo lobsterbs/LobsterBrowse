@@ -54,6 +54,10 @@ import M3eSelect from "../M3eSelect";
 /* Navigation-poll routing decision, kept pure so the regression
    check (tests/poll-recovery/check.mjs) can run the real logic. */
 import { pollAction } from "../browser/pollRecovery";
+/* Auto-load visibility gate + in-flight dedupe, kept pure so the
+   regression check (tests/load-visibility/check.mjs) runs the real
+   logic. */
+import { autoLoadGate, navInFlight } from "../browser/navGate";
 import { faviconBlob, faviconCandidates, faviconRoute } from "../browser/favicon";
 
 /* ---- Toolbar scroll tuck/reveal:
@@ -343,6 +347,10 @@ type Props = {
   /* Per-site rule edits from the toolbar chip (#10): the same store
      the Settings editor writes. */
   onRulesChange: (rules: SiteRule[]) => void;
+  /* True while the Browse view is the view the user sees: a hidden
+     view must not start or resume any navigation (the operator's
+     rule: no site loads until the user actually sees it). */
+  visible: boolean;
 };
 
 /* A .xpi download surfaced as a prompt dialog. The prompt opens the
@@ -1667,6 +1675,23 @@ export default function BrowserView(props: Props) {
   };
   const load = (tab: Tab, url: string, opts?: { push?: boolean; idx?: number }) => {
     const push = opts?.push !== false;
+    /* In-flight dedupe: the same destination already loading for
+       this tab is not a second navigation. Core to the blank-frame
+       flow: load() blanks the frame below, which makes the
+       auto-load effect's #249 re-navigation read (same lastNav +
+       blank frame) fire again; without this guard every navigation
+       would double-mint and double-navigate. */
+    if (
+      navInFlight(
+        {
+          lastNav: lastNav.current.get(tab.id),
+          pendingNav: pendingNav.current.get(tab.id)?.url,
+          loading: !!statusRef.current[tab.id]?.loading,
+        },
+        url,
+      )
+    )
+      return;
     lastNav.current.set(tab.id, url);
     /* #249: a navigating tab is active work; reset its idle deadline. */
     tabActiveAt.current.set(tab.id, Date.now());
@@ -1691,11 +1716,26 @@ export default function BrowserView(props: Props) {
     /* #122/#181: an explicit idx wins - back/forward must move it
        before the render-time snapshot in `tab` goes stale. */
     const idx = opts?.idx ?? (push ? stack.length - 1 : tab.idx);
-    /* #247: classify before the flip: a same-origin destination
-       keeps the committed page visible (indicator only); anything
-       else re-arms the skeleton for a fresh surface. */
-    if (sameOrigin(tab.url, url)) minorNav.current.add(tab.id);
-    else minorNav.current.delete(tab.id);
+    /* Every load()-driven navigation is a fresh surface: the page
+       being left never stays painted while the new one is under
+       way (#247 kept same-origin destinations visible; the
+       operator wants no trace). The frame's own load handler
+       re-flags minor flips once the new document commits. */
+    minorNav.current.delete(tab.id);
+    /* Blank the frame immediately, before the async route mint: no
+       site content shows until the new one takes its place. The
+       sleeping flag keeps the blank's own load event from
+       committing (the #249 idle-unload guard); the mint callback
+       clears it before assigning the real route. */
+    const curFrame = frames.current.get(tab.id);
+    if (curFrame && !blankFrame(tab.id)) {
+      sleeping.current.add(tab.id);
+      try {
+        curFrame.src = "about:blank";
+      } catch {
+        sleeping.current.delete(tab.id);
+      }
+    }
     props.updateTab(tab.id, { url, stack, idx, title: "" });
     /* Navigating away collapses the pill back to name mode (an empty
      * tab keeps it expanded via the empty-tab effect). */
@@ -1735,6 +1775,9 @@ export default function BrowserView(props: Props) {
       /* Re-read the frame: it can be remounted while the mint was
          pending; a captured element would strand the load (#171). */
       const f = frames.current.get(tab.id);
+      /* The blank placeholder's job is done; the next load event is
+         the real first paint and must commit. */
+      sleeping.current.delete(tab.id);
       if (f) f.src = href;
       /* Route form in the log (#168): handle routes are opaque, the
          legacy b64u fallback is not. */
@@ -1748,21 +1791,28 @@ export default function BrowserView(props: Props) {
   loadRef.current = load;
 
   /* ---- Auto-load: a tab whose URL was set without a navigation
-     (Home search, restored session, newTab(url)) starts loading as
-     soon as it becomes the active tab. ---- */
+     (Home search, restored session, newTab(url)) starts loading
+     when it becomes the active tab AND the Browse view is the
+     visible view - nothing loads unseen. ---- */
   useEffect(() => {
     const t = active;
     if (!t || !t.url) return;
-    /* #249: an idle-unloaded frame sits at about:blank; a matching
-       lastNav must not suppress the re-navigation. */
-    if (lastNav.current.get(t.id) === t.url && !blankFrame(t.id)) return;
-    /* An escape recovery is in flight for this tab: the recovered
-       target is already loading; a settings/rules change re-running
-       this effect must not re-drive the escaped-from URL (#169). */
-    if (recovering.current.has(t.id)) return;
+    const gate = autoLoadGate({
+      hasActive: true,
+      hasUrl: true,
+      /* A hidden view parks the tab: a restored session starts no
+         engine work until the user actually goes to it. */
+      visible: props.visible,
+      recovering: recovering.current.has(t.id),
+      /* #249: an idle-unloaded frame sits at about:blank; a matching
+         lastNav must not suppress the re-navigation. */
+      sameLastNav: lastNav.current.get(t.id) === t.url,
+      blankFrame: blankFrame(t.id),
+    });
+    if (gate !== "load") return;
     load(t, t.url, { push: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.id, active?.url, settings, rules]);
+  }, [active?.id, active?.url, settings, rules, props.visible]);
 
   /* #249: detect a frame parked at about:blank by the idle unloader
      (or a restored tab whose frame remounted empty). */
@@ -2792,6 +2842,11 @@ export default function BrowserView(props: Props) {
                          fires load here; it is not a first paint and
                          must not commit the tab. */
                       if (sleeping.current.has(t.id)) { sleeping.current.delete(t.id); return; }
+                    /* Same rule for the pre-mint blank: its load
+                       event can land after the mint already cleared
+                       the flag. A frame sitting on an about:
+                       document is never a first paint. */
+                    if (blankFrame(t.id)) { return; }
                       /* First paint committed - the skeleton
                          goes away and stays away while this document
                          loads its own assets in place. */
