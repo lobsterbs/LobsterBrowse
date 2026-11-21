@@ -39,11 +39,21 @@ jobs:
             add=$(git log --diff-filter=A --format=%H -1 -- "$p") || fail "$phase:gitlog:$i"
             [ -n "$add" ] || fail "$phase:noadd:$i"
             git show "$add:$p" > "/tmp/lvchunks/c$i.b64" || fail "$phase:show:$i"
-            echo "recovered c$i from $add"
           done
           phase=md5
           for f in /tmp/lvchunks/c*.b64; do base64 -d "$f"; done > /tmp/lv.patch || fail "$phase"
-          echo "0ed66eb971cfdeb1316e33c953372591  /tmp/lv.patch" | md5sum -c - || fail "$phase"
+          gotmd5=$(md5sum /tmp/lv.patch | cut -d' ' -f1)
+          gotsz=$(wc -c < /tmp/lv.patch)
+          nchunk=$(ls /tmp/lvchunks/ | wc -l)
+          echo "chunk count: $nchunk; patch size: $gotsz; patch md5: $gotmd5"
+          for f in /tmp/lvchunks/c*.b64; do
+            b=$(cat "$f")
+            echo "chunk $(basename $f): $(printf '%s' "$b" | git hash-object --stdin) $(wc -c < "$f")"
+          done
+          if [ "$gotmd5" != "0ed66eb971cfdeb1316e33c953372591" ]; then
+            echo "::error::LVFAIL md5 got=$gotmd5 size=$gotsz nchunk=$nchunk"
+            exit 1
+          fi
           phase=applycheck
           git apply --check --verbose --whitespace=nowarn --exclude=.github/workflows/ci.yml /tmp/lv.patch || fail "$phase"
           phase=apply
