@@ -2703,7 +2703,7 @@ export default function BrowserView(props: Props) {
         return n;
       });
       props.closeTab(id);
-    }, 240);
+    }, 320);
   };
 
   /* ---- Ad-blocking card: the site scope mirrors the lock popup's

@@ -973,6 +973,7 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--md-sys-measurement-space100);
   /* Auto margins center the pill in the toolbar. */
   flex: 0 1 auto;
@@ -996,12 +997,12 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 .lb-tb-lock svg { width: 16px; height: 16px; display: block; fill: currentColor; }
 .lb-tb-lock + .lb-tb-favicon { margin-left: var(--md-sys-measurement-space50); }
 .lb-tb-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   background: none;
   border: none;
   padding: 0;
-  text-align: left;
+  text-align: center;
   color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
   font-family: inherit;
   font-size: var(--md-sys-typescale-body-medium-font-size, 14px);
@@ -1839,6 +1840,9 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   min-height: 0;
   margin-top: calc(-1 * var(--md-sys-measurement-space100, 8px));
   overflow: hidden;
+  /* Glide: the rows below follow this collapse, so it runs on the same
+     320ms window the real close waits for (Browser.tsx closeTabSmooth). */
+  transition: opacity 200ms var(--md-sys-motion-easing-standard, ease), height 320ms cubic-bezier(0.4, 0, 0.2, 1), margin-top 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* The toolbar slides fully away while the tab switcher is open; this
    rule must sit after the dock hover/reveal rules to win the cascade. */
