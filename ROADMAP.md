@@ -3,7 +3,7 @@
 This is the **single authoritative roadmap** for LobsterBrowse.
 
 - Canonical location: `/ROADMAP.md`
-- README and AGENTS.md should point here instead of duplicating the roadmap.
+- README should point here instead of duplicating the roadmap.
 - Zeolite has its own roadmap; do not copy Zeolite milestones into this file.
 - This roadmap is a living plan. Milestone scope may be adjusted when repository inspection shows that work is already complete, incorrectly scoped, or architecturally obsolete.
 
@@ -83,7 +83,7 @@ Search source, tests, configuration and documentation for:
 
 If RewriteFallback is genuinely obsolete, remove remaining implementation and documentation references. If a piece is still required, identify the exact dependency instead of deleting working compatibility infrastructure blindly.
 
-Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README/AGENTS), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed LobsterBrowse component. Nothing to delete; recorded here per the audit instruction.
+Audit result (2026-09-30, resolved): no RewriteFallback implementation, route, engine flag, DevTools label or fallback-rewriter code remains in the repository (0 code hits on main and beta). The term survives only as design vocabulary in the NativeTransit direction diagrams (README), where "RewriteFallback" names the Zeolite worker wasm rewriter escape hatch, not a removed LobsterBrowse component. Nothing to delete; recorded here per the audit instruction.
 
 ### Engine architecture
 
@@ -104,7 +104,7 @@ sented as implemented, partial, experimental or planned.
 
 ### Documentation
 
-Bring README, AGENTS.md and architecture documentation into agreement with the implementation.
+Bring README and architecture documentation into agreement with the implementation.
 
 ### Titanium gate
 
@@ -115,9 +115,8 @@ browser pass, which is deferred until a browser session is free. The
 deterministic transit suite (tests/transit, Tiers 0-7) gates everything
 CI can gate; the browser pass against a live beta origin is the one
 remaining step. The RewriteFallback audit is resolved above, the
-LB/Zeolite boundary is documented (AGENTS.md,
-docs/zeolite-integration.md), the build/deploy reliability checklist
-lives in DEPLOY.md, and README/AGENTS/DEPLOY agree on the current
+LB/Zeolite boundary is documented (docs/zeolite-integration.md), the build/deploy reliability checklist
+lives in DEPLOY.md, and README/DEPLOY agree on the current
 Zeolite pin (e3f1a171 / dist 3080d559).
 
 Recorded browser pass (2026-10-04, live beta origin, engine mode
@@ -369,7 +368,7 @@ service lobsterbrowse-content-ocbg.onrender.com) behind ZL_CONTENT_ORIGIN
 (enabled on main and beta; see the beta seam port record); the
 boot page self-heals the relay channel, and the navigation seam
 skips the per-origin navHandle mint in favor of the b64u route.
-Honest gaps and the provisioned origins are recorded in AGENTS.md.
+Honest gaps and the provisioned origins are recorded in docs/zeolite-integration.md and DEPLOY.md.
 #107 stays open.
 
 Beta seam port record (2026-10-21, wave 39): the #107 split-origin
@@ -382,7 +381,7 @@ engine pin 103 (dist ec7fd8fe, sw.js ce02ad5c6c73bd90,
 bootstrap.js 37460e146d217cb7). ZL_CONTENT_ORIGIN is set on the
 beta UI service: split mode is live on both deployments. The
 phase-2 URL/title sync and the wave-37 honest-gap list apply to
-beta exactly as to main (AGENTS.md wave 39 record).
+beta exactly as to main (wave 39 record).
 
 ### Downloads
 
@@ -540,7 +539,7 @@ Complete a security/privacy review of the proxy and browser-state architecture.
 
 ### Documentation
 
-README, AGENTS.md, architecture documentation and DevTools documentation must agree with the implementation.
+README, architecture documentation and DevTools documentation must agree with the implementation.
 
 ---
 
@@ -611,7 +610,7 @@ The canonical roadmap is:
 /ROADMAP.md
 ```
 
-README and AGENTS.md should point here.
+README should point here.
 
 ## Zeolite remains
  separate
@@ -652,7 +651,7 @@ Vanadium, 0.5 - Cobalt and 0.6 - Nickel are complete). The Cobalt
 groundwork stands: the RewriteFallback architecture was audited and
 reconciled into the engine's expected routing decisions,
 LobsterBrowse and Zeolite responsibilities are documented in
-AGENTS.md, /zl/ with Wisp and NativeTransit behavior is verified
+docs/zeolite-integration.md, /zl/ with Wisp and NativeTransit behavior is verified
 live on every deploy, engine builds are reproducible (dist pin plus
 sha256 checks in CI and in the Docker build), and the real-site
 regression suite runs in CI.

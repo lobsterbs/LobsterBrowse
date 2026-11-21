@@ -81,7 +81,7 @@ compiles; it does not browse). The beta branch isolates that risk.
 
 ## Ground rules for this branch
 
-- AGENTS.md remains the architecture authority; update it with every
+- README.md and docs/ remain the architecture authority; update them with every
   behavior change, not at the end.
 - Every step keeps the honest-behavior rule: nothing may pretend a
   capability succeeded when it did not. Failed capability = immediate,

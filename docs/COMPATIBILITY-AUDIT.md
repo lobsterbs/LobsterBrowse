@@ -25,7 +25,7 @@ what is genuinely unsupported.
 | fetch/XHR/element-setter routing patches | `engine-shim.js` | required for proxy operation | KEPT |
 | console/net/resfail diagnostics capture | `engine-shim.js` | diagnostics | KEPT; sanitized centrally (see §2) |
 | Decentraleyes local library substitution (jquery/lodash/moment/d3 from jsDelivr) | `ui/public/lobsterjet.js` | deliberate substitution | KEPT, user-toggleable, version mapping documented as approximate |
-| CSP meta / `integrity` attribute stripping | `main.rs` `strip_csp_meta` / `strip_integrity` | forced compat | KEPT: rewritten resources legitimately differ from upstream bytes, SRI would reject 100% of them; CSP would forbid the injected shim. Counted and reported per page (`lb-diag` meta) instead of silent. Header-level CSP never reaches the browser (engine_proxy forwards only content-type + cache headers) - documented in AGENTS.md |
+| CSP meta / `integrity` attribute stripping | `main.rs` `strip_csp_meta` / `strip_integrity` | forced compat | KEPT: rewritten resources legitimately differ from upstream bytes, SRI would reject 100% of them; CSP would forbid the injected shim. Counted and reported per page (`lb-diag` meta) instead of silent. Header-level CSP never reaches the browser (engine_proxy forwards only content-type + cache headers) - documented |
 | `<base>` tag stripping | `main.rs` `strip_base_tags` | forced compat | KEPT: the server resolves every relative URL against the real page URL, so a surviving `<base>` would re-anchor runtime-resolved URLs away from the engine route. Tests added for case/whitespace variants. Honest gap: pages that mutate `<base>` at runtime are not re-anchored |
 | engine error card (own HTML on load failure) | `engine_error_page` | intentional emulation | KEPT: never a fake success; carries `lb-load-error` meta + Try Again |
 | 429 captcha-page suppression | `engine_proxy` | deliberate policy | KEPT: a self-refreshing challenge that cannot be solved inside the proxy is replaced by an honest error card |
@@ -138,7 +138,7 @@ break DevTools as written).
 - Full back/forward history through OAuth popup flows and
   `window.open` return values (returns `null`).
 - Zeolite-mode incognito: `/lj/` tabs share the engine cookie jar
-  (documented AGENTS gap; ScramJet `/r/` has a real separate jar).
+  (documented gap; ScramJet `/r/` has a real separate jar).
 - Session restoration preserves the full stack + index (fixed this
   pass); timestamps/favicons per entry are not stored (backlog).
 
