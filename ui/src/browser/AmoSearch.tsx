@@ -80,6 +80,22 @@ async function amoGet(url: string): Promise<unknown> {
      egress (observed live: one search 503s, the identical next
      request serves 200). The engine passes the upstream status
      through, so retry those briefly instead of failing the search. */
+  /* #280: the /zl/ route must be answered by the engine service
+     worker; a client the SW has not claimed yet gets its fetches
+     served bare by the LB server (the /zl/<b64> 503 class, x3).
+     If this client is not controlled yet, wait once for the SW
+     before the retry loop; skipWaiting + clients.claim (#63) makes
+     ready + fetch land intercepted. */
+  if (typeof navigator !== "undefined" &&
+      navigator.serviceWorker &&
+      !navigator.serviceWorker.controller) {
+    try {
+      await navigator.serviceWorker.ready;
+    } catch {
+      /* no registration: fall through, retries still run */
+    }
+  }
+
   let last = 0;
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await fetch(routeUrl(url));
