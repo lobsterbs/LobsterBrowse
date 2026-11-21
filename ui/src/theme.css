@@ -2777,10 +2777,29 @@ background: var(--lb-glass-tint);
 /* Tab rows: a 9-sided cookie shape holds the site favicon, centred (prototype .tshape). */
 .lb-tab-shape { --m3e-shape-size: 44px; --m3e-shape-container-color: var(--md-sys-color-secondary-container, #5d3f3a); position: relative; flex: none; display: inline-block; color: var(--md-sys-color-on-secondary-container, #ffdad6); }
 .lb-tab-shape .lb-tab-shape-icon { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 22px; height: 22px; border-radius: 6px; object-fit: contain; font-size: 22px; }
-/* Wordmark is ~45x its font size wide: scale with viewport so it fits the sheet at 320-600px. */
-.lb-home-sheet pre.lb-ascii { font-size: clamp(5px, calc(2.1vw - 1px), 11px); }
+/* Wordmark is ~45.1x its font size wide: size it from the card's own content width so it always fills it. */
+.lb-home-sheet { container-type: inline-size; }
+.lb-home-sheet pre.lb-ascii { font-size: calc(100cqw / 45.6); }
 /* Active row is tinted like the shape; flip the shape to primary so the cookie stays visible. */
 .lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary, #ffb4a8); color: var(--md-sys-color-on-primary, #561e17); }
 /* Home matches the demo: plain surface instead of the wallpaper. Only the paint changes; the fx layers and hero gate stay mounted. */
 body:has(.lb-home) .lb-fx-bg { background: #130d0c; }
 body:has(.lb-home) .lb-fx-flash { display: none; }
+/* Settings nav, per the demo: transparent items, hover tint, pill when active, 48px shape (52px sunny when active). */
+.lb-set-nav { gap: 4px; }
+.lb-set-nav-item { gap: 14px; padding: 8px 18px 8px 8px; border: 0; border-radius: 18px; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; transition: background-color 200ms cubic-bezier(0.2, 0, 0, 1), border-radius 300ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1), scale 150ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-set-nav-item:hover { background: var(--md-sys-color-surface-container, #271d1b); }
+.lb-set-nav-item:active { scale: .96; }
+.lb-set-nav-item.active { background: var(--md-sys-color-secondary-container); border-radius: 999px; }
+.lb-set-nav-item m3e-shape { --m3e-shape-size: 48px; --m3e-shape-container-color: var(--md-sys-color-surface-container-high, #32282a); color: var(--md-sys-color-primary); display: inline-grid; place-items: center; --m3e-shape-transition: border-radius .7s cubic-bezier(.2, 0, 0, 1), clip-path .7s cubic-bezier(.2, 0, 0, 1), background-color .3s; }
+.lb-set-nav-item.active m3e-shape { --m3e-shape-size: 52px; --m3e-shape-container-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.lb-set-nav-item m3e-shape m3e-icon { font-size: 22px; }
+/* Tabs sheet: the demo's 60vh cap. */
+.lb-tabs-sheet { --m3e-bottom-sheet-top-space: calc(100dvh - min(60dvh, 780px)); --m3e-bottom-sheet-compact-top-space: calc(100dvh - min(60dvh, 780px)); }
+/* AI tool rows take the demo's step-card geometry (.step): 18px radius, 8/12 padding, 13.4/12.2px type, 18px icon. */
+.lb-ai-tool { border-radius: 18px; padding: 8px 12px; gap: 10px; }
+.lb-ai-tool-btn { font-size: .84rem; }
+.lb-ai-tool-dur { font-size: .76rem; }
+.lb-ai-tool-btn m3e-icon { font-size: 18px; }
+/* The AI view's base padding-bottom:0 (above) outranked the phone rule by source order and left the composer under the fixed nav. */
+@media (max-width: 600px) { .app-content[data-view="ai"] { padding-bottom: var(--m3e-nav-bar-height, 64px); } }

@@ -423,7 +423,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     inside a real m3e-shape (the expressive 4-sided
                     cookie), then the category name with one plain
                     line under it saying what the section holds. */}
-                <m3e-shape name="4-sided-cookie" aria-hidden={true}>
+                <m3e-shape name={section === id ? "sunny" : "4-sided-cookie"} aria-hidden={true}>
                   <m3e-icon name={SECTION_META[id].icon} />
                 </m3e-shape>
                 <span className="lb-set-nav-txt">
