@@ -449,8 +449,21 @@ export default function App() {
         nonce: op.nonce,
         before: new Set(tabsRef.current.map((t) => t.id)),
       });
-      if (/^https?:/i.test(op.url)) newTab(op.url);
-      else {
+      if (/^https?:/i.test(op.url)) {
+        newTab(op.url);
+        /* #701-tail: a browser_action-driven tabs.create can land
+           while an extension popup window (extLaunch
+           openExtPageWindow) holds focus; the new tab is created in
+           the main LB window, so raise it. window.focus is
+           best-effort: without transient activation the browser may
+           refuse, which is acceptable (the tab still appears in the
+           strip and the user finds it on the next window switch). */
+        try {
+          window.focus();
+        } catch {
+          /* focus refused: the tab is still created. */
+        }
+      } else {
         /* Rooted engine-extension page (zlExt/zlPageTok): not an LB tab;
            open it as its own window like extLaunch does. */
         window.open(op.url, "_blank", "noopener");

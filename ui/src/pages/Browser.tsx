@@ -2020,14 +2020,18 @@ export default function BrowserView(props: Props) {
             "warn",
             "escaped navigation recovered: " + loc.pathname + " -> " + intended
           );
-          /* LB#53 (Zeolite#63): the re-drive rides the same opaque
-             initial-route helper (handle first, legacy fallback). */
-          /* The frame handle is re-read in the callback: the captured
-             element can be gone by then (#171). */
-          void initialRoute(t.id, intended).then((href) => {
-            const fr = frames.current.get(t.id);
-            if (fr) fr.src = href;
-          });
+          /* #701-tail: reaching this recovery means the keyed nav
+             handle no longer resolves (typically an engine worker
+             restart orphaned it, and re-minting against a cold
+             worker just burned two 3s timeouts while the origin's
+             404 SPA shell painted inside the tab). Skip the mint
+             dance and drive the legacy route directly: routeUrl is
+             the deterministic terminal fallback of every
+             initialRoute branch anyway, is synchronous, and the
+             once-per-path lastEscape guard above still bounds
+             loops. */
+          const fr = frames.current.get(t.id);
+          if (fr) fr.src = routeUrl(intended);
           /* Record the recovered URL as this tab's last navigation so
              the URL sync (once the frame loads it) never triggers a
              duplicate auto-load of the same target. */
