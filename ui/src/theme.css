@@ -1756,14 +1756,8 @@ m3e-snackbar {
      of running 16px past the sheet's right edge. */
   padding: var(--md-sys-measurement-space50) 0 16px;
 }
-/* Close-all, the sheet bar's trailing action: quiet while idle
-   (transparent over the bar), error-toned once armed, so the
-   second tap shows what the second tap does without a dialog. */
+/* Close-all, the sheet bar's trailing action: quiet over the bar. */
 .lb-tabs-closeall { --m3e-button-container-color: transparent; }
-.lb-tabs-closeall.armed {
-  --m3e-button-container-color: var(--md-sys-color-error-container);
-  --m3e-button-label-text-color: var(--md-sys-color-on-error-container);
-}
 /* Rows are plain buttons (not cards): the active tab reads as a
    rounded tonal pill behind the whole row (the active-marker
    language), the inactive rows stay transparent until hovered. */
