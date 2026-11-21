@@ -138,7 +138,7 @@ export default function TabSwitcherCard(props: {
                 {props.icons[t.id] ? (
                   <img className="lb-tab-shape-icon" src={props.icons[t.id]} alt="" />
                 ) : (
-                  <m3e-icon className="lb-tab-shape-icon" name="public" aria-hidden={true} />
+                  <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-shape-icon" }} />
                 )}
               </m3e-shape>
               <span className="lb-tabs-title">{tabLabel(t)}</span>

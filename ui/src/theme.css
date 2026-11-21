@@ -2751,9 +2751,10 @@ background: var(--lb-glass-tint);
 }
 .lb-home-hl { position: absolute; pointer-events: none; z-index: 0; transition: opacity .5s ease; }
 .lb-home-hl m3e-shape { display: block; opacity: .42; transition: --m3e-shape-size .9s var(--bz-slow, ease); }
-.lb-home-hl1 { left: 58%; top: -42%; }
+/* Shapes sit above the sheet's corners so neither overlaps the search bar below. */
+.lb-home-hl1 { right: -6%; bottom: 62%; }
 .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(170px, 40vmin, 360px); --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); }
-.lb-home-hl2 { left: -7%; top: 82%; }
+.lb-home-hl2 { left: -5%; bottom: 84%; }
 .lb-home-hl2 m3e-shape { --m3e-shape-size: clamp(56px, 11vmin, 100px); --m3e-shape-container-color: var(--md-sys-color-tertiary-container, #554500); opacity: .6; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-sheet { transform: translateY(-10px) scale(.9); opacity: .6; border-radius: 40px; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(120px, 26vmin, 240px); opacity: .28; }
@@ -2766,13 +2767,20 @@ background: var(--lb-glass-tint);
 /* Home: the wordmark sits on the frosted sheet, not in a second glass box. */
 .lb-home-sheet pre.lb-ascii { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; box-shadow: none; padding: 0; }
 /* Toolbar pill: fixed resting width, springs on hover and press (prototype values). */
-.lb-tb-pill { width: clamp(130px, 34vw, 340px); height: 36px; min-width: 0; }
+.lb-tb-pill { box-sizing: border-box; width: clamp(130px, 34vw, 340px); height: 36px;
+  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), border-radius 350ms cubic-bezier(.2, .9, .3, 1.2), transform 200ms cubic-bezier(.2, .9, .3, 1.2); }
 .lb-tb-pill:hover { border-radius: 18px; }
 .lb-tb-pill:active { transform: scale(.985); }
-.lb-tb-pill.expanded { width: min(92vw, 440px); }
 .lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }
 /* Loader: the prototype's 48px indicator. */
 .lb-loadchip m3e-loading-indicator { width: 48px; height: 48px; }
 /* Tab rows: a 9-sided cookie shape holds the site favicon, centred (prototype .tshape). */
 .lb-tab-shape { --m3e-shape-size: 44px; --m3e-shape-container-color: var(--md-sys-color-secondary-container, #5d3f3a); position: relative; flex: none; display: inline-block; color: var(--md-sys-color-on-secondary-container, #ffdad6); }
 .lb-tab-shape .lb-tab-shape-icon { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 22px; height: 22px; border-radius: 6px; object-fit: contain; font-size: 22px; }
+/* Wordmark is ~45x its font size wide: scale with viewport so it fits the sheet at 320-600px. */
+.lb-home-sheet pre.lb-ascii { font-size: clamp(5px, calc(2.1vw - 1px), 11px); }
+/* Active row is tinted like the shape; flip the shape to primary so the cookie stays visible. */
+.lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary, #ffb4a8); color: var(--md-sys-color-on-primary, #561e17); }
+/* Home matches the demo: plain surface instead of the wallpaper. Only the paint changes; the fx layers and hero gate stay mounted. */
+body:has(.lb-home) .lb-fx-bg { background: #130d0c; }
+body:has(.lb-home) .lb-fx-flash { display: none; }
