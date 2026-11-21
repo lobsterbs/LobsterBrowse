@@ -2604,7 +2604,19 @@ FROM debian:bookworm-slim AS zl-builder
 # sw.js fce0135d1b99d8d3 -> 7df24a17983a2c82 (947394 bytes);
 # bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
 # Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=8b8edb792b328d910fd0ab93fbe523f02b57e7f3
+# Pin 191 (2026-11-21): dist 8f35da9 (build 44953221976; Zeolite
+# main 1184dfc, all five jobs green). The #703 apps-widget origin=
+# repair ships: the committed-query decode cedes /widget/app/so to
+# the widget surface, the guard arms on the riding zlNavh token,
+# and virtualOgsOrigin re-derives the page origin from the token
+# and strips every MAC-verifying zlNavh before upstream. Tagged
+# 3.4.4 (engine patch bump: a fix pin that changes engine bytes).
+# Cargo-side pin stays 5073f316 (no zeolite-server code change;
+# only the TS engine and the workspace version stamps moved).
+# sw.js 7df24a17983a2c82 -> 2ba4232414965a63 (947844 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=8f35da9d7924c67319c7e0a6fd0df1d854c51412
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2671,7 +2683,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=7df24a17983a2c82 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2ba4232414965a63 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
