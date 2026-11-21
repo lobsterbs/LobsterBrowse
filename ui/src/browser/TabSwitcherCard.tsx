@@ -134,13 +134,13 @@ export default function TabSwitcherCard(props: {
               {/* The favicon sits inside a frosted m3e-avatar: the
                   translucent avatar surface blurs the sheet content
                   behind it. */}
-              <m3e-avatar {...{ class: "lb-tab-avatar" }} aria-hidden={true}>
+              <m3e-shape name="9-sided-cookie" {...{ class: "lb-tab-shape" }} aria-hidden={true}>
                 {props.icons[t.id] ? (
-                  <img src={props.icons[t.id]} alt="" />
+                  <img className="lb-tab-shape-icon" src={props.icons[t.id]} alt="" />
                 ) : (
-                  <m3e-icon name="public" aria-hidden={true} />
+                  <m3e-icon className="lb-tab-shape-icon" name="public" aria-hidden={true} />
                 )}
-              </m3e-avatar>
+              </m3e-shape>
               <span className="lb-tabs-title">{tabLabel(t)}</span>
               {/* #91/#233: a real icon button so closing is
                   independently keyboard-reachable; selection and

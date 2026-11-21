@@ -3107,26 +3107,7 @@ export default function BrowserView(props: Props) {
                 runs along the pill's bottom edge. Pure inline SVG, two
                 identical copies so the 50% slide loop never shows a
                 seam. Hidden entirely under reduced motion. */}
-            {st.loading && (
-              <span className="lb-tb-wave" aria-hidden={true}>
-                <svg viewBox="0 0 120 6" preserveAspectRatio="none">
-                  <path
-                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  />
-                  <path
-                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    transform="translate(60)"
-                  />
-                </svg>
-              </span>
-            )}
-          </span>
+                      </span>
           {/* Trail zone (wave 112): diagnostics chip, right-side
               compact keyboard hint, full screen, pinned-tab state
               and the overflow menu close the bar on the right. */}

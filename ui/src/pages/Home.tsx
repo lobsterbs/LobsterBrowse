@@ -158,6 +158,14 @@ export default function HomePage({ settings, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
+      <div className="lb-home-stage">
+        <div className="lb-home-hl lb-home-hl1" aria-hidden={true}>
+          <m3e-shape name="soft-burst" />
+        </div>
+        <div className="lb-home-hl lb-home-hl2" aria-hidden={true}>
+          <m3e-shape name="sunny" />
+        </div>
+        <div className="lb-home-sheet">
       <pre
         className="lb-ascii"
         aria-label="LobsterBrowse"
@@ -170,6 +178,8 @@ export default function HomePage({ settings, onNavigate }: Props) {
  / /___/ /_/ / /_/ (__  ) /_/  __/ /  / /_/ / /  / /_/ / |/ |/ (__  )  __/
 /_____/\____/_.___/____/\__/\___/_/  /_____/_/   \____/|__/|__/____/\___/ 
                                                                            `}</pre>
+        </div>
+      </div>
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
       <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
         <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
