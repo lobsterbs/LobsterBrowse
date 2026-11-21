@@ -156,6 +156,14 @@ export default function App() {
     const restored = store.loadSessionTabs();
     return restored.length > 0 ? restored[restored.length - 1].id : 0;
   });
+  /* Latest tabs/activeId for closeTab: a close-all fires several closeTab
+     calls from one render's closure, and each filtered that stale snapshot,
+     so only the last close stuck. The refs are also written synchronously
+     by closeTab/restoreClosedTabs so back-to-back calls compose. */
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   /* #81: Ctrl+K command palette. */
   const [paletteOpen, setPaletteOpen] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
@@ -402,17 +410,30 @@ export default function App() {
     store.pushLog("info", "new tab #" + tab.id + (url ? " → " + url : ""));
   }, []);
 
-  const closeTab = useCallback(
-    (id: number) => {
-      const tab = tabs.find((t) => t.id === id);
-      if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
-      const next = tabs.filter((t) => t.id !== id);
-      setTabs(next);
-      if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
-      if (next.length === 0) setView("home");
-    },
-    [tabs, activeId]
-  );
+  const closeTab = useCallback((id: number) => {
+    const cur = tabsRef.current;
+    const tab = cur.find((t) => t.id === id);
+    if (!tab) return;
+    closedTabs.current = [...closedTabs.current, tab].slice(-10);
+    const next = cur.filter((t) => t.id !== id);
+    tabsRef.current = next;
+    setTabs(next);
+    if (id === activeIdRef.current && next.length > 0) {
+      activeIdRef.current = next[next.length - 1].id;
+      setActiveId(activeIdRef.current);
+    }
+    if (next.length === 0) setView("home");
+  }, []);
+  /* Undo for "Close all": put the given tabs back by id (the closed stack
+     keeps the last 10), without moving the active tab. Pages reload. */
+  const restoreClosedTabs = useCallback((ids: number[]) => {
+    const back = closedTabs.current.filter((t) => ids.includes(t.id));
+    if (back.length === 0) return;
+    closedTabs.current = closedTabs.current.filter((t) => !ids.includes(t.id));
+    const next = [...tabsRef.current, ...back];
+    tabsRef.current = next;
+    setTabs(next);
+  }, []);
 
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -1033,6 +1054,7 @@ export default function App() {
                   updateTab={updateTab}
                   newTab={newTab}
                   closeTab={closeTab}
+                  restoreClosedTabs={restoreClosedTabs}
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}

@@ -3,11 +3,11 @@
    request 2026-11-07; the preview windows are gone - a second page
    instance per tab was weight, not information). The sheet header is
    a basic m3e-app-bar: back button, title, and a Close-all action
-   with a two-step confirm. The sheet stays
+   (immediate; Browser shows an Undo snackbar). The sheet stays
    mounted; open/close rides the sheet's own show()/hide() methods
    with the `closing` event flowing back into Browser state.
    Presentational: tab state and selection stay in pages/Browser.tsx. */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
 
@@ -48,36 +48,6 @@ export default function TabSwitcherCard(props: {
     else el.hide();
   }, [props.open]);
 
-  /* Close-all is a destructive bulk action, so it carries a
-     two-step confirm in place: the first press arms the button
-     (the label turns into the real warning), the second press
-     fires. The arm is transient: it disarms itself after 4s, when
-     the sheet closes, or on unmount, so a stray armed button never
-     waits for the next visit. */
-  const [closeAllArmed, setCloseAllArmed] = useState(false);
-  const disarmTimer = useRef<number | null>(null);
-  const clearDisarm = () => {
-    if (disarmTimer.current !== null) {
-      window.clearTimeout(disarmTimer.current);
-      disarmTimer.current = null;
-    }
-  };
-  useEffect(() => {
-    if (!props.open) setCloseAllArmed(false);
-  }, [props.open]);
-  useEffect(() => clearDisarm, []);
-  const pressCloseAll = () => {
-    if (!props.onCloseAll) return;
-    if (closeAllArmed) {
-      clearDisarm();
-      setCloseAllArmed(false);
-      props.onCloseAll();
-    } else {
-      setCloseAllArmed(true);
-      clearDisarm();
-      disarmTimer.current = window.setTimeout(() => setCloseAllArmed(false), 4000);
-    }
-  };
   const closableCount = props.tabs.filter((t) => t.id !== props.activeId).length;
 
   if (props.tabs.length === 0) return null;
@@ -99,11 +69,11 @@ export default function TabSwitcherCard(props: {
         {props.onCloseAll && closableCount > 0 && (
           <m3e-button
             slot="trailing"
-            {...{ class: "lb-tabs-closeall" + (closeAllArmed ? " armed" : "") }}
-            aria-label={closeAllArmed ? "Confirm: close every other tab" : "Close every other tab"}
-            onClick={pressCloseAll}
+            {...{ class: "lb-tabs-closeall" }}
+            aria-label="Close every other tab"
+            onClick={props.onCloseAll}
           >
-            {closeAllArmed ? "Tap again to confirm" : "Close all"}
+            Close all
           </m3e-button>
         )}
       </m3e-app-bar>

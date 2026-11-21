@@ -333,6 +333,7 @@ type Props = {
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
   closeTab: (id: number) => void;
+  restoreClosedTabs: (ids: number[]) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
@@ -2911,8 +2912,18 @@ export default function BrowserView(props: Props) {
                .closing animation as a single close, so the sheet
                empties in one choreographed wave instead of one
                row snapping out; closeTabSmooth owns the per-tab
-               cleanup and the guarded state drop. */
-            for (const t of tabs) if (t.id !== active.id) closeTabSmooth(t.id);
+               cleanup and the guarded state drop. No confirm step:
+               an Undo snackbar follows once the collapse has landed
+               (closeTabSmooth's 320ms), restoring the closed tabs. */
+            const ids = tabs.filter((t) => t.id !== active.id).map((t) => t.id);
+            for (const id of ids) closeTabSmooth(id);
+            if (ids.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+            window.setTimeout(() => {
+              M3eSnackbar.open(ids.length === 1 ? "Closed 1 tab" : "Closed " + ids.length + " tabs", "Undo", {
+                duration: 6000,
+                actionCallback: () => props.restoreClosedTabs(ids),
+              });
+            }, 340);
           }}
         />
         {/* #86: the tucked dock hides fully; the grip line is the
