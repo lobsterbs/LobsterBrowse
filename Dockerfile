@@ -2450,7 +2450,31 @@ FROM debian:bookworm-slim AS zl-builder
 # 39f3f86a873eee80 (938155 bytes); bootstrap unchanged 0ddd6edd9485c8ab
 # (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy
 # with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=5f14b7349c69cd4f0ccb0bd963669ac1e86136b8
+# Pin 187 (2026-11-21): dist 16d89cbd (build 44897192830; Zeolite
+# main ef66f29, all five jobs green on the scheduled run
+# 44899232015; the bundle's own push-event run landed red only on
+# the browser job - environment-level mass page.goto timeouts with
+# zero assertion failures, green on the rerun). Ships the extension
+# bare-root navigation rescue (#698, also reported as #699): rooted
+# pages inject <base href="/zl-ext/<id>/">, so a fragment-only
+# anchor (Tampermonkey options "Get some scripts...") resolved to a
+# FULL top-level navigation to the bare package root, which is
+# neither a declared page nor a WAR, and the tab dead-ended on a raw
+# 404. Two layers: the page bridge restores same-document fragment
+# semantics so a "#" anchor never leaves the document, and a
+# bare-root navigation that still reaches the engine answers 302 to
+# the granted, tokened options page (subresource fetches and
+# options-less extensions keep the honest 404; regressions: the
+# ext-root-nav suite). Also rides #541: the a[download] anchor intent
+# seam - a click posts the engine URL it is about to navigate to,
+# and the navigation's response seam registers the download
+# (single-use, client-bound, TTL-etched; zl:dlIntent control-plane
+# case, torture coverage, downloads-anchor e2e harness).
+# sw.js 39f3f86a873eee80 -> d77346d284798bf1 (941778 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a
+# cleared Render build cache.
+ARG ZEOLITE_COMMIT=16d89cbdf78230f36f132854c4973acbda0d338d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2517,7 +2541,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=39f3f86a873eee80 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d77346d284798bf1 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
