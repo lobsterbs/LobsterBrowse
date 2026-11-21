@@ -25,32 +25,43 @@ jobs:
           node-version: 22
       - name: Recover chunks from history, apply code files, verify, commit
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          fail() { echo "::error::LVFAIL phase=$1"; exit 1; }
+          phase=guard
           if grep -q "autoLoadGate" ui/src/pages/Browser.tsx; then
             echo "Patch already applied; skipping"
             exit 0
           fi
-          mkdir -p /tmp/lvchunks
+          phase=recover
+          mkdir -p /tmp/lvchunks || fail "$phase"
           for i in $(seq -w 1 36); do
             p="_apply/chunks/c$i.b64"
-            add=$(git log --diff-filter=A --format=%H -1 -- "$p")
-            if [ -z "$add" ]; then echo "no add-commit for $p"; exit 1; fi
-            git show "$add:$p" > "/tmp/lvchunks/c$i.b64"
+            add=$(git log --diff-filter=A --format=%H -1 -- "$p") || fail "$phase:gitlog:$i"
+            [ -n "$add" ] || fail "$phase:noadd:$i"
+            git show "$add:$p" > "/tmp/lvchunks/c$i.b64" || fail "$phase:show:$i"
+            echo "recovered c$i from $add"
           done
-          for f in /tmp/lvchunks/c*.b64; do base64 -d "$f"; done > /tmp/lv.patch
-          echo "0ed66eb971cfdeb1316e33c953372591  /tmp/lv.patch" | md5sum -c -
-          git apply --check --verbose --whitespace=nowarn --exclude=.github/workflows/ci.yml /tmp/lv.patch
-          git apply --whitespace=nowarn --exclude=.github/workflows/ci.yml /tmp/lv.patch
-          test -f ui/src/browser/navGate.ts
-          test -f tests/load-visibility/check.mjs
-          grep -q "autoLoadGate" ui/src/pages/Browser.tsx
-          node --experimental-strip-types tests/load-visibility/check.mjs
-          git add ui/src tests
+          phase=md5
+          for f in /tmp/lvchunks/c*.b64; do base64 -d "$f"; done > /tmp/lv.patch || fail "$phase"
+          echo "0ed66eb971cfdeb1316e33c953372591  /tmp/lv.patch" | md5sum -c - || fail "$phase"
+          phase=applycheck
+          git apply --check --verbose --whitespace=nowarn --exclude=.github/workflows/ci.yml /tmp/lv.patch || fail "$phase"
+          phase=apply
+          git apply --whitespace=nowarn --exclude=.github/workflows/ci.yml /tmp/lv.patch || fail "$phase"
+          phase=exists
+          test -f ui/src/browser/navGate.ts || fail "$phase"
+          test -f tests/load-visibility/check.mjs || fail "$phase"
+          grep -q "autoLoadGate" ui/src/pages/Browser.tsx || fail "$phase"
+          phase=nodecheck
+          node --experimental-strip-types tests/load-visibility/check.mjs || fail "$phase"
+          phase=stage
+          git add ui/src tests || fail "$phase"
           echo "--- staged files ---"
           git diff --cached --name-only
           nstaged=$(git diff --cached --name-only | wc -l)
-          if [ "$nstaged" -ne 4 ]; then echo "expected exactly 4 staged paths, got $nstaged"; exit 1; fi
+          [ "$nstaged" -eq 4 ] || fail "$phase:$nstaged"
+          phase=commit-push
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix(ui): load tabs only when the Browse view is visible; blank the frame before each navigation"
-          git push
+          git commit -m "fix(ui): load tabs only when the Browse view is visible; blank the frame before each navigation" || fail "$phase"
+          git push || fail "$phase"
