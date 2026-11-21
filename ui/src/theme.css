@@ -2781,3 +2781,5 @@ background: var(--lb-glass-tint);
 .lb-ai-tool-body .lb-ai-tool-dur { font-size: .76rem; }
 /* The AI view's base padding-bottom:0 (above) outranked the phone rule by source order and left the composer under the fixed nav. */
 @media (max-width: 600px) { .app-content[data-view="ai"] { padding-bottom: var(--m3e-nav-bar-height, 64px); } }
+/* Rows pan vertically by browser default only, so horizontal swipes reach m3e-swipe-gesture. */
+.lb-tab-row { touch-action: pan-y; }

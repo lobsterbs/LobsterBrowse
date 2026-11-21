@@ -50,6 +50,39 @@ export default function TabSwitcherCard(props: {
 
   const closableCount = props.tabs.filter((t) => t.id !== props.activeId).length;
 
+  /* Swipe a row sideways to close it (touch and pen). One non-visual
+     m3e-swipe-gesture per row reports phases: the row follows the finger
+     on update, a committed swipe closes the tab, a cancel springs back.
+     The click the lift would fire is swallowed for a moment. */
+  const swipedAt = useRef(0);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const onGesture = (ev: Event) => {
+      const g = ev.currentTarget as HTMLElement;
+      const d = (ev as CustomEvent<{ phase: string; translationX: number; direction: string }>).detail;
+      const id = Number(g.dataset.tab);
+      const row = document.getElementById("lb-tab-row-" + id);
+      if (!row) return;
+      if (d.phase === "update") {
+        row.style.transition = "none";
+        row.style.transform = "translateX(" + d.translationX + "px)";
+        row.style.opacity = String(Math.max(0.2, 1 - Math.abs(d.translationX) / 300));
+      } else {
+        row.style.transition = "transform 250ms cubic-bezier(0.2, 0, 0, 1), opacity 250ms";
+        row.style.transform = "";
+        row.style.opacity = "";
+        if (d.phase === "end") {
+          swipedAt.current = Date.now();
+          live.current.onCloseTab(id);
+        }
+      }
+    };
+    const gestures = el.querySelectorAll<HTMLElement>("m3e-swipe-gesture");
+    gestures.forEach((g) => g.addEventListener("gesture", onGesture));
+    return () => gestures.forEach((g) => g.removeEventListener("gesture", onGesture));
+  }, [props.tabs]);
+
   if (props.tabs.length === 0) return null;
   return (
     <m3e-bottom-sheet
@@ -79,6 +112,7 @@ export default function TabSwitcherCard(props: {
       </m3e-app-bar>
       <div className="lb-tabs-row">
         {props.tabs.map((t) => {
+          /* shortcut: swipe closes any row, including the active tab (same as its X). */
           const rowClass =
             "lb-tab-row" +
             (t.id === props.activeId ? " active" : "") +
@@ -86,12 +120,16 @@ export default function TabSwitcherCard(props: {
           return (
             <div
               key={t.id}
+              id={"lb-tab-row-" + t.id}
               className={rowClass}
               role="button"
               tabIndex={0}
               aria-current={t.id === props.activeId ? "true" : undefined}
               aria-label={"Switch to " + tabLabel(t)}
-              onClick={() => props.onSelect(t.id)}
+              onClick={() => {
+                if (Date.now() - swipedAt.current < 400) return;
+                props.onSelect(t.id);
+              }}
               onKeyDown={(e: KeyboardEvent) => {
                 /* #91: full button semantics: Space activates too,
                    without scrolling the list. */
@@ -128,6 +166,17 @@ export default function TabSwitcherCard(props: {
             </div>
           );
         })}
+        {props.tabs.map((t) => (
+          <m3e-swipe-gesture
+            key={t.id}
+            for={"lb-tab-row-" + t.id}
+            data-tab={t.id}
+            directions="left right"
+            pointer-types="touch pen"
+            min-displacement="48"
+            min-velocity="0.1"
+          />
+        ))}
       </div>
     </m3e-bottom-sheet>
   );
