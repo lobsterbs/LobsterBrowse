@@ -2962,9 +2962,11 @@ export default function BrowserView(props: Props) {
             }}
             {...{ ref: tabsBtnRef }}
           >
-            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+            <span id="lb-tabs-ic" className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          {/* Tab count: a real m3e-badge on the 24px icon (M3 anchors badges to the icon, not the 48px button). */}
+          {tabs.length > 0 && <m3e-badge for="lb-tabs-ic" aria-hidden={true}>{tabs.length}</m3e-badge>}
           <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>

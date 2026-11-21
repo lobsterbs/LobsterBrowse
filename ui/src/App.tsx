@@ -39,6 +39,8 @@ let tabSeq = 1;
    lb-hero.jpg backplate never flashes through on a cold cache. */
 const HERO_BACKDROP_URL =
   "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
+/* Wallpaper off (all pages paint the theme surface). Flip to true to bring the hero layer, its pre-warm fetch and the flash back. */
+const HERO_BG = false;
 let heroBackdropWarm: Promise<void> | null = null;
 let heroBackdropSettled = false;
 function heroBackdropReady(): Promise<void> {
@@ -66,7 +68,7 @@ function heroBackdropReady(): Promise<void> {
    the "frosted glass takes its 100ms" symptom this removes. The cold
    path is unchanged: the layer still waits for the load, so the local
    lb-hero.jpg backplate never flashes. */
-heroBackdropReady();
+if (HERO_BG) heroBackdropReady();
 
 function freshTab(url = ""): Tab {
   return {
@@ -106,6 +108,7 @@ export default function App() {
   const [heroBgReady, setHeroBgReady] = useState(heroBackdropSettled);
   useEffect(() => {
     let on = true;
+    if (!HERO_BG) return;
     heroBackdropReady().then(() => {
       if (on) setHeroBgReady(true);
     });
@@ -916,12 +919,12 @@ export default function App() {
           and replaced by the static photographic hero image
           (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
           theme.css). Away from those views = not rendered. */}
-      {(view === "home" || view === "ai") && heroBgReady &&
+      {HERO_BG && (view === "home" || view === "ai") && heroBgReady &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
         )}
-      {heroFlash &&
+      {HERO_BG && heroFlash &&
         createPortal(
           <div className="lb-fx-flash" aria-hidden={true} />,
           document.body
