@@ -337,6 +337,7 @@ type Props = {
   updateTab: (id: number, patch: Partial<Tab>) => void;
   newTab: (url?: string) => void;
   closeTab: (id: number) => void;
+  restoreClosedTabs: (ids: number[]) => void;
   /* Incognito session: no history recording, no session persistence. */
   incognito: boolean;
   onIncognitoChange: (v: boolean) => void;
@@ -2757,7 +2758,7 @@ export default function BrowserView(props: Props) {
         return n;
       });
       props.closeTab(id);
-    }, 240);
+    }, 320);
   };
 
   /* ---- Ad-blocking card: the site scope mirrors the lock popup's
@@ -2970,8 +2971,18 @@ export default function BrowserView(props: Props) {
                .closing animation as a single close, so the sheet
                empties in one choreographed wave instead of one
                row snapping out; closeTabSmooth owns the per-tab
-               cleanup and the guarded state drop. */
-            for (const t of tabs) if (t.id !== active.id) closeTabSmooth(t.id);
+               cleanup and the guarded state drop. No confirm step:
+               an Undo snackbar follows once the collapse has landed
+               (closeTabSmooth's 320ms), restoring the closed tabs. */
+            const ids = tabs.filter((t) => t.id !== active.id).map((t) => t.id);
+            for (const id of ids) closeTabSmooth(id);
+            if (ids.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+            window.setTimeout(() => {
+              M3eSnackbar.open(ids.length === 1 ? "Closed 1 tab" : "Closed " + ids.length + " tabs", "Undo", {
+                duration: 6000,
+                actionCallback: () => props.restoreClosedTabs(ids),
+              });
+            }, 340);
           }}
         />
         {/* #86: the tucked dock hides fully; the grip line is the
@@ -3021,9 +3032,11 @@ export default function BrowserView(props: Props) {
             }}
             {...{ ref: tabsBtnRef }}
           >
-            <span className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+            <span id="lb-tabs-ic" className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          {/* Tab count: a real m3e-badge on the 24px icon (M3 anchors badges to the icon, not the 48px button). */}
+          {tabs.length > 0 && <m3e-badge for="lb-tabs-ic" aria-hidden={true}>{tabs.length}</m3e-badge>}
           <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
@@ -3162,27 +3175,13 @@ export default function BrowserView(props: Props) {
                 {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
               </button>
             )}
-            {/* Load wave: while this tab is loading, a thin wavy line
-                runs along the pill's bottom edge. Pure inline SVG, two
-                identical copies so the 50% slide loop never shows a
-                seam. Hidden entirely under reduced motion. */}
+            {/* Load wave: while this tab is loading, the real wavy
+                indeterminate m3e-linear-progress-indicator runs along
+                the pill's bottom edge (the old hand-drawn SVG slide
+                is gone). Hidden entirely under reduced motion. */}
             {st.loading && (
               <span className="lb-tb-wave" aria-hidden={true}>
-                <svg viewBox="0 0 120 6" preserveAspectRatio="none">
-                  <path
-                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  />
-                  <path
-                    d="M0 3 Q 3.75 0 7.5 3 T 15 3 T 22.5 3 T 30 3 T 37.5 3 T 45 3 T 52.5 3 T 60 3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    transform="translate(60)"
-                  />
-                </svg>
+                <m3e-linear-progress-indicator variant="wavy" mode="indeterminate" />
               </span>
             )}
           </span>
@@ -3366,33 +3365,31 @@ export default function BrowserView(props: Props) {
               <div className="lb-ext-note-msg">{n.message}</div>
               <div className="lb-ext-note-actions">
                 {n.buttons.map((b, i) => (
-                  <button
+                  <m3e-button
                     key={i}
-                    className="lb-ext-note-btn"
+                    variant="tonal"
+                    size="small"
                     onClick={() => {
                       notifyEvt(n.extId, n.id, "buttonClicked", i);
                       dropNote(n.extId, n.id, true);
                     }}
                   >
                     {b.title}
-                  </button>
+                  </m3e-button>
                 ))}
-                <button
-                  className="lb-ext-note-btn"
+                <m3e-button
+                  variant="tonal"
+                  size="small"
                   onClick={() => {
                     notifyEvt(n.extId, n.id, "clicked");
                     dropNote(n.extId, n.id, true);
                   }}
                 >
                   Open
-                </button>
-                <button
-                  className="lb-ext-note-btn"
-                  aria-label="Dismiss"
-                  onClick={() => dropNote(n.extId, n.id, true)}
-                >
-                  &times;
-                </button>
+                </m3e-button>
+                <m3e-icon-button aria-label="Dismiss" onClick={() => dropNote(n.extId, n.id, true)}>
+                  <m3e-icon name="close" aria-hidden={true} />
+                </m3e-icon-button>
               </div>
             </div>
           ))}

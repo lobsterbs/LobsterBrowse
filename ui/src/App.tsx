@@ -40,6 +40,8 @@ let tabSeq = 1;
    lb-hero.jpg backplate never flashes through on a cold cache. */
 const HERO_BACKDROP_URL =
   "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
+/* Wallpaper off (all pages paint the theme surface). Flip to true to bring the hero layer, its pre-warm fetch and the flash back. */
+const HERO_BG = false;
 let heroBackdropWarm: Promise<void> | null = null;
 let heroBackdropSettled = false;
 function heroBackdropReady(): Promise<void> {
@@ -67,7 +69,7 @@ function heroBackdropReady(): Promise<void> {
    the "frosted glass takes its 100ms" symptom this removes. The cold
    path is unchanged: the layer still waits for the load, so the local
    lb-hero.jpg backplate never flashes. */
-heroBackdropReady();
+if (HERO_BG) heroBackdropReady();
 
 function freshTab(url = ""): Tab {
   return {
@@ -107,6 +109,7 @@ export default function App() {
   const [heroBgReady, setHeroBgReady] = useState(heroBackdropSettled);
   useEffect(() => {
     let on = true;
+    if (!HERO_BG) return;
     heroBackdropReady().then(() => {
       if (on) setHeroBgReady(true);
     });
@@ -154,6 +157,14 @@ export default function App() {
     const restored = store.loadSessionTabs();
     return restored.length > 0 ? restored[restored.length - 1].id : 0;
   });
+  /* Latest tabs/activeId for closeTab: a close-all fires several closeTab
+     calls from one render's closure, and each filtered that stale snapshot,
+     so only the last close stuck. The refs are also written synchronously
+     by closeTab/restoreClosedTabs so back-to-back calls compose. */
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   /* #81: Ctrl+K command palette. */
   const [paletteOpen, setPaletteOpen] = useState(false);
   /* Incognito: no history recording, no session persistence while on. */
@@ -400,17 +411,30 @@ export default function App() {
     store.pushLog("info", "new tab #" + tab.id + (url ? " → " + url : ""));
   }, []);
 
-  const closeTab = useCallback(
-    (id: number) => {
-      const tab = tabs.find((t) => t.id === id);
-      if (tab) closedTabs.current = [...closedTabs.current, tab].slice(-10);
-      const next = tabs.filter((t) => t.id !== id);
-      setTabs(next);
-      if (id === activeId && next.length > 0) setActiveId(next[next.length - 1].id);
-      if (next.length === 0) setView("home");
-    },
-    [tabs, activeId]
-  );
+  const closeTab = useCallback((id: number) => {
+    const cur = tabsRef.current;
+    const tab = cur.find((t) => t.id === id);
+    if (!tab) return;
+    closedTabs.current = [...closedTabs.current, tab].slice(-10);
+    const next = cur.filter((t) => t.id !== id);
+    tabsRef.current = next;
+    setTabs(next);
+    if (id === activeIdRef.current && next.length > 0) {
+      activeIdRef.current = next[next.length - 1].id;
+      setActiveId(activeIdRef.current);
+    }
+    if (next.length === 0) setView("home");
+  }, []);
+  /* Undo for "Close all": put the given tabs back by id (the closed stack
+     keeps the last 10), without moving the active tab. Pages reload. */
+  const restoreClosedTabs = useCallback((ids: number[]) => {
+    const back = closedTabs.current.filter((t) => ids.includes(t.id));
+    if (back.length === 0) return;
+    closedTabs.current = closedTabs.current.filter((t) => !ids.includes(t.id));
+    const next = [...tabsRef.current, ...back];
+    tabsRef.current = next;
+    setTabs(next);
+  }, []);
 
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -424,8 +448,6 @@ export default function App() {
      new tab carries the op nonce (Zeolite tabs.ts syncFromUi); before
      this host existed the op dead-ended on LB and the extension saw a
      30s "no tab host acknowledgement" timeout. ---- */
-  const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
   const pendingTabOp = useRef<{ nonce: string; before: Set<number> }[]>([]);
   useEffect(() => {
     const onSwMsg = (ev: MessageEvent) => {
@@ -990,12 +1012,12 @@ export default function App() {
           and replaced by the static photographic hero image
           (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
           theme.css). Away from those views = not rendered. */}
-      {(view === "home" || view === "ai") && heroBgReady &&
+      {HERO_BG && (view === "home" || view === "ai") && heroBgReady &&
         createPortal(
           <div className="lb-fx-bg" aria-hidden={true} />,
           document.body
         )}
-      {heroFlash &&
+      {HERO_BG && heroFlash &&
         createPortal(
           <div className="lb-fx-flash" aria-hidden={true} />,
           document.body
@@ -1107,6 +1129,7 @@ export default function App() {
                   updateTab={updateTab}
                   newTab={newTab}
                   closeTab={closeTab}
+                  restoreClosedTabs={restoreClosedTabs}
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
