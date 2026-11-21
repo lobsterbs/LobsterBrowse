@@ -32,8 +32,15 @@ assert.ok(b.includes("if (sleeping.current.has(t.id)) { sleeping.current.delete(
 assert.ok(b.includes("sleeping.current.add(t.id);"), "unloading marks the tab sleeping");
 assert.ok(b.includes("minorNav.current.delete(t.id);"), "unloading clears the minor-nav commitment");
 
-/* Returning to an unloaded tab re-navigates. */
-assert.ok(b.includes("if (lastNav.current.get(t.id) === t.url && !blankFrame(t.id)) return;"), "the blank-frame arm re-navigates unloaded tabs");
+/* Returning to an unloaded tab re-navigates. The decision moved to
+   the pure autoLoadGate (ui/src/browser/navGate.ts, with the
+   load-visibility gate): sameLastNav + blank frame falls through to
+   the "load" decision, so the auto-load effect re-navigates the
+   parked tab. */
+const gateSrc = read("../../ui/src/browser/navGate.ts");
+assert.ok(b.includes("blankFrame: blankFrame(t.id),"), "the auto-load gate input carries the blank-frame state");
+assert.ok(b.includes('if (gate !== "load") return;'), "the auto-load effect only navigates on the load decision");
+assert.ok(gateSrc.includes('if (v.sameLastNav && !v.blankFrame) return "done";'), "a blank frame is never \"done\": unloaded tabs re-navigate");
 assert.ok(b.includes('f.contentWindow.location.href === "about:blank"'), "blankFrame detects the parked frame");
 
 /* Navigating resets the idle deadline; closing cleans the bookkeeping. */
