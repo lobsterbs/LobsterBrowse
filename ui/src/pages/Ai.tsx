@@ -602,14 +602,13 @@ export default function AiPage() {
 
   return (
     <div className="lb-ai">
-      <button
-        type="button"
-        className="lb-ai-hist-btn"
+      <m3e-icon-button
+        {...{ class: "lb-ai-hist-btn" }}
         aria-label="Conversation history"
         onClick={() => void openHistory()}
       >
         <m3e-icon name="history" aria-hidden={true} />
-      </button>
+      </m3e-icon-button>
       <div className="lb-ai-msgs" ref={scrollRef}>
         {!helloGone && (
           <div
@@ -726,9 +725,10 @@ export default function AiPage() {
             <div className="lb-ai-error-title">{error.title}</div>
             <div className="lb-ai-error-msg">{error.message}</div>
             {error.retry && (
-              <button
-                type="button"
-                className="lb-ai-error-retry"
+              <m3e-button
+                variant="text"
+                size="small"
+                {...{ class: "lb-ai-error-retry" }}
                 onClick={() => {
                   const retry = error.retry;
                   setError(null);
@@ -736,7 +736,7 @@ export default function AiPage() {
                 }}
               >
                 Try again
-              </button>
+              </m3e-button>
             )}
           </div>
         )}

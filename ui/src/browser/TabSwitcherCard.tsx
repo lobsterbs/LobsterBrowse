@@ -3,11 +3,11 @@
    request 2026-11-07; the preview windows are gone - a second page
    instance per tab was weight, not information). The sheet header is
    a basic m3e-app-bar: back button, title, and a Close-all action
-   with a two-step confirm. The sheet stays
+   (immediate; Browser shows an Undo snackbar). The sheet stays
    mounted; open/close rides the sheet's own show()/hide() methods
    with the `closing` event flowing back into Browser state.
    Presentational: tab state and selection stay in pages/Browser.tsx. */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
 import { tabLabel } from "./browserShared";
 
@@ -48,37 +48,40 @@ export default function TabSwitcherCard(props: {
     else el.hide();
   }, [props.open]);
 
-  /* Close-all is a destructive bulk action, so it carries a
-     two-step confirm in place: the first press arms the button
-     (the label turns into the real warning), the second press
-     fires. The arm is transient: it disarms itself after 4s, when
-     the sheet closes, or on unmount, so a stray armed button never
-     waits for the next visit. */
-  const [closeAllArmed, setCloseAllArmed] = useState(false);
-  const disarmTimer = useRef<number | null>(null);
-  const clearDisarm = () => {
-    if (disarmTimer.current !== null) {
-      window.clearTimeout(disarmTimer.current);
-      disarmTimer.current = null;
-    }
-  };
-  useEffect(() => {
-    if (!props.open) setCloseAllArmed(false);
-  }, [props.open]);
-  useEffect(() => clearDisarm, []);
-  const pressCloseAll = () => {
-    if (!props.onCloseAll) return;
-    if (closeAllArmed) {
-      clearDisarm();
-      setCloseAllArmed(false);
-      props.onCloseAll();
-    } else {
-      setCloseAllArmed(true);
-      clearDisarm();
-      disarmTimer.current = window.setTimeout(() => setCloseAllArmed(false), 4000);
-    }
-  };
   const closableCount = props.tabs.filter((t) => t.id !== props.activeId).length;
+
+  /* Swipe a row sideways to close it (touch and pen). One non-visual
+     m3e-swipe-gesture per row reports phases: the row follows the finger
+     on update, a committed swipe closes the tab, a cancel springs back.
+     The click the lift would fire is swallowed for a moment. */
+  const swipedAt = useRef(0);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const onGesture = (ev: Event) => {
+      const g = ev.currentTarget as HTMLElement;
+      const d = (ev as CustomEvent<{ phase: string; translationX: number; direction: string }>).detail;
+      const id = Number(g.dataset.tab);
+      const row = document.getElementById("lb-tab-row-" + id);
+      if (!row) return;
+      if (d.phase === "update") {
+        row.style.transition = "none";
+        row.style.transform = "translateX(" + d.translationX + "px)";
+        row.style.opacity = String(Math.max(0.2, 1 - Math.abs(d.translationX) / 300));
+      } else {
+        row.style.transition = "transform 250ms cubic-bezier(0.2, 0, 0, 1), opacity 250ms";
+        row.style.transform = "";
+        row.style.opacity = "";
+        if (d.phase === "end") {
+          swipedAt.current = Date.now();
+          live.current.onCloseTab(id);
+        }
+      }
+    };
+    const gestures = el.querySelectorAll<HTMLElement>("m3e-swipe-gesture");
+    gestures.forEach((g) => g.addEventListener("gesture", onGesture));
+    return () => gestures.forEach((g) => g.removeEventListener("gesture", onGesture));
+  }, [props.tabs]);
 
   if (props.tabs.length === 0) return null;
   return (
@@ -99,16 +102,17 @@ export default function TabSwitcherCard(props: {
         {props.onCloseAll && closableCount > 0 && (
           <m3e-button
             slot="trailing"
-            {...{ class: "lb-tabs-closeall" + (closeAllArmed ? " armed" : "") }}
-            aria-label={closeAllArmed ? "Confirm: close every other tab" : "Close every other tab"}
-            onClick={pressCloseAll}
+            {...{ class: "lb-tabs-closeall" }}
+            aria-label="Close every other tab"
+            onClick={props.onCloseAll}
           >
-            {closeAllArmed ? "Tap again to confirm" : "Close all"}
+            Close all
           </m3e-button>
         )}
       </m3e-app-bar>
       <div className="lb-tabs-row">
         {props.tabs.map((t) => {
+          /* shortcut: swipe closes any row, including the active tab (same as its X). */
           const rowClass =
             "lb-tab-row" +
             (t.id === props.activeId ? " active" : "") +
@@ -116,12 +120,16 @@ export default function TabSwitcherCard(props: {
           return (
             <div
               key={t.id}
+              id={"lb-tab-row-" + t.id}
               className={rowClass}
               role="button"
               tabIndex={0}
               aria-current={t.id === props.activeId ? "true" : undefined}
               aria-label={"Switch to " + tabLabel(t)}
-              onClick={() => props.onSelect(t.id)}
+              onClick={() => {
+                if (Date.now() - swipedAt.current < 400) return;
+                props.onSelect(t.id);
+              }}
               onKeyDown={(e: KeyboardEvent) => {
                 /* #91: full button semantics: Space activates too,
                    without scrolling the list. */
@@ -134,13 +142,13 @@ export default function TabSwitcherCard(props: {
               {/* The favicon sits inside a frosted m3e-avatar: the
                   translucent avatar surface blurs the sheet content
                   behind it. */}
-              <m3e-avatar {...{ class: "lb-tab-avatar" }} aria-hidden={true}>
+              <m3e-shape name="9-sided-cookie" {...{ class: "lb-tab-shape" }} aria-hidden={true}>
                 {props.icons[t.id] ? (
-                  <img src={props.icons[t.id]} alt="" />
+                  <img className="lb-tab-shape-icon" src={props.icons[t.id]} alt="" />
                 ) : (
-                  <m3e-icon name="public" aria-hidden={true} />
+                  <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-shape-icon" }} />
                 )}
-              </m3e-avatar>
+              </m3e-shape>
               <span className="lb-tabs-title">{tabLabel(t)}</span>
               {/* #91/#233: a real icon button so closing is
                   independently keyboard-reachable; selection and
@@ -158,6 +166,17 @@ export default function TabSwitcherCard(props: {
             </div>
           );
         })}
+        {props.tabs.map((t) => (
+          <m3e-swipe-gesture
+            key={t.id}
+            for={"lb-tab-row-" + t.id}
+            data-tab={t.id}
+            directions="left right"
+            pointer-types="touch pen"
+            min-displacement="48"
+            min-velocity="0.1"
+          />
+        ))}
       </div>
     </m3e-bottom-sheet>
   );

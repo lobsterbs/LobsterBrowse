@@ -33,6 +33,8 @@ declare module "react" {
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
       "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
+      /* Non-visual swipe recognizer; fires a `gesture` CustomEvent on the control named by `for`. */
+      "m3e-swipe-gesture": M3eBase & { for?: string; directions?: string; "pointer-types"?: string; "min-displacement"?: string; "min-velocity"?: string };
       "m3e-card": M3eBase & { variant?: string; tabIndex?: number; role?: string; title?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
       /* Expressive background shapes (Settings hero). */
       "m3e-shape": M3eBase & { name?: string };
