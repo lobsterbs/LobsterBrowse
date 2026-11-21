@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Recover chunks from history, apply code files, verify, commit
+      - name: Recover chunks from pinned commit, apply code files, verify, commit
         run: |
           set -uo pipefail
           fail() { echo "::error::LVFAIL phase=$1"; exit 1; }
@@ -32,13 +32,14 @@ jobs:
             echo "Patch already applied; skipping"
             exit 0
           fi
+          phase=pin
+          CHK=2aafb1178e53d7f39ab256b317974aac94ddc443
+          git cat-file -e "$CHK^{commit}" || fail "$phase"
           phase=recover
           mkdir -p /tmp/lvchunks || fail "$phase"
           for i in $(seq -w 1 36); do
             p="_apply/chunks/c$i.b64"
-            add=$(git log --diff-filter=A --format=%H -1 -- "$p") || fail "$phase:gitlog:$i"
-            [ -n "$add" ] || fail "$phase:noadd:$i"
-            git show "$add:$p" > "/tmp/lvchunks/c$i.b64" || fail "$phase:show:$i"
+            git show "$CHK:$p" > "/tmp/lvchunks/c$i.b64" || fail "$phase:show:$i"
           done
           phase=md5
           for f in /tmp/lvchunks/c*.b64; do base64 -d "$f"; done > /tmp/lv.patch || fail "$phase"
@@ -46,10 +47,6 @@ jobs:
           gotsz=$(wc -c < /tmp/lv.patch)
           nchunk=$(ls /tmp/lvchunks/ | wc -l)
           echo "chunk count: $nchunk; patch size: $gotsz; patch md5: $gotmd5"
-          for f in /tmp/lvchunks/c*.b64; do
-            b=$(cat "$f")
-            echo "chunk $(basename $f): $(printf '%s' "$b" | git hash-object --stdin) $(wc -c < "$f")"
-          done
           if [ "$gotmd5" != "0ed66eb971cfdeb1316e33c953372591" ]; then
             echo "::error::LVFAIL md5 got=$gotmd5 size=$gotsz nchunk=$nchunk"
             exit 1
