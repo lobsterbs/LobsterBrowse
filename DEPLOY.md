@@ -92,7 +92,7 @@ the engine CI vendor. The Rust zeolite-server dependency is unchanged.
 ## Build/deploy reliability checklist (0.3 Titanium)
 
 - A bundle pin move updates the Dockerfile ARG, expected SW/bootstrap
-  hashes, this pin note and AGENTS.md together. A server dependency change
+  hashes and this pin note together. A server dependency change
   additionally updates its Cargo.toml rev and regenerated Cargo.lock.
 - Deploys are API-triggered: autoDeploy is off on both services.
   Trigger with clearCache: true after every pin bump, then verify

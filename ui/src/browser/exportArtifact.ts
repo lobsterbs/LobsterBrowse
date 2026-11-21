@@ -7,7 +7,7 @@
    structurally typed so a node check can exercise the join and the
    redaction guarantees without a browser.
 
-   Redaction contract (AGENTS.md): the engine redacts secrets before
+   Redaction contract: the engine redacts secrets before
    anything is stored; this module must not add any back. Every field
    passes through the central sanitizers or arrives already sanitized
    in the snapshot; the doctor report is sanitized field-by-field

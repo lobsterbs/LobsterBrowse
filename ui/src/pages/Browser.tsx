@@ -2644,7 +2644,7 @@ export default function BrowserView(props: Props) {
             {tbExpanded || !active.url ? (
               /* #102: this URL field stays a raw input on purpose. It is
                  the compact editor that expands in place inside the
-                 center pill (AGENTS.md: toolbar URL editing remains
+                 center pill (toolbar URL editing remains
                  inside the pill); an m3e-search-bar or m3e-form-field
                  frame would break that layout. It is labelled by
                  aria-label. */
