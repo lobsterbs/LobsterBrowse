@@ -19,6 +19,7 @@ import {
   type SiteRule,
 } from "./settings";
 import * as store from "./store";
+import { parseTabsCreateOp, toTabsUi } from "./browser/tabsHost";
 import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
 import { parseNavTab, shellGuardCancel, shellGuardDest, type ShellNavApi, type ShellNavEvent } from "./frameNav";
 import { sanitizeUrl } from "./sanitize";
@@ -414,6 +415,66 @@ export default function App() {
   const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
+
+  /* ---- Engine tabs host (Zeolite #698/#701 seam): LB owns the real tab
+     model, so an extension's tabs.create() (the reported instance:
+     Tampermonkey's options "Get some scripts..." link) arrives as a
+     zl:tabsOp broadcast and opens a real LB tab here. The full list
+     syncs back over zl:tabs, and the pending create resolves when the
+     new tab carries the op nonce (Zeolite tabs.ts syncFromUi); before
+     this host existed the op dead-ended on LB and the extension saw a
+     30s "no tab host acknowledgement" timeout. ---- */
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const pendingTabOp = useRef<{ nonce: string; before: Set<number> }[]>([]);
+  useEffect(() => {
+    const onSwMsg = (ev: MessageEvent) => {
+      /* Handoffs only from the engine worker itself. */
+      if (!engineSwSource(ev)) return;
+      const op = parseTabsCreateOp(ev.data);
+      if (!op) return;
+      /* #63 election: the broadcast reaches every LB window; claim per
+         nonce, first write wins, 45s expiry so a dead claim cannot wedge
+         the retry. Honest gap: the getItem/setItem pair is not atomic
+         across processes (same as the download claim). */
+      try {
+        const key = "lobsterbrowse-tab-claim-" + op.nonce;
+        const prevRaw = localStorage.getItem(key);
+        if (prevRaw !== null && Date.now() - (JSON.parse(prevRaw) as { at: number }).at < 45000) return;
+        localStorage.setItem(key, JSON.stringify({ at: Date.now() }));
+      } catch {
+        /* storage unavailable: create rather than drop. */
+      }
+      pendingTabOp.current.push({
+        nonce: op.nonce,
+        before: new Set(tabsRef.current.map((t) => t.id)),
+      });
+      if (/^https?:/i.test(op.url)) newTab(op.url);
+      else {
+        /* Rooted engine-extension page (zlExt/zlPageTok): not an LB tab;
+           open it as its own window like extLaunch does. */
+        window.open(op.url, "_blank", "noopener");
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", onSwMsg);
+    return () => navigator.serviceWorker?.removeEventListener("message", onSwMsg);
+  }, [newTab]);
+  useEffect(() => {
+    /* Authoritative tab list sync, so the engine's registry (tabs.query,
+       tab events) stays truthful and pending creates resolve. Honest
+       multi-window limit: each LB window publishes only its own list,
+       so a tab another window created drops from the engine view when
+       this window's sync lands later (tabs.onRemoved fires); the 30s op
+       deadline still settles the create itself. */
+    const pend = pendingTabOp.current;
+    const nonceOf = (id: number): string | undefined => {
+      for (let i = 0; i < pend.length; i++) {
+        if (!pend[i].before.has(id)) return pend.splice(i, 1)[0].nonce;
+      }
+      return undefined;
+    };
+    void zlSend({ type: "zl:tabs", tabs: toTabsUi(tabs, activeId, nonceOf) }, 8000);
+  }, [tabs, activeId]);
 
   /* Incognito session swap: turning incognito on suspends the whole
      normal session (stashed in a ref, not persisted) and drops you on
