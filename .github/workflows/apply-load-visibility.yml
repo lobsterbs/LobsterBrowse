@@ -1,0 +1,59 @@
+name: Apply load-visibility patch
+
+on:
+  push:
+    branches: ["bot/apply-load-visibility"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-load-visibility
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recover chunks from history, apply, verify, commit
+        run: |
+          set -euo pipefail
+          if grep -q "autoLoadGate" ui/src/pages/Browser.tsx; then
+            echo "Patch already applied; skipping"
+            exit 0
+          fi
+          mkdir -p /tmp/lvchunks
+          for i in $(seq -w 1 36); do
+            p="_apply/chunks/c$i.b64"
+            add=$(git log --diff-filter=A --format=%H -1 -- "$p")
+            if [ -z "$add" ]; then echo "no add-commit for $p"; exit 1; fi
+            git show "$add:$p" > "/tmp/lvchunks/c$i.b64"
+          done
+          for f in /tmp/lvchunks/c*.b64; do base64 -d "$f"; done > /tmp/lv.patch
+          echo "0ed66eb971cfdeb1316e33c953372591  /tmp/lv.patch" | md5sum -c -
+          git apply --check --verbose --whitespace=nowarn /tmp/lv.patch
+          git apply --whitespace=nowarn /tmp/lv.patch
+          test -f ui/src/browser/navGate.ts
+          test -f tests/load-visibility/check.mjs
+          grep -q "autoLoadGate" ui/src/pages/Browser.tsx
+          node --experimental-strip-types tests/load-visibility/check.mjs
+          rm -rf _apply
+          git rm -q -f .github/workflows/apply-load-visibility.yml
+          rm -f .github/workflows/apply-load-visibility.yml
+          git add -A
+          echo "--- staged files ---"
+          git diff --cached --name-only
+          nstaged=$(git diff --cached --name-only | wc -l)
+          if [ "$nstaged" -lt 7 ]; then echo "expected at least 7 staged paths, got $nstaged"; exit 1; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(ui): load tabs only when the Browse view is visible; blank the frame before each navigation"
+          git push
