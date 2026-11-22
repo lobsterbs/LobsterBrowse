@@ -2490,12 +2490,13 @@ background: var(--lb-glass-tint);
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl1 m3e-shape, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(120px, 26vmin, 240px); opacity: .28; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl2, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl2 { opacity: 0; }
 /* Search commit (home): the wipe overlay is a plain sibling div, so it
-   cannot paint over the search bar; the bar fades itself out over the
-   same beat instead of staying lit above the morph. */
-.lb-home .lb-ac-wrap { transition: opacity 180ms cubic-bezier(.34, .8, .34, 1); }
-.lb-home .lb-ac-wrap.lb-away { opacity: 0; }
+   cannot paint over the search bar. The bar leaves with the wipe
+   START: visibility does not transition, so the bar is gone the
+   frame the morph begins, and the hidden wrapper keeps its layout so
+   nothing on the page shifts while the shape grows from its rect. */
+.lb-home .lb-ac-wrap.lb-away { opacity: 0; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape, .lb-ac-wrap { transition: none; }
+  .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape { transition: none; }
 }
 
 /* ---- Ported from the expressive prototype (Home, toolbar pill, loader, tab rows). ---- */

@@ -131,7 +131,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
   const commit = (target: string) => {
     const field = inputRef.current?.closest("m3e-search-view") ?? inputRef.current;
     /* The wipe overlay is a plain sibling div and cannot sit above
-       the search view, so the bar fades out over the same beat. */
+       the search view, so the bar hides the moment the morph begins. */
     setWiping(true);
     shapeWipe(field!.getBoundingClientRect(), () => {
       onNavigate(target);
