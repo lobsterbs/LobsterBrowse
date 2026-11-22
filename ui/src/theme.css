@@ -1973,6 +1973,11 @@ body .lb-ext-panel {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 
+/* The search bar's trailing slot forces its own muted icon color onto
+   any slotted icon button, which drowned the filled send state's glyph;
+   the ready state pins the filled icon back to on-primary. */
+.lb-ai-bar m3e-search-bar m3e-icon-button[slot="trailing"][variant="filled"] { --m3e-filled-icon-button-icon-color: var(--md-sys-color-on-primary); }
+
 /* Tool row: the 21st.dev thinking-tool pattern on M3E tokens. The
    summary line shimmers while the step runs, settles to a static
    label, and expands a detail area under it. Shared by reasoning and
@@ -2588,10 +2593,10 @@ background: var(--lb-glass-tint);
 .lb-ai-assistant .lb-ai-bubble { background: none; border: 0; border-radius: 0; padding: 10px 0 0; line-height: 1.55; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .lb-ai-answer .lb-md { line-height: 1.55; }
 .lb-ai-stat-wrap { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-.lb-ai-stat { display: inline-flex; align-items: center; gap: 10px; padding: 4px 14px 4px 4px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 58%, transparent); font: inherit; font-size: .86rem; cursor: pointer; transition: background-color .4s cubic-bezier(0.2, 0, 0, 1); }
+.lb-ai-stat { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 58%, transparent); font: inherit; font-size: .86rem; cursor: pointer; transition: background-color .4s cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 8%, transparent); }
 .lb-ai-stat:disabled { cursor: default; }
-.lb-ai-stat-load { width: 20px; height: 20px; flex: none; }
+.lb-ai-stat-load { --m3e-loading-indicator-size: 24px; flex: none; }
 .lb-ai-stat-ok { color: var(--md-sys-color-primary, #ffb4ab); font-size: 20px; }
 .lb-ai-stat-chev { font-size: 18px; transition: transform .5s cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat.open .lb-ai-stat-chev { transform: rotate(180deg); }

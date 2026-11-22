@@ -39,6 +39,11 @@ assert.ok(ai.includes('name={busy ? "stop" : "arrow_upward"}'), "send is arrow_u
 /* 5. Theme: the old side-by-side send rule is gone. */
 assert.ok(!theme.includes(".lb-ai-send"), "the old send button rule is gone from the theme");
 
+/* 6. The ready state stays legible: the search bar's trailing slot
+   recolors every slotted icon button's generic icon token, so the
+   filled send state pins its icon to on-primary. */
+assert.ok(theme.includes('.lb-ai-bar m3e-search-bar m3e-icon-button[slot="trailing"][variant="filled"] { --m3e-filled-icon-button-icon-color: var(--md-sys-color-on-primary); }'), "the filled send button pins its icon to on-primary");
+
 /* CI runs this check. */
 assert.ok(ci.includes("../tests/ai-send-morph/check.mjs"), "ci.yml runs the ai-send-morph check");
 

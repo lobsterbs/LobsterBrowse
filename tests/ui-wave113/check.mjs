@@ -1,6 +1,7 @@
 /* Regression check for the wave-113 AI + toolbar + tabs wave:
-   (1) the AI status pill loader is 20px so the morphing shape stops
-       towering over the pill;
+   (1) the AI status pill loader sizes through the component token
+       (24px) so contain:strict stops clipping the morphing shape, and
+       the pill gains 6px breathing room;
    (2) the step list expands and collapses on the grid-rows curve with
        an inner fade/slide, killed for reduced motion;
    (3) the token counter is gone; the meta line shows elapsed only;
@@ -31,9 +32,11 @@ const settings = read("../../ui/src/pages/Settings.tsx");
 const theme = read("../../ui/src/theme.css");
 const ci = read("../../.github/workflows/ci.yml");
 
-/* 1. Loader size. */
-assert.ok(theme.includes(".lb-ai-stat-load { width: 20px; height: 20px;"), "the status loader shrunk to 20px");
+/* 1. Loader size + pill breathing room. */
+assert.ok(theme.includes(".lb-ai-stat-load { --m3e-loading-indicator-size: 24px; flex: none; }"), "the status loader sizes via the component token, unclipped");
+assert.ok(!theme.includes(".lb-ai-stat-load { width:"), "the host width override that clipped the shape is gone");
 assert.ok(!theme.includes("width: 26px; height: 26px;"), "the old 26px loader rule is gone");
+assert.ok(theme.includes("padding: 6px 14px 6px 6px"), "the pill keeps breathing room around the loader");
 
 /* 2. Steps expand/collapse. */
 assert.ok(toolRow.includes('className={"lb-ai-steps" + (open ? " open" : "")}'), "steps toggle is class-based");
