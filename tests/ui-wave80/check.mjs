@@ -197,9 +197,9 @@ const ok = (name, cond) => {
   /* The demo conversation replaced the thinking morph shape with a
      status pill: loader while the turn runs, check when settled, the
      step cards as outlined cards under the pill. */
-  ok("ai: status pill runs the loader while the turn is live", toolRow.includes('<m3e-loading-indicator className="lb-ai-stat-load" />'));
+  ok("ai: status pill runs the loader while the turn is live", toolRow.includes('<m3e-loading-indicator aria-hidden={true} {...{ class: "lb-ai-stat-load" }} />'));
   ok("ai: settled turns swap the loader for the check", toolRow.includes('name="check_circle"'));
-  ok("ai: step cards are outlined cards under the pill", toolRow.includes('<m3e-card variant="outlined" className="lb-ai-step">'));
+  ok("ai: step cards are outlined cards under the pill", toolRow.includes('<m3e-card variant="outlined" {...{ class: "lb-ai-step" }}>'));
   ok("shape: downloads card file removed", !existsSync(new URL("src/browser/DownloadsCard.tsx", ui)));
   const xpiPrompt = read("src/browser/XpiPrompt.tsx");
   ok("shape: xpi prompt icons are decorative", xpiPrompt.includes('name="extension" aria-hidden={true}'));
