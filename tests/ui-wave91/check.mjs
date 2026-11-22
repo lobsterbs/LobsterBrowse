@@ -35,7 +35,7 @@ ok(theme.split("--lb-glass-lift: var(--md-sys-color-surface-container-high, #2b2
 const dt91 = theme.lastIndexOf(".lb-dt-card {");
 const dtWin = dt91 >= 0 ? theme.slice(dt91, dt91 + 900) : "";
 ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "DevTools cards paint the lift");
-ok(dtWin.includes("box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);"), "DevTools card host carries the inset top highlight");
+ok(dtWin.includes("box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);"), "DevTools card host carries the inset top highlight");
 const tile = block(theme, ".lb-ext-tile {");
 ok(tile.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "extension tiles paint the lift");
 const adRow = block(theme, ".lb-ad-row {");

@@ -620,7 +620,7 @@ export default function AiPage() {
             How can I<br />help today?
             <div className="lb-ai-sugs">
               <m3e-chip-set aria-label="Suggestions">
-                {["Search the web", "Spawn a sub agent", "Summarize this page"].map((t) => (
+                {["Solve this: 17 * 24 - 96", "Explain error: ERR_CONNECTION_RESET", "Summarize this tab's page"].map((t) => (
                   <m3e-chip key={t} variant="elevated" onClick={() => setDraft(t)}>{t}</m3e-chip>
                 ))}
               </m3e-chip-set>
