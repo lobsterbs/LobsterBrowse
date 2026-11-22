@@ -617,7 +617,7 @@ export default function AiPage() {
               if (e.animationName === "lb-ai-hello-out") setHelloGone(true);
             }}
           >
-            How can I help you today?
+            How can I<br />help today?
             <div className="lb-ai-sugs">
               <m3e-chip-set aria-label="Suggestions">
                 {["Search the web", "Spawn a sub agent", "Summarize this page"].map((t) => (

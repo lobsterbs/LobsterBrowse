@@ -3021,35 +3021,6 @@ export default function BrowserView(props: Props) {
               as the site info card). Real m3e-icon-button with toggle
               semantics: geometry, hover/pressed/focus/selected states
               come from the component like every other toolbar control. */}
-          <m3e-icon-button
-            id="lb-tabs-pill"
-            toggle
-            aria-label={"Open tab list (" + tabs.length + " tabs)"}
-            onClick={() => {
-              const next = !tabsOpen;
-              if (next) closeSheets("tabs");
-              setTabsOpen(next);
-            }}
-            {...{ ref: tabsBtnRef }}
-          >
-            <span id="lb-tabs-ic" className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          {/* Tab count: a real m3e-badge on the 24px icon (M3 anchors badges to the icon, not the 48px button). */}
-          {tabs.length > 0 && <m3e-badge for="lb-tabs-ic" aria-hidden={true}>{tabs.length}</m3e-badge>}
-          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
-            <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
-          {/* Back / Forward are plain icon buttons (#227): the
-              m3e-button-group expressive press choreography slid the
-              grouped buttons into each other on every press. Tooltips
-              anchor by for= id exactly as before. Back is disabled at
-              the bottom of the stack: the earliest entry has nothing
-              to go back to, and a dead press reads as broken. Wave
-              112: the pair carries the tonal container (see
-              .lb-tb-nav), so the disabled back button reads as a
-              dimmed physical button, not a ghost. */}
           <span className="lb-tb-nav">
           <m3e-icon-button
             id="lb-back-btn"
@@ -3185,7 +3156,36 @@ export default function BrowserView(props: Props) {
               </span>
             )}
           </span>
-          {/* Trail zone (wave 112): diagnostics chip, right-side
+<m3e-icon-button
+            id="lb-tabs-pill"
+            toggle
+            aria-label={"Open tab list (" + tabs.length + " tabs)"}
+            onClick={() => {
+              const next = !tabsOpen;
+              if (next) closeSheets("tabs");
+              setTabsOpen(next);
+            }}
+            {...{ ref: tabsBtnRef }}
+          >
+            <span id="lb-tabs-ic" className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
+          {/* Tab count: a real m3e-badge on the 24px icon (M3 anchors badges to the icon, not the 48px button). */}
+          {tabs.length > 0 && <m3e-badge for="lb-tabs-ic" aria-hidden={true}>{tabs.length}</m3e-badge>}
+          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
+            <m3e-icon name="add" aria-hidden={true} />
+          </m3e-icon-button>
+          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
+          {/* Back / Forward are plain icon buttons (#227): the
+              m3e-button-group expressive press choreography slid the
+              grouped buttons into each other on every press. Tooltips
+              anchor by for= id exactly as before. Back is disabled at
+              the bottom of the stack: the earliest entry has nothing
+              to go back to, and a dead press reads as broken. Wave
+              112: the pair carries the tonal container (see
+              .lb-tb-nav), so the disabled back button reads as a
+              dimmed physical button, not a ghost. */}
+                    {/* Trail zone (wave 112): diagnostics chip, right-side
               compact keyboard hint, full screen, pinned-tab state
               and the overflow menu close the bar on the right. */}
           <span className="lb-tb-zone lb-tb-trail">
@@ -3285,6 +3285,10 @@ export default function BrowserView(props: Props) {
               }}
             >
               AdBlocking
+            </m3e-menu-item>
+            {/* Phones: the incognito toggle leaves the bar (demo <=600px), so the menu carries it. Hidden on desktop by CSS. */}
+            <m3e-menu-item className="lb-incog-menu" onClick={() => props.onIncognitoChange(!props.incognito)}>
+              {props.incognito ? "Turn off incognito" : "Turn on incognito"}
             </m3e-menu-item>
           </m3e-menu>
           </span>

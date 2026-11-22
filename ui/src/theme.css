@@ -882,7 +882,7 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    never blocks page interaction. */
 .lb-dock {
   position: absolute;
-  bottom: 10px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -1943,7 +1943,7 @@ m3e-snackbar {
     bottom: 0;
     z-index: 40;
   }
-  .lb-dock { bottom: calc(10px + var(--m3e-nav-bar-height, 64px)); }
+  .lb-dock { bottom: calc(18px + var(--m3e-nav-bar-height, 64px)); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
   .app-content[data-view="browser"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
@@ -2767,3 +2767,13 @@ background: var(--lb-glass-tint);
 
 /* AI empty-state suggestion chips (demo .sugs). */
 .lb-ai-sugs { display: flex; justify-content: center; margin-top: 16px; }
+.lb-ai-sugs m3e-chip-set { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* Demo parity: the dock stays up, so the tuck grip is hidden unless tucked; phones drop forward and new tab (demo <=600px). */
+.lb-dock:not(.tucked) .lb-dock-grip { display: none; }
+.lb-incog-menu { display: none; }
+@media (max-width: 600px) {
+  #lb-forward-btn, #lb-newtab-btn, #lb-fs-btn, #lb-incognito-pill, .lb-toolbar m3e-badge { display: none; }
+  .lb-incog-menu { display: revert; }
+  .lb-tb-pill { min-width: 130px; }
+}

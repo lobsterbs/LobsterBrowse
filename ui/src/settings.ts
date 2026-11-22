@@ -185,7 +185,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wispServer: "",
   suggestQueries: true,
   prefetchLinks: true,
-  autoHideChrome: true,
+  autoHideChrome: false,
   density: "normal",
 };
 
@@ -215,7 +215,7 @@ export function loadSettings(): Settings {
       seed: !parsed.seed || parsed.seed === "#E8552F" || parsed.seed === "#6750A4" ? DEFAULT_SETTINGS.seed : parsed.seed,
       suggestQueries: parsed.suggestQueries === undefined ? true : Boolean(parsed.suggestQueries),
       prefetchLinks: parsed.prefetchLinks === undefined ? true : Boolean(parsed.prefetchLinks),
-      autoHideChrome: parsed.autoHideChrome === undefined ? true : Boolean(parsed.autoHideChrome),
+      autoHideChrome: parsed.autoHideChrome === undefined ? false : Boolean(parsed.autoHideChrome),
       /* SameSite option removed from Settings: pinned on (approx). */
       sameSitePolicy: "approx",
       /* "Server default" UA option removed from Settings: stored picks
