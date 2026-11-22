@@ -2864,6 +2864,10 @@ export default function BrowserView(props: Props) {
           <div key={t.id} className={"lb-page" + (t.id === active.id ? " active" : "")}>
             <iframe
               title={"Proxy tab " + t.id}
+              /* Audit 2026-11-22: an empty tab's frame has committed no
+                 document, so it sits out of the tab cycle; a blank iframe
+                 must never take a keyboard stop ahead of the real chrome. */
+              tabIndex={t.url ? undefined : -1}
               allow="clipboard-read; clipboard-write"
               ref={(el) => {
                 if (el) {
@@ -3065,7 +3069,7 @@ export default function BrowserView(props: Props) {
           >
             <m3e-icon name="arrow_back" aria-hidden={true} />
           </m3e-icon-button>
-          <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward}>
+          <m3e-icon-button id="lb-forward-btn" aria-label="Forward" onClick={forward} disabled={active.idx < active.stack.length - 1 ? undefined : true}>
             <m3e-icon name="arrow_forward" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-back-btn" position="above">Back</m3e-tooltip>
