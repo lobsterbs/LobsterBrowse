@@ -40,7 +40,7 @@ assert.ok(b.includes("minorNav.current.delete(t.id);"), "unloading clears the mi
 const gateSrc = read("../../ui/src/browser/navGate.ts");
 assert.ok(b.includes("blankFrame: blankFrame(t.id),"), "the auto-load gate input carries the blank-frame state");
 assert.ok(b.includes('if (gate !== "load") return;'), "the auto-load effect only navigates on the load decision");
-assert.ok(gateSrc.includes('if (v.sameLastNav && !v.blankFrame) return "done";'), 'a blank frame is never "done": unloaded tabs re-navigate');
+assert.ok(gateSrc.includes('if (v.sameLastNav && !v.blankFrame) return "done";'), "a blank frame is never \"done\": unloaded tabs re-navigate");
 assert.ok(b.includes('f.contentWindow.location.href === "about:blank"'), "blankFrame detects the parked frame");
 
 /* Navigating resets the idle deadline; closing cleans the bookkeeping. */
