@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { shapeWipe } from "../wipe";
 import { ENGINES, fetchSuggestions, looksLikeUrl, normalizeUrl, searchUrl, type Settings } from "../settings";
 import { pushLog } from "../store";
 import { buildSuggests, SUGGEST_MIN_CHARS, type Suggestion } from "../suggest";
@@ -127,10 +128,13 @@ export default function HomePage({ settings, onNavigate }: Props) {
   };
 
   const commit = (target: string) => {
-    onNavigate(target);
-    setUrl("");
-    setOpen(false);
-    setIdx(-1);
+    const field = inputRef.current?.closest("m3e-search-view") ?? inputRef.current;
+    shapeWipe(field!.getBoundingClientRect(), () => {
+      onNavigate(target);
+      setUrl("");
+      setOpen(false);
+      setIdx(-1);
+    });
   };
   const go = (q0: string) => {
     const q = q0.trim();

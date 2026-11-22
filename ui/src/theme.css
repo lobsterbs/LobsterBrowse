@@ -2764,3 +2764,6 @@ background: var(--lb-glass-tint);
 .wipe m3e-shape{position:absolute;left:0;top:0;--m3e-shape-size:240px;--m3e-shape-container-color:var(--wc,var(--md-sys-color-primary-container,#930010));transform:translate(-50%,-50%) scale(0) rotate(-30deg);transition:transform .72s cubic-bezier(.39,1.29,.35,.98),opacity .42s cubic-bezier(.34,.8,.34,1)}
 .wipe.in m3e-shape{transform:translate(-50%,-50%) scale(var(--sc,20)) rotate(20deg)}
 .wipe.out m3e-shape{opacity:0}
+
+/* AI empty-state suggestion chips (demo .sugs). */
+.lb-ai-sugs { display: flex; justify-content: center; margin-top: 16px; }

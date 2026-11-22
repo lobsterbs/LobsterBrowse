@@ -18,6 +18,7 @@ import M3eSelect from "../M3eSelect";
 import AmoSearch from "../browser/AmoSearch";
 import ExtManage from "../browser/ExtManage";
 import { extWarnings } from "../browser/browserShared";
+import { shapeWipe } from "../wipe";
 
 type Props = {
   settings: Settings;
@@ -496,7 +497,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 />
                 <m3e-chip-set>
                   {SEEDS.map(([hex, name]) => (
-                    <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={() => onChange({ seed: hex })}>
+                    <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={(e) => settings.seed !== hex && shapeWipe(e.currentTarget.getBoundingClientRect(), () => onChange({ seed: hex }), hex)}>
                       {/* A colored swatch in the chip's icon slot (the
                          plain m3e-chip exposes no avatar slot) so every
                          seed option shows its color. */}

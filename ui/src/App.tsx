@@ -27,6 +27,7 @@ import CommandPalette, { type Command } from "./CommandPalette";
 import { createPopupGate } from "./browser/popupGate";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
+import { shapeWipe } from "./wipe";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
@@ -83,10 +84,6 @@ function freshTab(url = ""): Tab {
   };
 }
 
-/* NavRail tab-change wipe (demo #wipe): a real shape grows from the tapped item, the view swaps under it. */
-const WIPE_SHAPES = ["soft-burst", "sunny", "flower", "12-sided-cookie", "very-sunny", "9-sided-cookie", "burst"];
-const wipeSleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
-
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [rules, setRules] = useState<SiteRule[]>(() => loadSiteRules());
@@ -100,36 +97,6 @@ export default function App() {
     return m ? (m[1] as View) : "home";
   };
   const [view, setView] = useState<View>(viewFromHash);
-  const wipeRef = useRef<HTMLDivElement>(null);
-  const wipeBusy = useRef(false);
-  /* Demo uv(): wipe from the tapped item, navigate at the peak, fade out. Skipped under reduced motion. */
-  const shapeWipe = (r: DOMRect, go: () => void) => {
-    const el = wipeRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { go(); return; }
-    if (wipeBusy.current) return;
-    wipeBusy.current = true;
-    const x = r.left + r.width / 2, y = r.top + r.height / 2;
-    const sc = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) * 2.2 / 240 * 1.5;
-    const shape = el.firstElementChild as HTMLElement;
-    shape.setAttribute("name", WIPE_SHAPES[Math.floor(Math.random() * WIPE_SHAPES.length)]);
-    el.style.setProperty("--x", x + "px");
-    el.style.setProperty("--y", y + "px");
-    el.style.setProperty("--sc", sc.toFixed(1));
-    el.className = "wipe";
-    el.hidden = false;
-    (async () => {
-      await wipeSleep(20);
-      el.classList.add("in");
-      await wipeSleep(430);
-      go();
-      await wipeSleep(120);
-      el.classList.add("out");
-      await wipeSleep(450);
-      el.hidden = true;
-      el.className = "wipe";
-      wipeBusy.current = false;
-    })();
-  };
   const navGo = (el: EventTarget, target: View, go: () => void) => {
     if (target === view) return;
     shapeWipe((el as HTMLElement).getBoundingClientRect(), go);
@@ -1061,7 +1028,6 @@ export default function App() {
           document.body
         )}
       <div className="lb-shell">
-        <div className="wipe" ref={wipeRef} hidden aria-hidden="true"><m3e-shape name="soft-burst" /></div>
         {/* Compact-only rail: the M3E defaults are the spec
            (48dp collapsed with icons only, 44dp top inset); the
            hamburger expansion was removed with the mode="auto"

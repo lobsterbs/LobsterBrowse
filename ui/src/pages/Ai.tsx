@@ -618,6 +618,13 @@ export default function AiPage() {
             }}
           >
             How can I help you today?
+            <div className="lb-ai-sugs">
+              <m3e-chip-set aria-label="Suggestions">
+                {["Search the web", "Spawn a sub agent", "Summarize this page"].map((t) => (
+                  <m3e-chip key={t} variant="elevated" onClick={() => setDraft(t)}>{t}</m3e-chip>
+                ))}
+              </m3e-chip-set>
+            </div>
           </div>
         )}
         {messages.map((m, i) => {
