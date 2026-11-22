@@ -70,24 +70,6 @@ const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
 
 const NAV_ORDER: SectionId[] = ["search", "privacy", "appearance", "extensions", "advanced"];
 
-/* The search index: one row per anchored setting (wave 112). The
-   filter field matches on these labels and the section titles; a hit
-   jumps straight to the section and focuses the setting's anchor. */
-type SettingHit = { section: SectionId; label: string; anchorId: string };
-const SETTING_INDEX: SettingHit[] = [
-  { section: "search", label: "Search engine", anchorId: "set-search-engine" },
-  { section: "search", label: "Engine search suggestions", anchorId: "set-search-suggest" },
-  { section: "privacy", label: "Ad & tracker blocking", anchorId: "set-adblock" },
-  { section: "appearance", label: "Theme color", anchorId: "set-theme-color" },
-  { section: "extensions", label: "Manage installed", anchorId: "set-manage-ext" },
-  { section: "extensions", label: "Find and install add-ons", anchorId: "set-amo" },
-  { section: "extensions", label: "Import locally", anchorId: "set-import" },
-  { section: "advanced", label: "Proxy engine", anchorId: "set-proxy" },
-  { section: "advanced", label: "Transport engine", anchorId: "set-transport" },
-  { section: "advanced", label: "WISP server", anchorId: "set-wisp" },
-  { section: "advanced", label: "Data", anchorId: "set-data" },
-  { section: "advanced", label: "Logs", anchorId: "set-logs" },
-];
 
 function SectionHead(props: { section: SectionId }) {
   const meta = SECTION_META[props.section];
@@ -226,52 +208,19 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      sticky side navigation switches between them. */
   const [section, setSection] = useState<SectionId>("search");
 
-  /* Settings search (wave 112): the filter field matches the index
-     above; a hit switches the section and scrolls the anchor into
-     view. A jump counter is needed so a hit inside the already-open
-     section still fires (setSection with the same value would not
-     re-render). */
-  const [query, setQuery] = useState("");
-  const [jumpTick, setJumpTick] = useState(0);
-  const jumpRef = useRef<string | null>(null);
-  const q = query.trim().toLowerCase();
-  const hits =
-    q === ""
-      ? []
-      : SETTING_INDEX.filter(
-          (h) =>
-            h.label.toLowerCase().includes(q) ||
-            SECTION_TITLES[h.section].toLowerCase().includes(q),
-        );
-  const jumpTo = (h: SettingHit) => {
-    jumpRef.current = h.anchorId;
-    setSection(h.section);
-    setJumpTick((t) => t + 1);
-    setQuery("");
-  };
-
   /* Switching categories glides the pane's scroll container back to
      the top instead of leaving the previous category's scroll offset
-     on the new (possibly shorter) content. A search jump scrolls the
-     anchor into view instead and focuses it. The scroll container
+     on the new (possibly shorter) content. The scroll container
      lives inside the m3e-content-pane shadow root
      (.scroll-container), so the reset reaches through it;
      reduced-motion users get the instant jump from `auto`. */
   const paneRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const anchorId = jumpRef.current;
-    jumpRef.current = null;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const anchor = anchorId ? document.getElementById(anchorId) : null;
-    if (anchor) {
-      anchor.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
-      anchor.focus();
-      return;
-    }
     const sc = paneRef.current?.shadowRoot?.querySelector<HTMLElement>(".scroll-container");
     if (!sc) return;
     sc.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
-  }, [section, jumpTick]);
+  }, [section]);
 
   /* ScramJet is the current engine: every Zeolite-only option greyes
      out. The options keep their stored values and come back when the
@@ -368,33 +317,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
           <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
             <span slot="title">Settings</span>
           </m3e-app-bar>
-
-          {/* Settings search (wave 112): a compact filter in the pane
-              header. Matches list one jump button per setting; an
-              empty field renders nothing extra (the card rail is the
-              browse path). */}
-          <div className="lb-set-search">
-            <m3e-icon name="search" aria-hidden={true} />
-            <input
-              type="search"
-              className="lb-set-search-input"
-              aria-label="Search settings"
-              placeholder="Search settings"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          {q !== "" && (
-            <div className="lb-set-hits" aria-label="Matching settings">
-              {hits.length === 0 && <p className="lb-set-hits-empty">No setting matches.</p>}
-              {hits.map((h) => (
-                <button key={h.anchorId} type="button" className="lb-set-hit" onClick={() => jumpTo(h)}>
-                  <span>{h.label}</span>
-                  <span className="lb-set-hit-sec">{SECTION_TITLES[h.section]}</span>
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Narrow screens (wave 112): the card rail collapses into
               this dropdown; the five category chips stopped fitting a

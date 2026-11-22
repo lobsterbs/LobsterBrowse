@@ -5,6 +5,7 @@ import {
   deleteChat,
   listChats,
   mergeUsage,
+  nameChat,
   needsThinking,
   runSubAgent,
   saveChat,
@@ -184,6 +185,7 @@ export default function AiPage() {
   /* The saved conversation's title (kept across turns so updates do
      not retitle the chat). */
   const titleRef = useRef("");
+  const turnsRef = useRef(0);
   /* Abort chain for the in-flight turn (the Stop button). */
   const abortRef = useRef<AbortController | null>(null);
 
@@ -303,6 +305,9 @@ export default function AiPage() {
   }
 
   async function send(retry?: { text: string; files: Attached[] }) {
+    /* Turn counter: guards the silent first-turn rename against a later
+       turn that has already rewritten the chat in storage. */
+    const atTurn = ++turnsRef.current;
     const text = retry ? retry.text : draft.trim();
     const files = retry ? retry.files : attached;
     /* #235: an attachment alone is a valid turn - text files carry
@@ -361,7 +366,12 @@ export default function AiPage() {
        prompt teaches the tool; the loop below runs the calls the
        model streams back. */
     const sys =
-      "You are the assistant inside LobsterBrowse, a private web proxy browser. Be concise and accurate. " +
+      "You are the assistant inside LobsterBrowse, a private web proxy browser. " +
+      "Reply like a person talking to one person: plain words, short paragraphs, no filler openings " +
+      "(no 'Great question', no 'Certainly', no closing offer to help further), bullet lists only when " +
+      "a list is genuinely clearer, headings only for long answers. Specifics over summaries. " +
+      "Write math as plain text (17 x 24 = 408, then 408 - 96 = 312), never LaTeX, never \\times. " +
+      "Be concise and accurate. " +
       "You can call the web_search tool whenever the question benefits from current web information " +
       "(news, prices, releases, anything recent or uncertain); answer citing the results by number. " +
       "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Gemma) " +
@@ -549,8 +559,8 @@ export default function AiPage() {
       abortRef.current = null;
       setBusy(false);
       setPhase("idle");
-      /* The settled turn gets its counter line: total tokens (main
-         model plus sub agents) and elapsed wall time. */
+      /* The settled turn gets its elapsed-time line (the token
+         counter is gone; usage still ships with the stored turn). */
       const elapsed = Date.now() - t0;
       const finalUsage = usage;
       const finalSubs = subRuns.length ? subRuns : undefined;
@@ -591,6 +601,19 @@ export default function AiPage() {
             updated: Date.now(),
           });
           setCurrentId(id);
+          /* The first turn silently hands the conversation naming to
+             the sub model: its short title replaces the heuristic one
+             in storage. The turn guard keeps a slow rename from
+             clobbering a chat that has already moved on. */
+          if (before === 0) {
+            void nameChat(text)
+              .then((gen) => {
+                if (!gen || turnsRef.current !== atTurn) return;
+                titleRef.current = gen;
+                void saveChat({ id, title: gen, messages: all, updated: Date.now() }).catch(() => {});
+              })
+              .catch(() => {});
+          }
         } catch {
           toast("Chat could not be saved locally.");
         }
@@ -697,14 +720,9 @@ export default function AiPage() {
               {m.role === "assistant" && m.text && (
                 <Answer text={m.text} typing={last && busy && phase === "streaming"} />
               )}
-              {m.role === "assistant" && !busy && (m.usage || m.ms != null) && (
+              {m.role === "assistant" && !busy && m.ms != null && (
                 <div className="lb-ai-meta">
-                  {m.usage && (
-                    <span>
-                      {m.usage.totalTokens} tokens ({m.usage.promptTokens} in / {m.usage.completionTokens} out)
-                    </span>
-                  )}
-                  {m.ms != null && <span>{formatElapsed(m.ms)}</span>}
+                  <span>{formatElapsed(m.ms)}</span>
                 </div>
               )}
             </div>

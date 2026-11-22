@@ -37,8 +37,8 @@ export function StatRow({
         {hasSteps && <m3e-icon name="keyboard_arrow_down" {...{ class: "lb-ai-stat-chev" }} />}
       </button>
       {hasSteps && (
-        <div className="lb-ai-steps" hidden={!open}>
-          {children}
+        <div className={"lb-ai-steps" + (open ? " open" : "")}>
+          <div className="lb-ai-steps-in">{children}</div>
         </div>
       )}
     </div>

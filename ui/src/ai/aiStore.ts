@@ -750,3 +750,31 @@ export async function runSubAgent(opts: {
   }
   return { answer: splitHarmony(answer).final, usage };
 }
+
+/* Conversation naming: the sub model answers with a bare short title
+   for the first user message; the AI page saves it onto the chat.
+   One text call, no tools, no thinking: naming is a one-shot. */
+export async function nameChat(firstUserText: string): Promise<string> {
+  let out = "";
+  for await (const ev of streamChat({
+    model: SUB_AGENT_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You name chat conversations. Reply with only a 2-4 word title. " +
+          "No quotes, no markdown, no trailing punctuation, no explanation.",
+      },
+      { role: "user", content: firstUserText.slice(0, 500) },
+    ],
+    thinking: false,
+  })) {
+    if (ev.type === "text") out += ev.text;
+  }
+  const line = out.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  return line
+    .replace(/["`*_#>|]+/g, "")
+    .replace(/[\s.!?,;:]+$/, "")
+    .trim()
+    .slice(0, 48);
+}

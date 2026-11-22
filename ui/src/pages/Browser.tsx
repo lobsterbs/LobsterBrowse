@@ -3121,7 +3121,17 @@ export default function BrowserView(props: Props) {
             id="lb-reload-btn"
             aria-label="Reload"
             disabled={active.url ? undefined : true}
-            onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
+            onClick={(e) => {
+              /* One short clockwise spin per press; the class restarts
+                 so rapid reloads re-run it. */
+              const ic = (e.currentTarget as HTMLElement).querySelector<HTMLElement>("m3e-icon");
+              if (ic) {
+                ic.classList.remove("lb-reload-spin");
+                void ic.offsetWidth;
+                ic.classList.add("lb-reload-spin");
+              }
+              if (active.url) load(active, active.url, { push: false });
+            }}
           >
             <m3e-icon name="refresh" aria-hidden={true} />
           </m3e-icon-button>

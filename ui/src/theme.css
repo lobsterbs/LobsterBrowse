@@ -456,7 +456,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 @media (prefers-reduced-motion: reduce) {
   .lb-set-section > * { animation: none; }
   .lb-set-nav-item { transition: none; }
-  .lb-set-hit { transition: none; }
 }
 
 /* #256 redesign: every group reads as one M3 section: an icon
@@ -520,40 +519,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 }
 .lb-setting-group { padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200) var(--md-sys-measurement-space50); }
 .lb-setting-sub { margin-top: var(--md-sys-measurement-space50); }
-/* Settings search (wave 112): a frosted pill filter in the pane
-   header, the same glass family as the page cards. Results render
-   as plain jump buttons with the section name as the trailing
-   label, so a hit says where it will land before the tap. */
-.lb-set-search {
-  grid-column: 1 / -1;
-  display: flex; align-items: center; gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space150);
-  border: var(--lb-glass-ring);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: var(--lb-glass-tint);
-  color: var(--md-sys-color-on-surface-variant);
-}
-.lb-set-search-input {
-  flex: 1 1 auto; min-width: 0;
-  background: transparent; border: none; outline: none;
-  color: var(--md-sys-color-on-surface);
-  font: inherit;
-}
-.lb-set-search-input::placeholder { color: var(--md-sys-color-on-surface-variant); }
-.lb-set-hits { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-.lb-set-hit {
-  display: flex; justify-content: space-between; align-items: center; gap: var(--md-sys-measurement-space100);
-  padding: var(--md-sys-measurement-space100) var(--md-sys-measurement-space200);
-  border: var(--lb-glass-ring);
-  border-radius: var(--md-sys-shape-corner-medium, 12px);
-  background: var(--lb-glass-tint);
-  color: var(--md-sys-color-on-surface);
-  font: inherit; text-align: left; cursor: pointer;
-  transition: background-color var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)), scale var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
-}
-.lb-set-hit:active { scale: 0.98; transition-duration: 90ms; }
-.lb-set-hit-sec { font-size: var(--md-sys-typescale-body-small-font-size, 12px); color: var(--md-sys-color-on-surface-variant); }
-.lb-set-hits-empty { margin: 0; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); color: var(--md-sys-color-on-surface-variant); }
 /* Theme hero card (wave 112): the seed row sits at the top of the
    Appearance section in plain sight, the card family of the page
    (glass tint, ring, large-increased radius). The text column keeps
@@ -2510,13 +2475,21 @@ background: var(--lb-glass-tint);
   transition: width 550ms cubic-bezier(.39, 1.29, .35, .98), border-radius 500ms cubic-bezier(.34, .8, .34, 1), background-color 500ms cubic-bezier(.34, .8, .34, 1), border-color 500ms cubic-bezier(.34, .8, .34, 1), transform 350ms cubic-bezier(.42, 1.67, .21, .9); }
 .lb-tb-pill:hover { border-radius: 18px; }
 .lb-tb-pill:active { transform: scale(.985); }
+/* Reload press: one short clockwise spin on the icon, composite-only;
+   reduced motion skips it. */
+#lb-reload-btn m3e-icon.lb-reload-spin { animation: lb-reload-spin 460ms cubic-bezier(0.2, 0, 0, 1); }
+@keyframes lb-reload-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #lb-reload-btn m3e-icon.lb-reload-spin { animation: none; } }
 .lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }
 /* Loader: the prototype's 48px indicator. */
 .lb-loadchip m3e-loading-indicator { width: 48px; height: 48px; }
 /* Tab rows (spec sketch): a 48px cookie shape frames the favicon,
    the title takes the rest of the row, close X at the end. */
-.lb-tab-favicon { display: block; width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); object-fit: contain; font-size: 24px; flex: none; }
-.lb-tab-shape { --m3e-shape-size: 48px; --m3e-shape-container-color: var(--md-sys-color-surface-container-high, #32282a); color: var(--md-sys-color-primary); display: inline-grid; place-items: center; flex: none; }
+/* The cookie shape's shadow wrapper does not center its slot, so the
+   favicon pins to the shape's top-left; anchoring it absolutely to
+   the host centers it. */
+.lb-tab-favicon { position: absolute; inset: 0; margin: auto; display: block; width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); object-fit: contain; font-size: 24px; }
+.lb-tab-shape { --m3e-shape-size: 48px; --m3e-shape-container-color: var(--md-sys-color-surface-container-high, #32282a); color: var(--md-sys-color-primary); display: inline-grid; place-items: center; flex: none; position: relative; }
 .lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); }
 /* Wordmark is ~45.1x its font size wide: size it from the card's own content width so it always fills it. */
 .lb-home-sheet { container-type: inline-size; }
@@ -2599,8 +2572,8 @@ background: var(--lb-glass-tint);
 /* The wrapper carries the elevation shadow; without a radius that shadow is a square halo around the pill. */
 .lb-dock-pill { border-radius: 999px; }
 
-/* Toolbar trim: smaller identity pill, no tab-count badge, no load wave on the pill. */
-.lb-tb-pill { width: clamp(130px, 28vw, 280px); }
+/* Toolbar trim: smaller identity pill, no tab-count badge, no load wave on the pill. The pill hugs its content (favicon + title) and only widens when they grow; interpolate-size lets the width transition run to and from the intrinsic size, the min-width keeps the floor and the clamp keeps the old ceiling. */
+.lb-tb-pill { interpolate-size: allow-keywords; width: max-content; min-width: 130px; max-width: clamp(130px, 28vw, 280px); }
 
 /* Home gutter: demo .home is 16px each side; the app shell gives 12px on phones. */
 @media (max-width: 600px) { .lb-home { box-sizing: border-box; padding-inline: 4px; } }
@@ -2616,12 +2589,18 @@ background: var(--lb-glass-tint);
 .lb-ai-stat { display: inline-flex; align-items: center; gap: 10px; padding: 4px 14px 4px 4px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 58%, transparent); font: inherit; font-size: .86rem; cursor: pointer; transition: background-color .4s cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 8%, transparent); }
 .lb-ai-stat:disabled { cursor: default; }
-.lb-ai-stat-load { width: 26px; height: 26px; flex: none; }
+.lb-ai-stat-load { width: 20px; height: 20px; flex: none; }
 .lb-ai-stat-ok { color: var(--md-sys-color-primary, #ffb4ab); font-size: 20px; }
 .lb-ai-stat-chev { font-size: 18px; transition: transform .5s cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat.open .lb-ai-stat-chev { transform: rotate(180deg); }
-.lb-ai-steps { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 6px; max-width: min(520px, 100%); }
-.lb-ai-steps[hidden] { display: none; }
+/* Steps expand on the grid-rows curve: the track interpolates 0fr to
+   1fr while the inner wrapper fades and slides; visibility flips
+   after the collapse so the closed cards leave the a11y tree. */
+.lb-ai-steps { display: grid; grid-template-rows: 0fr; margin: 8px 0 6px; max-width: min(520px, 100%); transition: grid-template-rows 300ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-ai-steps.open { grid-template-rows: 1fr; }
+.lb-ai-steps-in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; visibility: hidden; opacity: 0; transform: translateY(-4px); transition: opacity 300ms cubic-bezier(0.2, 0, 0, 1), transform 300ms cubic-bezier(0.2, 0, 0, 1), visibility 0s 300ms; }
+.lb-ai-steps.open .lb-ai-steps-in { visibility: visible; opacity: 1; transform: none; transition: opacity 300ms cubic-bezier(0.2, 0, 0, 1), transform 300ms cubic-bezier(0.2, 0, 0, 1), visibility 0s; }
+@media (prefers-reduced-motion: reduce) { .lb-ai-steps, .lb-ai-steps-in { transition: none; } }
 .lb-ai-step { width: 100%; box-sizing: border-box; }
 .lb-ai-tin { display: flex; align-items: center; gap: 10px; padding: 8px 12px; box-sizing: border-box; }
 .lb-ai-tin m3e-icon { flex: none; font-size: 18px; }
