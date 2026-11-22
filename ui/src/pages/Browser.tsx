@@ -248,6 +248,32 @@ type ZlMenuItem = {
    pointer positioning with these same item components). Checkbox and
    radio entries use the real menu-item shapes, no Unicode markers, and
    parentId nesting renders as m3e submenus. */
+/* Nav-URL equivalence: the engine reports a page's committed URL
+   normalized (origin-host paths gain a trailing slash: example.com ->
+   example.com/). History sync compared those reports against stack
+   entries verbatim, so a fresh omnibus navigation landed as TWO stack
+   entries (the raw request, then the normalized report), Back then
+   "traveled" between two copies of the same page, and the sync bounced
+   the index back up after every Back click. Two URLs are the same
+   history entry when their parts match after dropping a trailing
+   pathname slash (directories still compare equal: one fetch);
+   search and hash must match exactly. */
+const dropTrailingSlash = (p: string): string =>
+  p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
+const sameNavUrl = (a: string, b: string): boolean => {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return (
+      ua.origin === ub.origin &&
+      dropTrailingSlash(ua.pathname) === dropTrailingSlash(ub.pathname) &&
+      ua.search === ub.search &&
+      ua.hash === ub.hash
+    );
+  } catch {
+    return a === b;
+  }
+};
 type CtxMenuEl = HTMLElement & { show: (anchor: HTMLElement) => Promise<void> };
 function CtxMenu(props: {
   x: number;
@@ -2142,6 +2168,12 @@ export default function BrowserView(props: Props) {
           patch = { url: real, idx: idx - 1 };
         } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
           patch = { url: real, idx: idx + 1 };
+        } else if (sameNavUrl(t.url, real)) {
+          /* The committed URL is a normalized variant of the entry
+             already showing (engine reports gain a trailing
+             slash): same history entry, update the stored URL, no
+             push and no index move. */
+          patch = { url: real };
         } else {
           patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
         }
@@ -2548,6 +2580,12 @@ export default function BrowserView(props: Props) {
             patch = { url: real, idx: idx - 1 };
           } else if (idx < stack.length - 1 && stack[idx + 1] === real) {
             patch = { url: real, idx: idx + 1 };
+          } else if (sameNavUrl(tab.url, real)) {
+            /* The committed URL is a normalized variant of the entry
+               already showing (engine reports gain a trailing
+               slash): same history entry, update the stored URL, no
+               push and no index move. */
+            patch = { url: real };
           } else {
             patch = { url: real, stack: [...stack.slice(0, idx + 1), real], idx: idx + 1 };
           }
