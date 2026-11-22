@@ -2777,3 +2777,11 @@ background: var(--lb-glass-tint);
   .lb-incog-menu { display: revert; }
   .lb-tb-pill { min-width: 130px; }
 }
+
+/* URL edit, 1:1 with the demo's fc(): the pill takes the whole toolbar,
+   every button collapses out, the pill widens with the field inside. */
+.lb-toolbar m3e-icon-button { transition: max-width var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-short-4, 200ms), transform var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring); }
+.lb-toolbar.editing m3e-icon-button, .lb-toolbar.editing .lb-diag-tb-chip { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
+.lb-toolbar.editing .lb-tb-trail { display: none; }
+.lb-toolbar.editing .lb-tb-zone { gap: 0; }
+.lb-toolbar.editing .lb-tb-pill { width: min(92vw, 440px); border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }

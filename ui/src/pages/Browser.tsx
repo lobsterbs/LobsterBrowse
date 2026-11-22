@@ -3011,7 +3011,7 @@ export default function BrowserView(props: Props) {
             of view and goes inert (effect above). The grip line
             alone remains the reveal handle. */}
         <div className="lb-dock-pill" ref={dockPillRef}>
-          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar", ref: toolbarRef }}>
+          <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" + (tbExpanded && active.url ? " editing" : ""), ref: toolbarRef }}>
           {/* Lead zone (wave 112): tabs, new tab and navigation
               travel together on the left; the omnibox centers and
               the secondary actions close the bar on the right. */}
@@ -3052,7 +3052,10 @@ export default function BrowserView(props: Props) {
           {/* The pill centers itself with auto margins; no spacers. */}
           {/* Center pill: lock + favicon + tab name. Pressed, it expands
               in place into the editable URL (the name hides). */}
-          <span className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}>
+          <span
+            className={"lb-tb-pill" + (tbExpanded || !active.url ? " expanded" : "")}
+            onClick={() => { if (active.url && !tbExpanded) setTbExpanded(true); }}
+          >
             {tbSuggOpen && (
               <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
                 {tbSugg.map((it, i) => (
