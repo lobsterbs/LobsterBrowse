@@ -3,12 +3,11 @@
    own state.
 
    Redesign: the old floating card lives on
-   as DevToolsLegacy.tsx (not imported; kept for rollback). This
-   implementation hosts the panel in the m3e-bottom-sheet, the
-   sub-tool picker (Console / Network / Diagnostics) is a connected
-   m3e-button-group, and each section renders its mini surfaces as
-   m3e-card components: a card per concern, content above a divider
-   with inline action buttons under it.
+   as DevToolsLegacy.tsx (not imported; kept for rollback). The
+   panel hosts in the m3e-bottom-sheet; the sub-tool picker (Console /
+   Network / Diagnostics) is a connected m3e-button-group of toggle
+   segments, and all three pages render their content bare, directly
+   in the sheet, with per-page footers for filters and actions.
 
    Console and network render bare like diagnostics, the level
    filter chips are gone, and all three pages stay mounted ([hidden]
@@ -24,6 +23,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { type Tab } from "../store";
+import { StatRow } from "../ai/ToolRow";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
@@ -529,6 +529,17 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       el.show();
       /* Content entrance trails the sheet's own slide: nav first. */
       requestAnimationFrame(() => dtEnter(el.querySelector(".lb-dt-nav")));
+      /* Row stagger, sheet open only - sub-tool flips use the page
+         effect below. Visible rows enter 60ms out plus 24ms per
+         position, capped at 12 so a long console stays cheap. */
+      requestAnimationFrame(() => {
+        const rows = el.querySelectorAll(
+          ".lb-dt-page:not([hidden]) .lb-console-line, .lb-dt-page:not([hidden]) .lb-net-summary, .lb-dt-page:not([hidden]) .lb-dt-card"
+        );
+        rows.forEach((r, i) => {
+          if (i < 12) dtEnter(r, 60 + i * 24);
+        });
+      });
     } else el.hide();
   }, [open]);
 
@@ -807,6 +818,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const netPages = Math.max(1, Math.ceil(netEntries.length / netPageSize));
   const netPageClamped = Math.min(netPage, netPages - 1);
   const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
+  const netFailed = netEntries.filter((n) => n.error || (!n.ok && n.status >= 400)).length;
 
   /* Entry count per section, shown on the picker buttons like real
      devtools do. */
@@ -818,7 +830,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   return (
     <m3e-bottom-sheet
-      detents="fit"
+      detents="fit half full"
       handle=""
       hideable=""
       handle-label="Dismiss developer tools"
@@ -829,7 +841,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         <m3e-icon-button slot="leading" aria-label="Back" onClick={() => live.current.onClose()}>
           <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
-        <span slot="title">DevTools - {tab.title || "tab"}</span>
+        <span slot="title">DevTools<span className="lb-dt-title-sub">{tab.url ? hostOf(tab.url) : tab.title || "no site"}</span></span>
         {/* #266: Copy logs and Eruda in page moved up here, out of the
             Diagnostics page body: the header keeps them reachable from
             every sub-page and the page body stays cards only. */}
@@ -841,29 +853,37 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
       </m3e-app-bar>
 
       <div className="lb-dt-content">
-        {/* Sub-tool picker (#239, the bottom-bar pattern): one button
-            per sub-tool; the active one is a tonal rounded pill behind
-            its icon and label, the inactive ones are borderless text
-            buttons - the pill is the active indication, no text
-            marker. Plain buttons keep native Tab / Enter / Space. */}
-        <div className="lb-dt-nav" aria-label="Developer tools sections">
-          {PAGES.map(([page, label, icon]) => {
-            const on = dt.page === page;
-            return (
-              <m3e-button
-                key={page}
-                variant={on ? "tonal" : "text"}
-                shape="rounded"
-                aria-current={on ? "true" : undefined}
-                {...{ class: "lb-dt-nav-btn" }}
-                onClick={() => setDt({ page })}
-              >
-                <m3e-icon name={icon} aria-hidden={true} />
-                {label}
-                {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
-              </m3e-button>
-            );
-          })}
+        {/* Sub-tool picker (wave-114 M3E redesign): a connected
+            m3e-button-group of toggle buttons; the group owns the
+            radiogroup and aria-checked semantics and the connected
+            shape, the selected segment stays tonal, and native
+            Tab / Enter / Space keep working. */}
+        <div className="lb-dt-nav">
+          <m3e-button-group
+            variant="connected"
+            aria-label="Developer tools sections"
+            {...{ class: "lb-dt-nav-group" }}
+          >
+            {PAGES.map(([page, label, icon]) => {
+              const on = dt.page === page;
+              return (
+                <m3e-button
+                  key={page}
+                  variant="tonal"
+                  shape="square"
+                  toggle=""
+                  selected={on ? "" : undefined}
+                  aria-current={on ? "true" : undefined}
+                  {...{ class: "lb-dt-nav-btn" }}
+                  onClick={() => setDt({ page })}
+                >
+                  <m3e-icon name={icon} aria-hidden={true} />
+                  {label}
+                  {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
+                </m3e-button>
+              );
+            })}
+          </m3e-button-group>
         </div>
 
         {/* Console and Network render bare like Diagnostics (user
@@ -932,7 +952,23 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         </div>
 
         <div className="lb-dt-page" hidden={dt.page !== "network"}>
+          {/* Real devtools keep a status line above the list - the
+              same settled status pill the AI page uses, counts only,
+              no steps. */}
+          <StatRow
+            label="Collecting requests..."
+            active={false}
+            hasSteps={false}
+            done={"Network · " + netEntries.length + (netEntries.length === 1 ? " request" : " requests") + (netFailed > 0 ? " · " + netFailed + " failed" : "")}
+          />
           <div className="lb-net">
+            {/* 94 pattern: an empty log says so; a filtered-to-nothing
+                log says that instead. */}
+            {pagedNet.length === 0 && (
+              <p className="lb-muted lb-console-empty">
+                {dt.net.length > 0 ? "No matching requests." : "Network requests will appear here."}
+              </p>
+            )}
             {pagedNet.map((n) => (
               <details key={n.id} className="lb-net-row">
                 <summary className="lb-net-summary">

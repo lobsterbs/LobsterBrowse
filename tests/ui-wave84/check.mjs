@@ -27,7 +27,7 @@ ok(!theme.includes(".lb-ad-card"), "#236 ad card css retired");
 ok(theme.includes(".lb-ad-body"), "#236 sheet body css present (the sheet surface is the global wave-88 sheet rule)");
 ok(theme.includes(".lb-ad-hero"), "#236 hero row css present");
 ok(theme.includes(".lb-ad-foot { width: 100%; }"), "#236 footer css present");
-ok(!theme.includes(".lb-dt-bgroup"), "#239 button-group css retired");
+ok(!theme.includes(".lb-dt-bgroup"), "the old #239 bgroup selector stays retired");
 ok(theme.includes(".lb-dt-nav {"), "#239 nav row css present");
 ok(!/^\.lb-set-search \{ margin:/m.test(theme), "#238 dead unscoped set-search margin removed");
 
@@ -51,7 +51,7 @@ ok(settings.includes("m3e-button-segment"), "#237 proxy/transport segmented rows
 
 const dt = src("src/pages/DevTools.tsx");
 ok(dt.includes("lb-dt-nav"), "#239 nav row markup present");
-ok(dt.includes('variant={on ? "tonal" : "text"}'), "#239 active sub-tool is a tonal pill");
+ok(dt.includes('selected={on ? "" : undefined}'), "wave 114 active segment carries selected");
 ok(dt.includes('aria-current={on ? "true" : undefined}'), "#239 aria-current on the active sub-tool");
 ok(!dt.includes("bgroupRef"), "#239 reconcile effect retired");
 

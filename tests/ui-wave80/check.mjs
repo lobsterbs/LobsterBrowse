@@ -77,8 +77,9 @@ const ok = (name, cond) => {
 {
   const d = read("src/pages/DevTools.tsx");
   ok("devtools: bottom sheet host", d.includes("m3e-bottom-sheet"));
-  /* #239: the connected button group was replaced by the tonal pill row. */
-  ok("devtools: sub-tool picker is the tonal pill row", d.includes("lb-dt-nav") && d.includes('variant={on ? "tonal" : "text"}'));
+  /* Wave 114: the tonal pill row became a connected button group
+     of toggle segments; the #239 supersession is deliberate. */
+  ok("devtools: sub-tool picker is a connected toggle group", d.includes("lb-dt-nav") && d.includes('variant="connected"') && d.includes('toggle=""'));
   ok("devtools: section cards", d.includes("m3e-card"));
   ok("devtools: legacy copy kept", existsSync(new URL("src/pages/DevToolsLegacy.tsx", ui)));
   const walk = (dir) => {

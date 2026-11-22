@@ -1014,6 +1014,8 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 /* The sub-tool picker centers under the sheet. */
 .lb-dt-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--md-sys-measurement-space50); }
 .lb-dt-nav-btn { flex: 0 1 auto; }
+.lb-dt-nav-group { flex: 0 1 auto; }
+.lb-dt-title-sub { display: block; font-size: 0.72em; color: var(--md-sys-color-on-surface-variant); }
 .lb-dt-card { width: 100%; }
 .lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
 .lb-dt-card-title { font-variation-settings: "wght" var(--lb-wght-medium); }
