@@ -1,5 +1,5 @@
 /* Tab switcher: a modal m3e-bottom-sheet with one row per tab:
-   favicon (inside a frosted m3e-avatar), site title, close X (user
+   favicon, site title, supporting state line, close X (user
    request 2026-11-07; the preview windows are gone - a second page
    instance per tab was weight, not information). The sheet header is
    a basic m3e-app-bar: back button, title, and a Close-all action
@@ -139,17 +139,17 @@ export default function TabSwitcherCard(props: {
                 }
               }}
             >
-              {/* The favicon sits inside a frosted m3e-avatar: the
-                  translucent avatar surface blurs the sheet content
-                  behind it. */}
-              <m3e-shape name="9-sided-cookie" {...{ class: "lb-tab-shape" }} aria-hidden={true}>
-                {props.icons[t.id] ? (
-                  <img className="lb-tab-shape-icon" src={props.icons[t.id]} alt="" />
-                ) : (
-                  <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-shape-icon" }} />
-                )}
-              </m3e-shape>
-              <span className="lb-tabs-title">{tabLabel(t)}</span>
+              {/* Demo row anatomy: leading favicon, title, and a
+                  supporting current-state line. */}
+              {props.icons[t.id] ? (
+                <img className="lb-tab-favicon" src={props.icons[t.id]} alt="" />
+              ) : (
+                <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-favicon" }} />
+              )}
+              <span className="lb-tabs-text">
+                <span className="lb-tabs-title">{tabLabel(t)}</span>
+                <span className="lb-tabs-sub">{t.id === props.activeId ? "Current tab" : "Tab"}</span>
+              </span>
               {/* #91/#233: a real icon button so closing is
                   independently keyboard-reachable; selection and
                   closing stay separate actions, and the X is always
