@@ -132,7 +132,7 @@ function formatValue(v: unknown): string {
   if (v === undefined) return "undefined";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
-  if (typeof v === "function") return "Æ " + (v.name || "anonymous") + "()";
+  if (typeof v === "function") return "ƒ " + (v.name || "anonymous") + "()";
   if (typeof v === "symbol") return v.toString();
   try {
     return JSON.stringify(v, null, 2) ?? "undefined";
@@ -860,7 +860,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
               >
                 <m3e-icon name={icon} aria-hidden={true} />
                 {label}
-                {(pageCounts[page] ?? 0) > 0 ? " Â· " + pageCounts[page] : ""}
+                {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
               </m3e-button>
             );
           })}
@@ -883,7 +883,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
-                <span className="lb-console-arrow">{c.kind === "input" ? "âº" : c.kind === "result" ? "â¹" : levelOf(c.kind)}</span>
+                <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
                 <span className="lb-console-text">{c.text}</span>
               </div>
             ))}
