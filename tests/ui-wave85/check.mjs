@@ -41,8 +41,8 @@ for (const gone of [".lb-site-head", ".lb-site-ctitle", ".lb-dt-sheet-head", ".l
 /* Tabs sheet: rows, not tiles; shape favicon; no preview windows. */
 ok(theme.includes(".lb-tab-row {"), "tab row rule exists");
 ok(theme.includes(".lb-tab-row.active {"), "active row pill exists");
-ok(theme.includes(".lb-tab-shape {"), "tab favicon shape rule exists");
-ok(theme.includes("--m3e-shape-size: 44px;"), "shape size token set");
+ok(theme.includes(".lb-tab-favicon {"), "tab favicon rule exists");
+ok(theme.includes(".lb-tabs-sub {"), "tab row supporting line exists");
 ok(!theme.includes(".lb-tab-avatar"), "the dead avatar rules are gone");
 ok(!theme.includes("lb-tabs-tile"), "tile rules gone");
 ok(!theme.includes("lb-tab-preview"), "preview rules gone");
@@ -67,8 +67,9 @@ ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2
 ok(theme.includes("min-height: 56px;"), "inline card min-height matches the collapsed panel header (#274, wave 107)");
 
 const tabs = read("src/browser/TabSwitcherCard.tsx");
-ok(tabs.includes('<m3e-shape name="9-sided-cookie"'), "tab rows use the shape favicon tile");
-ok(tabs.includes('class: "lb-tab-shape"'), "the tile carries the shape class");
+ok(tabs.includes("lb-tab-favicon"), "tab rows use the leading favicon");
+ok(tabs.includes("lb-tabs-sub"), "the row carries the supporting state line");
+ok(!tabs.includes("lb-tab-shape"), "the cookie shape tile is gone");
 ok(tabs.includes("<m3e-app-bar"), "tabs sheet header is an app bar");
 ok(tabs.includes('<span slot="title">Tabs'), "tabs sheet title in title slot");
 ok(!tabs.includes("zlContentHref"), "preview route import gone");

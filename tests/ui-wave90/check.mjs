@@ -31,9 +31,9 @@ const theme = read("src/theme.css");
 const extPanel = read("src/browser/ExtensionsPanel.tsx");
 
 /* 1. Tab sheet favicon (#240). */
-const shapeIcon = block(theme, ".lb-tab-shape .lb-tab-shape-icon {");
-ok(shapeIcon.includes("width: 22px;") && shapeIcon.includes("height: 22px;"), "slotted favicon is constrained to 22px");
-ok(shapeIcon.includes("object-fit: contain;"), "favicon keeps its aspect inside the shape tile");
+const favicon = block(theme, ".lb-tab-favicon {");
+ok(favicon.includes("width: 24px;") && favicon.includes("height: 24px;"), "leading favicon is constrained to 24px");
+ok(favicon.includes("object-fit: contain;"), "favicon keeps its aspect inside the row");
 
 /* 2. AdBlock hero (#241). */
 const adHero = block(theme, ".lb-ad-hero {");
