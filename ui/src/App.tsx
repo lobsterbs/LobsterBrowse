@@ -228,10 +228,15 @@ export default function App() {
       lastEngineKey.current = key;
       if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
         /* duration 0 = never auto-dismiss: the notice stays until the
-           user reloads or presses Reload now. The old 8s timeout
-           dropped the notice while the old worker kept serving. */
-        M3eSnackbar.open("Engine updated - reload to pick it up", "Reload now", {
-          actionCallback: () => window.location.reload(),
+           user reloads. The old 8s timeout dropped the notice while
+           the old worker kept serving. Text only: an action button
+           inside the top-layer popover camps the first tab stop
+           (Chromium walks open popovers before the document; the
+           stop observed on the shadow action m3e-button), leaving
+           keyboard users one Tab short of the app forever. Native
+           F5 / Ctrl-R reloads, and the status role announces the
+           text to screen readers without any focusable part. */
+        M3eSnackbar.open("Engine updated - reload to pick it up", {
           duration: 0,
         });
       }
