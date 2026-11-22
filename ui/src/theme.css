@@ -2495,7 +2495,7 @@ background: var(--lb-glass-tint);
 .lb-home .lb-ac-wrap { transition: opacity 180ms cubic-bezier(.34, .8, .34, 1); }
 .lb-home .lb-ac-wrap.lb-away { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape { transition: none; }
+  .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape, .lb-ac-wrap { transition: none; }
 }
 
 /* ---- Ported from the expressive prototype (Home, toolbar pill, loader, tab rows). ---- */

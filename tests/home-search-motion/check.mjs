@@ -22,6 +22,7 @@ ok(home.includes("placeholder="), "the shrink selector needs a real placeholder 
    div, so the bar must dim itself. */
 ok(theme.includes(".lb-home .lb-ac-wrap { transition: opacity 180ms cubic-bezier(.34, .8, .34, 1); }"), "bar fade transition exists");
 ok(theme.includes(".lb-home .lb-ac-wrap.lb-away { opacity: 0; }"), "lb-away dims the bar");
+ok(theme.includes(".lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape, .lb-ac-wrap { transition: none; }"), "reduced motion freezes the bar fade");
 ok(home.includes('const [wiping, setWiping] = useState(false);'), "wiping state exists");
 ok(home.includes("setWiping(true);"), "commit arms the fade");
 ok(home.includes('"lb-ac-wrap" + (wiping ? " lb-away" : "")'), "the wrap gains lb-away on wipe");
