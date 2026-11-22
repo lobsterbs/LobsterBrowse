@@ -883,7 +883,7 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   /* Auto margins center the pill in the toolbar. */
   flex: 0 1 auto;
   min-width: 120px;
-  max-width: 460px;
+  max-width: 440px;
   margin: 0 auto;
   padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space150);
   border-radius: var(--md-sys-shape-corner-full, 999px);
@@ -896,11 +896,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
 }
 .lb-tb-favicon { width: 18px; height: 18px; border-radius: 6px; object-fit: contain; flex-shrink: 0; }
-/* Security indicator: sits before the favicon with breathing room.
-   Inline SVG (self-hosted Material Symbols), inherits the text color. */
-.lb-tb-lock { font-size: 0; flex-shrink: 0; line-height: 0; display: inline-flex; color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface)); }
-.lb-tb-lock svg { width: 16px; height: 16px; display: block; fill: currentColor; }
-.lb-tb-lock + .lb-tb-favicon { margin-left: var(--md-sys-measurement-space50); }
 .lb-tb-name {
   flex: 0 1 auto;
   min-width: 0;
@@ -960,10 +955,7 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 }
 .lb-tb-ac {
   animation: lb-card-in 180ms var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  right: 0;
+  position: fixed;
   z-index: 40;
   /* #232: menu-class surface, not a solid sheet with a full-strength
      outline; the hairline is outline-variant at low alpha. */
@@ -1215,7 +1207,7 @@ m3e-icon-button:active { transform: scale(0.88); }
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
   m3e-icon-button, .lb-dock-pill, m3e-nav-rail,
-  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-tb-pill { transition: none; }
+  m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-tb-pill, .lb-tb-zone { transition: none; }
   .lb-view, .lb-tb-ac { animation: none; }
   .lb-tb-ac-item { animation: none; }
   .lb-toolbar.lb-flash::after { animation: none; opacity: 0; }
@@ -1306,14 +1298,8 @@ border-radius: var(--m3e-shape-lg);
 
 /* Toolbar centering: the pill centers itself with auto margins. */
 
-/* Lock colors: green closed (https), red broken (http). */
-.lb-tb-lock.secure { color: #1e8e3e; }
-.lb-tb-lock.insecure { color: var(--md-sys-color-error, #d93025); }
-
-/* Site info: a real m3e-card popup anchored above the lock glyph. The
+/* Site info: a real m3e-card popup anchored above the pill. The
    card supplies the container; positioning and long texts are ours. */
-.lb-tb-lock-wrap { display: inline-flex; align-items: center; cursor: pointer; padding: var(--md-sys-measurement-space25); border-radius: var(--md-sys-shape-corner-full, 999px); }
-.lb-tb-lock-wrap:focus-visible { outline: 2px solid var(--md-sys-color-primary); }
 .lb-site-card {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -2507,9 +2493,11 @@ background: var(--lb-glass-tint);
 /* ---- Ported from the expressive prototype (Home, toolbar pill, loader, tab rows). ---- */
 /* Home: the wordmark sits on the frosted sheet, not in a second glass box. */
 .lb-home-sheet pre.lb-ascii { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; box-shadow: none; padding: 0; }
-/* Toolbar pill: fixed resting width, springs on hover and press (prototype values). */
+/* Toolbar pill: fixed resting width; the edit morph rides the demo's
+   expressive curves (width .55s with a gentle settle, radius springs,
+   tint eases long, press bounces on the fast spatial spring). */
 .lb-tb-pill { box-sizing: border-box; width: clamp(130px, 34vw, 340px); height: 36px;
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), border-color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease), width var(--md-sys-motion-duration-medium-1, 250ms) var(--m3e-spring, cubic-bezier(0.2, 0, 0, 1)), border-radius 350ms cubic-bezier(.2, .9, .3, 1.2), transform 200ms cubic-bezier(.2, .9, .3, 1.2); }
+  transition: width 550ms cubic-bezier(.39, 1.29, .35, .98), border-radius 500ms cubic-bezier(.38, 1.21, .22, 1), background-color 500ms cubic-bezier(.34, .8, .34, 1), border-color 500ms cubic-bezier(.34, .8, .34, 1), transform 350ms cubic-bezier(.42, 1.67, .21, .9); }
 .lb-tb-pill:hover { border-radius: 18px; }
 .lb-tb-pill:active { transform: scale(.985); }
 .lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }
@@ -2574,9 +2562,13 @@ background: var(--lb-glass-tint);
 
 /* URL edit, 1:1 with the demo's fc(): the pill takes the whole toolbar,
    every button collapses out, the pill widens with the field inside. */
-.lb-toolbar m3e-icon-button { transition: max-width var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-short-4, 200ms), transform var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring); }
+/* One shared 500ms spring (the demo's default spatial) carries the
+   collapse: buttons squeeze out with a 200ms opacity fade, and the
+   trail rides the same squeeze instead of blinking away in a frame. */
+.lb-toolbar m3e-icon-button { flex: none; max-width: 64px; transition: max-width 500ms cubic-bezier(.38, 1.21, .22, 1), opacity 200ms cubic-bezier(.34, .8, .34, 1), transform 500ms cubic-bezier(.38, 1.21, .22, 1); }
 .lb-toolbar.editing m3e-icon-button { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
-.lb-toolbar.editing .lb-tb-trail { display: none; }
+.lb-toolbar.editing .lb-tb-trail m3e-menu { display: none; }
+.lb-tb-zone { transition: gap 500ms cubic-bezier(.38, 1.21, .22, 1); }
 .lb-toolbar.editing .lb-tb-zone { gap: 0; }
 .lb-toolbar.editing .lb-tb-pill { width: min(92vw, 440px); border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }
 
