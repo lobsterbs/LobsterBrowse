@@ -2616,7 +2616,17 @@ FROM debian:bookworm-slim AS zl-builder
 # sw.js 7df24a17983a2c82 -> 2ba4232414965a63 (947844 bytes);
 # bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
 # Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=8f35da9d7924c67319c7e0a6fd0df1d854c51412
+# Pin 192 (2026-11-22): dist 1048b03a (build 45026329077; Zeolite
+# main 3a0d54cd, all five jobs green). The Google/Outlook auth wave:
+# committed-query prel tails resolve against the parent document
+# (#708 bscframe handshake), the authorize-token rootHome recovery
+# and the MS iframe-request-id dedupe ship (#706 ESTS white page);
+# the #700 workers-grant fix rides the same bundle. Cargo-side pin
+# stays 5073f316 (no zeolite-server code change; app TS only).
+# sw.js 2ba4232414965a63 -> 733c925ba2fbc22e (950241 bytes);
+# bootstrap.js 0ddd6edd9485c8ab -> 0a3e47fd0bcfbba3 (51347 bytes).
+# Deploy with a cleared Render build cache.
+ARG ZEOLITE_COMMIT=1048b03a4982e2b02d281c50c083a3f14c547418
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2683,7 +2693,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2ba4232414965a63 ZEOLITE_BOOTSTRAP_SHA=0ddd6edd9485c8ab SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=733c925ba2fbc22e ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
@@ -2701,5 +2711,6 @@ RUN useradd --system --uid 10001 --no-create-home appuser \
  && chown -R appuser:appuser /app
 USER appuser
 ENTRYPOINT ["/app/lobster-server"]
+
 
 
