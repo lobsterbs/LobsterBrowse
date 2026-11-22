@@ -4,7 +4,6 @@ import SettingsPanel from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import AiPage from "./pages/Ai";
-import neurologySvg from "@material-symbols/svg-400/outlined/neurology.svg?raw";
 import {
   engineRoutePrefix,
   loadSettings,
@@ -1058,7 +1057,7 @@ export default function App() {
             selected={view === "ai" ? "" : undefined}
             onClick={(e) => navGo(e.currentTarget, "ai", () => setView("ai"))}
           >
-            <span slot="icon" className="lb-ai-nav-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: neurologySvg }} />AI
+            <m3e-icon slot="icon" name="psychology" aria-hidden={true} />AI
           </m3e-nav-item>
           <m3e-nav-item
             id="nav-settings"
@@ -1067,15 +1066,6 @@ export default function App() {
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
-          {/* #262: view names on the collapsed rail. m3e-tooltip
-             accepts above/below/before/after only and silently
-             resets anything else to below, so the side position is
-             "after" (inline after = right in LTR); "right" is
-             exactly the bug that put them over the next button. */}
-          <m3e-tooltip for="nav-home" position="after">Home</m3e-tooltip>
-          <m3e-tooltip for="nav-browse" position="after">Browse</m3e-tooltip>
-          <m3e-tooltip for="nav-ai" position="after">AI</m3e-tooltip>
-          <m3e-tooltip for="nav-settings" position="after">Settings</m3e-tooltip>
         </m3e-nav-rail>
 
         {/* Small screens (#76): the M3E nav bar replaces the wide
@@ -1101,7 +1091,7 @@ export default function App() {
             selected={view === "ai" ? "" : undefined}
             onClick={(e) => navGo(e.currentTarget, "ai", () => setView("ai"))}
           >
-            <span slot="icon" className="lb-ai-nav-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: neurologySvg }} />AI
+            <m3e-icon slot="icon" name="psychology" aria-hidden={true} />AI
           </m3e-nav-item>
           <m3e-nav-item
             selected={view === "settings" ? "" : undefined}

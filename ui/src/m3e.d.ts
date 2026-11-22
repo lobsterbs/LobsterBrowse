@@ -31,7 +31,7 @@ declare module "react" {
       "m3e-button": M3eBase & { variant?: string; shape?: string; size?: string; disabled?: boolean; autofocus?: boolean; toggle?: boolean | string; selected?: boolean | string; "data-page"?: string; };
       "m3e-button-segment": M3eBase & { checked?: boolean | string; value?: string; disabled?: boolean };
       "m3e-segmented-button": M3eBase & { multi?: boolean | string; disabled?: boolean };
-      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string };
+      "m3e-icon-button": M3eBase & { variant?: string; disabled?: boolean; toggle?: boolean | string; selected?: boolean | string; width?: string; shape?: string };
       "m3e-icon": M3eBase & { name?: string; filled?: boolean | string };
       /* Non-visual swipe recognizer; fires a `gesture` CustomEvent on the control named by `for`. */
       "m3e-swipe-gesture": M3eBase & { for?: string; directions?: string; "pointer-types"?: string; "min-displacement"?: string; "min-velocity"?: string };

@@ -762,6 +762,15 @@ export default function AiPage() {
                 }
               }}
             />
+            <m3e-icon-button
+              slot="trailing"
+              {...(busy || draft.trim() || attached.length ? {} : { disabled: true })}
+              {...(draft.trim() || attached.length ? { variant: "filled", shape: "square" } : { variant: "tonal", shape: "rounded" })}
+              aria-label={busy ? "Stop" : "Send"}
+              onClick={() => (busy ? abortRef.current?.abort() : void send())}
+            >
+              <m3e-icon name={busy ? "stop" : "arrow_upward"} aria-hidden={true} />
+            </m3e-icon-button>
           </m3e-search-bar>
           {peekMounted && (
             <div
@@ -789,16 +798,6 @@ export default function AiPage() {
             </div>
           )}
         </div>
-        <m3e-button
-          variant="tonal"
-          {...{ class: "lb-ai-send" }}
-          {...(busy || draft.trim() || attached.length ? {} : { disabled: true })}
-          aria-label={busy ? "Stop" : "Send"}
-          onClick={() => (busy ? abortRef.current?.abort() : void send())}
-        >
-          <m3e-icon slot="icon" name={busy ? "stop" : "send"} aria-hidden={true} />
-          {busy ? "Stop" : "Send"}
-        </m3e-button>
       </div>
 
       <div className="lb-ai-under">
