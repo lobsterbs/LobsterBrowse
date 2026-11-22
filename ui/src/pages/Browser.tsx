@@ -416,6 +416,8 @@ export default function BrowserView(props: Props) {
      place into the editable URL (the name hides). */
   const [tbExpanded, setTbExpanded] = useState(false);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
+  /* #283 dock-clip: the suggestion list pins to a manual popover. */
+  const acRef = useRef<HTMLDivElement | null>(null);
   /* Real favicon per tab (blob URL fetched through the engine). */
   const [icons, setIcons] = useState<Record<number, string>>({});
   /* #213: toolbar pill tint from the active tab's favicon. The pure
@@ -2657,6 +2659,60 @@ export default function BrowserView(props: Props) {
     if (tbExpanded) urlInputRef.current?.select();
   }, [tbExpanded]);
 
+  /* The omnibox suggestion list opens as a manual popover: the
+     #283 dock-clip (overflow:hidden + clip-path on .lb-toolbar)
+     hard-clips any child popup, so the list rides the top layer
+     like the overflow m3e-menu and is pinned to the input rect in
+     fixed coordinates on open and on every suggestion change. */
+  useEffect(() => {
+    const ac = acRef.current;
+    if (!ac) return;
+    const input = urlInputRef.current;
+    if (input) {
+      const r = input.getBoundingClientRect();
+      ac.style.left = r.left + "px";
+      ac.style.bottom = window.innerHeight - r.top + 10 + "px";
+      ac.style.width = r.width + "px";
+    }
+    if (!ac.matches(":popover-open")) ac.showPopover();
+  }, [tbSuggOpen, tbSugg, tbSuggIdx]);
+
+  /* m3e-toolbar's roving-tabindex key manager sweeps every slotted
+     interactive control (including this input) and treats every
+     arrow key as next/previous roving input, so keydown arrows in the
+     URL field dragged focus to the next toolbar button mid-edit (a
+     single ArrowDown moved focus to the tabs button - suggestion
+     keyboard roving never actually worked on beta, Enter just picked
+     the typed draft). The guard must be a native capture-phase
+     listener on the input itself: React delegates keydown to the app
+     root, which sits AFTER the toolbar's shadow slot in the composed
+     path, so no React-side handler can beat the manager.
+     stopPropagation therefore silences the React handler too - which
+     is why suggestion arrow roving lives HERE, native, while Enter
+     and Escape stay on the JSX handler. Horizontal arrows pass
+     through to the manager exactly when the caret cannot move
+     (boundary/empty field), so keyboard users can still arrow
+     across the toolbar through the omnibox. */
+  useEffect(() => {
+    const el = urlInputRef.current;
+    if (!el) return;
+    const onKey = (e: KeyboardEvent) => {
+      const sel = el.selectionStart === el.selectionEnd ? el.selectionStart : -1;
+      if (e.key === "Home" || e.key === "End") { e.stopPropagation(); return; }
+      if (e.key === "ArrowRight" && sel !== el.value.length) { e.stopPropagation(); return; }
+      if (e.key === "ArrowLeft" && sel !== 0) { e.stopPropagation(); return; }
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.stopPropagation();
+        if (!tbSuggOpen || tbSugg.length === 0) return;
+        e.preventDefault();
+        setTbSuggIdx((p) => (e.key === "ArrowDown" ? Math.min(p + 1, tbSugg.length - 1) : Math.max(p - 1, -1)));
+      }
+    };
+    el.addEventListener("keydown", onKey, true);
+    return () => el.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tbExpanded, !active.url, active.id, tbSuggOpen, tbSugg.length]);
+
   /* TLS certificate state: declared above the !active early return -
      a useState below a conditional return changes the hook count
      between renders and crashes React. */
@@ -3022,6 +3078,7 @@ export default function BrowserView(props: Props) {
           <m3e-icon-button
             id="lb-reload-btn"
             aria-label="Reload"
+            disabled={active.url ? undefined : true}
             onClick={() => (active.url ? load(active, active.url, { push: false }) : undefined)}
           >
             <m3e-icon name="refresh" aria-hidden={true} />
@@ -3036,7 +3093,14 @@ export default function BrowserView(props: Props) {
             onClick={() => { if (active.url && !tbExpanded) setTbExpanded(true); }}
           >
             {tbSuggOpen && (
-              <div className="lb-tb-ac" role="listbox" aria-label="Suggestions">
+              <div
+                id="lb-tb-ac"
+                ref={acRef}
+                className="lb-tb-ac"
+                {...{ popover: "manual" }}
+                role="listbox"
+                aria-label="Suggestions"
+              >
                 {tbSugg.map((it, i) => (
                   /* #262: suggestion rows on m3e-list-item; keyboard
                      stays on the input (roving arrows + Enter), rows
@@ -3044,6 +3108,7 @@ export default function BrowserView(props: Props) {
                   <m3e-list-item
                     key={it.url}
                     {...{
+                      id: "lb-tb-ac-item-" + i,
                       class: "lb-tb-ac-item" + (i === tbSuggIdx ? " active" : ""),
                       role: "option",
                       "aria-selected": i === tbSuggIdx ? "true" : "false",
@@ -3075,7 +3140,13 @@ export default function BrowserView(props: Props) {
               <input
                 ref={urlInputRef}
                 className="lb-url-input"
+                role="combobox"
                 aria-label="URL or search"
+                aria-expanded={tbSuggOpen ? "true" : "false"}
+                aria-controls="lb-tb-ac"
+                aria-autocomplete="list"
+                aria-haspopup="listbox"
+                aria-activedescendant={tbSuggOpen && tbSuggIdx >= 0 ? "lb-tb-ac-item-" + tbSuggIdx : undefined}
                 placeholder={"Search with " + ENGINES[settings.engine].name + " or URL"}
                 value={draft}
                 spellCheck={false}
@@ -3100,12 +3171,6 @@ export default function BrowserView(props: Props) {
                     setTbSuggOpen(false);
                     setTbExpanded(false);
                     if (pick) go(pick);
-                  } else if (e.key === "ArrowDown" && tbSuggOpen) {
-                    e.preventDefault();
-                    setTbSuggIdx((p) => Math.min(p + 1, tbSugg.length - 1));
-                  } else if (e.key === "ArrowUp" && tbSuggOpen) {
-                    e.preventDefault();
-                    setTbSuggIdx((p) => Math.max(p - 1, -1));
                   } else if (e.key === "Escape") {
                     setTbSuggOpen(false);
                     setTbExpanded(false);
