@@ -27,14 +27,14 @@ export function StatRow({
         onClick={() => setOpen((v) => !v)}
       >
         {active ? (
-          <m3e-loading-indicator className="lb-ai-stat-load" />
+          <m3e-loading-indicator aria-hidden={true} {...{ class: "lb-ai-stat-load" }} />
         ) : (
-          <m3e-icon name="check_circle" className="lb-ai-stat-ok" />
+          <m3e-icon name="check_circle" {...{ class: "lb-ai-stat-ok" }} />
         )}
         <span className="lb-ai-stxt" role={active ? "status" : undefined}>
           {active ? label : done}
         </span>
-        {hasSteps && <m3e-icon name="keyboard_arrow_down" className="lb-ai-stat-chev" />}
+        {hasSteps && <m3e-icon name="keyboard_arrow_down" {...{ class: "lb-ai-stat-chev" }} />}
       </button>
       {hasSteps && (
         <div className="lb-ai-steps" hidden={!open}>
@@ -47,7 +47,7 @@ export function StatRow({
 
 export function StepCard({ icon, title, sub, children }: { icon: string; title: string; sub?: string; children?: ReactNode }) {
   return (
-    <m3e-card variant="outlined" className="lb-ai-step">
+    <m3e-card variant="outlined" {...{ class: "lb-ai-step" }}>
       <div className="lb-ai-tin">
         <m3e-icon name={icon} />
         <div className="lb-ai-tt">
