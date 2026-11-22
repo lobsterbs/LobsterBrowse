@@ -366,7 +366,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             the column spacing must live on the page content. */}
 <div className="lb-set-page">
           {/* The classical app top bar: the same basic
-              m3e-app-bar the Logs page and AI history sheet use,
+              m3e-app-bar the Logs page and the AI history sheet use,
               title only. */}
           <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
             <span slot="title">Settings</span>
