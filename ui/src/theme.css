@@ -2785,3 +2785,6 @@ background: var(--lb-glass-tint);
 .lb-toolbar.editing .lb-tb-trail { display: none; }
 .lb-toolbar.editing .lb-tb-zone { gap: 0; }
 .lb-toolbar.editing .lb-tb-pill { width: min(92vw, 440px); border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }
+
+/* The wrapper carries the elevation shadow; without a radius that shadow is a square halo around the pill. */
+.lb-dock-pill { border-radius: 999px; }
