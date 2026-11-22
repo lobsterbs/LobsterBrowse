@@ -62,12 +62,12 @@ const SECTION_TITLES: Record<SectionId, string> = {
    on primary-container, a title heading, and one plain supporting
    line that says what the section holds. Descriptions stay short and
    human: they explain the thing itself, never the changelog. */
-const SECTION_META: Record<SectionId, { icon: string; sub: string }> = {
-  search: { icon: "search", sub: "Choose your engine and its suggestions." },
-  privacy: { icon: "shield", sub: "Block ads and trackers on the pages you open." },
-  extensions: { icon: "extension", sub: "Add-ons: install, search and manage." },
-  appearance: { icon: "palette", sub: "Set the colors and feel of the interface." },
-  advanced: { icon: "tune", sub: "Engines, network and stored data." },
+const SECTION_META: Record<SectionId, { icon: string; sub: string; shape: string }> = {
+  search: { icon: "search", sub: "Choose your engine and its suggestions.", shape: "4-sided-cookie" },
+  privacy: { icon: "shield", sub: "Block ads and trackers on the pages you open.", shape: "gem" },
+  extensions: { icon: "extension", sub: "Add-ons: install, search and manage.", shape: "12-sided-cookie" },
+  appearance: { icon: "palette", sub: "Set the colors and feel of the interface.", shape: "flower" },
+  advanced: { icon: "tune", sub: "Engines, network and stored data.", shape: "soft-burst" },
 };
 
 const NAV_ORDER: SectionId[] = ["search", "privacy", "appearance", "extensions", "advanced"];
@@ -366,7 +366,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             the column spacing must live on the page content. */}
 <div className="lb-set-page">
           {/* The classical app top bar: the same basic
-              m3e-app-bar the Logs page and the AI history sheet use,
+              m3e-app-bar the Logs page and AI history sheet use,
               title only. */}
           <m3e-app-bar size="small" {...{ class: "lb-sheet-bar lb-set-bar" }}>
             <span slot="title">Settings</span>
@@ -398,10 +398,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 onClick={() => setSection(id)}
               >
                 {/* Android Settings sub-card, ported: the icon sits
-                    inside a real m3e-shape (the expressive 4-sided
-                    cookie), then the category name with one plain
+                    inside a real m3e-shape and every category
+                    carries its own shape (no one shared cookie),
+                    then the category name with one plain
                     line under it saying what the section holds. */}
-                <m3e-shape name={section === id ? "sunny" : "4-sided-cookie"} aria-hidden={true}>
+                <m3e-shape name={SECTION_META[id].shape} aria-hidden={true}>
                   <m3e-icon name={SECTION_META[id].icon} />
                 </m3e-shape>
                 <span className="lb-set-nav-txt">

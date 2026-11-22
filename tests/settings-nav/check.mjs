@@ -7,10 +7,10 @@
    rendered as a small centered card ignoring most of the viewport; the
    side categories were plain pills. The check pins: the settings-only
    wide column, the 300px nav grid track, and every category being an
-   Android-style sub-card with the icon inside a real M3E shape (the
-   expressive 4-sided cookie, sized and tinted through the m3e-shape
-   component tokens), then the category name and one plain supporting
-   line. Icon centering: the slotted m3e-icon lives inside the
+   Android-style sub-card with the icon inside a real M3E shape
+   (one expressive shape per category, sized and tinted through the
+   m3e-shape component tokens), then the category name and one plain
+   supporting line. Icon centering: the slotted m3e-icon lives inside the
    component's shadow .wrapper (a relative block) through the
    slot, so no page-level flex can reach it (live-probed: the icon
    pinned 20x20 in the 40px wrapper's top-left corner while the
@@ -68,7 +68,8 @@ ok("markup: nav sub line rendered", page.includes('<span className="lb-set-nav-s
 ok("narrow screens swap the card rail for the section dropdown", theme.includes(".lb-set-nav { display: none; }") && theme.includes(".lb-set-nav-drop { display: block; grid-column: 1 / -1; }") && theme.includes(".lb-set-nav-sub { display: none; }") === false);
 
 /* The markup wires the shape, the icon and the name. */
-ok("markup: icon inside the m3e-shape", page.includes('name={section === id ? "sunny" : "4-sided-cookie"}'));
+ok("markup: each category renders its own m3e-shape", page.includes('name={SECTION_META[id].shape}'));
+ok("markup: the five category shapes are pinned and distinct", ["4-sided-cookie", "gem", "12-sided-cookie", "flower", "soft-burst"].every((n) => page.includes('shape: "' + n + '"')));
 ok("markup: the shape wraps the section icon", page.indexOf("<m3e-shape") < page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') && page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') < page.indexOf('<span className="lb-set-nav-txt">'));
 ok("markup: title inside the text column", page.includes('<span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>'));
 ok("markup: the old span tile is gone", !page.includes("lb-set-nav-ico"));
