@@ -2723,7 +2723,7 @@ background: var(--lb-glass-tint);
 .lb-tab-shape .lb-tab-shape-icon { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 22px; height: 22px; border-radius: 6px; object-fit: contain; font-size: 22px; }
 /* Wordmark is ~45.1x its font size wide: size it from the card's own content width so it always fills it. */
 .lb-home-sheet { container-type: inline-size; }
-.lb-home-sheet pre.lb-ascii { font-size: calc(100cqw / 45.6); }
+.lb-home-sheet pre.lb-ascii { font-size: min(14px, calc((100vw - 96px) / 48)); letter-spacing: .5px; }  /* demo .lb-ascii sizing */
 /* Active row is tinted like the shape; flip the shape to primary so the cookie stays visible. */
 .lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary, #ffb4a8); color: var(--md-sys-color-on-primary, #561e17); }
 /* No wallpaper anywhere: the shell sits inside m3e-theme, so it paints the real surface token (the old fx layer was portaled outside the theme, where tokens are empty). */
@@ -2788,3 +2788,10 @@ background: var(--lb-glass-tint);
 
 /* The wrapper carries the elevation shadow; without a radius that shadow is a square halo around the pill. */
 .lb-dock-pill { border-radius: 999px; }
+
+/* Toolbar trim: smaller identity pill, no tab-count badge, no load wave on the pill. */
+.lb-tb-pill { width: clamp(130px, 28vw, 280px); }
+.lb-toolbar m3e-badge, .lb-toolbar .lb-tb-wave { display: none; }
+
+/* Home gutter: demo .home is 16px each side; the app shell gives 12px on phones. */
+@media (max-width: 600px) { .lb-home { box-sizing: border-box; padding-inline: 4px; } }

@@ -185,7 +185,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
         </div>
       </div>
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
-      <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 640, width: "100%" }}>
+      <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 680, width: "100%" }}>
         <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
           {/* One icon only. The view ships its own default
               magnifier in the leading area; overriding the search-icon
