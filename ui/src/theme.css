@@ -1829,18 +1829,13 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The dying row surrenders its layout footprint: height animates to
-   0 and a negative margin eats the list gap, so the surviving rows
-   slide up smoothly inside the close window (#29). */
+/* A closing row fades out in place over the same 320ms window the real
+   close waits for (Browser.tsx closeTabSmooth); the rows below jump up
+   when it is removed. The sheet stays put, so nothing else moves. */
 .lb-tab-row.closing {
   opacity: 0;
-  height: 0;
-  min-height: 0;
-  margin-top: calc(-1 * var(--md-sys-measurement-space100, 8px));
-  overflow: hidden;
-  /* Glide: the rows below follow this collapse, so it runs on the same
-     320ms window the real close waits for (Browser.tsx closeTabSmooth). */
-  transition: opacity 200ms var(--md-sys-motion-easing-standard, ease), height 320ms cubic-bezier(0.4, 0, 0.2, 1), margin-top 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  transition: opacity 280ms var(--md-sys-motion-easing-standard, ease);
 }
 /* The toolbar slides fully away while the tab switcher is open; this
    rule must sit after the dock hover/reveal rules to win the cascade. */
