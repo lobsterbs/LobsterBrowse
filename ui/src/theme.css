@@ -696,115 +696,8 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   height: 100vh;
   min-height: 320px;
 }
-.lb-browser:fullscreen { height: 100vh; padding: 0; }
 
-/* Frosted floating tab strip: overlays the page so the tabs adapt to
-   whatever is rendered beneath them (blur + translucent surface). */
-.lb-tabstrip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 6;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: var(--md-sys-measurement-space50);
-  /* Never scrollable: tabs shrink (compact/tight tiers) to fit. */
-  overflow-x: hidden;
-  overflow-y: hidden;
-  padding: var(--md-sys-measurement-space25) var(--md-sys-measurement-space100);
-  background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl);
-  transition: opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-/* Same retract logic as the bottom dock: after the shared idle timer
-   the strip slides up leaving a 16px sliver. The tabs themselves are
-   NOT collapsed or faked: they keep their real shape and positions,
-   they are just mostly off-screen with the strip. Hovering (or any
-   pointer/keyboard activity, via the shared state) slides it back. */
-.lb-tabstrip.tucked { transform: translateY(calc(-100% + 16px)); gap: 0; }
-.lb-tabstrip:hover { transform: translateY(0); }
-/* In fullscreen the strip mostly fades out; hover brings it back. */
-.lb-browser:fullscreen .lb-tabstrip:not(.tucked) { opacity: 0.35; }
-.lb-browser:fullscreen .lb-tabstrip:not(.tucked):hover { opacity: 1; }
-/* Tabs, M3E style: pill chips with a state layer, an active container
-   tint, springy press physics and icon-button close affordance. */
-.lb-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space75);
-  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  cursor: pointer;
-  white-space: nowrap;
-  /* Shrinkable so the strip never needs to scroll. */
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 150px;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  color: var(--md-sys-color-on-surface-variant, var(--md-sys-color-on-surface));
-  background: color-mix(in srgb, var(--md-sys-color-surface) 30%, transparent);
-  transition: background var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-4, 200ms) var(--m3e-spring), color var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, ease),
-    max-width var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
-    padding var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1))),
-    opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, ease), gap var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring, var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)));
-}
-.lb-tab:hover {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
-  color: var(--md-sys-color-on-surface);
-}
-.lb-tab:active { transform: scale(0.96); }
-.lb-tab.active {
-  color: var(--md-sys-color-on-primary-container, var(--md-sys-color-on-surface));
-  background: var(--md-sys-color-primary-container, color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent));
-  font-variation-settings: "wght" var(--lb-wght-strong);
-}
-.lb-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 120px; min-width: 0; }
-.lb-tab-favicon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; object-fit: contain; }
-.lb-tab .lb-tab-close {
-  border-radius: 50%;
-  font-size: var(--md-sys-typescale-label-large-font-size, 14px);
-  opacity: 0;
-  transition: opacity var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), background var(--md-sys-motion-duration-short-2, 100ms) var(--md-sys-motion-easing-standard, ease), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring);
-}
-.lb-tab:hover .lb-tab-close, .lb-tab.active .lb-tab-close { opacity: 0.8; }
-.lb-tab .lb-tab-close:hover { opacity: 1; background: color-mix(in srgb, var(--md-sys-color-on-surface) 14%, transparent); transform: scale(1.08); }
-/* Many tabs: shrink automatically. compact = tighter pill (>=6 tabs),
-   tight = drop the titles, favicon-only pills (>=10 tabs). */
-.lb-tabstrip.compact { gap: var(--md-sys-measurement-space50); }
-.lb-tabstrip.compact .lb-tab { max-width: 150px; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); gap: var(--md-sys-measurement-space50); font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
-.lb-tabstrip.compact .lb-tab-title { max-width: 80px; }
-.lb-tabstrip.tight .lb-tab { max-width: 72px; padding: var(--md-sys-measurement-space75) var(--md-sys-measurement-space100); gap: 0; }
-.lb-tabstrip.tight .lb-tab-title { max-width: 0; opacity: 0; }
-/* Incognito toolbar toggle (inline SVG glyph: the domino mask is an
-   inline SVG because the glyph is missing from the
-   Material Symbols font); the icon span constrains it to 24px. The
-   button itself is a real m3e-icon-button (toggle) like its toolbar
-   neighbours; the component owns geometry and all states. */
-.lb-incognito-ic {
-  display: block;
-  width: 24px;
-  height: 24px;
-}
-.lb-incognito-ic svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-/* The raw Material Symbols SVG paths carry their own fill attribute
-   (dark), which overrides inherited fill from the svg element. Force
-   the paint down to every child so the mask follows the button color
-   (visible in dark mode). */
-.lb-incognito-ic svg path,
-.lb-incognito-ic svg g,
-.lb-incognito-ic svg circle,
-.lb-incognito-ic svg rect {
-  fill: currentColor;
-}
+
 
 /* Pages fill the whole browser area; the frosted tab strip floats
    above the rendered site. */
@@ -1232,7 +1125,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   .lb-tb-pill { min-width: 96px; }
   .lb-tb-pill.expanded { width: min(56vw, 440px); }
   .lb-devtools { left: var(--md-sys-measurement-space100); right: var(--md-sys-measurement-space100); width: auto; }
-  .lb-tab { max-width: 150px; }
   .lb-tab-title { max-width: 80px; }
   .lb-setting-row { gap: var(--md-sys-measurement-space100); }
   /* Settings on small screens: full-width inputs keep the page usable
@@ -1283,18 +1175,10 @@ m3e-heading[variant="display"] {
 m3e-button[variant="filled"] { font-variation-settings: "wght" var(--lb-wght-emph); }
 
 /* Larger, softer shapes on the floating chrome. */
-.lb-tabstrip { border-radius: 0 0 var(--m3e-shape-xl) var(--m3e-shape-xl); }
 .lb-ac { border-radius: var(--m3e-shape-lg); }
 .lb-log-list { border-radius: var(--m3e-shape-lg); }
 
-/* Springy interactions: tabs and icon buttons squish on press. */
-.lb-tab {
-  transition: background var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring), transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring);
-}
-.lb-tab:hover {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent);
-}
-.lb-tab:active { transform: scale(0.95); }
+/* Springy interactions: icon buttons and the dock squish on press. */
 m3e-icon-button { transition: transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring); }
 m3e-icon-button:active { transform: scale(0.88); }
 .lb-dock-pill {
@@ -1327,36 +1211,16 @@ m3e-icon-button:active { transform: scale(0.88); }
 .lb-tb-ac-item:nth-child(2) { animation-delay: 25ms; }
 .lb-tb-ac-item:nth-child(3) { animation-delay: 50ms; }
 
-/* Omnibox load wave: while the active tab is loading, a two-pixel
-   wavy line runs along the bottom of the identity pill - an
-   indeterminate progress flare instead of a spinner, drawn by the real
-   m3e-linear-progress-indicator (wavy). */
-.lb-tb-wave {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 6px;
-  pointer-events: none;
-  overflow: hidden;
-  border-radius: 0 0 999px 999px;
-}
-.lb-tb-wave m3e-linear-progress-indicator {
-  display: block; width: 100%;
-  --m3e-linear-progress-indicator-thickness: 2px;
-  --m3e-linear-wavy-progress-indicator-amplitude: 1.5px;
-  --m3e-linear-wavy-indeterminate-progress-indicator-wavelength: 24px;
-  --m3e-progress-indicator-track-color: transparent;
-}
 
 /* Reduced motion: no springs, no squish. */
 @media (prefers-reduced-motion: reduce) {
-  m3e-icon-button, .lb-tab, .lb-dock-pill, .lb-tabstrip, m3e-nav-rail,
+  m3e-icon-button, .lb-dock-pill, m3e-nav-rail,
   m3e-nav-rail m3e-nav-item, .lb-ac-item, .lb-nt-ac-item, .lb-tb-pill { transition: none; }
   .lb-view, .lb-tb-ac { animation: none; }
   .lb-tb-ac-item { animation: none; }
   .lb-toolbar.lb-flash::after { animation: none; opacity: 0; }
-  .lb-tb-wave { display: none; }
   .lb-fx-flash { display: none; }
-  .lb-tab:active, m3e-icon-button:active { transform: none; }
+  m3e-icon-button:active { transform: none; }
 }
 
 /* ---- New tab page ---- */
@@ -1540,32 +1404,7 @@ border-radius: var(--m3e-shape-lg);
 .lb-diag-chip.lb-diag-ok { background: color-mix(in srgb, #1e8e3e 18%, transparent); }
 .lb-diag-chip.lb-diag-bad { background: color-mix(in srgb, var(--md-sys-color-error) 18%, transparent); }
 
-/* ---- Compaction batch: toolbar tabs, diagnostics chip, suggest
-   loading indicator ---- */
-/* Tab-count button: a real m3e-icon-button (toggle) like its
-   neighbours; the component owns geometry and every state. The count
-   is a real m3e-badge anchored to the button via for=, so the badge
-   geometry and position are the component's too - the hand-rolled
-   absolute badge was pinned to the host corner and clipped wrong. */
-/* Diagnostics chip on the toolbar: appears only with captured load
-   failures; opens DevTools on the diagnostics page. */
-.lb-diag-tb-chip {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--md-sys-measurement-space50, 4px);
-  height: 32px;
-  padding: 0 var(--md-sys-measurement-space125, 10px);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-error) 45%, transparent);
-  background: color-mix(in srgb, var(--md-sys-color-error-container) 70%, transparent);
-  color: var(--md-sys-color-on-error-container);
-  font-family: inherit;
-  font-size: var(--md-sys-typescale-body-small-font-size, 12px);
-  font-variation-settings: "wght" var(--lb-wght-medium);
-  cursor: pointer;
-}
-.lb-diag-tb-chip m3e-icon { font-size: 16px; }
+
 /* Real frosted glass: every surface that
    floats over other content gets a translucent surface tint plus
    backdrop blur and saturation. The m3e-bottom-sheet host paints its
@@ -1779,14 +1618,12 @@ m3e-snackbar {
   align-items: center;
   gap: var(--md-sys-measurement-space150);
   width: 100%;
-min-height: 64px;
+min-height: 56px;
 padding: 12px 16px;
   box-sizing: border-box;
-border: var(--lb-glass-ring);
-border-radius: var(--md-sys-shape-corner-large-increased, 20px);
-background: var(--lb-glass-tint);
-  backdrop-filter: var(--lb-glass-blur);
-  -webkit-backdrop-filter: var(--lb-glass-blur);
+border: none;
+border-radius: var(--md-sys-shape-corner-full, 999px);
+background: transparent;
   color: inherit;
   font-family: inherit;
   text-align: left;
@@ -1807,7 +1644,7 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   outline-offset: -2px;
 }
 .lb-tab-row .lb-tabs-title {
-  flex: 1;
+  
   min-width: 0;
   font-size: var(--md-sys-typescale-body-large-font-size, 16px);
   line-height: var(--md-sys-typescale-body-large-line-height, 24px);
@@ -1832,19 +1669,6 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
 }
 /* (Exit animation is the .open transition above; the leaving class
    and its keyframes were removed with the unmount-on-close logic.) */
-/* Tab-count icon: inline SVG (same self-hosted Material Symbols route
-   as the lock and incognito icons), so it never depends on the icon
-   font being loaded to be visible. */
-.lb-tabs-ic {
-  display: block;
-  width: 22px;
-  height: 22px;
-}
-.lb-tabs-ic svg { display: block; width: 100%; height: 100%; fill: currentColor; }
-.lb-tabs-ic svg path,
-.lb-tabs-ic svg g,
-.lb-tabs-ic svg circle,
-.lb-tabs-ic svg rect { fill: currentColor; }
 
 
 @media (prefers-reduced-motion: reduce) {
@@ -2079,12 +1903,6 @@ background: var(--lb-glass-tint);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-outline) 40%, transparent);
 }
 
-/* #96 (revised): incognito identity is the domino icon's color,
-   not a text badge (removed) and not a toolbar outline (the toolbar
-   carries no outline at all now). */
-body.lb-incognito .lb-incognito-ic {
-  color: var(--md-sys-color-primary);
-}
 
 
 
@@ -2274,9 +2092,6 @@ body .lb-ext-panel {
 
 /* Rail icon: the AI glyph is an inline SVG (the bundled ligature set
    has gaps), sized like the sibling m3e icons. */
-.lb-ai-nav-ic { display: inline-flex; width: 24px; height: 24px; }
-.lb-ai-nav-ic svg { display: block; width: 100%; height: 100%; fill: currentColor; }
-.lb-ai-nav-ic svg path, .lb-ai-nav-ic svg g, .lb-ai-nav-ic svg circle, .lb-ai-nav-ic svg rect { fill: currentColor; }
 
 
 @media (prefers-reduced-motion: reduce) {
@@ -2385,24 +2200,6 @@ body .lb-ext-panel {
   pointer-events: none;
 }
 
-/* Send/Stop: one m3e-button (tonal, icon slot + label) beside the
-   chatbar, pill-rounded to match the search bar's curve. While the
-   assistant works, the label and icon swap to Stop and pressing it
-   aborts the stream; m3e-button owns its own press and ripple. */
-.lb-ai-send {
-  flex: none;
-  /* Fused into the chatbox: the button stretches to the search
-     bar's full height and shares its pill rounding; the negative
-     margin cancels the bar's 8px gap so the two pills sit flush
-     against each other. */
-  align-self: stretch;
-  min-height: 0;
-  margin-left: calc(-1 * var(--md-sys-measurement-space100, 8px));
-  --m3e-button-shape-round: var(--md-sys-shape-corner-full, 9999px);
-  /* Same height as the chatbox: the button container follows the
-     search bar's container token, so the two pills read as one bar. */
-  --m3e-button-container-height: var(--m3e-search-bar-container-height, 56px);
-}
 
 /* ---- AI: user-message glide. The user row rises from just below its
    final resting point with the same decelerate curve as the assistant
@@ -2718,14 +2515,13 @@ background: var(--lb-glass-tint);
 .lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }
 /* Loader: the prototype's 48px indicator. */
 .lb-loadchip m3e-loading-indicator { width: 48px; height: 48px; }
-/* Tab rows: a 9-sided cookie shape holds the site favicon, centred (prototype .tshape). */
-.lb-tab-shape { --m3e-shape-size: 44px; --m3e-shape-container-color: var(--md-sys-color-secondary-container, #5d3f3a); position: relative; flex: none; display: inline-block; color: var(--md-sys-color-on-secondary-container, #ffdad6); }
-.lb-tab-shape .lb-tab-shape-icon { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 22px; height: 22px; border-radius: 6px; object-fit: contain; font-size: 22px; }
+/* Tab rows: leading favicon (demo), title column. */
+.lb-tab-favicon { display: block; width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); object-fit: contain; font-size: 24px; flex: none; }
+.lb-tabs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lb-tabs-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: var(--md-sys-typescale-body-small-line-height, 16px); color: var(--md-sys-color-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Wordmark is ~45.1x its font size wide: size it from the card's own content width so it always fills it. */
 .lb-home-sheet { container-type: inline-size; }
 .lb-home-sheet pre.lb-ascii { font-size: min(14px, calc((100vw - 96px) / 48)); letter-spacing: .5px; }  /* demo .lb-ascii sizing */
-/* Active row is tinted like the shape; flip the shape to primary so the cookie stays visible. */
-.lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary, #ffb4a8); color: var(--md-sys-color-on-primary, #561e17); }
 /* No wallpaper anywhere: the shell sits inside m3e-theme, so it paints the real surface token (the old fx layer was portaled outside the theme, where tokens are empty). */
 .lb-shell { background: var(--md-sys-color-surface); }
 /* Settings nav, per the demo: transparent items, hover tint, pill when active, 48px shape (52px sunny when active). */
@@ -2771,17 +2567,15 @@ background: var(--lb-glass-tint);
 
 /* Demo parity: the dock stays up, so the tuck grip is hidden unless tucked; phones drop forward and new tab (demo <=600px). */
 .lb-dock:not(.tucked) .lb-dock-grip { display: none; }
-.lb-incog-menu { display: none; }
 @media (max-width: 600px) {
-  #lb-forward-btn, #lb-newtab-btn, #lb-fs-btn, #lb-incognito-pill, .lb-toolbar m3e-badge { display: none; }
-  .lb-incog-menu { display: revert; }
+  #lb-forward-btn, #lb-newtab-btn { display: none; }
   .lb-tb-pill { min-width: 130px; }
 }
 
 /* URL edit, 1:1 with the demo's fc(): the pill takes the whole toolbar,
    every button collapses out, the pill widens with the field inside. */
 .lb-toolbar m3e-icon-button { transition: max-width var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-short-4, 200ms), transform var(--md-sys-motion-duration-medium-2, 300ms) var(--m3e-spring); }
-.lb-toolbar.editing m3e-icon-button, .lb-toolbar.editing .lb-diag-tb-chip { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
+.lb-toolbar.editing m3e-icon-button { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
 .lb-toolbar.editing .lb-tb-trail { display: none; }
 .lb-toolbar.editing .lb-tb-zone { gap: 0; }
 .lb-toolbar.editing .lb-tb-pill { width: min(92vw, 440px); border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }
@@ -2791,7 +2585,6 @@ background: var(--lb-glass-tint);
 
 /* Toolbar trim: smaller identity pill, no tab-count badge, no load wave on the pill. */
 .lb-tb-pill { width: clamp(130px, 28vw, 280px); }
-.lb-toolbar m3e-badge, .lb-toolbar .lb-tb-wave { display: none; }
 
 /* Home gutter: demo .home is 16px each side; the app shell gives 12px on phones. */
 @media (max-width: 600px) { .lb-home { box-sizing: border-box; padding-inline: 4px; } }
