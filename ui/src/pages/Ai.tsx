@@ -27,7 +27,7 @@ import {
 } from "../ai/aiStore";
 import { Markdown } from "../ai/Markdown";
 import { formatElapsed } from "../ai/metrics";
-import { ToolRow } from "../ai/ToolRow";
+import { StatRow, StepCard } from "../ai/ToolRow";
 
 /* AI mode (beta-only). The Cloudflare Workers AI key lives on the
    server: sends go to this origin's /ai/chat proxy, which enforces
@@ -644,34 +644,31 @@ export default function AiPage() {
                   ))}
                 </div>
               )}
-              {m.role === "assistant" &&
-                (m.thinking ||
-                  (m.sources && m.sources.length > 0) ||
-                  subList ||
-                  (last && busy && (phase === "thinking" || phase === "searching" || phase === "subagent"))) && (
-                  <ToolRow
+              {m.role === "assistant" && (() => {
+                const stepCount = (m.thinking ? 1 : 0) + (m.sources?.length ? 1 : 0) + (subList?.length ?? 0);
+                const isLive = last && busy;
+                return (
+                  <StatRow
+                    active={isLive}
+                    hasSteps={stepCount > 0}
                     label={
                       phase === "searching"
-                        ? "Searching"
+                        ? "Searching the web"
                         : phase === "subagent"
-                          ? "Running sub agents"
-                          : "Thinking"
+                          ? "Spawning agent"
+                          : phase === "streaming"
+                            ? "Writing"
+                            : "Thinking"
                     }
-                    doneLabel={m.thinking ? "Thought" : "Worked"}
-                    shape
-                    active={last && busy && phase !== "streaming" && phase !== "idle"}
-                    duration={last && m.thinking ? dur.think : undefined}
+                    done={stepCount === 0 ? "Done" : `Done · ${stepCount} ${stepCount === 1 ? "step" : "steps"}`}
                   >
                     {m.thinking && (
-                      <pre className="lb-ai-think-pre">{stripStreamTokens(m.thinking)}</pre>
+                      <StepCard icon="psychology" title="Thinking">
+                        <pre className="lb-ai-think-pre">{stripStreamTokens(m.thinking)}</pre>
+                      </StepCard>
                     )}
                     {m.sources && m.sources.length > 0 && (
-                      <ToolRow
-                        label="Searching the web"
-                        doneLabel="Searched the web"
-                        active={last && busy && phase === "searching"}
-                        duration={last ? dur.search : undefined}
-                      >
+                      <StepCard icon="travel_explore" title="web_search" sub={`${m.sources.length} results`}>
                         <div className="lb-ai-sources">
                           {m.sources.map((s, j) => (
                             <a key={j} className="lb-ai-src" href={s.url} target="_blank" rel="noreferrer">
@@ -679,40 +676,26 @@ export default function AiPage() {
                             </a>
                           ))}
                         </div>
-                      </ToolRow>
+                      </StepCard>
                     )}
-                    {subList && subList.length > 0 && (
-                      <div className="lb-ai-subs">
-                        {subList.map((s, j) => {
-                          const st = s.status ?? (s.ms ? "done" : "working");
-                          return (
-                            <div key={j} className="lb-ai-sub">
-                              <span
-                                className={"lb-ai-tool-label" + (st === "working" ? " lb-ai-shimmer" : "")}
-                                role="status"
-                              >
-                                {st === "failed" ? "Sub agent failed" : st === "working" ? "Sub agent working" : "Sub agent done"}
-                              </span>
-                              <span className="lb-ai-sub-task">{s.task}</span>
-                              {s.ms > 0 && <span className="lb-ai-sub-ms">{formatElapsed(s.ms)}</span>}
-                              {s.tokens ? <span className="lb-ai-sub-ms">{s.tokens} tokens</span> : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </ToolRow>
-                )}
+                    {subList?.map((s, j) => {
+                      const st = s.status ?? (s.ms ? "done" : "working");
+                      const tail = [s.ms > 0 ? formatElapsed(s.ms) : "", s.tokens ? `${s.tokens} tokens` : ""].filter(Boolean).join(" · ");
+                      return (
+                        <StepCard
+                          key={j}
+                          icon="account_tree"
+                          title={st === "failed" ? "Sub agent failed" : st === "working" ? "Sub agent working" : "spawn_agent"}
+                          sub={[s.task, tail].filter(Boolean).join(" · ")}
+                        />
+                      );
+                    })}
+                  </StatRow>
+                );
+              })()}
               {m.role === "user" && m.text && <div className="lb-ai-bubble">{m.text}</div>}
               {m.role === "assistant" && m.text && (
                 <Answer text={m.text} typing={last && busy && phase === "streaming"} />
-              )}
-              {m.role === "assistant" && last && busy && phase === "streaming" && !m.text && !m.thinking && (
-                <div className="lb-ai-tool">
-                  <span className="lb-ai-tool-label lb-ai-shimmer" role="status">
-                    Working
-                  </span>
-                </div>
               )}
               {m.role === "assistant" && !busy && (m.usage || m.ms != null) && (
                 <div className="lb-ai-meta">
