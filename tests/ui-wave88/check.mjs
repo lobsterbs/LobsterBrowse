@@ -71,8 +71,8 @@ ok(theme.includes("--m3e-card-shape: 20px;"), "sub-cards use the spec 20px radiu
 ok(theme.includes(".lb-ext-list { display: flex; flex-direction: column; gap: 18px; }"), "extension list is a glass card column");
 ok(theme.includes("--m3e-snackbar-container-color: color-mix(in srgb, var(--md-sys-color-inverse-surface, #322f35) 78%, transparent);"), "snackbar is glass");
 const tabIdx = theme.indexOf(".lb-tab-row {");
-ok(tabIdx !== -1 && theme.slice(tabIdx, tabIdx + 700).includes("background: var(--lb-glass-tint);"), "tab rows are glass cards");
-ok(tabIdx !== -1 && theme.slice(tabIdx, tabIdx + 700).includes("min-height: 64px;"), "tab rows use the spec row height");
+ok(tabIdx !== -1 && theme.slice(tabIdx, tabIdx + 700).includes("background: transparent;"), "tab rows are plain (demo pass, no frost card)");
+ok(tabIdx !== -1 && theme.slice(tabIdx, tabIdx + 700).includes("min-height: 56px;"), "tab rows use the demo 56px height");
 const ntIdx = theme.indexOf(".lb-nt-ac {");
 ok(ntIdx !== -1 && theme.slice(ntIdx, ntIdx + 700).includes("background: var(--lb-glass-tint);"), "new tab suggestor is glass");
 const histIdx = theme.indexOf(".lb-ai-hist-row {");

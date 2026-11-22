@@ -44,7 +44,7 @@ const settings = read("src/pages/Settings.tsx");
 const tabsRow = block(theme, ".lb-tabs-row {");
 ok(tabsRow.includes("box-sizing: border-box;"), "tab rows size inside the sheet");
 ok(tabsRow.includes("padding: var(--md-sys-measurement-space50) 0 16px;"), "tab rows carry no inline padding");
-ok(theme.includes(".lb-tab-shape {") && theme.includes("--m3e-shape-size: 44px;"), "tab favicon tile uses the shape token");
+ok(theme.includes(".lb-tab-favicon {"), "tab favicon tile is the demo 24px tile");
 ok(!theme.includes(".lb-tab-avatar"), "the old avatar frost halo rules are gone");
 ok(tabs.includes('<span slot="title">Tabs</span>'), "tab sheet title is plain Tabs");
 ok(!tabs.includes("Tabs ({"), "count marker removed from the title");

@@ -27,7 +27,7 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
   /* Every open site consults it. */
   ok("tab switcher open closes others", b.includes('if (next) closeSheets("tabs");'));
-  ok("diag chip open closes others", b.includes('closeSheets("dt");\n                setDt(active.id, { open: true, page: "diagnostics" });'));
+  ok("diag chip gone (demo measure pass)", !b.includes('closeSheets("dt");\n                setDt(active.id, { open: true, page: "diagnostics" });'));
   ok("devtools checkbox open closes others", b.includes('if (next) closeSheets("dt");\n                setDt(active.id, { open: next });'));
   ok("ext checkbox open closes others", b.includes('if (next) closeSheets("ext");\n                setExtPanelOpen(next);'));
   ok("ext engine-message open closes others", b.includes('const onOpenExt = () => { closeSheets("ext"); setExtPanelOpen(true); };'));

@@ -64,9 +64,10 @@ const ok = (name, cond) => {
   const t = read("src/browser/TabSwitcherCard.tsx");
   ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal=""'));
   /* #85: the card grid and the live preview window are gone; one row
-     per tab now: favicon in a frosted m3e-avatar, then the title,
-     then the close button. */
-  ok("tabs: one row per tab", t.includes("m3e-avatar") && t.includes("lb-tab-row"));
+     per tab now: leading favicon tile, then the title with its
+     supporting state line, then the close button. */
+  ok("tabs: one row per tab", t.includes("lb-tab-favicon") && t.includes("lb-tab-row"));
+  ok("tabs: avatar tile gone", !t.includes("m3e-avatar"));
   ok("tabs: preview window removed", !t.includes("lb-tab-preview"));
 }
 
@@ -193,9 +194,12 @@ const ok = (name, cond) => {
   const hard = [...theme.matchAll(/font-variation-settings:[^;]*"wght"\s+\d/g)];
   ok("type: no hardcoded weight outside the token ramp", hard.length === 0);
   const toolRow = read("src/ai/ToolRow.tsx");
-  ok("shape: thinking morph shape renders", toolRow.includes("<m3e-shape"));
-  ok("shape: morph shape is decorative", toolRow.includes("aria-hidden={true}"));
-  ok("shape: morph settles when done", toolRow.includes(': "4-leaf-clover"'));
+  /* The demo conversation replaced the thinking morph shape with a
+     status pill: loader while the turn runs, check when settled, the
+     step cards as outlined cards under the pill. */
+  ok("ai: status pill runs the loader while the turn is live", toolRow.includes('<m3e-loading-indicator className="lb-ai-stat-load" />'));
+  ok("ai: settled turns swap the loader for the check", toolRow.includes('name="check_circle"'));
+  ok("ai: step cards are outlined cards under the pill", toolRow.includes('<m3e-card variant="outlined" className="lb-ai-step">'));
   ok("shape: downloads card file removed", !existsSync(new URL("src/browser/DownloadsCard.tsx", ui)));
   const xpiPrompt = read("src/browser/XpiPrompt.tsx");
   ok("shape: xpi prompt icons are decorative", xpiPrompt.includes('name="extension" aria-hidden={true}'));

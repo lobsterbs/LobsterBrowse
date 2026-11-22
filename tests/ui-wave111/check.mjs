@@ -7,7 +7,7 @@
        exit the AI conversations and DevTools sheets showed);
    (3) the toolbar flashes a one-shot frost wave on tab switch;
    (4) suggestion rows enter staggered, capped after the third row;
-   (5) a loading tab traces a thin wavy line under the omnibox pill;
+   (5) the omnibox wave is gone; the loadchip stays the loading signal;
    (6) the DevTools sheet body holds a steady 38vh floor so the
        fit-detent sheet stops resizing on every sub-tool switch;
    (7) Back is disabled at the bottom of the stack;
@@ -67,15 +67,12 @@ assert.ok(theme.includes("@keyframes lb-ac-item-in"), "the suggestion entry keyf
 assert.ok(rule(theme, ".lb-tb-ac-item:nth-child(2) {").includes("animation-delay: 25ms;"), "row two staggers by 25ms");
 assert.ok(rule(theme, ".lb-tb-ac-item:nth-child(3) {").includes("animation-delay: 50ms;"), "row three staggers by 50ms");
 
-/* 5. Omnibox load wave: the real wavy progress indicator runs
-   along the pill's bottom edge (the hand-drawn SVG slide is gone). */
-assert.ok(browser.includes("lb-tb-wave"), "the loading tab renders the wave element");
-assert.ok(browser.includes("st.loading && ("), "the wave is bound to the tab loading state");
-assert.ok(browser.includes('<m3e-linear-progress-indicator variant="wavy" mode="indeterminate" />'), "the wave is the real wavy indicator");
-const waveRule = rule(theme, ".lb-tb-wave {");
-assert.ok(waveRule.includes("height: 6px;") && waveRule.includes("bottom: 0;"), "the wave hugs the pill edge");
-const waveInd = rule(theme, ".lb-tb-wave m3e-linear-progress-indicator {");
-assert.ok(waveInd.includes("--m3e-linear-progress-indicator-thickness: 2px;"), "the wave line stays a thin 2px");
+/* 5. The omnibox load wave is gone (the demo ships no under-pill
+   wave); the loading tab is still signalled by the loadchip. */
+assert.ok(!browser.includes("lb-tb-wave"), "the wave element is gone from the toolbar");
+assert.ok(!theme.includes(".lb-tb-wave"), "the wave rules are gone from the theme");
+assert.ok(theme.includes(".lb-loadchip"), "the loadchip rule stays");
+assert.ok(browser.includes("lb-loadchip"), "the loadchip stays the loading signal in the toolbar");
 
 /* 6. DevTools steady sheet height. */
 assert.ok(rule(theme, ".lb-dt-content {").includes("min-height: 38vh;"), "the DevTools body holds a steady floor");
@@ -100,7 +97,7 @@ assert.ok(rule(theme, ".lb-site-tint-root m3e-nav-rail {").includes("var(--lb-si
 const reduce = theme.slice(theme.indexOf("@media (prefers-reduced-motion: reduce)"));
 assert.ok(reduce.includes(".lb-tb-ac-item { animation: none; }"), "the stagger stops under reduced motion");
 assert.ok(reduce.includes(".lb-toolbar.lb-flash::after { animation: none;"), "the flash stops under reduced motion");
-assert.ok(reduce.includes(".lb-tb-wave { display: none; }"), "the wave hides under reduced motion");
+assert.ok(!reduce.includes(".lb-tb-wave"), "the wave reduced-motion line is gone with the wave");
 assert.ok(reduce.includes(".lb-fx-flash { display: none; }"), "the hero flash hides under reduced motion");
 
 /* CI runs this check. */
