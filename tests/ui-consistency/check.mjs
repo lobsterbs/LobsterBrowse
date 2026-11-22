@@ -35,9 +35,14 @@ has(home, "blur(24px) saturate(1.4)", "home sheet keeps the chrome frost");
 const peek = theme.slice(theme.indexOf(".lb-ai-att-peek {"), theme.indexOf(".lb-ai-att-peek {") + 700);
 has(peek, "blur(28px) saturate(180%) brightness(.66)", "the attach peek rides the overlay frost");
 
-/* Curves: the app emphasized curve everywhere, no local .3 drift. */
-none(theme, "cubic-bezier(.3,", "local curve drift");
-none(theme, "cubic-bezier(0.3,", "local curve drift");
+/* Curves: the app emphasized curve everywhere. The only permitted .3
+   form is the canonical M3E standard-accelerate fallback (wave 115). */
+{
+  const accel = count(theme, "cubic-bezier(0.3, 0, 0.8, 0.15)");
+  const any3 = count(theme, "cubic-bezier(0.3,") + count(theme, "cubic-bezier(.3,");
+  if (any3 !== accel) fail("local curve drift");
+  if (accel === 0 || accel !== count(theme, "standard-accelerate")) fail("the accelerate fallback must stay tokenized on every site using the token it guards");
+}
 none(theme, "easing-standard, ease)", "the standard-easing fallback is the real bezier");
 none(theme, "rgb(255 255 255 / 0.06)", "inset highlight drift");
 
@@ -54,7 +59,7 @@ for (const old of ['"Search the web"', '"Spawn a sub agent"', '"Summarize this p
   none(ai, old, "retired AI chip string still present");
 for (const t of ["Solve this: 17 * 24 - 96", "Explain error: ERR_CONNECTION_RESET", "Summarize this tab's page"])
   has(ai, '"' + t + '"', "AI chip missing");
-has(ai, "onClick={() => setDraft(t)}", "chips must keep filling the composer draft");
+has(ai, "onClick={() => { setDraft(t); focusComposer(); }}", "chips must keep filling the composer draft and land focus");
 
 /* CI registration. */
 const ci = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");

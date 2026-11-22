@@ -1,6 +1,6 @@
 /* Settings: a sticky frosted side navigation with one section
-   visible at a time. The page keeps the component language (SetPanel
-   expansion panels, SetInline row cards) and every option, anchor and
+   visible at a time. The page keeps its component language (SetPanel
+   disclosure cards, SetInline row cards) and every option, anchor and
    control of the pre-redesign page; the ui-wave80 field oracle and
    the ui-wave108 anchor scan pin that. While ScramJet is the current
    proxy engine, every Zeolite-only option is greyed out. */
@@ -92,6 +92,16 @@ function SectionHead(props: { section: SectionId }) {
    headline; the body carries the controls. Only the header span toggles
    open state, so using a control inside the body never collapses the
    panel. */
+/* Sub-panel disclosure card: the m3e-expansion-panel it replaced
+   measured its own content inside the same Lit update that animated
+   the height, and on this app's pipeline the transition was created
+   against a poisoned before-style - probed live, the open snapped to
+   full height in one frame while the close ramped (the isolated
+   library ramps both ways). The disclosure instead rides a
+   grid-template-rows 0fr<->1fr ramp, the expand pattern the AI
+   steps and tool cards already proved here, so open and close both
+   animate on the emphasized curve. The card keeps the M3E surface
+   language; ids, anchors and the toggle contract are unchanged. */
 function SetPanel(props: {
   id: string;
   headline: string;
@@ -102,16 +112,39 @@ function SetPanel(props: {
   children: ReactNode;
 }) {
   return (
-    <m3e-expansion-panel id={props.id} open={props.open ? "" : undefined}>
-      <span slot="header" className="lb-setp-head" onClick={props.toggle}>
-        <span className="lb-setp-headline">{props.headline}</span>
-        {props.sub && <span className="lb-setp-sub">{props.sub}</span>}
-      </span>
-      <div className="lb-setp-body">
-        {props.anchorId && <div className="lb-set-anchor" id={props.anchorId} tabIndex={-1} />}
-        {props.children}
+    <div id={props.id} className="lb-setp">
+      <button
+        type="button"
+        className="lb-setp-toggle"
+        aria-expanded={props.open ? "true" : "false"}
+        aria-controls={props.id + "-disc"}
+        onClick={props.toggle}
+      >
+        <span className="lb-setp-head">
+          <span className="lb-setp-headline">{props.headline}</span>
+          {props.sub && <span className="lb-setp-sub">{props.sub}</span>}
+        </span>
+        <span className="lb-setp-chev" aria-hidden={true}>
+          <svg viewBox="0 0 24 24" width={20} height={20}>
+            <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" fill="currentColor" />
+          </svg>
+        </span>
+      </button>
+      <div
+        id={props.id + "-disc"}
+        className="lb-setp-disc"
+        {...(props.open ? { "data-open": "" } : { inert: "" })}
+        role="region"
+        aria-label={props.headline}
+      >
+        <div className="lb-setp-discin">
+          <div className="lb-setp-body">
+            {props.anchorId && <div className="lb-set-anchor" id={props.anchorId} tabIndex={-1} />}
+            {props.children}
+          </div>
+        </div>
       </div>
-    </m3e-expansion-panel>
+    </div>
   );
 }
 

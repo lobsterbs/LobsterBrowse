@@ -22,7 +22,10 @@ for (const a of ["set-search-engine", "set-search-suggest", "set-adblock", "set-
   ok(page.includes('anchorId="' + a + '"') || page.includes('id="' + a + '"'), "anchor " + a + " kept");
 }
 ok(page.includes("m3e-content-pane"), "the content pane host stays");
-ok(page.includes("m3e-expansion-panel"), "expansion panels stay");
+/* Wave 115: the sub-panels are hand-rolled grid-rows disclosure
+   cards (the m3e-collapsible height transition snapped on open
+   in this app; see tests/ui-wave115). */
+ok(page.includes("lb-setp-disc"), "the sub-panel disclosure stays");
 ok(page.includes("lb-set-inline"), "inline row cards stay");
 
 const theme = read("src/theme.css");

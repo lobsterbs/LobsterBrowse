@@ -57,7 +57,7 @@ ok(dtWin.includes(".lb-dt-card {") && dtWin.includes("border-radius: var(--md-sy
 ok(dtWin.includes("backdrop-filter: var(--lb-glass-blur);"), "frost card halo keeps the blur");
 
 /* 3. Settings. */
-ok(block(theme, ".lb-set-page m3e-expansion-panel {").includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "settings panel frost halo is rounded");
+ok(block(theme, ".lb-setp {").includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "settings panel frost halo is rounded");
 ok(settings.includes('slot="icon"') && settings.includes("lb-seed-dot"), "seed chips carry colored swatches in the icon slot");
 ok(block(theme, ".lb-seed-dot {").includes("border-radius: 50%;"), "seed swatch is a circle");
 

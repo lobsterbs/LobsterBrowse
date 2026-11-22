@@ -4,17 +4,21 @@ import { engineRoutePrefix, type Settings } from "../settings";
 import { clearDebugOverrides, defaultExperimental, loadDebugOverrides, saveDebugOverrides, EXPERIMENTAL_KEYS, type ExperimentalKey, type DebugOverrides } from "../debug";
 
 /* Hidden debug menu (beta): opened with five quick clicks on the Home
-   wordmark. Shows a live engine readout (/build + zl:ping) and runtime
-   engine toggles that would otherwise need a redeploy - the Injector
-   query-shape toggle, the https-upgrade and lazy-image page options,
-   and the split content-origin mode, plus an AI-mode mock
-   toggle (canned search, reasoning, and answer; override-only,
-   the AI store reads it). Config toggles write debug
-   overrides (localStorage) and push zl:config to BOTH workers
-   immediately; the split toggle is override-only (zlContentHref
-   reads it: off = frames stay on the app origin). App-side pushes
-   consult the same overrides, so the choice survives reloads and
-   worker restarts until cleared. */
+   wordmark. Shows a live engine readout (/build + zl:ping) and the
+   three runtime toggles that still have a reason to be flipped by
+   hand: the split content-origin mode (override-only: zlContentHref
+   reads it; off = frames stay on the app origin), and the Virtual
+   Service Workers / Hybrid location rewriting experimental flags.
+   Every other feature the menu once toggled stays permanently at
+   its enabled default - query-shape routes follow the deployment
+   /build value, https-upgrade follows the Settings value, lazy
+   images stay on, AI responses stay real, and the remaining
+   experimental flags stay on. Their machinery (debug.ts, the
+   readout, the pushes) is untouched; stale stored overrides for
+   those keys are ignored. Toggles write debug overrides
+   (localStorage) and push zl:config to BOTH workers immediately,
+   so the choice survives reloads and worker restarts until
+   cleared. */
 type Props = { open: boolean; onClose: () => void; settings: Settings };
 
 export default function DebugMenu({ open, onClose, settings }: Props) {
@@ -86,15 +90,22 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     });
   }, [open]);
 
-  /* The effective values: a debug override wins over the stored
-     setting, which wins over the built-in default. */
+  /* The effective values: the pruned list keeps every removed
+     feature permanently at its enabled default (the operator
+     order: readouts and machinery stay, the controls go); a debug
+     override wins only for the three controls that still render.
+     Stale stored overrides for the removed keys are bypassed. */
   const cur = {
-    queryRoutes: ov.queryRoutes ?? qr,
-    httpsUpgrade: ov.httpsUpgrade ?? settings.httpsUpgrade,
-    imageLazy: ov.imageLazy ?? true,
+    queryRoutes: qr,
+    httpsUpgrade: settings.httpsUpgrade,
+    imageLazy: true,
     split: ov.split ?? true,
-    aiMock: ov.aiMock ?? false,
-    experimental: { ...defaultExperimental(), ...ov.experimental },
+    aiMock: false,
+    experimental: {
+      ...defaultExperimental(),
+      hybridLocation: ov.experimental?.hybridLocation ?? true,
+      virtualSW: ov.experimental?.virtualSW ?? true,
+    },
   };
 
   /* Same shape the App settings effect sends (the parity push): the
@@ -103,10 +114,10 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     const msg = {
       type: "zl:config" as const,
       prefix: engineRoutePrefix(),
-      httpsUpgrade: next.httpsUpgrade ?? settings.httpsUpgrade,
-      imageLazy: next.imageLazy ?? true,
-      queryRoutes: next.queryRoutes ?? qr,
-      experimental: { ...defaultExperimental(), ...next.experimental },
+      httpsUpgrade: settings.httpsUpgrade,
+      imageLazy: true,
+      queryRoutes: qr,
+      experimental: { ...cur.experimental },
     };
     void zlSend(msg, 8000).then((r) => {
       const e = r?.experimental as {
@@ -129,13 +140,12 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
     void zlContentConfig(msg);
   };
 
-  const flip = (k: "queryRoutes" | "httpsUpgrade" | "imageLazy" | "split" | "aiMock") => () => {
+  const flip = (k: "split") => () => {
     const next: DebugOverrides = { ...ov, [k]: !cur[k] };
     setOv(next);
     saveDebugOverrides(next);
-    /* split and aiMock are override-only: no zl:config push
+    /* split is override-only: no zl:config push
        (zlContentHref reads split; the AI store reads aiMock) */
-    if (k !== "split" && k !== "aiMock") push(next);
   };
 
   const flipExperimental = (key: ExperimentalKey) => () => {
@@ -161,35 +171,8 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       </p>
       <m3e-list-item>
         <div className="lb-setting-row">
-          <span className="lb-setting-label">Query-shape routes (Injector)</span>
-          <m3e-switch checked={cur.queryRoutes ? "" : undefined} icons="selected" onClick={flip("queryRoutes")} />
-        </div>
-      </m3e-list-item>
-      <m3e-list-item>
-        <div className="lb-setting-row">
           <span className="lb-setting-label">Split content origin</span>
           <m3e-switch checked={cur.split ? "" : undefined} icons="selected" onClick={flip("split")} />
-        </div>
-      </m3e-list-item>
-      <m3e-list-item>
-        <div className="lb-setting-row">
-          <span className="lb-setting-label">HTTPS upgrade</span>
-          <m3e-switch checked={cur.httpsUpgrade ? "" : undefined} icons="selected" onClick={flip("httpsUpgrade")} />
-        </div>
-      </m3e-list-item>
-      <m3e-list-item>
-        <div className="lb-setting-row">
-          <span className="lb-setting-label">Lazy images</span>
-          <m3e-switch checked={cur.imageLazy ? "" : undefined} icons="selected" onClick={flip("imageLazy")} />
-        </div>
-      </m3e-list-item>
-      <m3e-list-item>
-        <div className="lb-setting-row">
-          <span>
-            <span className="lb-setting-label">Mock AI responses</span>
-            <small style={{ display: "block", opacity: 0.75 }}>AI mode answers, reasoning, and search come from canned local data; no Cloudflare AI or Exa request is made.</small>
-          </span>
-          <m3e-switch aria-label="Mock AI responses" checked={cur.aiMock ? "" : undefined} icons="selected" onClick={flip("aiMock")} />
         </div>
       </m3e-list-item>
       <m3e-divider />
@@ -198,10 +181,8 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
         the others stay ON (beta). Effects follow what the engine reports as effective.
       </p>
       {([
-        ["adaptiveTransit", "Adaptive NativeTransit", "Shadow comparison diagnostics; routing stays conservative"],
-        ["hybridLocation", "Hybrid location rewriting", "Wired (#456): on, every origin without an explicit per-site rule gets the bounded hybrid pass; on by default"],
-        ["cspTranslation", "CSP translation", "Deny-only HTML CSP subset; never translates arbitrary origins"],
         ["virtualSW", "Virtual Service Workers", "Shipped (#477): a page register spawns an isolated guest realm on the guest-host page; guest fetch events dispatch under a 250 ms fail-closed budget"],
+        ["hybridLocation", "Hybrid location rewriting", "Wired (#456): on, every origin without an explicit per-site rule gets the bounded hybrid pass; on by default"],
       ] as const).map(([key, label, detail]) => (
         <m3e-list-item key={key}>
           <div className="lb-setting-row">

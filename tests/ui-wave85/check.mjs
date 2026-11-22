@@ -62,9 +62,10 @@ ok(!theme.includes("font-size: 0.95rem;"), "no raw 0.95rem left");
 ok(theme.includes(".lb-muted { opacity: 0.65; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }"), "muted text uses body-small token");
 
 /* Settings uniformity: panels and inline cards share one rhythm. */
-ok(theme.includes("--m3e-expansion-header-padding-left: var(--md-sys-measurement-space200);"), "panel header padding harmonized, roomier (wave 104)");
-ok(theme.includes("--m3e-expansion-panel-content-padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);"), "panel body padding keeps the 12/16/16 rhythm (wave 107)");
-ok(theme.includes("--m3e-expansion-header-collapsed-height: auto;") && theme.includes("--m3e-expansion-header-expanded-height: auto;"), "panel header height tokens go auto, the 48px clip is gone (wave 105)");
+/* Wave 115: the lb-setp toggle carries the 16px inline rhythm natively. */
+ok(theme.includes("padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space150) var(--md-sys-measurement-space200);"), "panel header padding harmonized, roomier (wave 104/115)");
+ok(theme.includes("padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);"), "panel body padding keeps the 12/16/16 rhythm (wave 107/115)");
+ok(theme.includes("align-items: center;") && theme.includes("gap: var(--md-sys-measurement-space100);"), "the disclosure toggle sizes to its own content (wave 105/115)");
 ok(theme.includes(".lb-setp-head { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: var(--md-sys-measurement-space150) 0; }"), "panel headers carry the compact 12px rhythm (wave 107)");
 ok(theme.includes("min-height: 56px;"), "inline card min-height matches the collapsed panel header (#274, wave 107)");
 

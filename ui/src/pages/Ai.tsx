@@ -623,6 +623,18 @@ export default function AiPage() {
 
   const quotaUsed = quota === null ? 0 : QUOTA_MAX - quota;
 
+  /* A chip tap fills the composer draft; landing focus after the
+     commit makes the prefill read as a real interaction even when
+     the bar sits below the fold. */
+  const focusComposer = () =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLInputElement>('input[aria-label="Message the assistant"]')
+          ?.focus(),
+      ),
+    );
+
   return (
     <div className="lb-ai">
       <m3e-icon-button
@@ -644,7 +656,7 @@ export default function AiPage() {
             <div className="lb-ai-sugs">
               <m3e-chip-set aria-label="Suggestions">
                 {["Solve this: 17 * 24 - 96", "Explain error: ERR_CONNECTION_RESET", "Summarize this tab's page"].map((t) => (
-                  <m3e-chip key={t} variant="elevated" onClick={() => setDraft(t)}>{t}</m3e-chip>
+                  <m3e-chip key={t} variant="elevated" onClick={() => { setDraft(t); focusComposer(); }}>{t}</m3e-chip>
                 ))}
               </m3e-chip-set>
             </div>

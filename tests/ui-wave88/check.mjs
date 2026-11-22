@@ -67,7 +67,7 @@ ok(theme.includes("@media (prefers-reduced-transparency: reduce)"), "opaque fall
 ok(theme.includes("--lb-glass-blur: none;"), "fallback kills the blur");
 ok(theme.includes("inset 0 1px 0 rgb(255 255 255 / .05)"), "inset highlight present");
 /* Sub-cards and remaining surfaces. */
-ok(theme.includes("--m3e-expansion-panel-container-color: var(--lb-glass-tint);"), "settings panels are glass");
+ok(theme.includes(".lb-setp {") && theme.includes("background: var(--lb-glass-tint);"), "settings panels are glass");
 ok(theme.includes(".lb-set-inline .lb-setting-label"), "settings rows keep their typography");
 ok(theme.includes("--m3e-card-container-color: var(--lb-glass-lift);"), "in-sheet m3e-cards ride the glass lift");
 ok(theme.includes("--m3e-card-shape: 20px;"), "sub-cards use the spec 20px radius");
@@ -92,7 +92,7 @@ const cmdkIdx = theme.indexOf(".lb-cmdk-input {");
 ok(cmdkIdx !== -1 && theme.slice(cmdkIdx, cmdkIdx + 700).includes("background: var(--lb-glass-tint);"), "command palette input is glass");
 /* Behavior preservation: the settings surface set is unchanged. */
 const setp = read("src/pages/Settings.tsx");
-ok(setp.includes("m3e-expansion-panel") && setp.includes("lb-set-inline"), "settings panels and inline cards still render");
+ok(setp.includes("lb-setp-disc") && setp.includes("lb-set-inline"), "settings disclosure cards and inline cards still render");
 /* The only raw 13px/15px are the narrow-screen steps. */
 const narrow = theme.indexOf("Narrow screens: tighter sub-card padding");
 ok(narrow !== -1, "narrow glass block exists");

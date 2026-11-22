@@ -130,8 +130,10 @@ const ok = (name, cond) => {
    reachable from every sub-page. --- */
 {
   const theme = read("src/theme.css");
-  const pIdx = theme.indexOf(".lb-set-page m3e-expansion-panel {");
-  ok("settings: panel surface tokens defined", pIdx !== -1 && theme.slice(pIdx, pIdx + 300).includes("--m3e-expansion-panel-container-color"));
+  /* Wave 115: the sub-panel surface moved from the (retired)
+     m3e-expansion-panel onto the lb-setp disclosure card host. */
+  const pIdx = theme.indexOf(".lb-setp {");
+  ok("settings: panel surface tokens defined", pIdx !== -1 && theme.slice(pIdx, pIdx + 300).includes("background: var(--lb-glass-tint);"));
   ok("settings: sidenav grid wrapper rule (wave 108)", theme.includes(".lb-set-page { display: grid"));
   ok("settings: row labels evened inside panels", theme.includes(".lb-setp-body .lb-setting-label { margin: 0; }"));
   const rIdx = theme.indexOf("m3e-nav-rail {");
