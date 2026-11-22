@@ -42,6 +42,7 @@ import DevTools, { emptyDt, nextEntryId, reasonText, type DtState, type ResFailE
 import { DL_FILE_RE, fmtBytes, tabLabel } from "../browser/browserShared";
 import { createPopupGate } from "../browser/popupGate";
 import TabSwitcherCard from "../browser/TabSwitcherCard";
+import type { SectionId } from "./Settings";
 import AdBlockCard from "../browser/AdBlockCard";
 import FileViewer from "../browser/FileViewer";
 import { detectFileKind, headOf, type FileKind } from "../browser/fileKind";
@@ -368,7 +369,7 @@ type Props = {
   onOpenLogs: () => void;
   /* #210: the toolbar overflow menu opens Settings (where the AMO
      add-on search lives). */
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: SectionId) => void;
   /* Per-site rule edits from the toolbar chip (#10): the same store
      the Settings editor writes. */
   onRulesChange: (rules: SiteRule[]) => void;
@@ -2986,17 +2987,20 @@ export default function BrowserView(props: Props) {
             morphing indicator stays visible on top. */}
         {skeletonOn && (
           <div className="lb-sk" aria-hidden={true}>
-            <m3e-skeleton animation="pulse">
-              <div className="lb-sk-page">
-                <div className="lb-sk-head" />
-                <div className="lb-sk-hero" />
-                <div className="lb-sk-line" />
-                <div className="lb-sk-line" />
-                <div className="lb-sk-line lb-sk-short" />
-                <div className="lb-sk-line" />
-                <div className="lb-sk-line lb-sk-short" />
+            <div className="lb-sk-page">
+              <div className="lb-sk-head" />
+              <div className="lb-sk-hero" />
+              <div className="lb-sk-line" />
+              <div className="lb-sk-line" />
+              <div className="lb-sk-line lb-sk-short" />
+              <div className="lb-sk-chips">
+                <div className="lb-sk-chip" />
+                <div className="lb-sk-chip" />
+                <div className="lb-sk-chip" />
               </div>
-            </m3e-skeleton>
+              <div className="lb-sk-line" />
+              <div className="lb-sk-line lb-sk-short" />
+            </div>
           </div>
         )}
 
@@ -3369,7 +3373,7 @@ export default function BrowserView(props: Props) {
         onClose={() => setExtPanelOpen(false)}
         onLaunch={launchExt}
         onDelete={uninstallExt}
-        onFindAddons={() => props.onOpenSettings()}
+        onFindAddons={() => props.onOpenSettings("extensions")}
       />
 
       {/* #236: the ad-blocking sheet lives at the top level with the
@@ -3382,7 +3386,7 @@ export default function BrowserView(props: Props) {
         globalAdblock={settings.adblock}
         siteAdblock={adRule?.adblock}
         onSiteToggle={setSiteAdblock}
-        onOpenSettings={() => props.onOpenSettings()}
+        onOpenSettings={() => props.onOpenSettings("privacy")}
         onClose={() => setAdOpen(false)}
       />
 

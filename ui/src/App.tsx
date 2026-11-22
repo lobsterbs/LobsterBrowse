@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import HomePage from "./pages/Home";
-import SettingsPanel from "./pages/Settings";
+import SettingsPanel, { type SectionId } from "./pages/Settings";
 import LogsPage from "./pages/Logs";
 import BrowserView from "./pages/Browser";
 import AiPage from "./pages/Ai";
@@ -96,6 +96,11 @@ export default function App() {
     return m ? (m[1] as View) : "home";
   };
   const [view, setView] = useState<View>(viewFromHash);
+  /* Deep links: settings callers that name their section (adblock
+     lands on Privacy, the extension panels on Extensions) pass it
+     through; plain entries land on the default section. */
+  const [settingsSection, setSettingsSection] = useState<SectionId | null>(null);
+  const openSettings = (sec?: SectionId) => { setSettingsSection(sec ?? null); setView("settings"); };
   const navGo = (el: EventTarget, target: View, go: () => void) => {
     if (target === view) return;
     shapeWipe((el as HTMLElement).getBoundingClientRect(), go);
@@ -925,7 +930,7 @@ export default function App() {
     },
     { id: "reopen-tab", group: "Tabs", label: "Reopen last closed tab", run: reopenTab },
     { id: "go-home", group: "Go", label: "Home", run: () => setView("home") },
-    { id: "go-settings", group: "Go", label: "Settings", run: () => setView("settings") },
+    { id: "go-settings", group: "Go", label: "Settings", run: () => openSettings() },
     { id: "go-logs", group: "Go", label: "Logs", run: () => setView("logs") },
     {
       id: "toggle-engine",
@@ -1067,7 +1072,7 @@ export default function App() {
           <m3e-nav-item
             id="nav-settings"
             selected={view === "settings" ? "" : undefined}
-            onClick={(e) => navGo(e.currentTarget, "settings", () => setView("settings"))}
+            onClick={(e) => navGo(e.currentTarget, "settings", openSettings)}
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
           </m3e-nav-item>
@@ -1133,7 +1138,7 @@ export default function App() {
                   incognito={incognito}
                   onIncognitoChange={toggleIncognito}
                   onOpenLogs={() => setView("logs")}
-                  onOpenSettings={() => setView("settings")}
+                  onOpenSettings={openSettings}
                   onRulesChange={updateRules}
                   visible={view === "browser"}
                 />
@@ -1147,6 +1152,7 @@ export default function App() {
               {view === "settings" && (
                 <SettingsPanel
                   settings={settings}
+                  section={settingsSection ?? undefined}
                   onChange={update}
                   rules={rules}
                   onRulesChange={updateRules}

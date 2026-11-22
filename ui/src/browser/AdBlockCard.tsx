@@ -105,9 +105,9 @@ export default function AdBlockCard(props: {
                 above the count, so the hero text aligns with the
                 hosts card. */}
             <div className="lb-ad-hero">
-              <div className="lb-ad-hero-ic">
+              <m3e-shape name="4-sided-cookie" {...{ class: "lb-ad-hero-shape" }}>
                 <m3e-icon name="shield" aria-hidden={true} />
-              </div>
+              </m3e-shape>
               <div className="lb-ad-hero-txt">
                 <span className="lb-ad-num">{blocked.length}</span>
                 <p className="lb-ad-sub">
@@ -123,9 +123,7 @@ export default function AdBlockCard(props: {
                   <div key={h} className="lb-ad-host"><span className="lb-ad-hostn">{n}</span>{h}</div>
                 ))}
               </div>
-            ) : (
-              <p className="lb-muted">No blocked requests recorded for this document yet.</p>
-            )}
+            ) : null}
           </>
         ) : (
           <p className="lb-muted">

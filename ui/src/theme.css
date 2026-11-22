@@ -476,6 +476,11 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    base 150ms emphasized curve brings it back on release. Disabled
    with the other card transitions under reduced motion. */
 .lb-set-nav-item:active { scale: 0.97; transition-duration: 90ms; }
+/* Wave116: a slim accent bar glides between the section cards. The
+   cards keep their own active crossfade (pinned everywhere); the bar
+   only carries the glide. The rail is sticky, so it anchors the
+   absolute bar without touching the pinned rail rule. */
+.lb-set-nav-ind { position: absolute; left: 2px; top: 0; width: 3px; border-radius: 999px; background: var(--md-sys-color-primary, #ffb4ab); transition: transform 250ms cubic-bezier(0.2, 0, 0, 1), height 200ms cubic-bezier(0.2, 0, 0, 1); }
 @media (prefers-reduced-motion: reduce) {
   .lb-set-section > * { animation: none; }
   .lb-set-nav-item { transition: none; }
@@ -720,11 +725,17 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    URL, a new tab, a restored session - and never while a committed
    site loads more of its own assets in place. Sits below the
    loading indicator (z-index 5 vs 6). */
+/* Wave116: a real skeleton. Gray blocks mock the layout being
+   loaded (title bar, hero, text lines, chips) on the surface color
+   and breathe together on one slow 2s pulse; research across native
+   skeletons (Android, YouTube, Wikipedia) agrees: muted blocks at
+   final proportions, one gentle shared pulse, never a fast flash.
+   The old build was a black frame with one giant empty pulse
+   skeleton flashing over it. */
 .lb-sk {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: #000;
   overflow: hidden;
   animation: lb-sk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
 }
@@ -732,17 +743,16 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.lb-sk m3e-skeleton { display: block; width: 100%; height: 100%; }
-/* The mock layout the skeleton shapes are painted over: full-size,
-   so the skeleton reads as the entire frame instead of a
-   small centered box. */
-.lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; }
-.lb-sk-head { width: 42%; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); flex: 0 0 auto; }
-.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: var(--md-sys-shape-corner-medium, 12px); }
-.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; }
+.lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; background: var(--md-sys-color-surface-container-low, #1d1b1e); animation: lb-sk-breathe 2s var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+@keyframes lb-sk-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.lb-sk-head { width: 42%; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); flex: 0 0 auto; background: var(--md-sys-color-surface-container-highest, #3d322f); }
+.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: var(--md-sys-shape-corner-medium, 12px); background: var(--md-sys-color-surface-container-highest, #3d322f); }
+.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; background: var(--md-sys-color-surface-container-high, #2b2528); }
 .lb-sk-short { width: 62%; }
+.lb-sk-chips { display: flex; gap: 8px; flex: 0 0 auto; }
+.lb-sk-chip { width: 64px; height: 24px; border-radius: 999px; flex: 0 0 auto; background: var(--md-sys-color-surface-container, #211c1e); }
 @media (prefers-reduced-motion: reduce) {
-  .lb-sk { animation: none; }
+  .lb-sk, .lb-sk-page { animation: none; }
 }
 .lb-skel { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150); width: 100%; }
 .lb-empty-tab {
@@ -1099,6 +1109,10 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 }
 .lb-log-line { padding: var(--md-sys-measurement-space25) 0; word-break: break-word; }
 .lb-log-line b { font-variation-settings: "wght" var(--lb-wght-strong); }
+/* Wave116: log rows keep a quiet 150ms opacity surfacing; the list
+   is long, so anything bigger would read as flash. */
+@keyframes lb-log-in { from { opacity: 0; } }
+.lb-log-line { animation: lb-log-in var(--md-sys-motion-duration-short-3, 150ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)); }
 
 /* ---- Small screens ---- */
 @media (max-width: 600px) {
@@ -2000,7 +2014,6 @@ body .lb-ext-panel {
 /* The search bar's trailing slot forces its own muted icon color onto
    any slotted icon button, which drowned the filled send state's glyph;
    the ready state pins the filled icon back to on-primary. */
-.lb-ai-bar m3e-search-bar m3e-icon-button[slot="trailing"][variant="filled"] { --m3e-filled-icon-button-icon-color: var(--md-sys-color-on-primary); }
 
 /* Tool row: the 21st.dev thinking-tool pattern on M3E tokens. The
    summary line shimmers while the step runs, settles to a static
@@ -2352,18 +2365,13 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 /* The shield circle sits above the count. #241: the whole hero column is
    horizontally centered inside the sheet instead of left-aligned. */
 .lb-ad-hero { display: flex; flex-direction: column; align-items: center; gap: var(--md-sys-measurement-space100); }
-.lb-ad-hero-ic {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
+.lb-ad-hero-shape {
+  --m3e-shape-size: 56px;
+  --m3e-shape-container-color: var(--md-sys-color-secondary-container, #4a4458);
   flex-shrink: 0;
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: var(--md-sys-color-secondary-container, #4a4458);
   color: var(--md-sys-color-on-secondary-container, #e5defb);
 }
-.lb-ad-hero-ic > m3e-icon { color: currentColor; }
+.lb-ad-hero-shape > m3e-icon { color: currentColor; font-size: 24px; }
 .lb-ad-hero-txt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; min-width: 0; }
 .lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" var(--lb-wght-strong); line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
 .lb-ad-sub { margin: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
@@ -2385,6 +2393,7 @@ background: var(--lb-glass-tint);
 .lb-ad-row { display: flex; align-items: center; gap: var(--md-sys-measurement-space100); justify-content: space-between; }
 .lb-ad-rowtitle { font-size: var(--md-sys-typescale-body-medium-font-size, 14px); }
 .lb-ad-foot { width: 100%; }
+.lb-ad-foot m3e-icon { margin-inline-end: var(--md-sys-measurement-space100, 8px); }
 
 /* ---- Clawd easter egg: the sleeping mascot in the Settings About
        card, above the build chips. Pixel art: nearest-neighbour
@@ -2482,6 +2491,15 @@ background: var(--lb-glass-tint);
 .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(170px, 40vmin, 360px); --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); }
 .lb-home-hl2 { left: -5%; bottom: 84%; }
 .lb-home-hl2 m3e-shape { --m3e-shape-size: clamp(56px, 11vmin, 100px); --m3e-shape-container-color: var(--md-sys-color-tertiary-container, #554500); opacity: .6; }
+
+/* Wave116: the two background shapes now turn, each at one constant
+   rate (the M3E rule for looping motion): the big soft-burst crawls
+   once per 90s, the small sunny counter-turns once per 60s.
+   Composite-only rotate on the same host that carries the size
+   transitions. */
+@keyframes lb-home-hl-spin { to { transform: rotate(1turn); } }
+.lb-home-hl1 m3e-shape { animation: lb-home-hl-spin 90s linear infinite; }
+.lb-home-hl2 m3e-shape { animation: lb-home-hl-spin 60s linear infinite reverse; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-sheet, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-sheet { transform: translateY(-10px) scale(.9); opacity: .6; border-radius: 40px; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl1 m3e-shape, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(120px, 26vmin, 240px); opacity: .28; }
 .lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl2, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl2 { opacity: 0; }
@@ -2493,6 +2511,7 @@ background: var(--lb-glass-tint);
 .lb-home .lb-ac-wrap.lb-away { opacity: 0; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape { transition: none; }
+  .lb-home-hl m3e-shape { animation: none; }
 }
 
 /* ---- Ported from the expressive prototype (Home, toolbar pill, loader, tab rows). ---- */
@@ -2554,7 +2573,7 @@ background: var(--lb-glass-tint);
 .lb-ai-tool-shape { --m3e-shape-size: 26px; width: 26px; }
 .lb-ai-tool-label { order: 1; }
 .lb-ai-tool-dur { order: 2; }
-.lb-ai-tool-chev { order: 3; width: 18px; height: 18px; transform: rotate(90deg); transition: transform .5s cubic-bezier(.2, 0, 0, 1); }
+.lb-ai-tool-chev { order: 3; width: 18px; height: 18px; transform: rotate(90deg); transition: transform 250ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-tool-chev-open { transform: rotate(270deg); }
 .lb-ai-tool-body-wrap > .lb-ai-tool-body, .lb-ai-tool-body-wrap.lb-open > .lb-ai-tool-body { display: flex; flex-direction: column; gap: 8px; padding: 0; margin: 8px 0 6px; max-width: min(520px, 100%); }
 .lb-ai-tool-body .lb-ai-tool { background: var(--md-sys-color-surface-container, #271d1b); border-radius: 18px; padding: 8px 12px; gap: 10px; }
@@ -2606,23 +2625,36 @@ background: var(--lb-glass-tint);
 /* Toolbar trim: smaller identity pill, no tab-count badge, no load wave on the pill. The pill hugs its content (favicon + title) and only widens when they grow; interpolate-size lets the width transition run to and from the intrinsic size, the min-width keeps the floor and the clamp keeps the old ceiling. */
 .lb-tb-pill { interpolate-size: allow-keywords; width: max-content; min-width: 130px; max-width: clamp(130px, 28vw, 280px); }
 
+/* Wave116: the trim's max-width above silently capped the edit states
+   too (the .expanded/.editing widths could never pass 280px, so the
+   URL-edit pill stopped taking the toolbar), and the toolbar's own
+   row spacing left up to 28px of dead space trailing the pill while
+   the lead side kept half that: the pill sat visibly off balance.
+   The expanded exemption restores the 440px edit morph; the spacing
+   token (it inherits into the toolbar's shadow .base) closes the row
+   spacing in editing so the pill is the whole centered row. */
+.lb-tb-pill.expanded { max-width: min(92vw, 440px); }
+.lb-toolbar.editing { --m3e-toolbar-spacing: 0px; }
+
 /* Home gutter: demo .home is 16px each side; the app shell gives 12px on phones. */
 @media (max-width: 600px) { .lb-home { box-sizing: border-box; padding-inline: 4px; } }
 
 /* Demo conversation 1:1: user bubble, status pill, step cards, plain answer text */
-@keyframes lb-ai-me-in { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
-.lb-ai-msg.lb-ai-user { animation: none; }
-.lb-ai-user .lb-ai-bubble { align-self: flex-end; max-width: 85%; padding: 12px 18px; border: 0; border-radius: 24px 24px 8px 24px; background: var(--md-sys-color-primary-container, #930010); color: var(--md-sys-color-on-primary-container, #ffdad6); backdrop-filter: none; -webkit-backdrop-filter: none; transform-origin: 100% 100%; animation: lb-ai-me-in 620ms cubic-bezier(0.2, 0, 0, 1) both; }
+/* Wave116 review: the bubble entrance (scale .4, 620ms) broke the
+   300ms budget and the scale floor; it is gone, so the compliant row
+   entrance on .lb-ai-msg.lb-ai-user (300ms, translateY 28px) is the
+   only user-message motion again. */
+.lb-ai-user .lb-ai-bubble { align-self: flex-end; max-width: 85%; padding: 12px 18px; border: 0; border-radius: 24px 24px 8px 24px; background: var(--md-sys-color-primary-container, #930010); color: var(--md-sys-color-on-primary-container, #ffdad6); backdrop-filter: none; -webkit-backdrop-filter: none; transform-origin: 100% 100%; }
 .lb-ai-msg.lb-ai-assistant { max-width: min(640px, 100%); width: 100%; gap: 10px; margin: 0 auto 0 max(0px, calc(50% - 360px)); }
 .lb-ai-assistant .lb-ai-bubble { background: none; border: 0; border-radius: 0; padding: 10px 0 0; line-height: 1.55; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .lb-ai-answer .lb-md { line-height: 1.55; }
 .lb-ai-stat-wrap { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-.lb-ai-stat { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 58%, transparent); font: inherit; font-size: .86rem; cursor: pointer; transition: background-color .4s cubic-bezier(0.2, 0, 0, 1); }
+.lb-ai-stat { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 58%, transparent); font: inherit; font-size: .86rem; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface, #e4e2e6) 8%, transparent); }
 .lb-ai-stat:disabled { cursor: default; }
 .lb-ai-stat-load { --m3e-loading-indicator-size: 24px; flex: none; }
 .lb-ai-stat-ok { color: var(--md-sys-color-primary, #ffb4ab); font-size: 20px; }
-.lb-ai-stat-chev { font-size: 18px; transition: transform .5s cubic-bezier(0.2, 0, 0, 1); }
+.lb-ai-stat-chev { font-size: 18px; transition: transform 250ms cubic-bezier(0.2, 0, 0, 1); }
 .lb-ai-stat.open .lb-ai-stat-chev { transform: rotate(180deg); }
 /* Steps expand on the grid-rows curve: the track interpolates 0fr to
    1fr while the inner wrapper fades and slides; visibility flips
@@ -2640,3 +2672,28 @@ background: var(--lb-glass-tint);
 .lb-ai-tt span { font-size: .76rem; color: var(--md-sys-color-on-surface-variant, #cac4d0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-ai-step-body { padding: 0 12px 10px; }
 .lb-ai-bar, .lb-ai-under { max-width: min(720px, calc(100% - 32px)); }
+
+/* Wave116: the send control is an owned button now. The m3e
+   icon-button variant rules swap the whole fill in the same frame the
+   disabled attribute flips and nothing outside its shadow root can
+   transition that, so the idle-to-send morph never animated. Idle now
+   reads as a greyed-out tonal disc and a draft morphs it into the
+   filled 12px-round square on one 200ms emphasized pass. */
+.lb-ai-send {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none; padding: 0;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--md-sys-color-surface-container-highest, #3d322f);
+  color: var(--md-sys-color-on-surface-variant, #cac4d0);
+  transition: background-color 200ms cubic-bezier(0.2, 0, 0, 1), color 200ms cubic-bezier(0.2, 0, 0, 1), border-radius 200ms cubic-bezier(0.2, 0, 0, 1), transform 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+.lb-ai-send.lb-ready { border-radius: 12px; background: var(--md-sys-color-primary, #ffb4ab); color: var(--md-sys-color-on-primary, #ffdad6); }
+.lb-ai-send:active { transform: scale(0.94); }
+.lb-ai-send:disabled { cursor: default; }
+.lb-ai-send:focus-visible { outline: 2px solid var(--md-sys-color-primary, #ffb4ab); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-ai-send { transition: none; }
+  .lb-ai-tool-chev, .lb-ai-stat-chev { transition: none; }
+  .lb-log-line { animation: none; }
+  .lb-set-nav-ind { transition: none; }
+}

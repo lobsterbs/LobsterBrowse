@@ -267,6 +267,7 @@ export default function AiPage() {
       setHistChats([]);
     }
     sheetRef.current?.show();
+    histEnter();
   }
 
   function loadChat(c: AiChat) {
@@ -626,6 +627,20 @@ export default function AiPage() {
   /* A chip tap fills the composer draft; landing focus after the
      commit makes the prefill read as a real interaction even when
      the bar sits below the fold. */
+  /* Wave116: the history rows are mounted at boot, so a CSS entrance
+     would fire long before the sheet is ever opened. The same
+     WAAPI-on-open pattern as DevTools runs the stagger when the sheet
+     actually shows; reduced motion skips it. */
+  const histEnter = () => {
+    requestAnimationFrame(() => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const rows = sheetRef.current?.querySelectorAll(".lb-ai-hist-row");
+      rows?.forEach((r, i) => r.animate?.(
+        [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }],
+        { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)", delay: Math.min(i, 9) * 30 }
+      ));
+    });
+  };
   const focusComposer = () =>
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
@@ -792,15 +807,16 @@ export default function AiPage() {
                 }
               }}
             />
-            <m3e-icon-button
+            <button
+              type="button"
               slot="trailing"
-              {...(busy || draft.trim() || attached.length ? {} : { disabled: true })}
-              {...(draft.trim() || attached.length ? { variant: "filled", shape: "square" } : { variant: "tonal", shape: "rounded" })}
+              {...{ class: "lb-ai-send" + (draft.trim() || attached.length ? " lb-ready" : "") }}
+              disabled={!busy && !draft.trim() && !attached.length}
               aria-label={busy ? "Stop" : "Send"}
               onClick={() => (busy ? abortRef.current?.abort() : void send())}
             >
               <m3e-icon name={busy ? "stop" : "arrow_upward"} aria-hidden={true} />
-            </m3e-icon-button>
+            </button>
           </m3e-search-bar>
           {peekMounted && (
             <div

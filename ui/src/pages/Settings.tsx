@@ -21,6 +21,8 @@ import { extWarnings } from "../browser/browserShared";
 import { shapeWipe } from "../wipe";
 
 type Props = {
+  section?: SectionId;
+  /* Called with the section a caller names; see App openSettings. */
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   rules: SiteRule[];
@@ -46,7 +48,7 @@ const WISP_CUSTOM = "__custom__";
 
 /* The sections the side navigation switches between. One
    section renders at a time; the nav carries the icon and title. */
-type SectionId = "search" | "privacy" | "appearance" | "extensions" | "advanced";
+export type SectionId = "search" | "privacy" | "appearance" | "extensions" | "advanced";
 
 const SECTION_TITLES: Record<SectionId, string> = {
   search: "Search & browse",
@@ -229,7 +231,7 @@ function TextInput(props: {
 
 
 
-export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll }: Props) {
+export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll, section: sectionLink }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
      several open at once. All panels start closed; the single-control
      sub options are inline row cards now, so nothing needs a head
@@ -240,6 +242,25 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
   /* The active section. One section renders at a time; the
      sticky side navigation switches between them. */
   const [section, setSection] = useState<SectionId>("search");
+  /* Deep links: a caller that names its section (the adblock sheet
+     opens Privacy, the extension panels open Extensions) syncs once
+     per mount; the default stays search for plain entries. */
+  useEffect(() => { if (sectionLink) setSection(sectionLink); }, [sectionLink]);
+  /* Wave116 nav glider: the accent bar tracks the active card's
+     offset; the rail is sticky, so offsetTop already anchors to it. */
+  const setNavRef = useRef<HTMLElement | null>(null);
+  const [navInd, setNavInd] = useState<{ y: number; h: number } | null>(null);
+  useEffect(() => {
+    const nav = setNavRef.current;
+    if (!nav) return;
+    const read = () => {
+      const a = nav.querySelector(".lb-set-nav-item.active");
+      setNavInd(a ? { y: (a as HTMLElement).offsetTop, h: (a as HTMLElement).offsetHeight } : null);
+    };
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, [section]);
 
   /* Switching categories glides the pane's scroll container back to
      the top instead of leaving the previous category's scroll offset
@@ -366,7 +387,8 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
           {/* The sticky frosted side rail. One section is
               visible at a time; the active item carries the M3 pill
               and aria-current. */}
-          <nav className="lb-set-nav" aria-label="Settings sections">
+          <nav className="lb-set-nav" aria-label="Settings sections" ref={setNavRef}>
+            {navInd && <div className="lb-set-nav-ind" aria-hidden={true} style={{ transform: `translateY(${navInd.y}px)`, height: navInd.h + "px" }} />}
             {NAV_ORDER.map((id) => (
               <button
                 key={id}
