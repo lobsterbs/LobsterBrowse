@@ -13,8 +13,6 @@
    restored sessions) auto-load when they become active. */
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import dominoMaskSvg from "@material-symbols/svg-400/outlined/domino_mask.svg?raw";
-import tabSvg from "@material-symbols/svg-400/outlined/tab.svg?raw";
 import {
   decodeRoute,
   engineRoutePrefix,
@@ -690,18 +688,14 @@ export default function BrowserView(props: Props) {
   /* Compaction 1: tabs also surface from the toolbar. A tab-count
      button opens the tab switcher card (previews, switch, close). */
   const [tabsOpen, setTabsOpen] = useState(false);
-  /* Tab button and incognito toggle are real m3e-icon-buttons with
+  /* The tab button is a real m3e-icon-button with
      toggle semantics; React 18 cannot set boolean custom-element
      attributes correctly, so the selected attribute is managed from a
      ref effect instead of JSX props. */
   const tabsBtnRef = useRef<HTMLElement | null>(null);
-  const incognitoBtnRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     tabsBtnRef.current?.toggleAttribute("selected", tabsOpen);
   }, [tabsOpen]);
-  useEffect(() => {
-    incognitoBtnRef.current?.toggleAttribute("selected", !!props.incognito);
-  }, [props.incognito]);
   /* Tab switch frost flash: one class for 240ms traces a brightness
      wave across the toolbar glass (theme.css) whenever the active
      tab changes, so switching reads as a deliberate action on the
@@ -1473,18 +1467,6 @@ export default function BrowserView(props: Props) {
     }
   }, [settings.autoHideChrome]);
 
-  /* Fullscreen for the browser area. */
-  const rootRef = useRef<HTMLElement | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    const h = () => setFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", h);
-    return () => document.removeEventListener("fullscreenchange", h);
-  }, []);
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else rootRef.current?.requestFullscreen?.().catch(() => {});
-  };
 
   /* The patch accepts a functional form so DevTools can append
      entries from async handlers (the zl:* engine commands) without
@@ -2815,9 +2797,6 @@ export default function BrowserView(props: Props) {
   return (
     <section
       className={"lb-browser" + (props.incognito ? " incognito" : "")}
-      ref={(el) => {
-        rootRef.current = el as HTMLElement | null;
-      }}
     >
       {/* Compaction 1 (final): the floating tab strip is GONE. Tabs
           live in the toolbar only: the tab-count button opens the tab
@@ -3149,15 +3128,6 @@ export default function BrowserView(props: Props) {
                 {compact && uParts.host ? (uParts.host.startsWith("www.") ? uParts.host.slice(4) : uParts.host) : tabLabel(active)}
               </button>
             )}
-            {/* Load wave: while this tab is loading, the real wavy
-                indeterminate m3e-linear-progress-indicator runs along
-                the pill's bottom edge (the old hand-drawn SVG slide
-                is gone). Hidden entirely under reduced motion. */}
-            {st.loading && (
-              <span className="lb-tb-wave" aria-hidden={true}>
-                <m3e-linear-progress-indicator variant="wavy" mode="indeterminate" />
-              </span>
-            )}
           </span>
 <m3e-icon-button
             id="lb-tabs-pill"
@@ -3170,11 +3140,9 @@ export default function BrowserView(props: Props) {
             }}
             {...{ ref: tabsBtnRef }}
           >
-            <span id="lb-tabs-ic" className="lb-tabs-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: tabSvg }} />
+            <m3e-icon name="tab" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          {/* Tab count: a real m3e-badge on the 24px icon (M3 anchors badges to the icon, not the 48px button). */}
-          {tabs.length > 0 && <m3e-badge for="lb-tabs-ic" aria-hidden={true}>{tabs.length}</m3e-badge>}
           <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
             <m3e-icon name="add" aria-hidden={true} />
           </m3e-icon-button>
@@ -3188,69 +3156,11 @@ export default function BrowserView(props: Props) {
               112: the pair carries the tonal container (see
               .lb-tb-nav), so the disabled back button reads as a
               dimmed physical button, not a ghost. */}
-                    {/* Trail zone (wave 112): diagnostics chip, right-side
-              compact keyboard hint, full screen, pinned-tab state
-              and the overflow menu close the bar on the right. */}
+          {/* Trail zone (wave 112): the overflow menu closes the bar. */}
           <span className="lb-tb-zone lb-tb-trail">
           {/* Developer tools live in the three-dot overflow menu only
               (the toolbar button was removed: no duplicated chrome). */}
-          {/* Compaction 3: the diagnostics summary lives on the
-              toolbar. The chip appears only when this tab captured
-              load failures; it opens DevTools on the diagnostics
-              page. */}
-          {activeDt.fails.length > 0 && (
-            <button
-              type="button"
-              className="lb-diag-tb-chip"
-              aria-label={"Diagnostics: " + activeDt.fails.length + " load failures"}
-              title={activeDt.fails.length + " load failures - open diagnostics"}
-              onClick={() => {
-                closeSheets("dt");
-                setDt(active.id, { open: true, page: "diagnostics" });
-              }}
-            >
-              <m3e-icon name="warning" aria-hidden={true} />
-              {activeDt.fails.length}
-            </button>
-          )}
-          <m3e-icon-button
-            id="lb-fs-btn"
-            aria-label={fullscreen ? "Exit full screen" : "Full screen"}
-            toggle
-            selected={fullscreen ? "" : undefined}
-            onClick={toggleFullscreen}
-          >
-            <m3e-icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-fs-btn" position="above">Full screen</m3e-tooltip>
           {/* Extensions live in the three-dot overflow menu only. */}
-          {/* Incognito toggle: a regular 40x40 icon button inside the
-              toolbar, same slot as the other toggles. Toggling on
-              suspends the normal session and opens one empty
-              incognito tab (App.tsx); toggling off closes it and
-              restores the session. The domino mask is an inline SVG
-              (no font glyph exists), sized by CSS. */}
-          {/* Incognito: the same m3e-icon-button primitive as every
-              other toolbar control, with toggle semantics for the
-              on/off state (selected attribute via the ref effect -
-              React 18 mangles boolean custom-element attributes). The
-              domino mask is an inline SVG: the glyph is missing from
-              the self-hosted Material Symbols font. */}
-          <m3e-icon-button
-            id="lb-incognito-pill"
-            toggle
-            aria-label={props.incognito ? "Turn off incognito" : "Turn on incognito"}
-            onClick={() => props.onIncognitoChange(!props.incognito)}
-            {...{ ref: incognitoBtnRef }}
-          >
-            <span className="lb-incognito-ic" aria-hidden={true} dangerouslySetInnerHTML={{ __html: dominoMaskSvg }} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-incognito-pill" position="above">
-            {props.incognito ? "Turn off incognito" : "Turn on incognito"}
-          </m3e-tooltip>
-          {/* Incognito identity is the domino icon's color now
-              (theme.css: body.lb-incognito .lb-incognito-ic); the
-              text badge and the toolbar outline are gone. */}
           {/* #210: grouped overflow for the secondary toolbar actions.
               The menu trigger sits inside the icon button
               (ActionElementBase listens on its parent element). */}
@@ -3289,8 +3199,9 @@ export default function BrowserView(props: Props) {
             >
               AdBlocking
             </m3e-menu-item>
-            {/* Phones: the incognito toggle leaves the bar (demo <=600px), so the menu carries it. Hidden on desktop by CSS. */}
-            <m3e-menu-item className="lb-incog-menu" onClick={() => props.onIncognitoChange(!props.incognito)}>
+            {/* Incognito toggle: with the toolbar pill gone, the
+                menu is its only entry point, on every breakpoint. */}
+            <m3e-menu-item onClick={() => props.onIncognitoChange(!props.incognito)}>
               {props.incognito ? "Turn off incognito" : "Turn on incognito"}
             </m3e-menu-item>
           </m3e-menu>
