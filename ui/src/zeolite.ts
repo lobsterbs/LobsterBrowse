@@ -518,11 +518,18 @@ export function zlRelayInit(): void {
    policy route "wisp". The engine opens a secondary wisp client on
    the announced ws(s):// URL (the public ScramJet wisp-js
    backend; empty honestly when unset). An empty string withdraws the
-   endpoint and the route falls back to the default (relay). */
+   endpoint and the route falls back to the default (relay).
+   2026-11-22 anura switch: the same endpoint now also carries the
+   engine's PRIMARY wisp client (zl:wispPrimary), so the default
+   transit rides the announced server instead of the deployment's
+   own wisp endpoint (whose datacenter egress risk-gates refuse);
+   both pushes share one call so every announcement point (boot,
+   settings change, controllerchange) flips them together. */
 export function zlWispInit(url: string): void {
   void zlWorker().then((sw) => {
     if (!sw) return;
     sw.postMessage({ type: "zl:wispRegister", url });
+    sw.postMessage({ type: "zl:wispPrimary", url });
   });
 }
 
