@@ -1576,9 +1576,9 @@ m3e-snackbar {
 /* Tab switcher: a modal m3e-bottom-sheet;
    the sheet owns position, scrim and open/close motion. One row per
    tab: frosted avatar favicon, title, close X. */
-/* One tab per row: frosted avatar favicon,
-   site title, close X. The list scrolls vertically; a dying row
-   collapses vertically so the rows below slide up smoothly. */
+/* One tab per row: cookie-shape favicon, tab title, close X.
+   The list scrolls vertically; a dying row collapses vertically so
+   the rows below slide up smoothly. */
 .lb-tabs-row {
   display: flex;
   flex-direction: column;
@@ -1630,7 +1630,7 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   outline-offset: -2px;
 }
 .lb-tab-row .lb-tabs-title {
-  
+  flex: 1;
   min-width: 0;
   font-size: var(--md-sys-typescale-body-large-font-size, 16px);
   line-height: var(--md-sys-typescale-body-large-line-height, 24px);
@@ -2479,13 +2479,21 @@ background: var(--lb-glass-tint);
 .lb-home-hl { position: absolute; pointer-events: none; z-index: 0; transition: opacity .5s ease; }
 .lb-home-hl m3e-shape { display: block; opacity: .42; transition: --m3e-shape-size .9s var(--bz-slow, ease); }
 /* Shapes sit above the sheet's corners so neither overlaps the search bar below. */
-.lb-home-hl1 { left: 58%; top: -42%; }
-.lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(84px, 20vmin, 190px); --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); opacity: .9; }
-.lb-home-hl2 { left: -7%; top: 82%; }
-.lb-home-hl2 m3e-shape { --m3e-shape-size: clamp(60px, 13vmin, 130px); --m3e-shape-container-color: var(--md-sys-color-tertiary-container, #554500); opacity: .9; }
-.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-sheet { transform: translateY(-10px) scale(.9); opacity: .6; border-radius: 40px; }
-.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(120px, 26vmin, 240px); opacity: .28; }
-.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl2 { opacity: 0; }
+/* The shrink holds while the input has focus OR a typed value: a
+   focus flicker (the suggest panel grabbing and returning focus)
+   must not pop the wordmark back mid-typing. */
+.lb-home-hl1 { right: -6%; bottom: 62%; }
+.lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(170px, 40vmin, 360px); --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); }
+.lb-home-hl2 { left: -5%; bottom: 84%; }
+.lb-home-hl2 m3e-shape { --m3e-shape-size: clamp(56px, 11vmin, 100px); --m3e-shape-container-color: var(--md-sys-color-tertiary-container, #554500); opacity: .6; }
+.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-sheet, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-sheet { transform: translateY(-10px) scale(.9); opacity: .6; border-radius: 40px; }
+.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl1 m3e-shape, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl1 m3e-shape { --m3e-shape-size: clamp(120px, 26vmin, 240px); opacity: .28; }
+.lb-home:has(.lb-ac-wrap:focus-within) .lb-home-hl2, .lb-home:has(.lb-ac-wrap input:not(:placeholder-shown)) .lb-home-hl2 { opacity: 0; }
+/* Search commit (home): the wipe overlay is a plain sibling div, so it
+   cannot paint over the search bar; the bar fades itself out over the
+   same beat instead of staying lit above the morph. */
+.lb-home .lb-ac-wrap { transition: opacity 180ms cubic-bezier(.34, .8, .34, 1); }
+.lb-home .lb-ac-wrap.lb-away { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   .lb-home-sheet, .lb-home-hl, .lb-home-hl m3e-shape { transition: none; }
 }
@@ -2494,19 +2502,21 @@ background: var(--lb-glass-tint);
 /* Home: the wordmark sits on the frosted sheet, not in a second glass box. */
 .lb-home-sheet pre.lb-ascii { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; box-shadow: none; padding: 0; }
 /* Toolbar pill: fixed resting width; the edit morph rides the demo's
-   expressive curves (width .55s with a gentle settle, radius springs,
-   tint eases long, press bounces on the fast spatial spring). */
+   expressive curves (width .55s with a gentle settle, radius eases on a
+   monotonic curve so the corners never square mid-morph, tint eases
+   long, press bounces on the fast spatial spring). */
 .lb-tb-pill { box-sizing: border-box; width: clamp(130px, 34vw, 340px); height: 36px;
-  transition: width 550ms cubic-bezier(.39, 1.29, .35, .98), border-radius 500ms cubic-bezier(.38, 1.21, .22, 1), background-color 500ms cubic-bezier(.34, .8, .34, 1), border-color 500ms cubic-bezier(.34, .8, .34, 1), transform 350ms cubic-bezier(.42, 1.67, .21, .9); }
+  transition: width 550ms cubic-bezier(.39, 1.29, .35, .98), border-radius 500ms cubic-bezier(.34, .8, .34, 1), background-color 500ms cubic-bezier(.34, .8, .34, 1), border-color 500ms cubic-bezier(.34, .8, .34, 1), transform 350ms cubic-bezier(.42, 1.67, .21, .9); }
 .lb-tb-pill:hover { border-radius: 18px; }
 .lb-tb-pill:active { transform: scale(.985); }
 .lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }
 /* Loader: the prototype's 48px indicator. */
 .lb-loadchip m3e-loading-indicator { width: 48px; height: 48px; }
-/* Tab rows: leading favicon (demo), title column. */
+/* Tab rows (spec sketch): a 48px cookie shape frames the favicon,
+   the title takes the rest of the row, close X at the end. */
 .lb-tab-favicon { display: block; width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); object-fit: contain; font-size: 24px; flex: none; }
-.lb-tabs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.lb-tabs-sub { font-size: var(--md-sys-typescale-body-small-font-size, 12px); line-height: var(--md-sys-typescale-body-small-line-height, 16px); color: var(--md-sys-color-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-tab-shape { --m3e-shape-size: 48px; --m3e-shape-container-color: var(--md-sys-color-surface-container-high, #32282a); color: var(--md-sys-color-primary); display: inline-grid; place-items: center; flex: none; }
+.lb-tab-row.active .lb-tab-shape { --m3e-shape-container-color: var(--md-sys-color-primary-container, #930010); }
 /* Wordmark is ~45.1x its font size wide: size it from the card's own content width so it always fills it. */
 .lb-home-sheet { container-type: inline-size; }
 .lb-home-sheet pre.lb-ascii { font-size: min(14px, calc((100vw - 96px) / 48)); letter-spacing: .5px; }  /* demo .lb-ascii sizing */
@@ -2523,6 +2533,14 @@ background: var(--lb-glass-tint);
 .lb-set-nav-item m3e-shape m3e-icon { font-size: 22px; }
 /* Tabs sheet: the demo's 60vh cap. */
 .lb-tabs-sheet { --m3e-bottom-sheet-top-space: calc(100dvh - min(60dvh, 780px)); --m3e-bottom-sheet-compact-top-space: calc(100dvh - min(60dvh, 780px)); }
+/* Desktop sheets center on the CONTENT column, not the viewport:
+   the 96px navigation rail shifts the shell right of the true
+   center, so both overlays shift by half the rail. Below 601px the
+   rail collapses to the bottom nav bar and the sheets stay
+   viewport-centered. */
+@media (min-width: 601px) {
+  .lb-dt-sheet, .lb-tabs-sheet { left: calc(50% + 48px); }
+}
 /* AI status chip (demo .stat): the top-level ToolRow is a bare pill, 26px morphing shape, label, duration, then the chevron flipping 180deg. Rows nested in the expanded body are the demo's .step cards. */
 .lb-ai-tool { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; border-radius: 0; padding: 0; gap: 8px; }
 .lb-ai-tool-btn { align-self: flex-start; gap: 10px; padding: 4px 14px 4px 4px; min-height: 36px; border-radius: 999px; font-size: .86rem; color: color-mix(in srgb, var(--md-sys-color-on-surface, #f0dfdb) 58%, transparent); transition: background-color .4s cubic-bezier(.2, 0, 0, 1); }

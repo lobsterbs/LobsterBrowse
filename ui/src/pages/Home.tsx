@@ -33,6 +33,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
   const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
+  const [wiping, setWiping] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   /* The clear (X) button inside m3e-search-view empties the slotted
      input directly and fires a "clear" event; React's value tracker
@@ -129,6 +130,9 @@ export default function HomePage({ settings, onNavigate }: Props) {
 
   const commit = (target: string) => {
     const field = inputRef.current?.closest("m3e-search-view") ?? inputRef.current;
+    /* The wipe overlay is a plain sibling div and cannot sit above
+       the search view, so the bar fades out over the same beat. */
+    setWiping(true);
     shapeWipe(field!.getBoundingClientRect(), () => {
       onNavigate(target);
       setUrl("");
@@ -185,7 +189,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
         </div>
       </div>
       <DebugMenu open={dbgOpen} onClose={() => setDbgOpen(false)} settings={settings} />
-      <div className="lb-ac-wrap" style={{ margin: "32px auto 8px", maxWidth: 680, width: "100%" }}>
+      <div className={"lb-ac-wrap" + (wiping ? " lb-away" : "")} style={{ margin: "32px auto 8px", maxWidth: 680, width: "100%" }}>
         <m3e-search-view mode="docked" contained {...{ ref: viewRef }}>
           {/* One icon only. The view ships its own default
               magnifier in the leading area; overriding the search-icon

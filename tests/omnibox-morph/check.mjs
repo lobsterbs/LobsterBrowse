@@ -11,7 +11,7 @@ let fails = 0;
 const ok = (c, l) => { if (c) console.log("ok - " + l); else { fails++; console.log("FAIL - " + l); } };
 
 ok(theme.includes("width 550ms cubic-bezier(.39, 1.29, .35, .98)"), "pill width rides the demo's slow expressive curve");
-ok(theme.includes("border-radius 500ms cubic-bezier(.38, 1.21, .22, 1)"), "pill radius rides the demo's default spatial spring");
+ok(theme.includes("border-radius 500ms cubic-bezier(.34, .8, .34, 1)"), "pill radius eases on a monotonic curve (an overshoot squared the corners mid-morph)");
 ok(theme.includes("background-color 500ms cubic-bezier(.34, .8, .34, 1)"), "pill tint eases on the demo's effects curve");
 ok(theme.includes("transform 350ms cubic-bezier(.42, 1.67, .21, .9)"), "pill press bounce uses the demo's fast spatial spring");
 ok(theme.includes(".lb-toolbar m3e-icon-button { flex: none; max-width: 64px;"), "buttons are gated at the demo's 64px so the squeeze is uniform");

@@ -139,17 +139,17 @@ export default function TabSwitcherCard(props: {
                 }
               }}
             >
-              {/* Demo row anatomy: leading favicon, title, and a
-                  supporting current-state line. */}
-              {props.icons[t.id] ? (
-                <img className="lb-tab-favicon" src={props.icons[t.id]} alt="" />
-              ) : (
-                <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-favicon" }} />
-              )}
-              <span className="lb-tabs-text">
-                <span className="lb-tabs-title">{tabLabel(t)}</span>
-                <span className="lb-tabs-sub">{t.id === props.activeId ? "Current tab" : "Tab"}</span>
-              </span>
+              {/* Spec sketch: an M3E cookie shape frames the
+                  favicon, the title takes the rest of the row, X
+                  closes at the end. No supporting state line. */}
+              <m3e-shape name="4-sided-cookie" {...{ class: "lb-tab-shape" }}>
+                {props.icons[t.id] ? (
+                  <img className="lb-tab-favicon" src={props.icons[t.id]} alt="" />
+                ) : (
+                  <m3e-icon name="public" aria-hidden={true} {...{ class: "lb-tab-favicon" }} />
+                )}
+              </m3e-shape>
+              <span className="lb-tabs-title">{tabLabel(t)}</span>
               {/* #91/#233: a real icon button so closing is
                   independently keyboard-reachable; selection and
                   closing stay separate actions, and the X is always
