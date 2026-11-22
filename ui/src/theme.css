@@ -2555,6 +2555,11 @@ background: var(--lb-glass-tint);
 
 /* Demo parity: the dock stays up, so the tuck grip is hidden unless tucked; phones drop forward and new tab (demo <=600px). */
 .lb-dock:not(.tucked) .lb-dock-grip { display: none; }
+/* Audit 2026-11-22: the 130px pill floor yields a ~116px URL field at
+   390px. The toolbar has no slack: four visible 48px M3 pointer-target
+   buttons plus zone gaps and dock padding add up to the full width, so
+   widening the field means dropping a control or breaking the 48px
+   touch-target floor. 130px is the a11y-respecting minimum. */
 @media (max-width: 600px) {
   #lb-forward-btn, #lb-newtab-btn { display: none; }
   .lb-tb-pill { min-width: 130px; }
