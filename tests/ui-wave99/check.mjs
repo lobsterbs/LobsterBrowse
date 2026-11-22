@@ -88,12 +88,14 @@ assert.ok(setSrc.includes("wispServer: string;"), "Settings carries the wispServ
 assert.ok(setSrc.includes('typeof parsed.wispServer === "string"'), "a stored wispServer value is validated on load (#250)");
 assert.ok(setSrc.includes('"wss://anura.pro"') && setSrc.includes('"wss://wisp.mercurywork.shop"'), "the WISP presets ship (#250)");
 assert.ok(settingsPage.includes('headline="WISP server"'), "Settings exposes the WISP server panel (#250)");
-/* The description restoration kept the WISP trust warning, in the
-   plain-copy form: no issue references, no request provenance. */
-/* cbaaa52 reworded the panel copy for the wisp primary endpoint; the
-   trust warning survives in the new phrasing. */
-assert.ok(settingsPage.includes("pick one you trust"), "the WISP trust warning is back in plain copy");
-assert.ok(settingsPage.includes("never the cleartext"), "the wisp relay scope sentence stays plain copy");
+/* The WISP trust warning stays plain copy (no issue references, no
+   request provenance) and states the epoxy-era truth since the
+   2026-11-22 anura switch: TLS ends inside the browser, the wisp
+   relays encrypted bytes only. The pre-epoxy "sees your traffic
+   decrypted" claim was wrong for that mode and is pinned gone. */
+assert.ok(settingsPage.includes("relays the encrypted bytes and sees destination hosts"), "the WISP trust warning states the relay truth (cleartext stays in the browser)");
+assert.ok(settingsPage.includes("never the cleartext"), "the warning says the wisp never sees cleartext");
+assert.ok(!settingsPage.includes("sees your traffic decrypted"), "the pre-epoxy decrypted-traffic claim is gone");
 assert.ok(!settingsPage.includes("terminates the upstream TLS"), "the old issue-era trust phrasing is gone");
 assert.ok(appSrc.includes("const w = effectiveWisp();") && appSrc.includes("zlWispInit(w);"), "the effective endpoint reaches the engine worker through zl:wispRegister (#250)");
 assert.ok(appSrc.includes("}, [settings.wispServer]);"), "the override re-pushes when the setting changes (#250)");
