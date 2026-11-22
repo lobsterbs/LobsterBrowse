@@ -147,9 +147,10 @@ export type Settings = {
   /* Engine-side lazy images: add loading="lazy" to page images so
      off-screen images load on approach, not at first paint. */
   imageLazy: boolean;
-  /* Transport engine: libcurl (default wasm stack) or
-     epoxy (rustls+hyper, different TLS fingerprint). Applied on the
-     next engine init; no mid-session swap. */
+  /* Transport engine: epoxy (rustls+hyper, the default since the
+    2026-11-22 anura switch) or libcurl (wasm stack; some sites still
+    prefer its shape). Applied on the next engine init; a mid-session
+    swap rides the same switch. */
   transport: "libcurl" | "epoxy";
   /* Custom WISP transit endpoint override (Settings >
      Advanced > WISP server). Empty = the deployment default (the
@@ -181,7 +182,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fingerprintProfile: "ua",
   httpsUpgrade: true,
   imageLazy: true,
-  transport: "libcurl",
+  transport: "epoxy",
   wispServer: "",
   suggestQueries: true,
   prefetchLinks: true,
@@ -244,7 +245,10 @@ export function loadSettings(): Settings {
       /* HTTPS upgrade is always on; the Settings toggle is gone. */
       httpsUpgrade: true,
       imageLazy: parsed.imageLazy === undefined ? true : Boolean(parsed.imageLazy),
-      transport: parsed.transport === "epoxy" ? "epoxy" : "libcurl",
+      /* Epoxy is the default since the anura switch; a stored
+         "libcurl" is a deliberate choice and keeps winning, junk
+         falls back to the default. */
+      transport: parsed.transport === "libcurl" ? "libcurl" : "epoxy",
       /* A stored override must be a wss:// URL; anything else
          falls back to the deployment default. */
       wispServer:

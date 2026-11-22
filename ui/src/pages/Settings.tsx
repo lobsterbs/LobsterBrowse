@@ -618,27 +618,27 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               <div className="lb-seg-wrap">
                 <m3e-segmented-button aria-label="Transport engine" disabled={zlOff ? true : undefined}>
                   <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
-                    libcurl (default)
+                    libcurl
                   </m3e-button-segment>
                   <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
-                    epoxy (experimental)
+                    epoxy (default)
                   </m3e-button-segment>
                 </m3e-segmented-button>
               </div>
               {zlOff && zlNote}
               <p className="lb-muted" style={{ marginTop: 6 }}>
-                epoxy shows sites a different TLS fingerprint; that is its purpose. Experimental: keep libcurl if a site misbehaves. Applied on the next engine load.
+                epoxy shows sites a different TLS fingerprint; that is its purpose. Switch back to libcurl if a site misbehaves under it. Applied on the next engine load.
               </p>
             </SetPanel>
             <SetPanel
               id="p-wisp"
               headline="WISP server"
-              sub="Send engine traffic through your own server."
+              sub="Route engine traffic through a WISP transit server."
               anchorId="set-wisp"
               open={!!openP["p-wisp"]}
               toggle={() => toggleP("p-wisp")}
             >
-              <p className="lb-muted">A third-party WISP server sees your traffic decrypted before sending it on. Use only servers you trust.</p>
+              <p className="lb-muted">Engine sessions end their TLS inside your browser: a WISP server relays the encrypted bytes and sees destination hosts, timing and sizes, never the cleartext. It is still shared infrastructure with no SLA; pick one you trust.</p>
               {zlOff && zlNote}
               <div className={zlOff ? "lb-zl-guard" : undefined}>
                 <M3eSelect
