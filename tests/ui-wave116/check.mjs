@@ -66,9 +66,8 @@ assert.ok(settings.includes("section: sectionLink }"), "the panel takes a sectio
 assert.ok(settings.includes("useEffect(() => { if (sectionLink) setSection(sectionLink); }, [sectionLink]);"), "the link syncs once per mount");
 assert.ok(app.includes("const openSettings = (sec?: SectionId)"), "App owns the settings entry point");
 assert.ok(app.includes("section={settingsSection ?? undefined}"), "the panel receives the linked section");
-assert.ok(settings.includes('className="lb-set-nav-ind"'), "the nav indicator renders");
-assert.ok(theme.includes(".lb-set-nav-ind { position: absolute; left: 2px; top: 0; width: 3px; border-radius: 999px; background: var(--md-sys-color-primary"), "the indicator bar is a slim glide");
-assert.ok(theme.includes(".lb-set-nav-ind { transition: none; }"), "the glide freezes under reduced motion");
+assert.ok(!settings.includes("lb-set-nav-ind") && !settings.includes("navInd"), "the nav glider is gone (operator order, wave 119)");
+assert.ok(!theme.includes("lb-set-nav-ind"), "the glide bar css went with it");
 
 /* 8. Home background shapes spin slowly, constant rate, RM off. */
 assert.ok(theme.includes("@keyframes lb-home-hl-spin { to { transform: rotate(1turn); } }"), "the spin keyframes exist");

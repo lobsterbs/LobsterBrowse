@@ -733,7 +733,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
         {PAGES.map(([page, label, icon]) => (
           <m3e-button-segment
             key={page}
-            checked={dt.page === page ? "" : undefined}
+            checked={dt.page === page}
             onClick={() => setDt({ page: page })}
           >
             <m3e-icon slot="icon" name={icon} aria-hidden={true} />

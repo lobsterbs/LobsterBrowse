@@ -147,7 +147,7 @@ export default function ExtensionsPanel(props: {
         <span slot="title">Extensions</span>
       </m3e-app-bar>
       <div className="lb-ext-sheet-body">
-      <m3e-dialog {...{ ref: deleteDialogRef }} alert="">
+      <m3e-dialog {...{ ref: deleteDialogRef }} alert={true}>
         <span slot="header">Remove {pendingDelete?.name ?? "extension"}?</span>
         <p>Its stored data and caches are removed from the engine. This cannot be undone.</p>
         <div slot="actions">

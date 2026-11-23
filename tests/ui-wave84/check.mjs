@@ -51,7 +51,7 @@ ok(settings.includes("m3e-button-segment"), "#237 proxy/transport segmented rows
 
 const dt = src("src/pages/DevTools.tsx");
 ok(dt.includes("lb-dt-nav"), "#239 nav row markup present");
-ok(dt.includes('selected={on ? "" : undefined}'), "wave 114 active segment carries selected");
+ok(dt.includes('selected={on}'), "wave 114 active segment carries selected");
 ok(dt.includes('aria-current={on ? "true" : undefined}'), "#239 aria-current on the active sub-tool");
 ok(!dt.includes("bgroupRef"), "#239 reconcile effect retired");
 

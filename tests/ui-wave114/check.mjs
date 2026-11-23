@@ -23,7 +23,7 @@ const ci = read("../../.github/workflows/ci.yml");
 /* 1. Connected toggle group picker. */
 assert.ok(d.includes('variant="connected"'), "the picker group is connected");
 assert.ok(d.includes('toggle=""'), "every segment is a toggle button");
-assert.ok(d.includes('selected={on ? "" : undefined}'), "the selected segment is the active page");
+assert.ok(d.includes('selected={on}'), "the selected segment is the active page");
 assert.ok(d.includes('aria-current={on ? "true" : undefined}'), "aria-current stays on the active segment");
 assert.ok(d.includes('"lb-dt-nav-group"'), "the group carries its own class");
 assert.ok(!d.includes('variant={on ? "tonal" : "text"}'), "the tonal pill row is retired");
