@@ -2705,7 +2705,16 @@ FROM debian:bookworm-slim AS zl-builder
 # 23119912d4117837 (983330 bytes); bootstrap.js unchanged (0a3e47fd0bcfbba3).
 # Epoxy artifact pair unchanged (the Chromium-shaped h2 fix rides on):
 # epoxy.js 5a707545, epoxy.wasm 9fcab511. Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=3322f396bd480fe5ea7b8cabada9ef25ec1d5b46
+# Pin 200 (2026-11-23): dist af80c688 (Zeolite 7eb4a1d: the #706 breakout
+# lane is removed end-to-end by operator order - the policy route and
+# validator, the three interactive-auth marks in policy.kdl, the
+# fetch-handler stamp and the zl:breakout host-page push, docs,
+# both breakout regression suites; run 45210987282 all five green).
+# sw.js 23119912d4117837 -> dd98f6516554b102 (982465 bytes);
+# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair
+# unchanged (epoxy.js 5a707545, epoxy.wasm 9fcab511). Cargo-side pin
+# unchanged.
+ARG ZEOLITE_COMMIT=af80c6880ef5ba0de40f2c4afb41b717f6a66048
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2780,7 +2789,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=23119912d4117837 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=dd98f6516554b102 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
