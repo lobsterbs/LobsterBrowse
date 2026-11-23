@@ -13,6 +13,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import EmptyState from "../components/ui/EmptyState";
+import { m3eAttrs } from "./browserShared";
 
 type DialogEl = HTMLElement & { show: () => Promise<void>; returnValue: string };
 
@@ -121,6 +122,17 @@ export default function ExtensionsPanel(props: {
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
+  /* Attribute contracts land as attributes (m3eAttrs): React 19
+     property-mode assignment unset these features. Runs before the
+     show effect so a mount with open=true opens correctly. */
+  useLayoutEffect(() => {
+    m3eAttrs(sheetRef.current, {
+      detents: "fit",
+      modal: "",
+      handle: "",
+      hideable: "",
+    });
+  }, []);
   /* #260: layout effect so the sheet cannot lag the state commit
      on a wedged main thread (see DevTools). */
   useLayoutEffect(() => {
@@ -132,10 +144,6 @@ export default function ExtensionsPanel(props: {
 
   return (
     <m3e-bottom-sheet
-      detents="fit"
-      modal=""
-      handle=""
-      hideable=""
       handle-label="Dismiss extensions"
       aria-label="Extensions"
       {...{ class: "lb-ext-sheet", ref: sheetRef }}

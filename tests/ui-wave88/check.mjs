@@ -52,11 +52,11 @@ ok(!theme.includes("--m3e-bottom-sheet-max-width: 720px;") && !theme.includes("-
 ok(theme.includes("--m3e-bottom-sheet-compact-top-space: calc(100dvh - min(76dvh, 780px));"), "sheet JS clamp equals the CSS max height");
 ok(theme.includes("--m3e-bottom-sheet-top-space: calc(100dvh - min(76dvh, 780px));"), "sheet short-viewport clamp matches");
 for (const f of ["browser/AdBlockCard.tsx", "browser/ExtensionsPanel.tsx", "browser/TabSwitcherCard.tsx", "pages/Ai.tsx"]) {
-  ok(read("src/" + f).includes('detents="fit"'), "fit detent on " + f);
+  ok(read("src/" + f).includes('detents: "fit"'), "fit detent on " + f);
 }
 /* Wave 114: DevTools exposes fit/half/full detents from tokens -
    fit first, so it still opens at fit like the others. */
-ok(read("src/pages/DevTools.tsx").includes('detents="fit half full"'), "fit-first detents on pages/DevTools.tsx");
+ok(read("src/pages/DevTools.tsx").includes('detents: "fit half full"'), "fit-first detent on pages/DevTools.tsx");
 ok(!read("src/extensions.css").includes("--m3e-bottom-sheet-max-width: 480px;"), "extensions sheet follows the global 560px width");
 /* Shared glass tokens and fallbacks. */
 ok(theme.includes("--lb-glass-tint: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 62%, transparent);"), "card tint is the spec 62%");

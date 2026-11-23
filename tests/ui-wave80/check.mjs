@@ -62,7 +62,7 @@ const ok = (name, cond) => {
 /* --- Tab switcher: modal m3e-bottom-sheet with one card per tab. --- */
 {
   const t = read("src/browser/TabSwitcherCard.tsx");
-  ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal=""'));
+  ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal: ""'));
   /* #85: the card grid and the live preview window are gone; one row
      per tab now: leading favicon tile, then the title with its
      supporting state line, then the close button. */
@@ -79,7 +79,7 @@ const ok = (name, cond) => {
   ok("devtools: bottom sheet host", d.includes("m3e-bottom-sheet"));
   /* Wave 114: the tonal pill row became a connected button group
      of toggle segments; the #239 supersession is deliberate. */
-  ok("devtools: sub-tool picker is a connected toggle group", d.includes("lb-dt-nav") && d.includes('variant="connected"') && d.includes('toggle=""'));
+  ok("devtools: sub-tool picker is a connected toggle group", d.includes("lb-dt-nav") && d.includes('variant="connected"') && d.includes('m3eAttrs(el, { toggle: "" })'));
   ok("devtools: section cards", d.includes("m3e-card"));
   ok("devtools: legacy copy kept", existsSync(new URL("src/pages/DevToolsLegacy.tsx", ui)));
   const walk = (dir) => {

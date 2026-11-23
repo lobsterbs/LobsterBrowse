@@ -37,3 +37,20 @@ export function fmtBytes(n: number): string {
   if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB";
   return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 }
+
+/* React 19 assigns a custom-element prop as a DOM property when the
+   element class defines that property, and the attribute never lands.
+   @m3e/web parses its Boolean and list attributes from the DOM
+   attribute, so JSX props authored as empty strings (modal="",
+   handle="", hideable="") or plain strings (detents=) silently
+   unset the feature: the tab sheet lost its modal top layer and
+   rendered off-screen inside the transformed dock, and the DevTools
+   sheet lost its handle and half/full detents to a raw string.
+   setAttribute is the only path that lands them verbatim; every
+   sheet sets its attribute contracts through this once at mount. */
+export function m3eAttrs(el: Element | null, attrs: Record<string, string>): void {
+  if (!el) return;
+  for (const name in attrs) {
+    el.setAttribute(name, attrs[name]);
+  }
+}

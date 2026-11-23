@@ -22,7 +22,7 @@ const ci = read("../../.github/workflows/ci.yml");
 
 /* 1. Connected toggle group picker. */
 assert.ok(d.includes('variant="connected"'), "the picker group is connected");
-assert.ok(d.includes('toggle=""'), "every segment is a toggle button");
+assert.ok(d.includes('m3eAttrs(el, { toggle: "" })'), "every segment is a toggle button");
 assert.ok(d.includes('selected={on}'), "the selected segment is the active page");
 assert.ok(d.includes('aria-current={on ? "true" : undefined}'), "aria-current stays on the active segment");
 assert.ok(d.includes('"lb-dt-nav-group"'), "the group carries its own class");
@@ -49,7 +49,7 @@ assert.ok(d.includes("No matching requests."), "a filtered-to-nothing network lo
 assert.ok(d.includes("Network requests will appear here."), "a fresh network log carries the quiet empty state");
 
 /* 5. Detents. */
-assert.ok(d.includes('detents="fit half full"'), "the sheet exposes fit/half/full detents");
+assert.ok(d.includes('detents: "fit half full"'), "the sheet exposes fit/half/full detents");
 
 /* 6. CI wiring. */
 assert.ok(ci.includes("node --experimental-strip-types ../tests/ui-wave114/check.mjs"), "ci runs the wave-114 gate");

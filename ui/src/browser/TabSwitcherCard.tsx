@@ -9,7 +9,7 @@
    Presentational: tab state and selection stay in pages/Browser.tsx. */
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import type { Tab } from "../store";
-import { tabLabel } from "./browserShared";
+import { m3eAttrs, tabLabel } from "./browserShared";
 
 export default function TabSwitcherCard(props: {
   tabs: Tab[];
@@ -38,6 +38,17 @@ export default function TabSwitcherCard(props: {
     const onClosing = () => live.current.onClose();
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
+  }, []);
+  /* Attribute contracts land as attributes (m3eAttrs): React 19
+     property-mode assignment unset these features. Runs before the
+     show effect so a mount with open=true opens correctly. */
+  useLayoutEffect(() => {
+    m3eAttrs(sheetRef.current, {
+      detents: "fit",
+      modal: "",
+      handle: "",
+      hideable: "",
+    });
   }, []);
   /* #260: layout effect so the sheet cannot lag the state commit
      on a wedged main thread (see DevTools). */
@@ -86,10 +97,6 @@ export default function TabSwitcherCard(props: {
   if (props.tabs.length === 0) return null;
   return (
     <m3e-bottom-sheet
-      detents="fit"
-      modal=""
-      handle=""
-      hideable=""
       handle-label="Dismiss tab switcher"
       aria-label="Tabs"
       {...{ class: "lb-tabs-sheet", ref: sheetRef }}

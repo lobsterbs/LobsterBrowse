@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { m3eAttrs } from "../browser/browserShared";
 import {
   AI_MODELS,
   aiSearch,
@@ -211,6 +212,10 @@ export default function AiPage() {
      fire before popover promotion; the row menus live inside the
      sheet's DOM, so their clicks and the sheet's own gestures never
      count as outside. */
+  /* Attribute contracts land as attributes (m3eAttrs). */
+  useEffect(() => {
+    m3eAttrs(sheetRef.current, { detents: "fit" });
+  }, []);
   useEffect(() => {
     const dismiss = (e: PointerEvent) => {
       const sheet = sheetRef.current;
@@ -855,7 +860,7 @@ export default function AiPage() {
         </span>
       </div>
 
-      <m3e-bottom-sheet detents="fit" {...{ ref: sheetRef }}>
+      <m3e-bottom-sheet {...{ ref: sheetRef }}>
         <m3e-app-bar slot="header" size="small" {...{ class: "lb-sheet-bar" }}>
           <m3e-icon-button slot="leading" aria-label="Back" onClick={() => sheetRef.current?.hide()}>
             <m3e-icon name="arrow_back" aria-hidden={true} />

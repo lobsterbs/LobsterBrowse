@@ -14,6 +14,7 @@ import {
   blockedHostOf, diagnosticsScope, pollDocumentDiagnostics, snapshotForScope,
   type DiagnosticsSnapshot, type DiagnosticsStatus, type EngineSource,
 } from "./diagnosticsScope";
+import { m3eAttrs } from "./browserShared";
 
 export default function AdBlockCard(props: {
   /* #236: the sheet owns its open state; show/hide ride props.open. */
@@ -48,6 +49,17 @@ export default function AdBlockCard(props: {
     const onClosing = () => live.current.onClose();
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
+  }, []);
+  /* Attribute contracts land as attributes (m3eAttrs): React 19
+     property-mode assignment unset these features. Runs before the
+     show effect so a mount with open=true opens correctly. */
+  useLayoutEffect(() => {
+    m3eAttrs(sheetRef.current, {
+      detents: "fit",
+      modal: "",
+      handle: "",
+      hideable: "",
+    });
   }, []);
   /* #260: layout effect so the sheet cannot lag the state commit
      on a wedged main thread (see DevTools). */
@@ -84,10 +96,6 @@ export default function AdBlockCard(props: {
   const effective = props.globalAdblock && props.siteAdblock !== false;
   return (
     <m3e-bottom-sheet
-      detents="fit"
-      modal=""
-      handle=""
-      hideable=""
       handle-label="Dismiss ad blocking"
       aria-label="Ad blocking"
       {...{ class: "lb-ad-sheet", ref: sheetRef }}

@@ -31,6 +31,7 @@ import {
   type DiagnosticsSnapshot, type DiagnosticsStatus, type DiagHistoryEvent, type EngineSource,
 } from "../browser/diagnosticsScope";
 import { diagKdl } from "../kdl";
+import { m3eAttrs } from "../browser/browserShared";
 
 export type ConsoleEntry = {
   id: number;
@@ -527,6 +528,16 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
+  /* Attribute contracts land as attributes (m3eAttrs): React 19
+     property-mode assignment unset these features. Runs before the
+     show effect so a mount with open=true opens correctly. */
+  useLayoutEffect(() => {
+    m3eAttrs(sheetRef.current, {
+      detents: "fit half full",
+      handle: "",
+      hideable: "",
+    });
+  }, []);
   /* #260 user report: a LAYOUT effect, not a passive one. On a
      wedged main thread passive effects starve far behind the
      commit, so the checkbox said open while the sheet never showed.
@@ -866,9 +877,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   return (
     <m3e-bottom-sheet
-      detents="fit half full"
-      handle=""
-      hideable=""
       handle-label="Dismiss developer tools"
       aria-label="Developer tools"
       {...{ class: "lb-dt-sheet", ref: sheetRef }}
@@ -907,10 +915,12 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                   key={page}
                   variant="tonal"
                   shape="square"
-                  toggle=""
                   selected={on}
                   aria-current={on ? "true" : undefined}
-                  {...{ class: "lb-dt-nav-btn" }}
+                  {...{
+                    class: "lb-dt-nav-btn",
+                    ref: (el: HTMLElement | null) => m3eAttrs(el, { toggle: "" }),
+                  }}
                   onClick={() => setDt({ page })}
                 >
                   <m3e-icon name={icon} aria-hidden={true} />
