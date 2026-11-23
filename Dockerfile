@@ -2546,13 +2546,21 @@ FROM debian:bookworm-slim AS zl-builder
 # the loop-lag sampler, zl:getDiag piggybacks the histogram (devtools
 # utf-8 ellipsis fix along), and the workspace version stamps to 3.4.5
 # Ferrierite, the pin-194 patch bump for the extensions member-slice
-# (#520/#523 members landed after the fact ride the NEXT pin).
+# (#520/#523 wave-2 members shipped IN pin 194; only the bb71532 notifications member missed it and rides the next pin).
 # Cargo-side pin stays 5073f316 (no zeolite-server code change; app TS
 # and the workspace version stamps only moved).
 # sw.js 97d0269a7ff264e7 -> f7a3d29691b1847b (954413 bytes);
 # bootstrap.js unchanged 0a3e47fd0bcfbba3 (51347 bytes).
 # Deploy with a cleared Render build cache.
-ARG ZEOLITE_COMMIT=493dc1ad95f333604895464f5b86006d440e0efb
+# Pin 195 (2026-11-23): dist abf2399 (build 45130303332; Zeolite
+# main cf20acca, all five jobs green). Stack since pin 194: the #696
+# 4 MiB wasm AST bound, the #688 persistent asset cache, the #708
+# pre-dispatch netlog rows, the #516 member-gap reasons, and the
+# #519/#520/#523 extension member slices. sw.js sha re-derived
+# f7a3d29691b1847b -> a110739b1756ec01 (964648 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (no zeolite-server/wisp-core/wisp-extensions source change).
+ARG ZEOLITE_COMMIT=abf2399bc893562108dac29cee8a6b78fb079adc
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2619,7 +2627,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f7a3d29691b1847b ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a110739b1756ec01 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
