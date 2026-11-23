@@ -2585,7 +2585,20 @@ FROM debian:bookworm-slim AS zl-builder
 # 4756af33df4de184 -> 2e41369452f851c3 (973788 bytes), bootstrap.js
 # unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
 # 5073f316 (app TS and tests only; no crate changed).
-ARG ZEOLITE_COMMIT=0e109fb3e10b2aaa9ae29d9a431f75b076ba6feb
+# Pin 198 (2026-11-23): dist 4dd6ed50 (build 45156263793; Zeolite
+# main e1c8a67d, all five jobs green): the Chromium-shaped h2
+# epoxy transport artifact plus the 0a5e7f82 breakout mark push
+# (#706) - the engine stamps the breakout-required mark into the
+# netlog and tracing ring and pushes zl:breakout with {dest, rule}
+# to the host pages, where the beta shell opens the real top-level
+# window. The epoxy-tls release moved under its tag (the h2
+# handshake bytes), so the vendor gates follow: epoxy.js
+# c3f79beb -> 5a707545 and epoxy.wasm 5bee4469 -> 9fcab511
+# (a rebuild with the old gate fails sha256sum -c honestly).
+# sw.js re-derived 2e41369452f851c3 -> 801a773ab7b21bb3
+# (974005 bytes), bootstrap.js unchanged 0a3e47fd0bcfbba3
+# (51347 bytes). Cargo-side pin stays 5073f316 (no crate changed).
+ARG ZEOLITE_COMMIT=4dd6ed50e0443c9982dee150de7ae2afb5e15678
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2621,8 +2634,8 @@ RUN mkdir -p /bundle/epoxy \
       -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
  && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
       -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
- && echo "c3f79beb2649b782ac3cdb9c21bdae056168c9c3059660566c9b5fd838fdc2d2  /bundle/epoxy/epoxy.js" | sha256sum -c - \
- && echo "5bee4469b46024a828bb0dc9601fd8add8408c243f67d10d6905cddee95389da  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
+ && echo "5a7075451f460aa2c969334c1e924885c6bdda36001418057b267aa13a36db52  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "9fcab511a1550617a54ac97ac662b3e34d27ed59d8206865dfcb69699f8b15db  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
 
 # ScramJet engine bundle (upstream MercuryWorkshop, the newest
 # published build), vendored with the same never-committed rule as
@@ -2660,7 +2673,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2e41369452f851c3 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=801a773ab7b21bb3 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
