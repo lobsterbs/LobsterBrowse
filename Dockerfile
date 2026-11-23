@@ -2669,8 +2669,9 @@ FROM debian:bookworm-slim AS zl-builder
 # a110739b1756ec01 -> 4756af33df4de184 (964745 bytes), bootstrap.js
 # unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
 # 5073f316 (5209ad8d touched app, CI and docs only; no crate change).
-# Pin 197 (2026-11-23): dist 7db29c97 (build 45146425486; Zeolite main
-# 85783e65, all five jobs green). On top of pin 196 the engine carries
+# Pin 197 (2026-11-23): dist 0e109fb3 (build 45148055568; Zeolite main
+# f76eee61, all five jobs green, the voice seam 85783e65 plus the
+# extensions removeCSS slice). On top of pin 196 the engine carries
 # the explicit TLS voice seam: the zl:fingerprint profile may now
 # carry tlsVoice (chromium | firefox | native; absent = UA-synced
 # derivation), applied on the next transport init; the beta UI ships
@@ -2680,10 +2681,10 @@ FROM debian:bookworm-slim AS zl-builder
 # epoxy ignored the identity arm entirely. The vendor now fetches
 # the sha-pinned epoxy-tls fork artifact (lyrebird ClientHello
 # profiles) with a sha256sum gate. sw.js re-derived
-# 4756af33df4de184 -> 3302a314ff06c170 (971856 bytes), bootstrap.js
+# 4756af33df4de184 -> 2e41369452f851c3 (973788 bytes), bootstrap.js
 # unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
 # 5073f316 (app TS and tests only; no crate changed).
-ARG ZEOLITE_COMMIT=7db29c9720e225c646a55fc21d7ef52e9f2c3b93
+ARG ZEOLITE_COMMIT=0e109fb3e10b2aaa9ae29d9a431f75b076ba6feb
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2758,7 +2759,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3302a314ff06c170 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=2e41369452f851c3 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
