@@ -5,6 +5,7 @@ import { pushLog } from "../store";
 import { buildSuggests, SUGGEST_MIN_CHARS, type Suggestion } from "../suggest";
 import { markFor } from "../engineMarks";
 import DebugMenu from "./DebugMenu";
+import HomeBg from "./HomeBg";
 
 /* One suggest warning per engine: empty providers do not spam the log. */
 const suggestWarned = new Set<string>();
@@ -169,6 +170,7 @@ export default function HomePage({ settings, onNavigate }: Props) {
 
   return (
     <section className="lb-view-content lb-home">
+      <HomeBg />
       <div className="lb-home-stage">
         <div className="lb-home-hl lb-home-hl1" aria-hidden={true}>
           <m3e-shape name="soft-burst" />

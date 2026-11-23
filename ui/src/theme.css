@@ -2683,3 +2683,24 @@ background: var(--lb-glass-tint);
 @media (prefers-reduced-motion: reduce) { .lb-console-line, .lb-dt-fab { animation: none; } }
 @media (max-width: 480px) { .lb-dt-nav-btn m3e-icon { display: none; } .lb-dt-nav-group { max-width: 100%; } }
 .lb-console-input { align-items: flex-start; }
+
+/* Home background (HomeBg.tsx): Aurora or Shapes, random per page load.
+   Pinned to .lb-main (full width: .app-content is capped at 1100px, so
+   pinning there would box the glow in); the isolated stacking context
+   keeps z-index -1 above the shell's surface paint but under the page. */
+.lb-main:has(.app-content[data-view="home"]) { position: relative; isolation: isolate; }
+.lb-home-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.lb-home-bg-aurora i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
+.lb-home-bg-aurora i:nth-child(1) { width: 70vmax; height: 70vmax; left: -20vmax; top: -30vmax; background: radial-gradient(closest-side, color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent), transparent); animation: lb-aur-1 38s ease-in-out infinite alternate; }
+.lb-home-bg-aurora i:nth-child(2) { width: 60vmax; height: 60vmax; right: -22vmax; top: 8vmax; background: radial-gradient(closest-side, color-mix(in srgb, var(--md-sys-color-tertiary) 26%, transparent), transparent); animation: lb-aur-2 46s ease-in-out infinite alternate; }
+.lb-home-bg-aurora i:nth-child(3) { width: 64vmax; height: 64vmax; left: 14vmax; bottom: -40vmax; background: radial-gradient(closest-side, color-mix(in srgb, var(--md-sys-color-secondary) 24%, transparent), transparent); animation: lb-aur-3 52s ease-in-out infinite alternate; }
+@keyframes lb-aur-1 { to { transform: translate(14vmax, 10vmax) scale(1.12); } }
+@keyframes lb-aur-2 { to { transform: translate(-12vmax, 12vmax) scale(0.92); } }
+@keyframes lb-aur-3 { to { transform: translate(10vmax, -10vmax) scale(1.1); } }
+.lb-home-bg-shapes span { position: absolute; display: block; transform: translate(calc(var(--px, 0) * var(--d)), calc(var(--py, 0) * var(--d))); transition: transform 0.6s var(--md-sys-motion-easing-expressive-spatial, cubic-bezier(0.27, 1.06, 0.18, 1)); }
+.lb-home-bg-shapes m3e-shape { display: block; opacity: var(--o); animation: lb-shp-float var(--t) ease-in-out infinite alternate; animation-delay: var(--dl); }
+@keyframes lb-shp-float { from { transform: translateY(-10px) rotate(-6deg); } to { transform: translateY(12px) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .lb-home-bg-aurora i, .lb-home-bg-shapes m3e-shape { animation: none; }
+  .lb-home-bg-shapes span { transition: none; transform: none; }
+}
