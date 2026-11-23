@@ -62,7 +62,7 @@ const ok = (name, cond) => {
 /* --- Tab switcher: modal m3e-bottom-sheet with one card per tab. --- */
 {
   const t = read("src/browser/TabSwitcherCard.tsx");
-  ok("tabs: non-modal dock-anchored sheet", t.includes("<m3e-bottom-sheet") && !t.includes('modal: ""'));
+  ok("tabs: modal bottom sheet", t.includes("<m3e-bottom-sheet") && t.includes('modal: ""'));
   /* #85: the card grid and the live preview window are gone; one row
      per tab now: leading favicon tile, then the title with its
      supporting state line, then the close button. */

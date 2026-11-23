@@ -1,5 +1,4 @@
-/* Tab switcher: a NON-MODAL m3e-bottom-sheet anchored above the
-   dock (wave 124), one row per tab:
+/* Tab switcher: a modal m3e-bottom-sheet with one row per tab:
    favicon, site title, supporting state line, close X (user
    request 2026-11-07; the preview windows are gone - a second page
    instance per tab was weight, not information). The sheet header is
@@ -40,30 +39,13 @@ export default function TabSwitcherCard(props: {
     el.addEventListener("closing", onClosing);
     return () => el.removeEventListener("closing", onClosing);
   }, []);
-  /* Wave 124: m3e wires Escape only onto modal sheets; the non-modal
-     tabs sheet keeps its own Escape close like DevTools does. */
-  useEffect(() => {
-    if (!props.open) return;
-    const onKey = (e: Event) => {
-      const k = e as globalThis.KeyboardEvent;
-      if (k.key === "Escape" && !k.shiftKey && !k.ctrlKey && !k.metaKey && !k.altKey) {
-        k.preventDefault();
-        live.current.onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [props.open]);
   /* Attribute contracts land as attributes (m3eAttrs): React 19
      property-mode assignment unset these features. Runs before the
      show effect so a mount with open=true opens correctly. */
   useLayoutEffect(() => {
     m3eAttrs(sheetRef.current, {
       detents: "fit",
-      /* Wave 124: NON-modal. The sheet rides above the dock, so the
-         toolbar pill must stay visible and interactive; a modal
-         top-layer scrim cannot be inset and would keep eating dock
-         clicks. */
+      modal: "",
       handle: "",
       hideable: "",
     });

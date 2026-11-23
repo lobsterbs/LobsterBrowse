@@ -1649,6 +1649,9 @@ background: color-mix(in srgb, var(--md-sys-color-secondary-container, #e8def8) 
   pointer-events: none;
   transition: opacity 280ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
 }
+/* The toolbar slides fully away while the tab switcher is open; this
+   rule must sit after the dock hover/reveal rules to win the cascade. */
+.lb-dock.tabs-open .lb-dock-pill { transform: translateY(calc(100% + 24px)); }
 @keyframes lb-card-in {
   from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.98); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
@@ -1754,9 +1757,6 @@ m3e-snackbar {
     z-index: 40;
   }
   .lb-dock { bottom: calc(18px + var(--m3e-nav-bar-height, 64px)); }
-  /* Wave 124 compact: the sheet clears the dock pill above the
-     bottom nav too (18 + 64 nav + 56 pill + 12 gap = 150). */
-  .lb-tabs-sheet { top: calc(100dvh - var(--_bottom-sheet-height) - 150px); }
   .lb-ext-panel { bottom: calc(76px + var(--m3e-nav-bar-height, 64px)); }
   .lb-devtools { bottom: calc(78px + var(--m3e-nav-bar-height, 64px)); }
   .app-content[data-view="browser"] { padding-bottom: var(--m3e-nav-bar-height, 64px); }
@@ -2498,11 +2498,6 @@ background: var(--lb-glass-tint);
    viewport-centered. */
 @media (min-width: 601px) {
   .lb-dt-sheet, .lb-tabs-sheet { left: calc(50% + 48px); }
-  /* Wave 124: the tabs sheet rides ABOVE the dock, top-layered but
-     non-modal, so the toolbar pill stays visible and clickable under
-     it. 86 = the dock bottom offset (18) + pill height (56) + a 12px
-     gap. */
-  .lb-tabs-sheet { top: calc(100dvh - var(--_bottom-sheet-height) - 86px - env(safe-area-inset-bottom, 0px)); }
 }
 /* AI status chip (demo .stat): the top-level ToolRow is a bare pill, 26px morphing shape, label, duration, then the chevron flipping 180deg. Rows nested in the expanded body are the demo's .step cards. */
 .lb-ai-tool { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; border-radius: 0; padding: 0; gap: 8px; }

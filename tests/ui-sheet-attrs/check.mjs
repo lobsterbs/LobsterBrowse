@@ -23,7 +23,7 @@ assert.ok(shared.includes("React 19"), "the helper documents the React 19 proper
 assert.ok(shared.includes('el.setAttribute(name, attrs[name]);'), "the helper lands attributes verbatim");
 
 const sheets = {
-  "browser/TabSwitcherCard.tsx": { detents: "fit", modal: false, handle: true, hideable: true }, /* wave 124: non-modal, anchored above the dock */
+  "browser/TabSwitcherCard.tsx": { detents: "fit", modal: true, handle: true, hideable: true },
   "browser/AdBlockCard.tsx": { detents: "fit", modal: true, handle: true, hideable: true },
   "browser/ExtensionsPanel.tsx": { detents: "fit", modal: true, handle: true, hideable: true },
   "pages/DevTools.tsx": { detents: "fit half full", modal: false, handle: true, hideable: true },
