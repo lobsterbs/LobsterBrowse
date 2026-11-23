@@ -593,6 +593,35 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
               </p>
             </SetPanel>
             <SetPanel
+              id="p-tlsvoice"
+              headline="TLS voice"
+              sub="The ClientHello shape the epoxy transport signs."
+              anchorId="set-tlsvoice"
+              open={!!openP["p-tlsvoice"]}
+              toggle={() => toggleP("p-tlsvoice")}
+            >
+              <p className="lb-muted">
+                The TLS handshake carries a fingerprint of its client. The engine can shape it like the browser in your User-Agent instead of the underlying rustls native shape.
+              </p>
+              {zlOff && zlNote}
+              <div className={zlOff || settings.transport !== "epoxy" ? "lb-zl-guard" : undefined}>
+                <M3eSelect
+                  label="TLS voice"
+                  value={settings.tlsVoice}
+                  options={[
+                    ["ua", "Match user-agent (default)"],
+                    ["chromium", "Chromium"],
+                    ["firefox", "Firefox"],
+                    ["native", "Native (rustls)"],
+                  ]}
+                  onChange={(v) => onChange({ tlsVoice: v as Settings["tlsVoice"] })}
+                />
+              </div>
+              <p className="lb-muted" style={{ marginTop: 6 }}>
+                Match user-agent derives the voice from the effective User-Agent; the other picks pin it. Applied on the next engine load.
+              </p>
+            </SetPanel>
+            <SetPanel
               id="p-wisp"
               headline="WISP server"
               sub="Route engine traffic through a WISP transit server."

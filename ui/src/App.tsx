@@ -867,8 +867,14 @@ export default function App() {
     const post = () => {
       void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
       /* The fingerprint profile picker is gone from Settings; the
-         default match-the-User-Agent profile is always on. */
-      const profile = { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent };
+         default match-the-User-Agent profile is always on. The
+         profile carries the TLS voice too when it pins a shape
+         other than the UA-synced default ("ua" stays implicit,
+         by omission, so stock engines ignore the field). */
+      const profile = {
+        userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent,
+        ...(settings.tlsVoice !== "ua" ? { tlsVoice: settings.tlsVoice } : {}),
+      };
       void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
         /* A rejected profile must not silently read as spoofed: the
            engine answers ok:false (e.g. a custom UA it cannot derive a
@@ -881,7 +887,7 @@ export default function App() {
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", post);
-  }, [settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, rules]);
+  }, [settings.sameSitePolicy, settings.uaPreset, settings.uaCustom, settings.tlsVoice, rules]);
 
   /* Transport engine: push the persisted choice (zl:transport). The
      engine switches on the NEXT transport init, not mid-session, and

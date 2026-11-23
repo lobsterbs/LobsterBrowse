@@ -152,6 +152,13 @@ export type Settings = {
     prefer its shape). Applied on the next engine init; a mid-session
     swap rides the same switch. */
   transport: "libcurl" | "epoxy";
+  /* TLS voice: the ClientHello shape the epoxy transport
+     signs (cipher suites, signature algorithms, extensions).
+     "ua" matches the effective User-Agent; the other picks pin
+     chromium, firefox, or the native rustls shape. Rides the
+     zl:fingerprint profile push; the engine applies it on the
+     next transport init. Zeolite-only, epoxy transport only. */
+  tlsVoice: "ua" | "chromium" | "firefox" | "native";
   /* Custom WISP transit endpoint override (Settings >
      Advanced > WISP server). Empty = the deployment default (the
      /build sjWisp endpoint). Validated to the wss:// shape on load;
@@ -183,6 +190,7 @@ export const DEFAULT_SETTINGS: Settings = {
   httpsUpgrade: true,
   imageLazy: true,
   transport: "epoxy",
+  tlsVoice: "ua",
   wispServer: "",
   suggestQueries: true,
   prefetchLinks: true,
@@ -249,6 +257,12 @@ export function loadSettings(): Settings {
          "libcurl" is a deliberate choice and keeps winning, junk
          falls back to the default. */
       transport: parsed.transport === "libcurl" ? "libcurl" : "epoxy",
+      /* TLS voice: a stored pick outside the four valid values
+         falls back to the UA-synced default. */
+      tlsVoice:
+        parsed.tlsVoice === "chromium" || parsed.tlsVoice === "firefox" || parsed.tlsVoice === "native"
+          ? parsed.tlsVoice
+          : "ua",
       /* A stored override must be a wss:// URL; anything else
          falls back to the deployment default. */
       wispServer:
