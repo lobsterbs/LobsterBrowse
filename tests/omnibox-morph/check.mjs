@@ -14,7 +14,8 @@ ok(theme.includes("width 550ms cubic-bezier(.39, 1.29, .35, .98)"), "pill width 
 ok(theme.includes("border-radius 500ms cubic-bezier(.34, .8, .34, 1)"), "pill radius eases on a monotonic curve (an overshoot squared the corners mid-morph)");
 ok(theme.includes("background-color 500ms cubic-bezier(.34, .8, .34, 1)"), "pill tint eases on the demo's effects curve");
 ok(theme.includes("transform 350ms cubic-bezier(.42, 1.67, .21, .9)"), "pill press bounce uses the demo's fast spatial spring");
-ok(theme.includes(".lb-toolbar m3e-icon-button { flex: none; max-width: 64px;"), "buttons are gated at the demo's 64px so the squeeze is uniform");
+const btnRule = theme.slice(theme.indexOf(".lb-toolbar m3e-icon-button"), theme.indexOf(".lb-toolbar.editing"));
+ok(btnRule.includes("flex: none; max-width: 64px;"), "buttons are gated at the demo's 64px so the squeeze is uniform (wave 121: the rule may carry the 2.13.6 container-color pins before the layout props)");
 ok(theme.includes("max-width 500ms cubic-bezier(.38, 1.21, .22, 1)"), "the button squeeze rides the shared spatial spring");
 ok(theme.includes("opacity 200ms cubic-bezier(.34, .8, .34, 1)"), "the button fade rides the effects spring");
 ok(!theme.includes(".lb-toolbar.editing .lb-tb-trail {"), "the trail no longer blinks away (no display rule on the whole zone)");

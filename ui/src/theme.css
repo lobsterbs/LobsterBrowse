@@ -815,7 +815,15 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
   pointer-events: auto;
   min-height: 44px;
   --m3e-toolbar-size: 44px;
-  --m3e-toolbar-rounded-padding: 4px;
+  /* @m3e/web 2.13.6 renamed --m3e-toolbar-rounded-padding into
+     four per-side -space tokens (default 8px). The 2.8.2 look the
+     toolbar shipped with is a 4px pad around the 48px buttons
+     (56px pill); pin all four sides or the pill grows to 64px
+     and every button shifts up by 8px. */
+  --m3e-toolbar-rounded-leading-space: 4px;
+  --m3e-toolbar-rounded-trailing-space: 4px;
+  --m3e-toolbar-rounded-top-space: 4px;
+  --m3e-toolbar-rounded-bottom-space: 4px;
   --m3e-toolbar-spacing: var(--md-sys-measurement-space100, 8px);
   /* Neutral frosted pill: the host paints the glass, so the
      shadow container stays transparent; otherwise the shadow
@@ -2525,7 +2533,18 @@ background: var(--lb-glass-tint);
 /* One shared 500ms spring (the demo's default spatial) carries the
    collapse: buttons squeeze out with a 200ms opacity fade, and the
    trail rides the same squeeze instead of blinking away in a frame. */
-.lb-toolbar m3e-icon-button { flex: none; max-width: 64px; transition: max-width 500ms cubic-bezier(.38, 1.21, .22, 1), opacity 200ms cubic-bezier(.34, .8, .34, 1), transform 500ms cubic-bezier(.38, 1.21, .22, 1); }
+.lb-toolbar m3e-icon-button {
+  /* @m3e/web 2.13.6 m3e-toolbar slotted-button style fills every
+     standard icon button with var(--m3e-toolbar-standard-button-
+     color, surfaceContainer): the toolbar read as if all six
+     buttons were permanently hovered. 2.8.2 filled nothing at
+     rest, selected or pressed; pin the button-level tokens here
+     because the toolbar sets them on its internal slot wrapper,
+     so a host-level override loses to that wrapper. */
+  --m3e-standard-icon-button-container-color: transparent;
+  --m3e-standard-icon-button-unselected-container-color: transparent;
+  --m3e-standard-icon-button-selected-container-color: transparent;
+  flex: none; max-width: 64px; transition: max-width 500ms cubic-bezier(.38, 1.21, .22, 1), opacity 200ms cubic-bezier(.34, .8, .34, 1), transform 500ms cubic-bezier(.38, 1.21, .22, 1); }
 .lb-toolbar.editing m3e-icon-button { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
 .lb-toolbar.editing .lb-tb-trail m3e-menu { display: none; }
 .lb-tb-zone { transition: gap 500ms cubic-bezier(.38, 1.21, .22, 1); }
