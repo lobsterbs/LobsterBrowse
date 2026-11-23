@@ -476,11 +476,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    base 150ms emphasized curve brings it back on release. Disabled
    with the other card transitions under reduced motion. */
 .lb-set-nav-item:active { scale: 0.97; transition-duration: 90ms; }
-/* Wave116: a slim accent bar glides between the section cards. The
-   cards keep their own active crossfade (pinned everywhere); the bar
-   only carries the glide. The rail is sticky, so it anchors the
-   absolute bar without touching the pinned rail rule. */
-.lb-set-nav-ind { position: absolute; left: 2px; top: 0; width: 3px; border-radius: 999px; background: var(--md-sys-color-primary, #ffb4ab); transition: transform 250ms cubic-bezier(0.2, 0, 0, 1), height 200ms cubic-bezier(0.2, 0, 0, 1); }
 @media (prefers-reduced-motion: reduce) {
   .lb-set-section > * { animation: none; }
   .lb-set-nav-item { transition: none; }
@@ -2613,7 +2608,6 @@ background: var(--lb-glass-tint);
   .lb-ai-send { transition: none; }
   .lb-ai-tool-chev, .lb-ai-stat-chev { transition: none; }
   .lb-log-line { animation: none; }
-  .lb-set-nav-ind { transition: none; }
 }
 
 /* DevTools, expressive pass: level chips, tonal level rows that spring
