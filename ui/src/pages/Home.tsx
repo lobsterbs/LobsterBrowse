@@ -7,6 +7,9 @@ import { markFor } from "../engineMarks";
 import DebugMenu from "./DebugMenu";
 import HomeBg from "./HomeBg";
 
+/* The search box text, kept across Home unmounts (session only). */
+let homeDraft = "";
+
 /* One suggest warning per engine: empty providers do not spam the log. */
 const suggestWarned = new Set<string>();
 
@@ -31,7 +34,12 @@ function SugMark({ s }: { s: Suggestion }) {
 }
 
 export default function HomePage({ settings, onNavigate }: Props) {
-  const [url, setUrl] = useState("");
+  /* Home unmounts whenever another view is open, so the typed query
+     lives at module scope: leaving Home and coming back keeps it. */
+  const [url, setUrl] = useState(homeDraft);
+  useEffect(() => {
+    homeDraft = url;
+  }, [url]);
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [wiping, setWiping] = useState(false);
