@@ -82,7 +82,6 @@ const appSrc = read("../../ui/src/App.tsx");
 const homeSrc = read("../../ui/src/pages/Home.tsx");
 assert.ok(!appSrc.includes("ShaderMetal"), "the shader-metal component is fully removed from App (wave 92)");
 assert.ok(!appSrc.includes("AsciiBackground"), "the ASCII background is gone from App");
-assert.ok(appSrc.includes("lb-fx-bg"), "the portal layer uses the wave 78 class");
 assert.ok(homeSrc.includes('slot="search-icon"'), "the search bar carries the single globe icon");
 assert.ok(!homeSrc.includes('slot="closed-leading"') && !homeSrc.includes('slot="open-leading"'), "no duplicate leading icons in the search bar");
 assert.ok(homeSrc.includes('"beforetoggle"'), "the suggestor is gated until rows exist");

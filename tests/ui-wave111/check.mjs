@@ -80,14 +80,6 @@ assert.ok(rule(theme, ".lb-dt-content {").includes("min-height: 38vh;"), "the De
 /* 7. Back disabled at the bottom of the stack. */
 assert.ok(browser.includes("disabled={active.idx > 0 ? undefined : true}"), "Back is disabled when the stack has nothing older");
 
-/* 8. Hero flash after cache clear / data wipe. */
-assert.ok(settings.includes('window.dispatchEvent(new CustomEvent("lb-flash-hero"));'), "Settings fires the hero flash event");
-assert.ok((settings.match(/lb-flash-hero/g) || []).length === 2, "both clear cache and delete all fire it");
-assert.ok(app.includes('"lb-flash-hero"'), "App listens for the hero flash event");
-assert.ok(app.includes("lb-fx-flash"), "App renders the flash overlay");
-assert.ok(rule(theme, ".lb-fx-flash {").includes("pointer-events: none;"), "the flash never blocks input");
-assert.ok(theme.includes("@keyframes lb-hero-flash"), "the flash keyframes exist");
-
 /* 9. Rail runtime tint from the active site. */
 assert.ok(browser.includes('document.documentElement.classList.add("lb-site-tint-root");'), "the favicon hue reaches the document root");
 assert.ok(browser.includes('document.documentElement.style.removeProperty("--lb-site-hue");'), "the root hue clears when no favicon exists");
@@ -98,7 +90,6 @@ const reduce = theme.slice(theme.indexOf("@media (prefers-reduced-motion: reduce
 assert.ok(reduce.includes(".lb-tb-ac-item { animation: none; }"), "the stagger stops under reduced motion");
 assert.ok(reduce.includes(".lb-toolbar.lb-flash::after { animation: none;"), "the flash stops under reduced motion");
 assert.ok(!reduce.includes(".lb-tb-wave"), "the wave reduced-motion line is gone with the wave");
-assert.ok(reduce.includes(".lb-fx-flash { display: none; }"), "the hero flash hides under reduced motion");
 
 /* CI runs this check. */
 assert.ok(ci.includes("../tests/ui-wave111/check.mjs"), "ci.yml runs the wave 111 check");

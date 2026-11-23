@@ -24,7 +24,6 @@ import { parseNavTab, shellGuardCancel, shellGuardDest, type ShellNavApi, type S
 import { sanitizeUrl } from "./sanitize";
 import { createPopupGate } from "./browser/popupGate";
 import { sjInit } from "./scramjet";
-import { createPortal } from "react-dom";
 import { shapeWipe } from "./wipe";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
@@ -33,43 +32,6 @@ import "./extensions.css";
 type View = "home" | "browser" | "ai" | "settings" | "logs";
 
 let tabSeq = 1;
-/* The remote hero wallpaper (same URL as the top .lb-fx-bg layer in
-   theme.css; keep the two in sync). Pre-warmed once per session: the
-   hero only paints when this image is decoded, so the local
-   lb-hero.jpg backplate never flashes through on a cold cache. */
-const HERO_BACKDROP_URL =
-  "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
-/* Wallpaper off (all pages paint the theme surface). Flip to true to bring the hero layer, its pre-warm fetch and the flash back. */
-const HERO_BG = false;
-
-let heroBackdropWarm: Promise<void> | null = null;
-let heroBackdropSettled = false;
-function heroBackdropReady(): Promise<void> {
-  heroBackdropWarm ??= new Promise<void>((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      heroBackdropSettled = true;
-      resolve();
-    };
-    img.onerror = () => {
-      heroBackdropSettled = true;
-      resolve();
-    };
-    img.src = HERO_BACKDROP_URL;
-  });
-  return heroBackdropWarm;
-}
-/* Start the pre-warm at module scope, NOT in a mount effect: the fetch
-   and decode now race the first render instead of following it. The
-   browser heuristically caches the image (no Cache-Control, 3-year-old
-   Last-Modified), so on a warm reload the promise usually settles
-   BEFORE React commits, and the hero layer paints with the first
-   frame instead of one cache round trip + decode behind it. Until the
-   layer mounts, the frost reads as flat dark glass, which is exactly
-   the "frosted glass takes its 100ms" symptom this removes. The cold
-   path is unchanged: the layer still waits for the load, so the local
-   lb-hero.jpg backplate never flashes. */
-if (HERO_BG) heroBackdropReady();
 
 function freshTab(url = ""): Tab {
   return {
@@ -105,47 +67,6 @@ export default function App() {
     if (target === view) return;
     shapeWipe((el as HTMLElement).getBoundingClientRect(), go);
   };
-  /* Hero load gate (2026-11-20 prompt item): .lb-fx-bg paints the
-     remote wallpaper OVER the local lb-hero.jpg backplate, so a
-     reload after a data wipe showed the old local wallpaper for the
-     fetch window before the current one landed on top. The layer now
-     mounts only once the remote image has loaded (or errored: a
-     blocked/unreachable hotlink still reveals the documented
-     backplate degrade instead of a bare surface). The state
-     initializes from the settled flag, not from false: a pre-warm
-     that finished before mount (warm reload) puts the hero layer in
-     the very first commit, so the glass is frosted at first paint. */
-  const [heroBgReady, setHeroBgReady] = useState(heroBackdropSettled);
-  useEffect(() => {
-    let on = true;
-    if (!HERO_BG) return;
-    heroBackdropReady().then(() => {
-      if (on) setHeroBgReady(true);
-    });
-    return () => {
-      on = false;
-    };
-  }, []);
-  /* Hero flash: Settings fires a one-shot lb-flash-hero event after a
-     cache clear or a wipe, and the response is a brief fullscreen
-     flare of the hero image - a visible confirmation that something
-     big just changed on this device. The overlay lives on <body>,
-     ignores pointer events, and fades itself out. */
-  const [heroFlash, setHeroFlash] = useState(false);
-  useEffect(() => {
-    let t = 0;
-    const onFlash = () => {
-      setHeroFlash(false);
-      requestAnimationFrame(() => setHeroFlash(true));
-      window.clearTimeout(t);
-      t = window.setTimeout(() => setHeroFlash(false), 650);
-    };
-    window.addEventListener("lb-flash-hero", onFlash);
-    return () => {
-      window.removeEventListener("lb-flash-hero", onFlash);
-      window.clearTimeout(t);
-    };
-  }, []);
   useEffect(() => {
     const h = "#view=" + view;
     if (window.location.hash !== h) window.history.replaceState(null, "", h);
@@ -936,25 +857,6 @@ export default function App() {
 
   return (
     <m3e-theme color={settings.seed} scheme="dark" motion="expressive" strong-focus={true}>
-      {/* The home hero background is portaled to
-          <body> so no view ancestor can trap the fixed layer.
-          It renders always on home and AI (#261 removed Settings:
-          a work surface wants a quiet background): the rail and
-          dock frost what is really adjacent to them.
-          #245: the liquid-metal ribbon shader was removed fully
-          and replaced by the static photographic hero image
-          (ui/public/lb-hero.jpg, painted by the .lb-fx-bg rule in
-          theme.css). Away from those views = not rendered. */}
-      {HERO_BG && (view === "home" || view === "ai") && heroBgReady &&
-        createPortal(
-          <div className="lb-fx-bg" aria-hidden={true} />,
-          document.body
-        )}
-      {HERO_BG && heroFlash &&
-        createPortal(
-          <div className="lb-fx-flash" aria-hidden={true} />,
-          document.body
-        )}
       <div className="lb-shell">
         {/* Compact-only rail: the M3E defaults are the spec
            (48dp collapsed with icons only, 44dp top inset); the
