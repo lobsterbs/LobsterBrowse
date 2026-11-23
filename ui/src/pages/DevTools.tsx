@@ -189,6 +189,16 @@ type Props = {
   open?: boolean;
 };
 
+const LEVELS: Array<[string, string, string]> = [
+  ["error", "Error", "error"],
+  ["warn", "Warn", "warning"],
+  ["info", "Info", "info"],
+  ["log", "Log", "notes"],
+];
+const KIND_ICON: Record<ConsoleEntry["kind"], string> = {
+  input: "chevron_right", result: "subdirectory_arrow_left", error: "error", warn: "warning", info: "info", log: "notes", debug: "bug_report",
+};
+
 const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
   ["network", "Network", "lan"],
@@ -285,20 +295,20 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
             {boundary && (
               <p className="lb-muted" style={{ margin: "10px 8px 2px", fontSize: "0.75em" }}>previous navigation</p>
             )}
-            <details className="lb-net-row">
-              <summary className="lb-net-summary">
+            <m3e-expansion-panel {...{ class: "lb-net-row" }}>
+              <span slot="header" className="lb-net-summary">
                 <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
                 <span className="lb-net-method">{e.category}</span>
                 <span className="lb-net-url">{e.message}</span>
                 <span className="lb-net-dur">{ts(e.ts)}</span>
-              </summary>
+              </span>
               <div className="lb-net-detail">
                 {e.stage && <div>Stage: {e.stage}</div>}
                 {e.url && <div>URL: {e.url}</div>}
                 {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
                 {e.traceId && <div>Trace: {e.traceId}</div>}
               </div>
-            </details>
+            </m3e-expansion-panel>
           </div>
         );
       })}
@@ -554,8 +564,11 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   }, [dt.page, open]);
 
 
+  /* Stick to the newest line only while the reader is already there. */
   useEffect(() => {
-    if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    const el = consoleRef.current;
+    if (el && !away) el.scrollTop = el.scrollHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dt.console.length]);
 
   const snapshotRef = useRef<DiagnosticsSnapshot | null>(null);
@@ -784,10 +797,33 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const levelOf = (k: ConsoleEntry["kind"]) =>
     k === "error" ? "error" : k === "warn" ? "warn" : k === "info" ? "info" : k === "debug" ? "debug" : "log";
 
+  /* Level chips (multi-select) mute noise in one tap. Typed input and
+     results are always shown; only log levels are filterable. */
+  const [levels, setLevels] = useState<Set<string>>(() => new Set(LEVELS.map((l) => l[0])));
+  const chipsRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const on = () => setLevels(new Set([...el.querySelectorAll<HTMLElement & { selected: boolean; value: string }>("m3e-filter-chip")].filter((c) => c.selected).map((c) => c.value)));
+    el.addEventListener("change", on);
+    return () => el.removeEventListener("change", on);
+  }, []);
+  const bucket = (k: ConsoleEntry["kind"]) => (k === "debug" ? "log" : k);
+  const lvlCount: Record<string, number> = {};
+  for (const c of dt.console) if (c.kind !== "input" && c.kind !== "result") lvlCount[bucket(c.kind)] = (lvlCount[bucket(c.kind)] ?? 0) + 1;
   const consoleEntries = dt.console.filter((c) => {
+    if (c.kind !== "input" && c.kind !== "result" && !levels.has(bucket(c.kind))) return false;
     if (dt.consoleFilter && !c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase())) return false;
     return true;
   });
+
+  /* Jump-to-latest FAB: shows once the log is scrolled away from the
+     newest line. */
+  const [away, setAway] = useState(false);
+  const onLogScroll = () => {
+    const el = consoleRef.current;
+    if (el) setAway(el.scrollTop + el.clientHeight < el.scrollHeight - 48);
+  };
 
   const netEntries = dt.net.filter((n) =>
     dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
@@ -892,7 +928,16 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             mounted; the sub-tool switch toggles [hidden], so flipping
             sub-tools no longer unmounts and remounts everything. */}
         <div className="lb-dt-page" hidden={dt.page !== "console"}>
-          <div className="lb-console" ref={consoleRef}>
+          <m3e-filter-chip-set multi={true} aria-label="Log levels" {...{ class: "lb-dt-levels", ref: chipsRef }}>
+            {LEVELS.map(([v, label, icon]) => (
+              <m3e-filter-chip key={v} value={v} selected={true}>
+                <m3e-icon slot="icon" name={icon} aria-hidden={true} />
+                {label}{lvlCount[v] ? " " + lvlCount[v] : ""}
+              </m3e-filter-chip>
+            ))}
+          </m3e-filter-chip-set>
+          <div className="lb-console-wrap">
+          <div className="lb-console" ref={consoleRef} onScroll={onLogScroll} role="log" aria-label="Console output">
             {/* #94: quiet empty state; a filtered-to-nothing list says
                 so instead of implying nothing was ever logged. */}
             {consoleEntries.length === 0 && (
@@ -903,20 +948,30 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             {consoleEntries.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
-                <span className="lb-console-arrow">{c.kind === "input" ? "›" : c.kind === "result" ? "‹" : levelOf(c.kind)}</span>
+                <m3e-icon name={KIND_ICON[c.kind]} aria-hidden={true} {...{ class: "lb-console-arrow" }} />
                 <span className="lb-console-text">{c.text}</span>
               </div>
             ))}
           </div>
+          {away && (
+            <m3e-fab size="small" aria-label="Jump to latest" {...{ class: "lb-dt-fab" }}
+              onClick={() => { const el = consoleRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }}>
+              <m3e-icon name="arrow_downward" aria-hidden={true} />
+            </m3e-fab>
+          )}
+          </div>
           <m3e-divider />
           <div className="lb-dt-toolbar">
-            <input
-              className="lb-input"
-              placeholder="Filter"
-              aria-label="Filter console output"
-              value={dt.consoleFilter}
-              onChange={(e) => setDt({ consoleFilter: e.target.value })}
-            />
+            <m3e-search-bar clearable={true} {...{ class: "lb-dt-search" }}>
+              <m3e-icon slot="leading" name="search" aria-hidden={true} />
+              <input
+                slot="input"
+                placeholder="Filter"
+                aria-label="Filter console output"
+                value={dt.consoleFilter}
+                onChange={(e) => setDt({ consoleFilter: e.target.value })}
+              />
+            </m3e-search-bar>
             <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
@@ -936,18 +991,25 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           <div className="lb-console-input">
             {/* m3e-textarea-autosize grows the console input to fit
                 multi-line expressions (Shift+Enter). */}
+            <m3e-form-field variant="outlined" {...{ class: "lb-dt-run" }}>
+              <label slot="label" htmlFor="lb-dt-console-in">Run JavaScript</label>
+              <textarea
+                ref={inputRef}
+                id="lb-dt-console-in"
+                className="lb-console-area"
+                value={cmd}
+                rows={1}
+                spellCheck={false}
+                onChange={(e) => setCmd(e.target.value)}
+                onKeyDown={keyDown}
+              />
+              <span slot="hint">Enter runs · Shift+Enter adds a line</span>
+            </m3e-form-field>
             <m3e-textarea-autosize for="lb-dt-console-in" min-rows={1} max-rows={10} />
-            <textarea
-              ref={inputRef}
-              id="lb-dt-console-in"
-              className="lb-input lb-console-area"
-              aria-label="Console input"
-              value={cmd}
-              rows={1}
-              onChange={(e) => setCmd(e.target.value)}
-              onKeyDown={keyDown}
-            />
-            <m3e-button variant="filled" onClick={submit}>Execute</m3e-button>
+            <m3e-button variant="filled" onClick={submit}>
+              <m3e-icon slot="icon" name="play_arrow" aria-hidden={true} />
+              Execute
+            </m3e-button>
           </div>
         </div>
 
@@ -970,15 +1032,15 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
               </p>
             )}
             {pagedNet.map((n) => (
-              <details key={n.id} className="lb-net-row">
-                <summary className="lb-net-summary">
+              <m3e-expansion-panel key={n.id} {...{ class: "lb-net-row" }}>
+                <span slot="header" className="lb-net-summary">
                   <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
                     {n.error ? "ERR" : n.status}
                   </span>
                   <span className="lb-net-method">{n.method}</span>
                   <span className="lb-net-url">{n.url}</span>
                   {n.dur !== undefined && <span className="lb-net-dur">{n.dur} ms</span>}
-                </summary>
+                </span>
                 <div className="lb-net-detail">
                   <div>URL: {n.url}</div>
                   <div>Method: {n.method}</div>
@@ -987,18 +1049,21 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                   <div>Time: {ts(n.ts)}</div>
                   <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
                 </div>
-              </details>
+              </m3e-expansion-panel>
             ))}
           </div>
           <m3e-divider />
           <div className="lb-dt-toolbar">
-            <input
-              className="lb-input"
-              placeholder="Filter by URL"
-              aria-label="Filter network requests"
-              value={dt.netFilter}
-              onChange={(e) => setDt({ netFilter: e.target.value })}
-            />
+            <m3e-search-bar clearable={true} {...{ class: "lb-dt-search" }}>
+              <m3e-icon slot="leading" name="search" aria-hidden={true} />
+              <input
+                slot="input"
+                placeholder="Filter by URL"
+                aria-label="Filter network requests"
+                value={dt.netFilter}
+                onChange={(e) => setDt({ netFilter: e.target.value })}
+              />
+            </m3e-search-bar>
             <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>

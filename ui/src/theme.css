@@ -1079,7 +1079,7 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 .lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" var(--lb-wght-strong); }
-.lb-net-status.lb-ok { color: #1e8e3e; }
+.lb-net-status.lb-ok { color: var(--md-sys-color-tertiary); }
 .lb-net-status.lb-bad { color: var(--md-sys-color-error); }
 .lb-net-method { flex-shrink: 0; opacity: 0.6; }
 .lb-net-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1392,7 +1392,7 @@ border-radius: var(--m3e-shape-lg);
   background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
   color: var(--md-sys-color-on-surface);
 }
-.lb-diag-chip.lb-diag-ok { background: color-mix(in srgb, #1e8e3e 18%, transparent); }
+.lb-diag-chip.lb-diag-ok { background: color-mix(in srgb, var(--md-sys-color-tertiary) 18%, transparent); }
 .lb-diag-chip.lb-diag-bad { background: color-mix(in srgb, var(--md-sys-color-error) 18%, transparent); }
 
 
@@ -2697,3 +2697,34 @@ background: var(--lb-glass-tint);
   .lb-log-line { animation: none; }
   .lb-set-nav-ind { transition: none; }
 }
+
+/* DevTools, expressive pass: level chips, tonal level rows that spring
+   in, jump-to-latest FAB, expansion-panel request rows, m3e inputs. */
+.lb-dt-levels { padding: 0 var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
+.lb-console-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lb-console-wrap .lb-console { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25); }
+.lb-console-line {
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+  padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100);
+  animation: lb-dt-line var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-expressive-spatial, cubic-bezier(0.27, 1.06, 0.18, 1)) both;
+}
+@keyframes lb-dt-line { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+.lb-console-arrow { flex: none; font-size: 18px; align-self: center; opacity: 0.8; }
+.lb-console-line.lb-error { background: color-mix(in srgb, var(--md-sys-color-error-container) 70%, transparent); color: var(--md-sys-color-on-error-container); }
+.lb-console-line.lb-error .lb-console-text { color: inherit; }
+.lb-console-line.lb-warn { background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 55%, transparent); color: var(--md-sys-color-on-tertiary-container); }
+.lb-console-line.lb-warn .lb-console-text { color: inherit; }
+.lb-dt-fab {
+  position: absolute; right: var(--md-sys-measurement-space150); bottom: var(--md-sys-measurement-space150); z-index: 2;
+  animation: lb-dt-line var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-expressive-spatial, cubic-bezier(0.27, 1.06, 0.18, 1)) both;
+}
+.lb-dt-search { flex: 1 1 200px; min-width: 0; }
+.lb-dt-run { flex: 1; min-width: 0; }
+.lb-dt-run .lb-console-area { font-family: ui-monospace, monospace; resize: none; }
+.lb-net { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
+.lb-net-row { border-bottom: 0; --m3e-expansion-panel-container-color: var(--md-sys-color-surface-container); }
+.lb-net-summary { padding: 0; min-width: 0; width: 100%; align-items: center; }
+.lb-net-status { padding: 0 var(--md-sys-measurement-space100); border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, currentColor 14%, transparent); }
+@media (prefers-reduced-motion: reduce) { .lb-console-line, .lb-dt-fab { animation: none; } }
+@media (max-width: 480px) { .lb-dt-nav-btn m3e-icon { display: none; } .lb-dt-nav-group { max-width: 100%; } }
+.lb-console-input { align-items: flex-start; }
