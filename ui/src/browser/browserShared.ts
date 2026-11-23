@@ -8,11 +8,27 @@ import type { Tab } from "../store";
 export function tabLabel(t: Tab): string {
   if (t.title) return t.title;
   if (!t.url) return "New tab";
-  try {
-    return new URL(t.url).hostname.replace(/^www\./, "");
-  } catch {
-    return t.url;
+  const host = (u: string): string => {
+    try {
+      return new URL(u).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+  const label = host(t.url);
+  if (!label) return t.url;
+  /* A frame parked on this proxy's own origin (a Cloudflare or engine
+     hop with no page title yet) must not label the tab with our host.
+     Use the last real site in this tab's history instead. */
+  const own = host(globalThis.location?.href ?? "");
+  if (label === own) {
+    for (let i = Math.min(t.idx ?? 0, (t.stack?.length ?? 1) - 1); i >= 0; i--) {
+      const h = host(t.stack?.[i] ?? "");
+      if (h && h !== own) return h;
+    }
+    return "New tab";
   }
+  return label;
 }
 
 /* File-extension heuristic: download click capture in Browser.tsx. */
