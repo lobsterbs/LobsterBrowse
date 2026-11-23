@@ -156,7 +156,7 @@ export default function ExtManage() {
           <m3e-icon name="refresh" aria-hidden={true} />
         </m3e-icon-button>
       </div>
-      <m3e-dialog {...{ ref: deleteDialogRef }} alert="">
+      <m3e-dialog {...{ ref: deleteDialogRef }} alert={true}>
         <span slot="header">Remove {pendingDelete?.name ?? "extension"}?</span>
         <p>Its stored data and caches are removed from the engine. This cannot be undone.</p>
         <div slot="actions">
@@ -258,7 +258,7 @@ export default function ExtManage() {
           <div className="lb-ext-trow">
             <span className="lb-ext-tlabel">Enabled</span>
             <m3e-switch
-              checked={detail.enabled ? "" : undefined}
+              checked={detail.enabled}
               icons="selected"
               aria-label="Extension enabled"
               onClick={() => void toggleEnabled(detail.id, !detail.enabled)}

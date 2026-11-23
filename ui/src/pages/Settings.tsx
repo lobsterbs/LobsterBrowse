@@ -180,7 +180,7 @@ function SetInline(props: {
       </span>
       {props.on !== undefined ? (
         <m3e-switch
-          checked={props.on ? "" : undefined}
+          checked={props.on}
           disabled={props.disabled ? true : undefined}
           onClick={props.disabled ? undefined : props.toggle}
         />
@@ -246,21 +246,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
      opens Privacy, the extension panels open Extensions) syncs once
      per mount; the default stays search for plain entries. */
   useEffect(() => { if (sectionLink) setSection(sectionLink); }, [sectionLink]);
-  /* Wave116 nav glider: the accent bar tracks the active card's
-     offset; the rail is sticky, so offsetTop already anchors to it. */
-  const setNavRef = useRef<HTMLElement | null>(null);
-  const [navInd, setNavInd] = useState<{ y: number; h: number } | null>(null);
-  useEffect(() => {
-    const nav = setNavRef.current;
-    if (!nav) return;
-    const read = () => {
-      const a = nav.querySelector(".lb-set-nav-item.active");
-      setNavInd(a ? { y: (a as HTMLElement).offsetTop, h: (a as HTMLElement).offsetHeight } : null);
-    };
-    read();
-    window.addEventListener("resize", read);
-    return () => window.removeEventListener("resize", read);
-  }, [section]);
 
   /* Switching categories glides the pane's scroll container back to
      the top instead of leaving the previous category's scroll offset
@@ -387,8 +372,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
           {/* The sticky frosted side rail. One section is
               visible at a time; the active item carries the M3 pill
               and aria-current. */}
-          <nav className="lb-set-nav" aria-label="Settings sections" ref={setNavRef}>
-            {navInd && <div className="lb-set-nav-ind" aria-hidden={true} style={{ transform: `translateY(${navInd.y}px)`, height: navInd.h + "px" }} />}
+          <nav className="lb-set-nav" aria-label="Settings sections">
             {NAV_ORDER.map((id) => (
               <button
                 key={id}
@@ -475,7 +459,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 />
                 <m3e-chip-set>
                   {SEEDS.map(([hex, name]) => (
-                    <m3e-chip key={hex} selected={settings.seed === hex ? "" : undefined} onClick={(e) => settings.seed !== hex && shapeWipe(e.currentTarget.getBoundingClientRect(), () => onChange({ seed: hex }), hex)}>
+                    <m3e-chip key={hex} selected={settings.seed === hex} onClick={(e) => settings.seed !== hex && shapeWipe(e.currentTarget.getBoundingClientRect(), () => onChange({ seed: hex }), hex)}>
                       {/* A colored swatch in the chip's icon slot (the
                          plain m3e-chip exposes no avatar slot) so every
                          seed option shows its color. */}
@@ -573,10 +557,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             >
               <div className="lb-seg-wrap">
                 <m3e-segmented-button aria-label="Proxy engine">
-                  <m3e-button-segment checked={settings.proxyEngine !== "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "zeolite" })}>
+                  <m3e-button-segment checked={settings.proxyEngine !== "scramjet"} onClick={() => onChange({ proxyEngine: "zeolite" })}>
                     Zeolite (default)
                   </m3e-button-segment>
-                  <m3e-button-segment checked={settings.proxyEngine === "scramjet" ? "" : undefined} onClick={() => onChange({ proxyEngine: "scramjet" })}>
+                  <m3e-button-segment checked={settings.proxyEngine === "scramjet"} onClick={() => onChange({ proxyEngine: "scramjet" })}>
                     ScramJet
                   </m3e-button-segment>
                 </m3e-segmented-button>
@@ -595,10 +579,10 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
             >
               <div className="lb-seg-wrap">
                 <m3e-segmented-button aria-label="Transport engine" disabled={zlOff ? true : undefined}>
-                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport !== "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "libcurl" })}>
+                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport !== "epoxy"} onClick={() => onChange({ transport: "libcurl" })}>
                     libcurl
                   </m3e-button-segment>
-                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport === "epoxy" ? "" : undefined} onClick={() => onChange({ transport: "epoxy" })}>
+                  <m3e-button-segment disabled={zlOff ? true : undefined} checked={settings.transport === "epoxy"} onClick={() => onChange({ transport: "epoxy" })}>
                     epoxy (default)
                   </m3e-button-segment>
                 </m3e-segmented-button>
@@ -655,8 +639,8 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   handling and alertdialog semantics (alert attribute). */}
               <m3e-dialog
                 {...{ ref: deleteDialogRef }}
-                alert=""
-                dismissible=""
+                alert={true}
+                dismissible={true}
                 close-label="Cancel"
               >
                 <span slot="header">Manage data</span>

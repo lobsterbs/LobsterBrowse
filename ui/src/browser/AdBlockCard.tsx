@@ -144,8 +144,8 @@ export default function AdBlockCard(props: {
             </div>
           </div>
           <m3e-switch
-            checked={effective ? "" : undefined}
-            disabled={!props.globalAdblock ? "" : undefined}
+            checked={effective}
+            disabled={!props.globalAdblock}
             icons="selected"
             onClick={() => props.onSiteToggle(!effective)}
           />

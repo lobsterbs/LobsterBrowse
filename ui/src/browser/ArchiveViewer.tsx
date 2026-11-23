@@ -187,7 +187,7 @@ export default function ArchiveViewer(props: { name: string; blob: Blob; kind: "
   const isOpen = (p: string) => dir === p || dir.startsWith(p + "/");
   const renderNode = (n: Node) =>
     n.isDir ? (
-      <m3e-tree-item key={n.path} open={isOpen(n.path) ? "" : undefined}>
+      <m3e-tree-item key={n.path} open={isOpen(n.path)}>
         <span slot="label" className="lb-fv-dir" onClick={() => setDir(n.path)}>
           <m3e-icon name="folder" aria-hidden={true} /> {n.name}
         </span>

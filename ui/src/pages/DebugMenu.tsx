@@ -164,7 +164,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
   };
 
   return (
-    <m3e-dialog {...{ ref: dialogRef }} alert="" dismissible="" close-label="Close">
+    <m3e-dialog {...{ ref: dialogRef }} alert={true} dismissible={true} close-label="Close">
       <span slot="header">Debug</span>
       <p style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, whiteSpace: "pre-wrap" }}>
         {build + "\n" + ping}
@@ -172,7 +172,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
       <m3e-list-item>
         <div className="lb-setting-row">
           <span className="lb-setting-label">Split content origin</span>
-          <m3e-switch checked={cur.split ? "" : undefined} icons="selected" onClick={flip("split")} />
+          <m3e-switch checked={cur.split} icons="selected" onClick={flip("split")} />
         </div>
       </m3e-list-item>
       <m3e-divider />
@@ -192,7 +192,7 @@ export default function DebugMenu({ open, onClose, settings }: Props) {
             </span>
             <m3e-switch
               aria-label={label + " experimental flag"}
-              checked={cur.experimental[key] ? "" : undefined}
+              checked={cur.experimental[key]}
               icons="selected"
               onClick={flipExperimental(key)}
             />
