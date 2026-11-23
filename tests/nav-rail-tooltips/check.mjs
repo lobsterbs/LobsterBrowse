@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
    rail button showed its tooltip UNDER the button, over the next
    button. Root cause: m3e-tooltip accepts exactly above / below /
    before / after and silently resets any other position value to
-   "below" (@m3e/web 2.8.2 dist/tooltip.js, isTooltipPosition + the
+   "below" (@m3e/web 2.13.6 dist/tooltip.js, isTooltipPosition + the
    changedProperties reset), so the old position="right" meant
    "below". The expressive demo ships no rail tooltips at all (the
    labels already sit in the item slots), so the rail tooltips were
