@@ -41,6 +41,9 @@ const HERO_BACKDROP_URL =
   "https://images4.alphacoders.com/134/thumb-1920-1341558.png";
 /* Wallpaper off (all pages paint the theme surface). Flip to true to bring the hero layer, its pre-warm fetch and the flash back. */
 const HERO_BG = false;
+
+/* #706: one breakout window per host per 30 s (re-push loop guard). */
+const BREAKOUT_DEDUP_MS = 30_000;
 let heroBackdropWarm: Promise<void> | null = null;
 let heroBackdropSettled = false;
 function heroBackdropReady(): Promise<void> {
@@ -241,6 +244,51 @@ export default function App() {
         M3eSnackbar.open("Engine updated - reload to pick it up", {
           duration: 0,
         });
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
+  /* #706: the engine pushes zl:breakout for a navigation a policy
+     rule marked: interactive-auth hosts must sign in inside a real
+     top-level window, never in-shell. The shell opens it; a
+     pop-up-blocker refusal degrades to a text-only snackbar. One
+     window per host per BREAKOUT_DEDUP_MS guards the loop a re-push
+     could make. */
+  const breakoutSeen = useRef(new Map<string, { open: number; ok: boolean; toast: number }>());
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (ev: MessageEvent) => {
+      /* Breakout pushes only come from the engine worker. */
+      if (!engineSwSource(ev)) return;
+      const d = ev.data as { type?: string; dest?: unknown } | null;
+      if (!d || d.type !== "zl:breakout" || typeof d.dest !== "string" || !d.dest) return;
+      let host = "";
+      try {
+        host = new URL(d.dest).host;
+      } catch {
+        return; /* no host to dedupe or explain by */
+      }
+      const now = Date.now();
+      const rec = breakoutSeen.current.get(host);
+      if (rec?.ok && now - rec.open < BREAKOUT_DEDUP_MS) return;
+      /* No opener arg: window.open must return the window (a null
+         return is the pop-up-block oracle). */
+      const w = window.open(d.dest, "_blank");
+      if (w) {
+        breakoutSeen.current.set(host, { open: now, ok: true, toast: rec?.toast ?? 0 });
+        return;
+      }
+      if (!rec || now - rec.toast >= BREAKOUT_DEDUP_MS) {
+        breakoutSeen.current.set(host, { open: 0, ok: false, toast: now });
+        if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
+          /* Text only: an action button camps a tab stop in the
+             top-layer popover (engine-update note above). */
+          M3eSnackbar.open(
+            "Sign-in for " + host + " was stopped by the pop-up blocker - allow pop-ups for this site, then open the sign-in again",
+            { duration: 8000 },
+          );
+        }
       }
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
