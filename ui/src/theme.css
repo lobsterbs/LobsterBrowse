@@ -2289,10 +2289,23 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 .lb-ad-hero-shape {
   --m3e-shape-size: 56px;
   --m3e-shape-container-color: var(--md-sys-color-secondary-container, #4a4458);
+  /* The shape paints as an absolute-fill SVG while slotted content
+     sits in normal flow at the top left, so the shield centers with
+     the wave-116 tab-favicon pattern: fixed-size icon, inset 0
+     margin auto. */
+  position: relative;
   flex-shrink: 0;
   color: var(--md-sys-color-on-secondary-container, #e5defb);
 }
-.lb-ad-hero-shape > m3e-icon { color: currentColor; font-size: 24px; }
+.lb-ad-hero-shape > m3e-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 24px;
+  height: 24px;
+  color: currentColor;
+  font-size: 24px;
+}
 .lb-ad-hero-txt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; min-width: 0; }
 .lb-ad-num { font-size: var(--md-sys-typescale-headline-large-font-size, 32px); font-variation-settings: "wght" var(--lb-wght-strong); line-height: var(--md-sys-typescale-headline-large-line-height, 40px); color: var(--md-sys-color-primary); }
 .lb-ad-sub { margin: 0; font-size: var(--md-sys-typescale-body-small-font-size, 12px); }
@@ -2631,7 +2644,6 @@ background: var(--lb-glass-tint);
 
 /* DevTools, expressive pass: level chips, tonal level rows that spring
    in, jump-to-latest FAB, expansion-panel request rows, m3e inputs. */
-.lb-dt-levels { padding: 0 var(--md-sys-measurement-space100) var(--md-sys-measurement-space100); }
 .lb-console-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .lb-console-wrap .lb-console { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25); }
 .lb-console-line {
@@ -2653,7 +2665,17 @@ background: var(--lb-glass-tint);
 .lb-dt-run { flex: 1; min-width: 0; }
 .lb-dt-run .lb-console-area { font-family: ui-monospace, monospace; resize: none; }
 .lb-net { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space50); }
-.lb-net-row { border-bottom: 0; --m3e-expansion-panel-container-color: var(--md-sys-color-surface-container); }
+.lb-net-row {
+  border-bottom: 0;
+  --m3e-expansion-panel-container-color: var(--lb-glass-lift);
+  /* In-sheet sub-card glass like .lb-dt-card: the frosted host
+     carries the card shape so the expansion rows read as glass
+     pills over the sheet instead of opaque surface boxes. */
+  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
+  backdrop-filter: var(--lb-glass-blur);
+  -webkit-backdrop-filter: var(--lb-glass-blur);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+}
 .lb-net-summary { padding: 0; min-width: 0; width: 100%; align-items: center; }
 .lb-net-status { padding: 0 var(--md-sys-measurement-space100); border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, currentColor 14%, transparent); }
 @media (prefers-reduced-motion: reduce) { .lb-console-line, .lb-dt-fab { animation: none; } }

@@ -101,7 +101,6 @@ export type DtState = {
   console: ConsoleEntry[];
   net: NetEntry[];
   fails: ResFailEntry[];
-  consoleFilter: string;
   netFilter: string;
   history: string[];
   engineClientId?: string;
@@ -115,7 +114,6 @@ export function emptyDt(): DtState {
     console: [],
     net: [],
     fails: [],
-    consoleFilter: "",
     netFilter: "",
     history: [],
   };
@@ -190,12 +188,6 @@ type Props = {
   open?: boolean;
 };
 
-const LEVELS: Array<[string, string, string]> = [
-  ["error", "Error", "error"],
-  ["warn", "Warn", "warning"],
-  ["info", "Info", "info"],
-  ["log", "Log", "notes"],
-];
 const KIND_ICON: Record<ConsoleEntry["kind"], string> = {
   input: "chevron_right", result: "subdirectory_arrow_left", error: "error", warn: "warning", info: "info", log: "notes", debug: "bug_report",
 };
@@ -808,26 +800,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const levelOf = (k: ConsoleEntry["kind"]) =>
     k === "error" ? "error" : k === "warn" ? "warn" : k === "info" ? "info" : k === "debug" ? "debug" : "log";
 
-  /* Level chips (multi-select) mute noise in one tap. Typed input and
-     results are always shown; only log levels are filterable. */
-  const [levels, setLevels] = useState<Set<string>>(() => new Set(LEVELS.map((l) => l[0])));
-  const chipsRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = chipsRef.current;
-    if (!el) return;
-    const on = () => setLevels(new Set([...el.querySelectorAll<HTMLElement & { selected: boolean; value: string }>("m3e-filter-chip")].filter((c) => c.selected).map((c) => c.value)));
-    el.addEventListener("change", on);
-    return () => el.removeEventListener("change", on);
-  }, []);
-  const bucket = (k: ConsoleEntry["kind"]) => (k === "debug" ? "log" : k);
-  const lvlCount: Record<string, number> = {};
-  for (const c of dt.console) if (c.kind !== "input" && c.kind !== "result") lvlCount[bucket(c.kind)] = (lvlCount[bucket(c.kind)] ?? 0) + 1;
-  const consoleEntries = dt.console.filter((c) => {
-    if (c.kind !== "input" && c.kind !== "result" && !levels.has(bucket(c.kind))) return false;
-    if (dt.consoleFilter && !c.text.toLowerCase().includes(dt.consoleFilter.toLowerCase())) return false;
-    return true;
-  });
-
   /* Jump-to-latest FAB: shows once the log is scrolled away from the
      newest line. */
   const [away, setAway] = useState(false);
@@ -938,24 +910,14 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             mounted; the sub-tool switch toggles [hidden], so flipping
             sub-tools no longer unmounts and remounts everything. */}
         <div className="lb-dt-page" hidden={dt.page !== "console"}>
-          <m3e-filter-chip-set multi={true} aria-label="Log levels" {...{ class: "lb-dt-levels", ref: chipsRef }}>
-            {LEVELS.map(([v, label, icon]) => (
-              <m3e-filter-chip key={v} value={v} selected={true}>
-                <m3e-icon slot="icon" name={icon} aria-hidden={true} />
-                {label}{lvlCount[v] ? " " + lvlCount[v] : ""}
-              </m3e-filter-chip>
-            ))}
-          </m3e-filter-chip-set>
           <div className="lb-console-wrap">
           <div className="lb-console" ref={consoleRef} onScroll={onLogScroll} role="log" aria-label="Console output">
             {/* #94: quiet empty state; a filtered-to-nothing list says
                 so instead of implying nothing was ever logged. */}
-            {consoleEntries.length === 0 && (
-              <p className="lb-muted lb-console-empty">
-                {dt.console.length > 0 ? "No matching entries." : "Console output will appear here."}
-              </p>
+            {dt.console.length === 0 && (
+              <p className="lb-muted lb-console-empty">Console output will appear here.</p>
             )}
-            {consoleEntries.map((c) => (
+            {dt.console.map((c) => (
               <div key={c.id} className={"lb-console-line lb-" + levelOf(c.kind)}>
                 <span className="lb-console-ts">{ts(c.ts)}</span>
                 <m3e-icon name={KIND_ICON[c.kind]} aria-hidden={true} {...{ class: "lb-console-arrow" }} />
@@ -972,16 +934,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           </div>
           <m3e-divider />
           <div className="lb-dt-toolbar">
-            <m3e-search-bar clearable={true} {...{ class: "lb-dt-search" }}>
-              <m3e-icon slot="leading" name="search" aria-hidden={true} />
-              <input
-                slot="input"
-                placeholder="Filter"
-                aria-label="Filter console output"
-                value={dt.consoleFilter}
-                onChange={(e) => setDt({ consoleFilter: e.target.value })}
-              />
-            </m3e-search-bar>
             <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
               <m3e-icon name="mop" aria-hidden={true} />
             </m3e-icon-button>
