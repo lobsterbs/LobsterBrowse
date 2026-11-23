@@ -19,7 +19,7 @@ const ok = (cond, label) => {
 const dt = read("src/pages/DevTools.tsx");
 ok(!dt.includes("lb-dt-chips"), "console filter chips removed");
 ok(!dt.includes("levelFilter"), "the level filter state is gone");
-ok(!dt.includes('aria-label="Console output"'), "console renders bare, no output card");
+ok(dt.includes('role="log" aria-label="Console output"'), "console log landmark renders (expressive console re-carded)");
 ok(!dt.includes('aria-label="Network requests"'), "network renders bare, no card");
 ok(!dt.includes("not a network tap"), "network explainer paragraph removed");
 ok(dt.split('className="lb-dt-page"').length - 1 === 3, "all three pages stay mounted, [hidden]-toggled");
