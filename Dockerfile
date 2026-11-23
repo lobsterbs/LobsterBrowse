@@ -2560,7 +2560,18 @@ FROM debian:bookworm-slim AS zl-builder
 # f7a3d29691b1847b -> a110739b1756ec01 (964648 bytes), bootstrap.js
 # unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
 # 5073f316 (no zeolite-server/wisp-core/wisp-extensions source change).
-ARG ZEOLITE_COMMIT=abf2399bc893562108dac29cee8a6b78fb079adc
+# Pin 196 (2026-11-23): dist 2bbe5b88 (build 45137973707; Zeolite main
+# 6efdd5a1, all five jobs green). On top of pin 195 the epoxy transport
+# now rides the sha-pinned epoxy-tls fork artifact (lyrebird identity
+# seam, real-browser ClientHello shaping) with the UA-synced voice.
+# Pin 195's beta clearCache deploy failed the served-sha gate by
+# design: dist republished two minutes after the pin commits and the
+# builder fetches refs/heads/dist HEAD, so this pin takes the current
+# bundle on its own verified shas. sw.js re-derived
+# a110739b1756ec01 -> 4756af33df4de184 (964745 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (5209ad8d touched app, CI and docs only; no crate change).
+ARG ZEOLITE_COMMIT=2bbe5b88fb4f67fa69a4218af7739a954533ec3a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2627,7 +2638,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=a110739b1756ec01 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4756af33df4de184 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
