@@ -29,7 +29,13 @@ const files = [
   "src/browser/ArchiveViewer.tsx",
   "src/browser/ExtensionsPanel.tsx",
 ];
-const idiom = /(?:selected|checked|disabled|open|alert|dismissible)=[^=]*\?s*""s*:/;
+const idiom = /(?:selected|checked|disabled|open|alert|dismissible)=[^=]*\?\s*""\s*:/;
+/* Self-test: if this regex stops matching the exact dead idiom, the
+   scan below goes silently blind, so the gate proves its own regex. */
+if (!idiom.test('checked={on ? "" : undefined}')) {
+  console.error("FAIL ui-r19-bool idiom regex no longer catches the empty-string prop");
+  process.exit(1);
+}
 for (const f of files) {
   const t = src(f);
   const m = t.match(idiom);
