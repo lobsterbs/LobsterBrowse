@@ -2571,7 +2571,20 @@ FROM debian:bookworm-slim AS zl-builder
 # a110739b1756ec01 -> 4756af33df4de184 (964745 bytes), bootstrap.js
 # unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
 # 5073f316 (5209ad8d touched app, CI and docs only; no crate change).
-ARG ZEOLITE_COMMIT=2bbe5b88fb4f67fa69a4218af7739a954533ec3a
+# Pin 197 (2026-11-23): dist 7db29c97 (build 45146425486; Zeolite main
+# 85783e65, all five jobs green). On top of pin 196 the engine carries
+# the explicit TLS voice seam: the zl:fingerprint profile may now
+# carry tlsVoice (chromium | firefox | native; absent = UA-synced
+# derivation), applied on the next transport init. This pin also
+# makes the epoxy vendor honest: pin 196's comment claimed the fork
+# artifact but the RUN still copied the npm package, so the shipped
+# epoxy ignored the identity arm entirely. The vendor now fetches
+# the sha-pinned epoxy-tls fork artifact (lyrebird ClientHello
+# profiles) with a sha256sum gate. sw.js re-derived
+# 4756af33df4de184 -> 3302a314ff06c170 (971856 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (app TS and tests only; no crate changed).
+ARG ZEOLITE_COMMIT=7db29c9720e225c646a55fc21d7ef52e9f2c3b93
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2590,17 +2603,25 @@ RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
 # from npm at build time, same pinned version the Zeolite CI vendors.
 RUN mkdir -p /bundle/libcurl \
  && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
- && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/epoxy-tls@2.1.20-1 \
  && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
 # The epoxy transport (selectable second engine, Zeolite #64):
-# same pinned-version, never-committed vendoring rule as libcurl.
-# Full variant: the WebSocket bridge + gzip/brotli + HTTP/2 sit
-# behind the package "full" build. The SW resolves it at the origin
-# root (/epoxy/epoxy.js + epoxy.wasm); the server serves /epoxy from
-# this bundle directory.
+# pulled from the lobsterbs/epoxy-tls fork artifact release, the
+# lyrebird-patched rustls that signs real-browser ClientHello
+# profiles (the identity arm: chromium, firefox, or native shapes).
+# Same never-committed vendoring rule as libcurl - the bundle is
+# AGPL-3.0-only, fetched pinned at build time only; the sha256 pair
+# IS the pin and the -c gate fails the build honestly if a release
+# asset moves. Same full variant the npm package exposed (the
+# WebSocket bridge + gzip/brotli + HTTP/2 sit behind "full"). The SW
+# resolves it at the origin root (/epoxy/epoxy.js + epoxy.wasm); the
+# server serves /epoxy from this bundle directory.
 RUN mkdir -p /bundle/epoxy \
- && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.js /bundle/epoxy/epoxy.js \
- && cp /zlvendor/node_modules/@mercuryworkshop/epoxy-tls/full/epoxy.wasm /bundle/epoxy/epoxy.wasm
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
+ && echo "c3f79beb2649b782ac3cdb9c21bdae056168c9c3059660566c9b5fd838fdc2d2  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "5bee4469b46024a828bb0dc9601fd8add8408c243f67d10d6905cddee95389da  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
 
 # ScramJet engine bundle (upstream MercuryWorkshop, the newest
 # published build), vendored with the same never-committed rule as
@@ -2638,7 +2659,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=4756af33df4de184 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3302a314ff06c170 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
