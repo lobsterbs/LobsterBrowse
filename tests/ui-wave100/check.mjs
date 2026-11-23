@@ -1,10 +1,11 @@
 /* Regression check: DevTools sheet declutter and the Settings hero
    engine badge.
-   - Console and Network render bare like Diagnostics: the filled
-     cards are gone, content sits directly in the sheet.
+   - Console and Diagnostics render bare: the filled cards are gone,
+     content sits directly in the sheet. The Network page is removed
+     entirely (2026-11-23): it was fully broken and served no purpose.
    - The console log-level filter chips are removed (text filter only).
-   - All three pages stay mounted; the sub-tool switch toggles
-     [hidden], so flipping sub-tools does not unmount and remount.
+   - Both pages stay mounted; the sub-tool switch toggles [hidden],
+     so flipping sub-tools does not unmount and remount.
    - The engine surfaces poll only while their page is open.
    - Settings: the About hero card is removed (#272, #273). */
 import { readFileSync } from "node:fs";
@@ -22,10 +23,10 @@ ok(!dt.includes("levelFilter"), "the level filter state is gone");
 ok(dt.includes('role="log" aria-label="Console output"'), "console log landmark renders (expressive console re-carded)");
 ok(!dt.includes('aria-label="Network requests"'), "network renders bare, no card");
 ok(!dt.includes("not a network tap"), "network explainer paragraph removed");
-ok(dt.split('className="lb-dt-page"').length - 1 === 3, "all three pages stay mounted, [hidden]-toggled");
-ok(dt.includes('active={dt.page === "network"}'), "the download registry polls only while Network is open");
+ok(dt.split('className="lb-dt-page"').length - 1 === 2, "console + diagnostics stay mounted, [hidden]-toggled (network removed 2026-11-23)");
+ok(!dt.includes('dt.page === "network"') && !dt.includes('aria-label="Engine downloads"'), "the broken Network page is fully gone, registry included");
 ok(dt.includes("active: boolean"), "engine surfaces gate polling on the visible page");
-ok(dt.includes("m3e-card"), "the download registry card remains");
+ok(dt.includes("m3e-card"), "the diagnostics count cards remain");
 
 const settings = read("src/pages/Settings.tsx");
 ok(!settings.includes("lb-hero-engine") && !settings.includes("lb-about-hero"), "the About hero card is removed (#272, #273)");

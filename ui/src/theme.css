@@ -662,42 +662,10 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    simple-icons) leads the suggestion text; the .lb-ac-item flex gap
    provides the required space after it. */
 .lb-engine-mark { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
-/* The black skeleton page (m3e-skeleton painting pulse
-   shapes over an invisible mock layout) that covers the content
-   area while a navigation's first paint has not committed - a new
-   URL, a new tab, a restored session - and never while a committed
-   site loads more of its own assets in place. Sits below the
-   loading indicator (z-index 5 vs 6). */
-/* Wave116: a real skeleton. Gray blocks mock the layout being
-   loaded (title bar, hero, text lines, chips) on the surface color
-   and breathe together on one slow 2s pulse; research across native
-   skeletons (Android, YouTube, Wikipedia) agrees: muted blocks at
-   final proportions, one gentle shared pulse, never a fast flash.
-   The old build was a black frame with one giant empty pulse
-   skeleton flashing over it. */
-.lb-sk {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  overflow: hidden;
-  animation: lb-sk-in var(--md-sys-motion-duration-short-4, 200ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
-}
-@keyframes lb-sk-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-.lb-sk-page { display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%; max-width: none; margin: 0; box-sizing: border-box; padding: 24px; background: var(--md-sys-color-surface-container-low, #1d1b1e); animation: lb-sk-breathe 2s var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
-@keyframes lb-sk-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
-.lb-sk-head { width: 42%; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); flex: 0 0 auto; background: var(--md-sys-color-surface-container-highest, #3d322f); }
-.lb-sk-hero { width: 100%; flex: 1 1 auto; min-height: 160px; height: auto; border-radius: var(--md-sys-shape-corner-medium, 12px); background: var(--md-sys-color-surface-container-highest, #3d322f); }
-.lb-sk-line { width: 100%; height: 12px; border-radius: 6px; flex: 0 0 auto; background: var(--md-sys-color-surface-container-high, #2b2528); }
-.lb-sk-short { width: 62%; }
-.lb-sk-chips { display: flex; gap: 8px; flex: 0 0 auto; }
-.lb-sk-chip { width: 64px; height: 24px; border-radius: 999px; flex: 0 0 auto; background: var(--md-sys-color-surface-container, #211c1e); }
-@media (prefers-reduced-motion: reduce) {
-  .lb-sk, .lb-sk-page { animation: none; }
-}
-.lb-skel { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space150); width: 100%; }
+/* Wave116 follow-up: the black page-load skeleton is fully removed
+   (Browser renders no skeleton tree and the extensions panels use
+   a quiet loading note); the top loading indicator alone
+   communicates in-flight work. */
 .lb-empty-tab {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: var(--md-sys-measurement-space100); opacity: 0.6;
@@ -998,8 +966,11 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
    are text buttons. */
 /* The sub-tool picker centers under the sheet. */
 .lb-dt-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--md-sys-measurement-space50); margin: var(--md-sys-measurement-space75) 0 var(--md-sys-measurement-space50); }
-.lb-dt-nav-btn { flex: 0 1 auto; }
-.lb-dt-nav-group { flex: 0 1 auto; }
+/* 2026-11-23: the picker is a real m3e-tabs bar. The component owns
+   the ink bar, tab heights and scrollable overflow; the sheet only
+   caps its width so long labels (counts included) wrap the row
+   instead of pushing the sheet walls. */
+.lb-dt-nav-tabs { max-width: 100%; }
 .lb-dt-title-sub { display: block; font-size: 0.72em; color: var(--md-sys-color-on-surface-variant); }
 .lb-dt-card { width: 100%; }
 .lb-dt-card-head { display: flex; justify-content: space-between; align-items: center; }
@@ -1027,7 +998,6 @@ border-radius: var(--md-sys-shape-corner-large-increased, 20px);
 .lb-console-area { resize: vertical; font-family: ui-monospace, monospace; }
 
 .lb-net { flex: 1; overflow: auto; font-size: var(--md-sys-typescale-body-medium-font-size, 14px); line-height: var(--md-sys-typescale-body-medium-line-height, 20px); }
-.lb-net-row { border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
 .lb-net-summary { display: flex; gap: var(--md-sys-measurement-space100); cursor: pointer; padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space75); align-items: baseline; }
 .lb-net-status { flex-shrink: 0; font-variation-settings: "wght" var(--lb-wght-strong); }
 .lb-net-status.lb-ok { color: var(--md-sys-color-on-tertiary-container); background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 70%, transparent); }
@@ -1129,6 +1099,18 @@ m3e-button[variant="filled"] { font-variation-settings: "wght" var(--lb-wght-emp
 /* Springy interactions: icon buttons and the dock squish on press. */
 m3e-icon-button { transition: transform var(--md-sys-motion-duration-short-3, 150ms) var(--m3e-spring); }
 m3e-icon-button:active { transform: scale(0.88); }
+/* 2026-11-23 report: the same icons, animated. One short
+   composite-only press flourish on the glyph itself (the host scale
+   stays as-is): the icon dips to 0.82 with a -4deg tilt right after
+   the press lands, then springs back. It re-runs on every press
+   because :active re-matches, and pauses nothing - the page stays
+   interactive throughout. */
+m3e-icon-button:active > m3e-icon { animation: lb-icon-press 160ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)); }
+@keyframes lb-icon-press {
+  0% { transform: scale(1) rotate(0deg); }
+  45% { transform: scale(0.82) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
 .lb-dock-pill {
   transition: transform var(--md-sys-motion-duration-medium-4, 400ms) var(--m3e-spring), opacity var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1));
 }
@@ -1168,6 +1150,10 @@ m3e-icon-button:active { transform: scale(0.88); }
   .lb-tb-ac-item { animation: none; }
   .lb-toolbar.lb-flash::after { animation: none; opacity: 0; }
   m3e-icon-button:active { transform: none; }
+  m3e-icon-button:active > m3e-icon { animation: none; }
+  /* The dt sheet entrance freeze also covers the @starting-style
+     entrance below: no slide for reduced-motion users. */
+  .lb-dt-sheet { transition: none; }
 }
 
 /* ---- New tab page ---- */
@@ -1334,18 +1320,45 @@ border-radius: var(--m3e-shape-lg);
 .lb-newtab { animation: lb-fade-in var(--md-sys-motion-duration-medium-1, 250ms) var(--md-sys-motion-easing-emphasized, cubic-bezier(0.2, 0, 0, 1)); }
 
 /* ---- DevTools diagnostics ---- */
-.lb-diag-counts { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space100, 8px); margin-bottom: var(--md-sys-measurement-space150, 12px); }
-.lb-diag-chip {
+/* 2026-11-23 report: the NativeTransit / Rewrite-routed text badges
+   became two compact m3e-cards (label over an expressive-weight
+   number), a slim centered divider, and the engine-event ring as
+   m3e-list rows rendered on demand (the IntersectionObserver
+   sentinel grows the window). */
+.lb-diag-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--md-sys-measurement-space100, 8px); }
+/* Compact but legible: the count cards sit over the sheet frost as
+   glass lifts (the .lb-dt-card block below carries the paint), this
+   rule keeps the geometry small so both cards read as one pair. */
+.lb-diag-card { min-width: 0; }
+.lb-diag-card-body { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space25, 2px); padding: var(--md-sys-measurement-space75, 6px) var(--md-sys-measurement-space100, 8px); }
+.lb-diag-card-body .lb-diag-card-title {
   font-size: var(--md-sys-typescale-label-medium-font-size, 12px);
-  padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space125, 10px);
-  border-radius: var(--md-sys-shape-corner-full, 999px);
-  background: color-mix(in srgb, var(--md-sys-color-on-surface-variant) 14%, transparent);
   color: var(--md-sys-color-on-surface-variant);
   font-variation-settings: "wght" var(--lb-wght-medium);
+}
+.lb-diag-card-body .lb-diag-card-num {
+  font-size: var(--md-sys-typescale-headline-small-font-size, 24px);
+  line-height: 1;
+  font-variation-settings: "wght" var(--lb-wght-display);
   font-variant-numeric: tabular-nums;
 }
-.lb-diag-chip.lb-diag-ok { background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 70%, transparent); color: var(--md-sys-color-on-tertiary-container); }
-.lb-diag-chip.lb-diag-bad { background: color-mix(in srgb, var(--md-sys-color-error-container) 70%, transparent); color: var(--md-sys-color-on-error-container); }
+/* The divider sits mid-range: breathing room from the cards above
+   and the list below, but never a full 16px block of dead space. */
+.lb-diag-sep { margin: var(--md-sys-measurement-space150, 12px) 0; }
+/* The engine-event ring: m3e-list rows with hover and pressed
+   affordances; the open row lifts with a surface tint so the
+   expanded supporting text reads inside its parent row. */
+.lb-diag-list { width: 100%; }
+.lb-diag-item { cursor: pointer; border-radius: var(--md-sys-shape-corner-small, 8px); transition: background-color 160ms cubic-bezier(0.2, 0, 0, 1); }
+.lb-diag-item:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.lb-diag-item:active { background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent); }
+.lb-diag-item.open { background: var(--lb-glass-lift); }
+.lb-diag-item-line { flex: 1; min-width: 0; display: flex; gap: var(--md-sys-measurement-space75, 6px); align-items: baseline; }
+/* Cross-navigation history boundary marker. */
+.lb-diag-boundary { margin: var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space100, 8px) var(--md-sys-measurement-space25, 2px); font-size: 0.75em; }
+/* Windowing sentinel: an invisible sliver that only exists so its
+   intersection can grow the rendered window. */
+.lb-diag-more { height: var(--md-sys-measurement-space50, 4px); }
 
 
 /* Real frosted glass: every surface that
@@ -1820,7 +1833,11 @@ body .lb-ext-panel {
 /* ---- AI mode (beta-only): view, messages, chatbar ---- */
 .app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); padding-bottom: 0; overflow: hidden; }
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
-.lb-ai { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+/* 2026-11-23 report: the AI page shares the Home view's random
+   background. The isolation keeps the background's z-index -1
+   inside this view (it paints above the app shell, below the
+   frosted message area) instead of sliding behind the whole app. */
+.lb-ai { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
 
 .lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
 .lb-ai-quota-out { color: var(--md-sys-color-error, #f2b8b5); }
@@ -1954,6 +1971,18 @@ body .lb-ext-panel {
 /* Settled-turn counters at the very end of an answer: total tokens
    (main model plus every sub agent) and the wall-clock elapsed. */
 .lb-ai-meta { display: flex; flex-wrap: wrap; gap: var(--md-sys-measurement-space150, 12px); padding: 2px var(--md-sys-measurement-space100, 8px); font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); font-variant-numeric: tabular-nums; }
+/* 2026-11-23 report: hover reveals a copy icon under the elapsed
+   time; it copies the full response text. The meta row gets the
+   button in flow so the elapsed numbers never shift, and the button
+   itself stays focusable for keyboard users even while visually
+   quiet (focus-visible lights it up). */
+.lb-ai-meta .lb-ai-copy { opacity: 0; transition: opacity 160ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)); }
+/* Compact glyph button so the meta row keeps its quiet one-line
+   rhythm (the m3e touch target shrinks to a 28px inline affordance
+   here alone; the real buttons in the sheet bar keep 48px). */
+.lb-ai-meta .lb-ai-copy { --m3e-icon-button-container-height: 28px; --m3e-icon-button-icon-size: 16px; margin: -4px 0; }
+.lb-ai-meta:hover .lb-ai-copy, .lb-ai-meta .lb-ai-copy:focus-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .lb-ai-meta .lb-ai-copy { transition: none; } }
 
 /* Rail icon: the AI glyph is an inline SVG (the bundled ligature set
    has gaps), sized like the sibling m3e icons. */
@@ -2447,6 +2476,16 @@ background: var(--lb-glass-tint);
 @media (min-width: 601px) {
   .lb-dt-sheet, .lb-tabs-sheet { left: calc(50% + 48px); }
 }
+/* DevTools entrance (2026-11-23 report): the non-modal sheet host
+   animates its own open/close through a transform transition, but
+   DevTools unmounts 280ms after close, so every open mounts the
+   sheet fresh with [open] already set - there is never a closed
+   state to transition from, and the sheet popped in with no
+   entrance while every other sheet slid. @starting-style hands
+   the freshly mounted open sheet the same off-screen transform
+   the host uses while closed, so the first paint starts below the
+   fold and the host's own medium2 transition slides it up. */
+@starting-style { .lb-dt-sheet[open] { transform: translateX(-50%) translateY(100%); } }
 /* AI status chip (demo .stat): the top-level ToolRow is a bare pill, 26px morphing shape, label, duration, then the chevron flipping 180deg. Rows nested in the expanded body are the demo's .step cards. */
 .lb-ai-tool { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; border-radius: 0; padding: 0; gap: 8px; }
 .lb-ai-tool-btn { align-self: flex-start; gap: 10px; padding: 4px 14px 4px 4px; min-height: 36px; border-radius: 999px; font-size: .86rem; color: color-mix(in srgb, var(--md-sys-color-on-surface, #f0dfdb) 58%, transparent); transition: background-color .4s cubic-bezier(.2, 0, 0, 1); }
@@ -2485,7 +2524,7 @@ background: var(--lb-glass-tint);
    widening the field means dropping a control or breaking the 48px
    touch-target floor. 130px is the a11y-respecting minimum. */
 @media (max-width: 600px) {
-  #lb-forward-btn, #lb-newtab-btn { display: none; }
+  #lb-forward-btn { display: none; /* phone toolbar: forward hides; new tab now lives in the Tabs sheet */ }
   .lb-tb-pill { min-width: 130px; }
 }
 
@@ -2506,11 +2545,23 @@ background: var(--lb-glass-tint);
   --m3e-standard-icon-button-unselected-container-color: transparent;
   --m3e-standard-icon-button-selected-container-color: transparent;
   flex: none; max-width: 64px; transition: max-width 500ms cubic-bezier(.38, 1.21, .22, 1), opacity 200ms cubic-bezier(.34, .8, .34, 1), transform 500ms cubic-bezier(.38, 1.21, .22, 1); }
-.lb-toolbar.editing m3e-icon-button { max-width: 0; opacity: 0; transform: scale(.4); pointer-events: none; overflow: hidden; }
+.lb-toolbar.editing m3e-icon-button { max-width: 0; opacity: 0; transform: translateX(-56px); pointer-events: none; overflow: hidden; }
+/* The trail cluster slides out to the right instead of the lead's
+   left; both exit the pill on their own side, so the collapse reads
+   as the buttons leaving the field, not squashing in place. */
+.lb-toolbar.editing .lb-tb-trail m3e-icon-button { transform: translateX(56px); }
 .lb-toolbar.editing .lb-tb-trail m3e-menu { display: none; }
 .lb-tb-zone { transition: gap 500ms cubic-bezier(.38, 1.21, .22, 1); }
 .lb-toolbar.editing .lb-tb-zone { gap: 0; }
-.lb-toolbar.editing .lb-tb-pill { width: min(92vw, 440px); border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }
+/* Frame-locked edit morph: the pill widens to the toolbar's own
+   resting width (pegged by the Browser frame-lock effect through
+   --lb-tb-edit-w) instead of min(92vw, 440px), so neither the pill
+   wrapper nor the toolbar ever grows past the resting chrome. */
+.lb-toolbar.editing .lb-tb-pill { width: var(--lb-tb-edit-w, min(92vw, 440px)); margin-inline: 0; border-radius: 14px; background: var(--md-sys-color-surface-container-highest, #3d322f); color: inherit; }
+/* The frame-locked width can exceed the trim's 440px expanded cap on
+   wide screens; the editing morph owns the full resting frame, so the
+   cap must not silently clip the field short of the toolbar edge. */
+.lb-toolbar.editing .lb-tb-pill.expanded { max-width: none; }
 
 /* The wrapper carries the elevation shadow; without a radius that shadow is a square halo around the pill. */
 .lb-dock-pill { border-radius: 999px; }
@@ -2609,25 +2660,16 @@ background: var(--lb-glass-tint);
   position: absolute; right: var(--md-sys-measurement-space150); bottom: var(--md-sys-measurement-space150); z-index: 2;
   animation: lb-dt-line var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-expressive-spatial, cubic-bezier(0.27, 1.06, 0.18, 1)) both;
 }
-.lb-dt-search { flex: 1 1 200px; min-width: 0; }
+/* The Network tab's URL filter bar left with the tab itself. */
 .lb-dt-run { flex: 1; min-width: 0; }
 .lb-dt-run .lb-console-area { font-family: ui-monospace, monospace; resize: none; }
 .lb-net { display: flex; flex-direction: column; gap: var(--md-sys-measurement-space100); }
-.lb-net-row {
-  border-bottom: 0;
-  --m3e-expansion-panel-container-color: var(--lb-glass-lift);
-  /* In-sheet sub-card glass like .lb-dt-card: the frosted host
-     carries the card shape so the expansion rows read as glass
-     pills over the sheet instead of opaque surface boxes. */
-  border-radius: var(--md-sys-shape-corner-large-increased, 20px);
-  backdrop-filter: var(--lb-glass-blur);
-  -webkit-backdrop-filter: var(--lb-glass-blur);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
-}
+/* The old expansion-panel request rows left with the Network tab:
+   the diagnostic ring is m3e-list rows (.lb-diag-item) now. */
 .lb-net-summary { padding: var(--md-sys-measurement-space50) var(--md-sys-measurement-space100); min-width: 0; width: 100%; align-items: center; }
 .lb-net-status { padding: var(--md-sys-measurement-space25, 2px) var(--md-sys-measurement-space100, 8px); border-radius: var(--md-sys-shape-corner-full, 999px); font-size: var(--md-sys-typescale-label-small-font-size, 11px); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .lb-console-line, .lb-dt-fab { animation: none; } }
-@media (max-width: 480px) { .lb-dt-nav-btn m3e-icon { display: none; } .lb-dt-nav-group { max-width: 100%; } }
+@media (max-width: 480px) { .lb-dt-nav-tabs m3e-tab m3e-icon { display: none; } .lb-dt-nav-tabs { max-width: 100%; } }
 .lb-console-input { align-items: flex-start; }
 
 /* Home background (HomeBg.tsx): Aurora or Shapes, random per page load.

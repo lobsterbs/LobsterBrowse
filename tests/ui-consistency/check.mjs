@@ -54,11 +54,15 @@ has(theme, ".lb-tb-favicon { width: 16px; height: 16px; border-radius: 4px; }", 
 has(theme, "box-shadow: var(--md-sys-elevation-level2);", "ext notes ride level-2 elevation");
 none(theme, "0 4px 12px rgba(0, 0, 0, 0.35)", "ext note raw shadow gone");
 
-/* AI chips: concrete evergreen prompts, still wired to setDraft. */
-for (const old of ['"Search the web"', '"Spawn a sub agent"', '"Summarize this page"'])
+/* AI chips (2026-11-23 flip): the math prompt stays first; the other
+   two roll from a generic pool per page visit. The retired
+   dev-facing strings must stay out. */
+for (const old of ['"Search the web"', '"Spawn a sub agent"', '"Summarize this page"', '"Explain error: ERR_CONNECTION_RESET"', '"Summarize this tab\'s page"'])
   none(ai, old, "retired AI chip string still present");
-for (const t of ["Solve this: 17 * 24 - 96", "Explain error: ERR_CONNECTION_RESET", "Summarize this tab's page"])
-  has(ai, '"' + t + '"', "AI chip missing");
+has(ai, '"Solve this: 17 * 24 - 96"', "the math starter stays");
+has(ai, "SUGGESTION_POOL", "the generic suggestion pool exists");
+has(ai, "rollSuggestions", "the pair is rolled per visit");
+has(ai, "const [suggestions] = useState(rollSuggestions);", "the roll happens once per mount (lazy init)");
 has(ai, "onClick={() => { setDraft(t); focusComposer(); }}", "chips must keep filling the composer draft and land focus");
 
 /* CI registration. */

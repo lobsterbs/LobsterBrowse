@@ -169,15 +169,9 @@ export default function ExtManage() {
         </div>
       </m3e-dialog>
       {list === null && busy ? (
-        <div className="lb-ext-list" aria-hidden={true}>
-          {[0, 1, 2].map((i) => (
-            <m3e-skeleton animation="wave" shape="rounded" key={i} {...{ class: "lb-ext-skel-row" }}>
-              <div className="lb-ext-skel-ava" />
-              <div className="lb-ext-skel-name" />
-              <div className="lb-ext-skel-ver" />
-            </m3e-skeleton>
-          ))}
-        </div>
+        /* #64: the pending list reads as loading via a quiet note,
+           never as "no extensions installed". */
+        <p className="lb-ext-note" aria-live="polite">Loading extensions…</p>
       ) : list === null ? (
         <p className="lb-ext-note">
           {error

@@ -80,13 +80,17 @@ assert.ok(theme.includes(".lb-tb-pill.expanded { max-width: min(92vw, 440px); }"
 assert.ok(theme.includes(".lb-toolbar.editing { --m3e-toolbar-spacing: 0px; }"), "editing closes the row spacing");
 assert.ok(theme.includes(".lb-tb-pill { interpolate-size: allow-keywords; width: max-content; min-width: 130px; max-width: clamp(130px, 28vw, 280px); }"), "the resting hug trim remains");
 
-/* 10. Skeleton: real blocks, gentle breathe, no black flash. */
+/* 10. Skeleton (2026-11-23 flip): the page-load skeleton is fully
+   removed everywhere - Browser renders no .lb-sk tree, the CSS has
+   no .lb-sk rules, and the extensions panels show a quiet note
+   instead of m3e-skeleton rows. */
 assert.ok(!theme.includes("background: #000;"), "the black frame is gone");
-assert.ok(!browser.includes('<m3e-skeleton animation="pulse">'), "the giant empty pulse skeleton is gone");
-assert.ok(theme.includes("animation: lb-sk-breathe 2s var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)) infinite;"), "the blocks breathe on one slow shared pulse");
-assert.ok(theme.includes(".lb-sk-head { width: 42%; height: 24px; border-radius: var(--md-sys-shape-corner-small, 8px); flex: 0 0 auto; background: var(--md-sys-color-surface-container-highest"), "the mock blocks are painted");
-assert.ok(browser.includes("lb-sk-chips"), "the skeleton carries a chip row");
-assert.ok(theme.includes(".lb-sk, .lb-sk-page { animation: none; }"), "the skeleton rests under reduced motion");
+assert.ok(!theme.includes(".lb-sk"), "the skeleton CSS is fully removed");
+assert.ok(!browser.includes("lb-sk"), "Browser renders no skeleton tree");
+const ext1 = read("../../ui/src/browser/ExtManage.tsx");
+const ext2 = read("../../ui/src/browser/ExtensionsPanel.tsx");
+assert.ok(!ext1.includes("m3e-skeleton") && !ext2.includes("m3e-skeleton"), "the extensions panels render no skeleton rows");
+assert.ok(ext1.includes("Loading extensions") && ext2.includes("Loading extensions"), "each panel carries the quiet loading note");
 
 /* CI runs this check. */
 assert.ok(ci.includes("../tests/ui-wave116/check.mjs"), "ci.yml runs the wave 116 gate");

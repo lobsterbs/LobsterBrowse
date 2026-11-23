@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { m3eAttrs } from "../browser/browserShared";
+import { copyText, m3eAttrs } from "../browser/browserShared";
 import {
   AI_MODELS,
   aiSearch,
@@ -30,6 +30,7 @@ import {
 import { Markdown } from "../ai/Markdown";
 import { formatElapsed } from "../ai/metrics";
 import { StatRow, StepCard } from "../ai/ToolRow";
+import HomeBg from "./HomeBg";
 
 /* AI mode (beta-only). The Cloudflare Workers AI key lives on the
    server: sends go to this origin's /ai/chat proxy, which enforces
@@ -44,6 +45,31 @@ import { StatRow, StepCard } from "../ai/ToolRow";
    aiStore.ts. */
 
 const QUOTA_MAX = 50;
+
+/* 2026-11-23 report: the starter chips rotate. The math prompt stays
+   first (it teaches the plain-text math rule); the other two draw
+   from a generic pool, re-rolled every time the AI page mounts, so
+   returning to the view changes what the user is invited to try. */
+const MATH_PROMPT = "Solve this: 17 * 24 - 96";
+const SUGGESTION_POOL = [
+  "What should I make for dinner tonight?",
+  "Help me write a short birthday message",
+  "Plan a relaxed weekend trip nearby",
+  "How can I stay focused while studying?",
+  "Recommend a book I might enjoy",
+  "Tips for keeping a small garden alive?",
+  "When is sunset today?",
+  "Help me draft a friendly out-of-office reply",
+];
+const rollSuggestions = (): string[] => {
+  const pool = [...SUGGESTION_POOL];
+  const out = [MATH_PROMPT];
+  /* Two distinct draws on top of the math prompt; splice removes the
+     pick so the pair never repeats itself. */
+  while (out.length < 3 && pool.length > 0)
+    out.push(...pool.splice(Math.floor(Math.random() * pool.length), 1));
+  return out;
+};
 
 type Phase = "idle" | "searching" | "thinking" | "streaming" | "subagent";
 
@@ -158,6 +184,12 @@ export default function AiPage() {
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<AiMsg[]>([]);
   const [draft, setDraft] = useState("");
+  /* Starter chips: math first, two rolled from the pool per mount
+     (lazy init, so the roll happens once per page visit, not per
+     render). */
+  const [suggestions] = useState(rollSuggestions);
+  /* Flash the copied message's meta icon to a check for a beat. */
+  const [copiedAt, setCopiedAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   /* Per-turn step durations (ms), shown beside settled tool rows. */
@@ -380,6 +412,8 @@ export default function AiPage() {
       "Be concise and accurate. " +
       "You can call the web_search tool whenever the question benefits from current web information " +
       "(news, prices, releases, anything recent or uncertain); answer citing the results by number. " +
+      "Write citations plainly as (1) or (2) in the sentence; never emit bracket-dagger markers like 【1†source 1】 - " +
+      "the UI renders raw text and those glyphs read as broken output. " +
       "You can call spawn_agent to delegate a self-contained subtask to a sub agent (Gemma) " +
       "that can search the web itself; each answer returns to you as its tool result. " +
       "Spawn multiple sub agents in parallel when the work splits into independent research threads. " +
@@ -657,6 +691,10 @@ export default function AiPage() {
 
   return (
     <div className="lb-ai">
+      {/* The AI page shares the Home view's random background
+          (aurora or shapes): backdrop-only, behind everything, the
+          sheet frost of the message area sits on top. */}
+      <HomeBg />
       <m3e-icon-button
         {...{ class: "lb-ai-hist-btn" }}
         aria-label="Conversation history"
@@ -675,7 +713,7 @@ export default function AiPage() {
             How can I<br />help today?
             <div className="lb-ai-sugs">
               <m3e-chip-set aria-label="Suggestions">
-                {["Solve this: 17 * 24 - 96", "Explain error: ERR_CONNECTION_RESET", "Summarize this tab's page"].map((t) => (
+                {suggestions.map((t) => (
                   <m3e-chip key={t} variant="elevated" onClick={() => { setDraft(t); focusComposer(); }}>{t}</m3e-chip>
                 ))}
               </m3e-chip-set>
@@ -755,6 +793,25 @@ export default function AiPage() {
               {m.role === "assistant" && !busy && m.ms != null && (
                 <div className="lb-ai-meta">
                   <span>{formatElapsed(m.ms)}</span>
+                  {/* Hover-revealed copy of the full response text
+                      right under the elapsed time; the icon flashes
+                      to a check for a beat once the copy lands. */}
+                  <m3e-icon-button
+                    {...{ class: "lb-ai-copy" }}
+                    aria-label="Copy response"
+                    onClick={() => {
+                      void copyText(m.text ?? "").then((ok) => {
+                        if (!ok) {
+                          toast("Copy failed.");
+                          return;
+                        }
+                        setCopiedAt(i);
+                        window.setTimeout(() => setCopiedAt((c) => (c === i ? null : c)), 1200);
+                      });
+                    }}
+                  >
+                    <m3e-icon name={copiedAt === i ? "check" : "content_copy"} aria-hidden={true} />
+                  </m3e-icon-button>
                 </div>
               )}
             </div>

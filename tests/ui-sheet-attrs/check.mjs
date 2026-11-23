@@ -43,10 +43,12 @@ for (const [file, want] of Object.entries(sheets)) {
   assert.ok(!t.includes('detents="'), file + " has no attribute-shaped detents prop");
 }
 
-/* The DevTools picker segments restore their toggle attribute through
-   the same helper; the JSX prop was silently a falsy "" property. */
+/* 2026-11-23: the DevTools picker segments left with the connected
+   button group (an m3e-tabs bar owns the semantics now); the
+   toggle-attribute helper contract applies to nothing there. */
 const d = read("../../ui/src/pages/DevTools.tsx");
-assert.ok(d.includes('m3eAttrs(el, { toggle: "" })'), "every DevTools segment restores its toggle attribute");
+assert.ok(!d.includes('m3eAttrs(el, { toggle: "" })'), "the retired segment toggle helper stays out");
+assert.ok(d.includes("m3eAttrs"), "DevTools keeps the shared attribute helper for its sheet attributes");
 
 /* No attribute-shaped sheet props hide anywhere else in the tree. */
 const walk = (dir) => {

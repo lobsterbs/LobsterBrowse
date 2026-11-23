@@ -432,6 +432,18 @@ const ZERO_WIDTH_RE = /[\u200b\u200c\u200d\u2060\ufeff]/g;
 const HARMONY_CHANNEL_RE = /(<\|channel\|>\s*(?:analysis|final)\s*(?:<\|message\|>)?)/gi;
 const HARMONY_DEGENERATE_RE = /<\|start\|>\s*assistant\s*(analysis|final)\b/gi;
 
+/* 2026-11-23 report: the model answered ERR_CONNECTION_RESET with
+   bracket-dagger web-citation markers (【1†source 1】, 【2†source 2】)
+   pasted straight from its search snippets. LB has no citation UI:
+   the glyphs render as machine junk in the answer. The scrubber is
+   idempotent (stripping once leaves no residue to strip again) and
+   leaves plain (1)/(2) style citations untouched. */
+const CITE_MARK_RE = / ?【\s*\d+\s*†[^】]*】/gu;
+
+export function stripCiteMarks(t: string): string {
+  return t.replace(CITE_MARK_RE, "");
+}
+
 const harmonyClean = (t: string): string =>
   t.replace(HARMONY_START_RE, "").replace(HARMONY_TOKEN_RE, "").replace(ZERO_WIDTH_RE, "");
 
@@ -444,19 +456,19 @@ const harmonyClean = (t: string): string =>
    <|start|>assistantfinal glue (channel token eaten by the model)
    normalizes to a channel marker first. */
 export function splitHarmony(s: string): { analysis: string; final: string } {
-  if (!s.includes("<|")) return { analysis: "", final: s.replace(ZERO_WIDTH_RE, "") };
+  if (!s.includes("<|")) return { analysis: "", final: stripCiteMarks(s.replace(ZERO_WIDTH_RE, "")) };
   const marked = s.replace(
     HARMONY_DEGENERATE_RE,
     (_m: string, ch: string) => "<|channel|>" + ch.toLowerCase()
   );
   const parts = marked.replace(HARMONY_START_RE, "").split(HARMONY_CHANNEL_RE);
-  if (parts.length === 1) return { analysis: "", final: harmonyClean(parts[0]) };
+  if (parts.length === 1) return { analysis: "", final: stripCiteMarks(harmonyClean(parts[0])) };
   let analysis = "";
-  let final = harmonyClean(parts[0] ?? "");
+  let final = stripCiteMarks(harmonyClean(parts[0] ?? ""));
   for (let i = 1; i < parts.length; i += 2) {
     const body = harmonyClean(parts[i + 1] ?? "");
     if (/analysis/i.test(parts[i] ?? "")) analysis += body;
-    else final += body;
+    else final += stripCiteMarks(body);
   }
   return { analysis, final };
 }

@@ -168,20 +168,9 @@ export default function ExtensionsPanel(props: {
         </div>
       </m3e-dialog>
       {props.list === null && props.busy ? (
-        /* #64: skeleton rows in the exact real-row metrics (28px
-           avatar, flex-1 name bar, fixed version bar) so the pending
-           list reads as loading, never as "no extensions installed".
-           Same shape as the page-load skeleton: sized divs slotted
-           into a flex m3e-skeleton. */
-        <div className="lb-ext-list" aria-hidden={true}>
-          {[0, 1, 2].map((i) => (
-            <m3e-skeleton animation="wave" shape="rounded" key={i} {...{ class: "lb-ext-skel-row" }}>
-              <div className="lb-ext-skel-ava" />
-              <div className="lb-ext-skel-name" />
-              <div className="lb-ext-skel-ver" />
-            </m3e-skeleton>
-          ))}
-        </div>
+        /* #64: the pending list reads as loading via a quiet note,
+           never as "no extensions installed". */
+        <p className="lb-ext-note" aria-live="polite">Loading extensions…</p>
       ) : props.list === null ? (
         <p className="lb-ext-note">
           {props.error

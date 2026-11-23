@@ -47,7 +47,7 @@ declare module "react" {
       "m3e-chip-set": M3eBase & { vertical?: boolean };
       "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
       "m3e-list": M3eBase;
-      "m3e-list-item": M3eBase;
+      "m3e-list-item": M3eBase & { role?: string; tabIndex?: number; "aria-expanded"?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
       "m3e-nav-menu": M3eBase;
       "m3e-nav-menu-item": M3eBase & { open?: boolean };
       "m3e-nav-rail": M3eBase & { mode?: string };
@@ -73,7 +73,7 @@ declare module "react" {
       "m3e-linear-progress-indicator": M3eBase & { value?: string | number; max?: string | number; mode?: string; variant?: string; "buffer-value"?: string | number };
       "m3e-circular-progress-indicator": M3eBase & { value?: string | number; max?: string | number; indeterminate?: boolean | string; variant?: string };
       "m3e-tabs": M3eBase & { variant?: string; stretch?: boolean | string; "header-position"?: string; "disable-pagination"?: boolean | string };
-      "m3e-tab": M3eBase & { for?: string; selected?: boolean | string; disabled?: boolean };
+      "m3e-tab": M3eBase & { for?: string; selected?: boolean | string; disabled?: boolean; "aria-current"?: string };
       "m3e-tab-panel": M3eBase & { id?: string };
       "m3e-slider": M3eBase & { min?: string | number; max?: string | number; step?: string | number };
       "m3e-slider-thumb": M3eBase & { value?: string | number };

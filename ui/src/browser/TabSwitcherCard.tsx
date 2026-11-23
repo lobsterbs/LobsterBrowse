@@ -106,6 +106,18 @@ export default function TabSwitcherCard(props: {
           <m3e-icon name="arrow_back" aria-hidden={true} />
         </m3e-icon-button>
         <span slot="title">Tabs</span>
+        {/* New tab lives here (moved out of the toolbar): a plain
+            icon button in the sheet bar next to the title, matching
+            the other bottom-sheet app bars. */}
+        <m3e-icon-button
+          slot="trailing"
+          id="lb-tabs-newtab-btn"
+          aria-label="New tab"
+          onClick={props.onNewTab}
+        >
+          <m3e-icon name="add" aria-hidden={true} />
+        </m3e-icon-button>
+        <m3e-tooltip for="lb-tabs-newtab-btn" position="above">New tab</m3e-tooltip>
         {props.onCloseAll && closableCount > 0 && (
           <m3e-button
             slot="trailing"

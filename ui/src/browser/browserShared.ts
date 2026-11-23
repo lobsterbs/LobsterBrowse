@@ -70,3 +70,33 @@ export function m3eAttrs(el: Element | null, attrs: Record<string, string>): voi
     el.setAttribute(name, attrs[name]);
   }
 }
+
+/* Honest clipboard write: navigator.clipboard can be absent or reject
+   (permissions policy, window not focused) while the page is still
+   usable, so fall back to a hidden textarea + execCommand inside the
+   same user gesture. Returns true only when the bytes landed. Shared
+   by the DevTools sheet copy actions and the AI response copy. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to execCommand */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}

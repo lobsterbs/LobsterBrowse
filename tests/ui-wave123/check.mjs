@@ -20,16 +20,24 @@ if (!consoleRegion) throw new Error('console page region not found');
 if (consoleRegion.includes('m3e-search-bar') || consoleRegion.includes('lb-dt-search')) throw new Error('console still has a filter search bar');
 if (d.includes('consoleFilter')) throw new Error('console filter state survived');
 if (d.includes('No matching entries.')) throw new Error('filtered-empty copy survived with no filter');
-if (!d.includes('Clear console') || !d.includes('Copy console output')) throw new Error('clear/copy actions lost');
+/* 2026-11-23: the broom + console-copy toolbar left the console page;
+   copying rides the header copy button (page-aware: console log when
+   the Console page is open) and clearing stays the `clear` command. */
+if (d.includes('Clear console') || d.includes('Copy console output')) throw new Error('the console toolbar actions must stay gone (header copy is page-aware)');
+if (!d.includes('if (code === "clear")')) throw new Error('the clear command still works from the console input');
+if (!d.includes('Console copied') || !d.includes('Diagnostics copied')) throw new Error('the header copy button reports per-page copies');
 if (!d.includes('Console output will appear here.')) throw new Error('quiet empty state lost');
 
-/* Network page keeps its URL filter bar layout. */
-if (!theme.includes('.lb-dt-search { flex: 1 1 200px; min-width: 0; }')) throw new Error('network filter bar lost its layout rule');
+/* 2026-11-23: the network URL filter bar left with the Network tab. */
+if (theme.includes('.lb-dt-search')) throw new Error('the retired network filter bar rule must stay gone');
+if (d.includes('lb-dt-search')) throw new Error('the DevTools sheet has no filter search bar left');
 
-/* 2. Glass diag rows. */
-if (!theme.includes('.lb-net-row {\n  border-bottom: 0;\n  --m3e-expansion-panel-container-color: var(--lb-glass-lift);')) throw new Error('net rows lost the glass lift');
-if (!theme.includes('.lb-net-row {') || theme.split('.lb-net-row {').length - 1 !== 2) throw new Error('net row rule count changed');
-if (!/\.lb-net-row \{[^}]*border-radius: var\(\--md-sys-shape-corner-large-increased, 20px\)[^}]*\}/.test(theme)) throw new Error("net rows lost the rounded host");
+/* 2. Diagnostics ring: m3e-list rows, not glass expansion panels. */
+if (theme.includes('.lb-net-row {')) throw new Error('the retired net-row glass block must stay gone');
+if (theme.split('.lb-net-row').length - 1 !== 0) throw new Error('no net-row rules may remain');
+if (!/\.lb-diag-item \{[^}]*cursor: pointer/.test(theme)) throw new Error('the ring rows are real pointer rows');
+if (!theme.includes('.lb-diag-item.open { background: var(--lb-glass-lift); }')) throw new Error('the open row lifts on glass');
+if (!theme.includes('.lb-diag-list')) throw new Error('the ring renders as an m3e-list');
 
 /* 3. Ad hero centering. */
 if (!theme.includes('.lb-ad-hero-shape {\n  --m3e-shape-size: 56px;\n  --m3e-shape-container-color: var(--md-sys-color-secondary-container, #4a4458);\n  /* The shape paints as an absolute-fill SVG while slotted content\n     sits in normal flow at the top left, so the shield centers with\n     the wave-116 tab-favicon pattern: fixed-size icon, inset 0\n     margin auto. */\n  position: relative;')) throw new Error('hero shape lost relative positioning');

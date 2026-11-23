@@ -31,7 +31,7 @@ assert.ok(theme.includes("grid-template-rows var(--md-sys-motion-duration-medium
 assert.ok(theme.includes(".lb-setp-discin { min-height: 0; overflow: hidden; }"), "the inner wrapper height-caps the track");
 assert.ok(theme.includes('.lb-setp-toggle[aria-expanded="true"] .lb-setp-chev { transform: rotate(180deg); }'), "the chevron rotates open");
 assert.ok(theme.includes("  .lb-setp-disc, .lb-setp-disc .lb-setp-body, .lb-setp-chev { transition: none; }"), "reduced motion freezes the disclosure");
-assert.ok(!theme.includes("m3e-expansion-header-collapsed-height") && theme.split("--m3e-expansion-panel-container-color").length - 1 === 1 && theme.includes(".lb-net-row {\n  border-bottom: 0;\n  --m3e-expansion-panel-container-color: var(--lb-glass-lift);"), "retired panel tokens left the settings sheet; container-color rides only the devtools net row (glass)");
+assert.ok(!theme.includes("m3e-expansion-header-collapsed-height") && !theme.includes("--m3e-expansion-panel-container-color") && !theme.includes(".lb-net-row {"), "retired panel tokens left everywhere: the devtools net-row container-color left with the Network tab (2026-11-23)");
 assert.ok(theme.includes(".lb-setp {") && theme.includes("background: var(--lb-glass-tint);"), "the card surface keeps the glass family");
 assert.ok(theme.includes("border-radius: var(--md-sys-shape-corner-large-increased, 20px);"), "the card keeps the corner-large shape");
 assert.ok(theme.includes("padding: var(--md-sys-measurement-space150) var(--md-sys-measurement-space200) var(--md-sys-measurement-space200);"), "the body keeps the 12/16/16 rhythm");

@@ -22,6 +22,17 @@ ok(!theme.includes(".lb-toolbar.editing .lb-tb-trail {"), "the trail no longer b
 ok(theme.includes(".lb-toolbar.editing .lb-tb-trail m3e-menu { display: none; }"), "the closed overflow menu stays display-locked while editing");
 ok(theme.includes(".lb-tb-zone { transition: gap 500ms"), "zone gaps ride the same spring");
 ok(theme.includes(".lb-tb-pill, .lb-tb-zone { transition: none; }"), "reduced motion freezes pill and zones");
+/* 2026-11-23 frame lock: the pill morphs INSIDE the resting toolbar
+   (its edit width is pegged by the Browser effect through
+   --lb-tb-edit-w), the buttons slide out of the pill on their own
+   side instead of squashing in place, and nothing widens past the
+   resting chrome. */
+ok(theme.includes("width: var(--lb-tb-edit-w, min(92vw, 440px));"), "the edit morph rides the frame-locked width var");
+ok(theme.includes(".lb-toolbar.editing .lb-tb-pill { width: var(--lb-tb-edit-w"), "the editing rule owns the var");
+ok(theme.includes("transform: translateX(-56px);"), "the lead buttons slide out left");
+ok(theme.includes(".lb-toolbar.editing .lb-tb-trail m3e-icon-button { transform: translateX(56px); }"), "the trail buttons slide out right");
+ok(!theme.includes("transform: scale(.4);"), "the squash press is retired");
+ok(theme.includes(".lb-toolbar.editing .lb-tb-pill.expanded { max-width: none; }"), "the trim cap cannot clip the frame-locked width");
 ok(ci.includes("tests/omnibox-morph/check.mjs"), "CI runs the omnibox morph check");
 process.exit(fails ? 1 : 0);
 

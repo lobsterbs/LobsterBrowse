@@ -1,29 +1,33 @@
-/* DevTools - console / network / diagnostics for the currently
-   selected proxy tab, in an @m3e/web bottom sheet. Each tab keeps its
-   own state.
+/* DevTools - console / diagnostics for the currently selected proxy
+   tab, in an @m3e/web bottom sheet. Each page keeps its own state.
 
-   Redesign: the old floating card lives on
-   as DevToolsLegacy.tsx (not imported; kept for rollback). The
-   panel hosts in the m3e-bottom-sheet; the sub-tool picker (Console /
-   Network / Diagnostics) is a connected m3e-button-group of toggle
-   segments, and all three pages render their content bare, directly
-   in the sheet, with per-page footers for filters and actions.
+   Redesign: the old floating card lives on as DevToolsLegacy.tsx
+   (not imported; kept for rollback). The panel hosts in the
+   m3e-bottom-sheet; the sub-tool picker (Console / Diagnostics,
+   2026-11-23: the broken Network page is gone) is a real m3e-tabs
+   bar, and both pages render their content bare, directly in the
+   sheet.
 
-   Console and network render bare like diagnostics, the level
-   filter chips are gone, and all three pages stay mounted ([hidden]
-   toggle, no remount churn).
+   Both pages stay mounted ([hidden] toggle, no remount churn); the
+   tabs bar owns the radiogroup semantics and the change event flows
+   back into React state like every other M3E control wiring.
+
+   Diagnostics renders its transport counts as two compact m3e-cards
+   (label over an expressive-weight number), a centered m3e-divider,
+   then the retained event ring as m3e-list rows (press a row for the
+   detailed record), windowed so only the rows the reader actually
+   reaches are ever rendered.
 
    Proxied pages ride the engine's split content origin, so the frame
    is usually cross-origin to the app: iframe.contentWindow.eval then
    throws SecurityError, and the console says so together with the
    two working routes (the page's own F12 DevTools, or the debug-menu
    Split content origin toggle). Same-origin frames still eval
-   directly. Console and network events arrive over the engine's
-   control plane for every proxied document either way. */
+   directly. Console events arrive over the engine's control plane for
+   every proxied document either way. */
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { type Tab } from "../store";
-import { StatRow } from "../ai/ToolRow";
 import { zlContentQuery, zlSend } from "../zeolite";
 import { sanitizeText, sanitizeUrl } from "../sanitize";
 import {
@@ -31,23 +35,12 @@ import {
   type DiagnosticsSnapshot, type DiagnosticsStatus, type DiagHistoryEvent, type EngineSource,
 } from "../browser/diagnosticsScope";
 import { diagKdl } from "../kdl";
-import { m3eAttrs } from "../browser/browserShared";
+import { copyText, m3eAttrs } from "../browser/browserShared";
 
 export type ConsoleEntry = {
   id: number;
   kind: "input" | "result" | "error" | "log" | "info" | "warn" | "debug";
   text: string;
-  ts: number;
-};
-
-export type NetEntry = {
-  id: number;
-  url: string;
-  method: string;
-  status: number;
-  ok?: boolean;
-  dur?: number;
-  error?: string;
   ts: number;
 };
 
@@ -83,25 +76,11 @@ export function reasonText(code: string): string {
   return REASON_TEXT[code] ?? code;
 }
 
-/* Human labels for the engine's transport fallback reasons. Fallbacks
-   are expected routing decisions (every HTML document and CSS load is
-   one by design), not load failures. */
-const FALLBACK_TEXT: Record<string, string> = {
-  DOCUMENT_REWRITE_REQUIRED: "document needs the rewriter (normal)",
-  CSS_URL_REWRITE_REQUIRED: "CSS needs url() rewriting (normal)",
-};
-
-function fallbackText(code: string): string {
-  return FALLBACK_TEXT[code] ?? code;
-}
-
 export type DtState = {
   open: boolean;
-  page: "console" | "network" | "diagnostics";
+  page: "console" | "diagnostics";
   console: ConsoleEntry[];
-  net: NetEntry[];
   fails: ResFailEntry[];
-  netFilter: string;
   history: string[];
   engineClientId?: string;
   engineSource?: EngineSource;
@@ -112,9 +91,7 @@ export function emptyDt(): DtState {
     open: false,
     page: "console",
     console: [],
-    net: [],
     fails: [],
-    netFilter: "",
     history: [],
   };
 }
@@ -145,35 +122,6 @@ function ts(t: number): string {
   return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
 
-/* Honest clipboard write: navigator.clipboard can be absent or reject
-   (permissions policy, window not focused) while the page is still
-   usable, so fall back to a hidden textarea + execCommand inside the
-   same user gesture. Returns true only when the bytes landed. */
-async function writeClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to execCommand */
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
 type Props = {
   tab: Tab;
   dt: DtState;
@@ -194,9 +142,13 @@ const KIND_ICON: Record<ConsoleEntry["kind"], string> = {
 
 const PAGES: Array<[DtState["page"], string, string]> = [
   ["console", "Console", "terminal"],
-  ["network", "Network", "lan"],
   ["diagnostics", "Diagnostics", "bug_report"],
 ];
+
+/* Diagnostics event window: how many retained ring rows render per
+   batch. The sentinel below the visible batch grows the window when
+   the reader scrolls that far. */
+const DIAG_WINDOW = 24;
 
 /* ---- Zeolite engine diagnostics: NativeTransit / RewriteFallback ---- */
 /* This document's retained request/diagnostic rings from its owning
@@ -272,132 +224,99 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
   /* Newest first, every event, with a visible boundary between
      navigations so the previous navigation's rows read as history. */
   const rows = [...history].reverse();
+  /* 2026-11-23 report: the ring renders as real m3e-list rows, and
+     only the rows the reader actually reaches: the window grows by
+     one batch when its sentinel scrolls into view, so a retained
+     cross-navigation history never mounts rows nobody scrolled to. */
+  const [limit, setLimit] = useState(DIAG_WINDOW);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || rows.length <= DIAG_WINDOW) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((x) => x.isIntersecting)) setLimit((n) => n + DIAG_WINDOW);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length > limit]);
+  const shown = rows.slice(0, limit);
   return (
     <div className="lb-net">
-      <div className="lb-diag-counts">
-        <span className="lb-diag-chip lb-diag-ok">NativeTransit: {stats.native}</span>
-        <span className="lb-diag-chip">Rewrite-routed loads (normal): {stats.fallback}</span>
+      <div className="lb-diag-cards">
+        <m3e-card variant="filled" {...{ class: "lb-dt-card lb-diag-card" }} aria-label="NativeTransit handoff count">
+          <div slot="content" className="lb-diag-card-body">
+            <span className="lb-diag-card-title">NativeTransit</span>
+            <span className="lb-diag-card-num">{stats.native}</span>
+          </div>
+        </m3e-card>
+        <m3e-card variant="filled" {...{ class: "lb-dt-card lb-diag-card" }} aria-label="Rewrite-routed load count">
+          <div slot="content" className="lb-diag-card-body">
+            <span className="lb-diag-card-title">Rewrite-routed (normal)</span>
+            <span className="lb-diag-card-num">{stats.fallback}</span>
+          </div>
+        </m3e-card>
       </div>
+      <m3e-divider {...{ class: "lb-diag-sep" }} />
       {rows.length === 0 && (
         <p className="lb-muted" style={{ margin: "0 8px 4px" }}>No engine events for this tab yet. Navigate and keep this page open to retain every event across navigations.</p>
       )}
-      {rows.map((e, i) => {
-        const boundary = i > 0 && rows[i - 1].clientId !== e.clientId;
-        return (
-          <div key={e.clientId + ":" + e.seq}>
-            {boundary && (
-              <p className="lb-muted" style={{ margin: "10px 8px 2px", fontSize: "0.75em" }}>previous navigation</p>
-            )}
-            <m3e-expansion-panel {...{ class: "lb-net-row" }}>
-              <span slot="header" className="lb-net-summary">
-                <span className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
-                <span className="lb-net-method">{e.category}</span>
-                <span className="lb-net-url">{e.message}</span>
-                <span className="lb-net-dur">{ts(e.ts)}</span>
-              </span>
-              <div className="lb-net-detail">
-                {e.stage && <div>Stage: {e.stage}</div>}
-                {e.url && <div>URL: {e.url}</div>}
-                {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
-                {e.traceId && <div>Trace: {e.traceId}</div>}
-              </div>
-            </m3e-expansion-panel>
-          </div>
-        );
-      })}
+      <m3e-list aria-label="Engine events" {...{ class: "lb-diag-list" }}>
+        {shown.map((e, i) => {
+          const boundary = i > 0 && shown[i - 1].clientId !== e.clientId;
+          const key = e.clientId + ":" + e.seq;
+          const open = openKey === key;
+          return (
+            <div key={key}>
+              {boundary && (
+                <p className="lb-muted lb-diag-boundary">previous navigation</p>
+              )}
+              <m3e-list-item
+                {...{
+                  class: "lb-diag-item" + (open ? " open" : ""),
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-expanded": open ? "true" : "false",
+                }}
+                onClick={() => setOpenKey(open ? null : key)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    setOpenKey(open ? null : key);
+                  }
+                }}
+              >
+                <span slot="leading" className={"lb-net-status " + (e.severity === "error" ? "lb-bad" : "lb-ok")}>{e.severity}</span>
+                <span className="lb-diag-item-line">
+                  <span className="lb-net-method">{e.category}</span>
+                  <span className="lb-net-url">{e.message}</span>
+                </span>
+                <span slot="trailing" className="lb-net-dur">{ts(e.ts)}</span>
+                {open && (
+                  <div slot="supporting-text" className="lb-net-detail">
+                    {e.stage && <div>Stage: {e.stage}</div>}
+                    {e.url && <div>URL: {e.url}</div>}
+                    {e.technicalReason && <div>Technical reason: {e.technicalReason}</div>}
+                    {e.traceId && <div>Trace: {e.traceId}</div>}
+                  </div>
+                )}
+              </m3e-list-item>
+            </div>
+          );
+        })}
+      </m3e-list>
+      {rows.length > shown.length && (
+        <div ref={moreRef} className="lb-diag-more" aria-hidden={true} />
+      )}
     </div>
   );
 }
 
-/* ---- Zeolite download registry ---- */
-/* The engine owns download tracking (attachment responses go through
-   its registry; the bytes themselves land in the browser's own download
-   machinery). This section only mirrors the engine's registry and
-   forwards cancels over the control plane: no parallel LB state.
-   Polled only while the Network page is open. */
-
-type ZlDownload = {
-  id: string;
-  filename: string;
-  mime: string;
-  size: number;
-  received: number;
-  startedAt: number;
-  endedAt: number;
-  status: "active" | "done" | "error" | "cancelled";
-  source: string;
-  speed: number;
-  error?: string;
-};
-
+/* Host of a proxied URL for the sheet title line; bare strings
+   (about:blank, no-site) pass through. */
 function hostOf(u: string): string {
   try { return new URL(u).hostname; } catch { return u; }
-}
-
-function fmtBytes(n: number): string {
-  if (n < 0) return "unknown";
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-function ZeoliteDownloads({ active }: { active: boolean }) {
-  const [dls, setDls] = useState<ZlDownload[] | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  useEffect(() => {
-    /* Poll only while the Network page is open: the registry is a
-       mirror, not a live tap, and a hidden poll burns control-plane
-       round trips every 2 s. */
-    if (!active) return;
-    let dead = false;
-    const tick = async () => {
-      const r = await zlSend({ type: "zl:downloads" });
-      if (!dead && r && r.ok && Array.isArray(r.downloads)) setDls(r.downloads as ZlDownload[]);
-    };
-    void tick();
-    const iv = setInterval(tick, 2000);
-    return () => {
-      dead = true;
-      clearInterval(iv);
-    };
-  }, [active]);
-
-  if (!dls || dls.length === 0) return null;
-  const cancel = async (id: string) => {
-    setBusy(id);
-    await zlSend({ type: "zl:cancelDownload", id });
-    setBusy(null);
-    /* The next poll tick (2 s) picks up the cancelled state. */
-  };
-  return (
-    <m3e-card variant="filled" {...{ class: "lb-dt-card" }} aria-label="Engine download registry">
-      <div slot="header" className="lb-dt-card-head">
-        <span className="lb-dt-card-title">Engine download registry ({dls.length})</span>
-      </div>
-      <div slot="content" className="lb-dt-card-body lb-net">
-        {dls.map((d) => (
-          <div key={d.id} className="lb-net-summary" style={{ alignItems: "center" }}>
-            <span className={"lb-net-status " + (d.status === "done" || d.status === "active" ? "lb-ok" : "lb-bad")}>
-              {d.status}
-            </span>
-            <span className="lb-net-url" title={d.source}>{d.filename}</span>
-            <span className="lb-net-method">{hostOf(d.source)}</span>
-            <span className="lb-net-dur">
-              {fmtBytes(d.received)}
-              {d.size >= 0 ? " / " + fmtBytes(d.size) : ""}
-              {d.status === "active" ? " (" + fmtBytes(d.speed) + "/s)" : ""}
-            </span>
-            {d.status === "active" && (
-              <m3e-button disabled={busy === d.id ? true : undefined} onClick={() => void cancel(d.id)}>
-                Cancel
-              </m3e-button>
-            )}
-          </div>
-        ))}
-      </div>
-    </m3e-card>
-  );
 }
 
 /* Engine-side developer tools: Eruda (an embeddable console/network
@@ -502,12 +421,30 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
   const [histIdx, setHistIdx] = useState(-1);
   const consoleRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  /* Copy flash: the header icon shows a check for a beat when the
+     bytes landed, so the press reads as done without watching the
+     snackbar. */
+  const [copyFlash, setCopyFlash] = useState(false);
 
   /* Live-props ref: the sheet's event listeners outlive renders. */
   const live = useRef({ onClose, onOpenLogs });
   live.current = { onClose, onOpenLogs };
 
   const sheetRef = useRef<HTMLElement & { show: () => void; hide: () => void } | null>(null);
+  /* The sub-tool tablist: the component owns selection, and its
+     change event (bubbling from the tab) is the single source React
+     subscribes to; the map below keeps both in step. */
+  const tabsRef = useRef<HTMLElement & { selectedIndex: number } | null>(null);
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const onChange = () => {
+      const page = PAGES[el.selectedIndex]?.[0];
+      if (page) setDt({ page });
+    };
+    el.addEventListener("change", onChange);
+    return () => el.removeEventListener("change", onChange);
+  }, []);
   /* The bottom sheet owns its own open state (show/hide methods, per
      the @m3e/web docs). React never writes the `open` attribute - a
      half-synced attribute would wedge the sheet open or closed after
@@ -547,7 +484,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
          position, capped at 12 so a long console stays cheap. */
       requestAnimationFrame(() => {
         const rows = el.querySelectorAll(
-          ".lb-dt-page:not([hidden]) .lb-console-line, .lb-dt-page:not([hidden]) .lb-net-summary, .lb-dt-page:not([hidden]) .lb-dt-card"
+          ".lb-dt-page:not([hidden]) .lb-console-line, .lb-dt-page:not([hidden]) .lb-diag-item, .lb-dt-page:not([hidden]) .lb-dt-card"
         );
         rows.forEach((r, i) => {
           if (i < 12) dtEnter(r, 60 + i * 24);
@@ -558,7 +495,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Sub-tool switch (and open): the visible page enters with the same
      composite keyframes, 40ms behind the nav. Covers the initial open
-     and every console/network/diagnostics switch alike. */
+     and every console/diagnostics switch alike. */
   useEffect(() => {
     if (!open) return;
     const id = requestAnimationFrame(() =>
@@ -583,22 +520,36 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
 
   /* Only this document's page reports and scoped worker snapshot.
      The server session ring spans navigations and remains in App Logs. */
-  /* Copy logs serializes the document diagnostics as KDL: header,
-     stats, console errors and warnings, resource failures, and the
-     full retained event ring. It is the single export path since
-     Export and Share to MCP were removed. */
+  /* Copy logs is page-aware (2026-11-23): on the Console page it
+     copies the console log itself (timestamp + text lines); on
+     Diagnostics it serializes the document diagnostics as KDL:
+     header, stats, console errors and warnings, resource failures,
+     and the full retained event ring. It is the single export path
+     since Export and Share to MCP were removed. */
   const copyLogs = async () => {
-    const snapshot = snapshotForScope(snapshotRef.current, scope);
-    const statusLine = snapshot
-      ? "Diagnostics collected."
-      : scope
-        ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"]
-        : "No engine identity for this document yet.";
-    const ok = await writeClipboard(diagKdl(snapshot, dt.console, dt.fails, statusLine));
+    let ok: boolean;
+    let say: string;
+    if (dt.page === "console") {
+      ok = await copyText(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n"));
+      say = ok ? "Console copied" : "Copy failed";
+    } else {
+      const snapshot = snapshotForScope(snapshotRef.current, scope);
+      const statusLine = snapshot
+        ? "Diagnostics collected."
+        : scope
+          ? DIAG_STATUS_TEXT[diagStatusRef.current ?? "starting"]
+          : "No engine identity for this document yet.";
+      ok = await copyText(diagKdl(snapshot, dt.console, dt.fails, statusLine));
+      say = ok ? "Diagnostics copied" : "Copy failed";
+    }
     /* #262: snackbar confirmation; the inline label alone was easy
        to miss at the sheet edge. */
+    if (ok) {
+      setCopyFlash(true);
+      window.setTimeout(() => setCopyFlash(false), 1200);
+    }
     if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-      M3eSnackbar.open(ok ? "Diagnostics copied" : "Copy failed", { duration: 3000 });
+      M3eSnackbar.open(say, { duration: 3000 });
     }
   };
 
@@ -808,42 +759,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     if (el) setAway(el.scrollTop + el.clientHeight < el.scrollHeight - 48);
   };
 
-  const netEntries = dt.net.filter((n) =>
-    dt.netFilter ? n.url.toLowerCase().includes(dt.netFilter.toLowerCase()) : true
-  );
-
-  /* Network log pagination (m3e-paginator): the page event is the
-     component's only output, so mirror it into state like the M3eSelect
-     change wiring. Clamped at render so shrinking logs never leave a
-     page index past the end. */
-  const [netPage, setNetPage] = useState(0);
-  const [netPageSize, setNetPageSize] = useState(25);
-  const pagerRef = useRef<HTMLElement & { pageSize: number | "all" } | null>(null);
-  useEffect(() => {
-    const el = pagerRef.current;
-    if (!el) return;
-    const onPage = (e: Event) => {
-      const d = (e as CustomEvent<{ pageIndex?: number; pageSize?: number | "all" }>).detail;
-      if (typeof d?.pageIndex === "number") setNetPage(d.pageIndex);
-      if (typeof d?.pageSize === "number") setNetPageSize(d.pageSize);
-    };
-    el.addEventListener("page", onPage);
-    return () => el.removeEventListener("page", onPage);
-  }, []);
-  useEffect(() => {
-    setNetPage(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dt.netFilter]);
-  const netPages = Math.max(1, Math.ceil(netEntries.length / netPageSize));
-  const netPageClamped = Math.min(netPage, netPages - 1);
-  const pagedNet = netEntries.slice(netPageClamped * netPageSize, (netPageClamped + 1) * netPageSize);
-  const netFailed = netEntries.filter((n) => n.error || (!n.ok && n.status >= 400)).length;
-
-  /* Entry count per section, shown on the picker buttons like real
+  /* Entry count per section, shown on the picker tabs like real
      devtools do. */
   const pageCounts: Record<DtState["page"], number> = {
     console: dt.console.length,
-    network: dt.net.length,
     diagnostics: dt.fails.length,
   };
 
@@ -862,53 +781,47 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
             Diagnostics page body: the header keeps them reachable from
             every sub-page and the page body stays cards only. */}
         <m3e-icon-button slot="trailing" id="lb-dt-copy-btn" aria-label="Copy logs" onClick={() => void copyLogs()}>
-          <m3e-icon name="content_copy" aria-hidden={true} />
+          <m3e-icon name={copyFlash ? "check" : "content_copy"} aria-hidden={true} />
         </m3e-icon-button>
         <m3e-tooltip for="lb-dt-copy-btn" position="below">Copy logs</m3e-tooltip>
         <ZeoliteEngineTools frame={frame} />
       </m3e-app-bar>
 
       <div className="lb-dt-content">
-        {/* Sub-tool picker (wave-114 M3E redesign): a connected
-            m3e-button-group of toggle buttons; the group owns the
-            radiogroup and aria-checked semantics and the connected
-            shape, the selected segment stays tonal, and native
-            Tab / Enter / Space keep working. */}
+        {/* Sub-tool picker (2026-11-23): a real m3e-tabs bar - an
+            icon plus label per page, the ink bar and selected tab
+            semantics owned by the component. The change event from
+            the tablist is mirrored into state (the M3eSelect
+            pattern); React never writes the sheet-open attributes. */}
         <div className="lb-dt-nav">
-          <m3e-button-group
-            variant="connected"
+          <m3e-tabs
             aria-label="Developer tools sections"
-            {...{ class: "lb-dt-nav-group" }}
+            {...{ class: "lb-dt-nav-tabs", ref: tabsRef }}
           >
             {PAGES.map(([page, label, icon]) => {
               const on = dt.page === page;
               return (
-                <m3e-button
+                <m3e-tab
                   key={page}
-                  variant="tonal"
-                  shape="square"
                   selected={on}
                   aria-current={on ? "true" : undefined}
-                  {...{
-                    class: "lb-dt-nav-btn",
-                    ref: (el: HTMLElement | null) => m3eAttrs(el, { toggle: "" }),
-                  }}
                   onClick={() => setDt({ page })}
                 >
-                  <m3e-icon name={icon} aria-hidden={true} />
+                  <m3e-icon slot="icon" name={icon} aria-hidden={true} />
                   {label}
                   {(pageCounts[page] ?? 0) > 0 ? " · " + pageCounts[page] : ""}
-                </m3e-button>
+                </m3e-tab>
               );
             })}
-          </m3e-button-group>
+          </m3e-tabs>
         </div>
 
-        {/* Console and Network render bare like Diagnostics (user
-            request 2026-11-13): the filled cards are gone and the
-            content sits directly in the sheet. All three pages stay
-            mounted; the sub-tool switch toggles [hidden], so flipping
-            sub-tools no longer unmounts and remounts everything. */}
+        {/* Console and Diagnostics render bare (user request
+            2026-11-13): the filled cards are gone and the content
+            sits directly in the sheet. Both pages stay mounted; the
+            sub-tool switch toggles [hidden], so flipping sub-tools
+            no longer unmounts and remounts everything. The broken
+            Network page is gone entirely (2026-11-23). */}
         <div className="lb-dt-page" hidden={dt.page !== "console"}>
           <div className="lb-console-wrap">
           <div className="lb-console" ref={consoleRef} onScroll={onLogScroll} role="log" aria-label="Console output">
@@ -933,23 +846,10 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
           )}
           </div>
           <m3e-divider />
-          <div className="lb-dt-toolbar">
-            <m3e-icon-button aria-label="Clear console" onClick={() => setDt({ console: [] })}>
-              <m3e-icon name="mop" aria-hidden={true} />
-            </m3e-icon-button>
-            <m3e-icon-button
-              aria-label="Copy console output"
-              onClick={() =>
-                void writeClipboard(dt.console.map((c) => ts(c.ts) + " " + c.text).join("\n")).then((ok) => {
-                  if (typeof M3eSnackbar !== "undefined" && M3eSnackbar) {
-                    M3eSnackbar.open(ok ? "Console copied" : "Copy failed", { duration: 3000 });
-                  }
-                })
-              }
-            >
-              <m3e-icon name="content_copy" aria-hidden={true} />
-            </m3e-icon-button>
-          </div>
+          {/* 2026-11-23: the mop and the duplicate copy button are
+              gone. Clearing stays the `clear` command in the input;
+              copying rides the header copy button, which copies the
+              console log whenever the Console page is open. */}
           <div className="lb-console-input">
             {/* m3e-textarea-autosize grows the console input to fit
                 multi-line expressions (Shift+Enter). */}
@@ -973,73 +873,6 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
               Execute
             </m3e-button>
           </div>
-        </div>
-
-        <div className="lb-dt-page" hidden={dt.page !== "network"}>
-          {/* Real devtools keep a status line above the list - the
-              same settled status pill the AI page uses, counts only,
-              no steps. */}
-          <StatRow
-            label="Collecting requests..."
-            active={false}
-            hasSteps={false}
-            done={"Network · " + netEntries.length + (netEntries.length === 1 ? " request" : " requests") + (netFailed > 0 ? " · " + netFailed + " failed" : "")}
-          />
-          <div className="lb-net">
-            {/* 94 pattern: an empty log says so; a filtered-to-nothing
-                log says that instead. */}
-            {pagedNet.length === 0 && (
-              <p className="lb-muted lb-console-empty">
-                {dt.net.length > 0 ? "No matching requests." : "Network requests will appear here."}
-              </p>
-            )}
-            {pagedNet.map((n) => (
-              <m3e-expansion-panel key={n.id} {...{ class: "lb-net-row" }}>
-                <span slot="header" className="lb-net-summary">
-                  <span className={"lb-net-status " + (n.error || (!n.ok && n.status >= 400) ? "lb-bad" : "lb-ok")}>
-                    {n.error ? "ERR" : n.status}
-                  </span>
-                  <span className="lb-net-method">{n.method}</span>
-                  <span className="lb-net-url">{n.url}</span>
-                  {n.dur !== undefined && <span className="lb-net-dur">{n.dur} ms</span>}
-                </span>
-                <div className="lb-net-detail">
-                  <div>URL: {n.url}</div>
-                  <div>Method: {n.method}</div>
-                  <div>Status: {n.error ? n.error : n.status}</div>
-                  {n.dur !== undefined && <div>Duration: {n.dur} ms</div>}
-                  <div>Time: {ts(n.ts)}</div>
-                  <div className="lb-muted">Request/response headers, sizes, and bodies: unavailable - the page context cannot read them.</div>
-                </div>
-              </m3e-expansion-panel>
-            ))}
-          </div>
-          <m3e-divider />
-          <div className="lb-dt-toolbar">
-            <m3e-search-bar clearable={true} {...{ class: "lb-dt-search" }}>
-              <m3e-icon slot="leading" name="search" aria-hidden={true} />
-              <input
-                slot="input"
-                placeholder="Filter by URL"
-                aria-label="Filter network requests"
-                value={dt.netFilter}
-                onChange={(e) => setDt({ netFilter: e.target.value })}
-              />
-            </m3e-search-bar>
-            <m3e-icon-button aria-label="Clear network log" onClick={() => setDt({ net: [] })}>
-              <m3e-icon name="mop" aria-hidden={true} />
-            </m3e-icon-button>
-            {netEntries.length > netPageSize && (
-              <m3e-paginator
-                length={netEntries.length}
-                page-size={netPageSize}
-                page-sizes="25,50,100"
-                aria-label="Network log pages"
-                {...{ class: "lb-dt-pager", ref: pagerRef }}
-              />
-            )}
-          </div>
-          <ZeoliteDownloads active={dt.page === "network"} />
         </div>
 
         <div className="lb-dt-page" hidden={dt.page !== "diagnostics"}>

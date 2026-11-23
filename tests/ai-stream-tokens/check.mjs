@@ -80,4 +80,33 @@ assert.deepEqual(splitHarmony("hello world"), { analysis: "", final: "hello worl
 assert.deepEqual(splitHarmony(h2.final), { analysis: "", final: h2.final });
 assert.deepEqual(splitHarmony(s2), { analysis: "", final: s2 });
 
+/* ---- 2026-11-23 report: bracket-dagger web-citation markers
+   (【1†source 1】) pasted from search snippets rendered as machine
+   junk in answers. stripCiteMarks removes them from every final
+   channel; plain (1)/(2) citations survive; the strip is
+   idempotent. ---- */
+const cited =
+  "The reset can come from any hop on the path 【1†source 1】. " +
+  "A keep-alive race can also trigger it 【2†source 2】.";
+const scrubbed = splitHarmony(cited);
+assert.ok(!scrubbed.final.includes("【"), "bracket-dagger markers must not survive in the answer");
+assert.ok(!scrubbed.final.includes("†"), "the dagger glyph must not survive");
+assert.ok(scrubbed.final.includes("The reset can come from any hop on the path."), "the sentence text survives the scrub");
+assert.ok(scrubbed.final.includes("A keep-alive race can also trigger it."), "the second sentence survives the scrub");
+assert.equal(scrubbed.final, "The reset can come from any hop on the path. A keep-alive race can also trigger it.");
+/* The leading space ahead of the marker is eaten too; no double
+   spaces are left behind. */
+assert.ok(!scrubbed.final.includes("  "), "no double space where a marker was removed");
+/* Plain numbered citations are untouched. */
+assert.equal(splitHarmony("The server closed it (1), a firewall may too (2).").final, "The server closed it (1), a firewall may too (2).");
+/* Idempotent: scrubbing twice changes nothing. */
+assert.equal(splitHarmony(scrubbed.final).final, scrubbed.final);
+/* The markers also scrub inside a marked harmony stream. */
+const citedStream =
+  "<|channel|>analysis<|message|>checking sources<|end|>" +
+  "<|start|>assistant<|channel|>final<|message|>The RST came back mid-handshake 【3†source 3】.<|return|>";
+const h3 = splitHarmony(citedStream);
+assert.ok(!h3.final.includes("【"), "a marker inside a harmony stream must scrub too");
+assert.ok(h3.final.includes("The RST came back mid-handshake."), "the stream answer text survives");
+
 console.log("ai-stream-tokens: ok");

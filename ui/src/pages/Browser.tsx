@@ -12,7 +12,7 @@
    Tabs that receive a URL without an explicit navigation (Home search,
    restored sessions) auto-load when they become active. */
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   decodeRoute,
   engineRoutePrefix,
@@ -89,13 +89,13 @@ const hookFrameScroll = (tabId: number, frame: HTMLIFrameElement, onScroll: (y: 
 };
 
 /* ---- DevTools capture (#106): the engine exposes no page console
-   or request surface to the embedder, so the Console and Network
-   panels had no producers and stayed empty on every page. Frames are
-   same-origin by architecture, so the parent captures the page
-   surface directly: no page-context script injection (CSP-immune).
-   Every navigation mints a fresh contentWindow, so the per-window
-   flag is the idempotence guard. Everything posts through the
-   existing {lb:...} message schema the DevTools reducer already
+   surface to the embedder, so the Console panel had no producer and
+   stayed empty on every page. Frames are same-origin by
+   architecture, so the parent captures the page surface directly:
+   no page-context script injection (CSP-immune). Every navigation
+   mints a fresh contentWindow, so the per-window flag is the
+   idempotence guard. Everything posts through the existing
+   {lb:...} message schema the DevTools reducer already
    processes. ---- */
 const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
   try {
@@ -153,64 +153,10 @@ const hookFrameDevTools = (frame: HTMLIFrameElement): void => {
     cw.addEventListener("unhandledrejection", (ev) => {
       post({ lb: "console", data: { level: "error", text: "Unhandled rejection: " + fmt((ev as PromiseRejectionEvent).reason), ts: Date.now() } });
     });
-    /* Network view: wrap the frame fetch/XHR after the engine's own
-       hooks (the bootstrap has wrapped them by load time), so what
-       DevTools sees is what the page actually calls. The URL is
-       recorded exactly as the page passed it: relative paths stay
-       readable, and resolving against the opaque engine location
-       would only add noise. */
-    const origFetch = cw.fetch.bind(cw);
-    const urlOf = (input: RequestInfo | URL): string => {
-      if (typeof input === "string") return input;
-      const u = (input as { url?: unknown }).url;
-      if (typeof u === "string") return u;
-      try {
-        return input.toString();
-      } catch {
-        return String(input);
-      }
-    };
-    cw.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const t0 = Date.now();
-      const url = urlOf(input);
-      const im = (input as { method?: unknown }).method;
-      const method = String(init?.method ?? (typeof im === "string" ? im : "GET")).toUpperCase();
-      return origFetch(input, init).then(
-        (r) => {
-          post({ lb: "net", data: { url, method, status: r.status, ok: r.ok, dur: Date.now() - t0, ts: Date.now() } });
-          return r;
-        },
-        (err) => {
-          post({ lb: "net", data: { url, method, error: fmt(err), dur: Date.now() - t0, ts: Date.now() } });
-          throw err;
-        },
-      );
-    }) as typeof fetch;
-    const xo = cw.XMLHttpRequest.prototype;
-    type XH = XMLHttpRequest & { __lbDt?: { method: string; url: string; t0: number } };
-    const origOpen = xo.open as unknown as (this: XH, method: string, url: string | URL, ...rest: unknown[]) => void;
-    xo.open = function (this: XH, method: string, url: string | URL, ...rest: unknown[]) {
-      try {
-        this.__lbDt = { method: String(method).toUpperCase(), url: String(url), t0: 0 };
-      } catch {
-        /* a sealed xhr just goes untracked */
-      }
-      return origOpen.call(this, method, url, ...rest);
-    } as typeof XMLHttpRequest.prototype.open;
-    const origSend = xo.send;
-    xo.send = function (this: XH, body?: Document | XMLHttpRequestBodyInit | null) {
-      const meta = this.__lbDt;
-      if (meta) {
-        meta.t0 = Date.now();
-        this.addEventListener("loadend", () => {
-          if (this.status === 0)
-            post({ lb: "net", data: { url: meta.url, method: meta.method, error: this.statusText || "network error", dur: Date.now() - meta.t0, ts: Date.now() } });
-          else
-            post({ lb: "net", data: { url: meta.url, method: meta.method, status: this.status, ok: this.status >= 200 && this.status < 300, dur: Date.now() - meta.t0, ts: Date.now() } });
-        });
-      }
-      return origSend.call(this, body);
-    };
+    /* 2026-11-23: the fetch/XHR net wrappers are gone with the
+       Network page - no listener consumes `lb: "net"` anymore, and
+       wrapping every page request only to post into a void costs a
+       postMessage per call on hot paths. */
   } catch {
     /* The capture surface must never break the page: any failure
        here just leaves that frame without DevTools data. */
@@ -455,6 +401,30 @@ export default function BrowserView(props: Props) {
      Any failure (decode, tainted canvas) leaves the toolbar untinted
      and logs nothing user-visible. */
   const toolbarRef = useRef<HTMLElement | null>(null);
+  /* Omnibox edit frame lock: .lb-toolbar is width: fit-content and
+     the dock pill hugs it, so the unleashed edit morph used to
+     resize the whole bar (the pill widened to min(92vw, 440px) and
+     the toolbar grew with it). Instead the resting frame width is
+     recorded while not editing; on entering editing the toolbar is
+     pegged to that width and the pill's edit width is derived from
+     it (--lb-tb-edit-w), so the URL field morphs inside the
+     existing pill and the buttons slide out of it. */
+  const tbRestingW = useRef(0);
+  const tbEditing = !!active.url && tbExpanded;
+  useLayoutEffect(() => {
+    const el = toolbarRef.current;
+    if (!el) return;
+    if (!tbEditing) {
+      el.style.width = "";
+      const w = el.offsetWidth;
+      if (w > 0) tbRestingW.current = w;
+      el.style.removeProperty("--lb-tb-edit-w");
+      return;
+    }
+    const w = tbRestingW.current || el.offsetWidth;
+    el.style.width = w + "px";
+    el.style.setProperty("--lb-tb-edit-w", Math.max(w - 8, 130) + "px");
+  }, [tbEditing]);
   useEffect(() => {
     const tb = toolbarRef.current;
     if (!tb) return;
@@ -534,7 +504,8 @@ export default function BrowserView(props: Props) {
   statusRef.current = status;
 
   /* #247: origin comparator for minor-nav classification. A parse
-     failure fails closed to cross-origin, so the skeleton shows. */
+     failure fails closed to cross-origin, so the surface re-arms
+     as an uncommitted navigation. */
   const sameOrigin = (a: string, b: string): boolean => {
     try {
       return !!a && !!b && new URL(a).origin === new URL(b).origin;
@@ -544,8 +515,8 @@ export default function BrowserView(props: Props) {
   };
   /* #247: tabs whose current loading flip is minor (a same-origin
      navigation, or in-place activity after a committed first paint).
-     Minor flips keep the commitment, so the black skeleton stays off
-     and only the top loading indicator moves. */
+     Minor flips keep the commitment, so only the top loading
+     indicator moves while the site works in place. */
   const minorNav = useRef<Set<number>>(new Set());
 
   /* #249 idle tab unloading: every tab keeps one same-origin engine
@@ -554,7 +525,7 @@ export default function BrowserView(props: Props) {
      heavy subframes grew renderer RSS from 257 MB to 1709 MB while
      the JS heap stayed flat at 15 MB). After this deadline a
      background tab frame unloads to about:blank; returning
-     re-navigates it as a fresh surface with the skeleton. */
+     re-navigates it as a fresh committed surface. */
   const IDLE_UNLOAD_MS = 5 * 60 * 1000;
   /* #249: the about:blank unload load event is not a first paint. */
   const sleeping = useRef<Set<number>>(new Set());
@@ -565,12 +536,13 @@ export default function BrowserView(props: Props) {
   activeIdRef.current = active?.id ?? 0;
   const tabsRef = useRef<Tab[]>(tabs);
   tabsRef.current = tabs;
-  /* Per-tab first-paint commitment. The black
-     skeleton overlay covers the content area while the active tab
-     loads a navigation that has not committed its first paint yet
+  /* Per-tab first-paint commitment. A tab is uncommitted while it
+     loads a navigation that has not fired its first load event yet
      (a fresh URL or a fresh tab); once the frame's load event fires
      the tab is committed and further in-place asset loads of the
-     same site never bring the skeleton back. */
+     same site never re-arm the tracker. The skeleton overlay that
+     once consumed this state is fully removed (#247 bookkeeping
+     kept for future consumers). */
   const [committed, setCommittedState] = useState<Record<number, boolean>>({});
   const committedRef = useRef<Record<number, boolean>>({});
   const setCommitted = (tabId: number, v: boolean) => {
@@ -589,7 +561,7 @@ export default function BrowserView(props: Props) {
       /* #247: a committed tab keeps its commitment through minor
          work (same-origin navigations, in-place reloads, asset
          activity); only a fresh surface (a fresh tab or a
-         cross-origin navigation) brings the skeleton back. */
+         cross-origin navigation) re-arms the tracker. */
       if (v.loading && !prevStatus.current[id]?.loading && !minorNav.current.has(id)) setCommitted(id, false);
     }
     prevStatus.current = status;
@@ -1488,12 +1460,6 @@ export default function BrowserView(props: Props) {
     });
   };
   const dtOf = (id: number): DtState => dt[id] ?? emptyDt();
-  const addNet = (id: number, entry: { url: string; method: string; status: number; ok?: boolean; dur?: number; error?: string }) => {
-    setDtState((prev) => {
-      const base = prev[id] ?? emptyDt();
-      return { ...prev, [id]: { ...base, net: [...base.net, { id: nextEntryId(), ts: Date.now(), ...entry }] } };
-    });
-  };
 
   /* #203: split frames report icons through the validated bridge;
      same-origin polling reuses the same route/decode/fetch path. */
@@ -1690,7 +1656,7 @@ export default function BrowserView(props: Props) {
     seenDocs.current.delete(tab.id);
     iconJobs.current.get(tab.id)?.abort.abort();
     iconJobs.current.delete(tab.id);
-    setDt(tab.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
+    setDt(tab.id, { console: [], fails: [], engineClientId: undefined, engineSource: undefined });
 
     /* #186: the mint is in flight from here until the frame reaches
        this destination; the poll sync branch holds off against it. */
@@ -2129,7 +2095,7 @@ export default function BrowserView(props: Props) {
           documentIds.current.delete(t.id);
           iconJobs.current.get(t.id)?.abort.abort();
           iconJobs.current.delete(t.id);
-          setDt(t.id, { console: [], net: [], fails: [], engineClientId: undefined, engineSource: undefined });
+          setDt(t.id, { console: [], fails: [], engineClientId: undefined, engineSource: undefined });
         }
       }
       if (real !== t.url) {
@@ -2167,7 +2133,7 @@ export default function BrowserView(props: Props) {
         lastNav.current.set(t.id, real);
         /* #247: page-initiated navigation (in-page link, pushState,
            engine challenge hop): same-origin keeps the committed
-           page visible; cross-origin re-arms the skeleton. */
+           page marked committed; cross-origin re-arms the tracker. */
         if (sameOrigin(t.url, real)) minorNav.current.add(t.id);
         else minorNav.current.delete(t.id);
         props.updateTab(t.id, patch);
@@ -2429,22 +2395,6 @@ export default function BrowserView(props: Props) {
         setDt(tabId, {
           console: [...dtBase().console, { id: nextEntryId(), kind, text: sanitizeText(cap(d.text, 4000)), ts: Number(d.ts ?? Date.now()) }].slice(-500),
         });
-      } else if (ev.lb === "net") {
-        setDt(tabId, {
-          net: [
-            ...dtBase().net,
-            {
-              id: nextEntryId(),
-              url: sanitizeUrl(cap(d.url, 2000)),
-              method: cap(d.method, 10) || "GET",
-              status: Number(d.status ?? 0),
-              ok: d.ok === undefined ? undefined : Boolean(d.ok),
-              dur: d.dur === undefined ? undefined : Number(d.dur),
-              error: d.error === undefined ? undefined : sanitizeText(cap(d.error, 500)),
-              ts: Number(d.ts ?? Date.now()),
-            },
-          ].slice(-500),
-        });
       } else if (ev.lb === "resfail") {
         /* Resource-failure diagnostics: what failed, where, why. */
         const entry: ResFailEntry = {
@@ -2541,7 +2491,7 @@ export default function BrowserView(props: Props) {
           if (changedDocument) {
             iconJobs.current.get(tabId)?.abort.abort();
             iconJobs.current.delete(tabId);
-            setDt(tabId, { console: [], net: [], fails: [], engineClientId: clientId, engineSource: source });
+            setDt(tabId, { console: [], fails: [], engineClientId: clientId, engineSource: source });
           }
           try {
             const doc = frames.current.get(tabId)?.contentDocument;
@@ -2739,9 +2689,6 @@ export default function BrowserView(props: Props) {
   }
 
   const st = status[active.id] ?? { loading: false };
-  /* The skeleton shows only for uncommitted navigations of
-     the active tab - never for a committed site's asset loads. */
-  const skeletonOn = st.loading && !committed[active.id];
   const activeDt = dtOf(active.id);
 
   const go = (value: string) => {
@@ -2903,9 +2850,9 @@ export default function BrowserView(props: Props) {
                        the flag. A frame sitting on an about:
                        document is never a first paint. */
                     if (blankFrame(t.id)) { return; }
-                      /* First paint committed - the skeleton
-                         goes away and stays away while this document
-                         loads its own assets in place. */
+                      /* First paint committed: the tab stays
+                         committed while this document loads its own
+                         assets in place. */
                       setCommitted(t.id, true);
                       /* #247: first paint committed: every later flip
                          on this document is in-place minor work (asset
@@ -2932,7 +2879,8 @@ export default function BrowserView(props: Props) {
                  navguard instead. */
               /* Cross-origin frames can't be polled; the
                  load event is the only reliable "done" signal there. */
-            />          </div>
+          />
+          </div>
         ))}
 
         {/* Top loading indicator (always mounted): the shape-morphing
@@ -2955,33 +2903,9 @@ export default function BrowserView(props: Props) {
           <m3e-loading-indicator variant="contained" aria-label="Loading page" />
         </div>
 
-        {/* The black skeleton page covers the
-            content area while the active tab's navigation has not
-            committed its first paint. The m3e-skeleton paints pulse
-            shapes over each mock layout div's box (the slotted mock
-            itself stays hidden until loaded), and the overlay sits
-            below the loading indicator (z-index 5 vs 6) so the
-            morphing indicator stays visible on top. */}
-        {skeletonOn && (
-          <div className="lb-sk" aria-hidden={true}>
-            <div className="lb-sk-page">
-              <div className="lb-sk-head" />
-              <div className="lb-sk-hero" />
-              <div className="lb-sk-line" />
-              <div className="lb-sk-line" />
-              <div className="lb-sk-line lb-sk-short" />
-              <div className="lb-sk-chips">
-                <div className="lb-sk-chip" />
-                <div className="lb-sk-chip" />
-                <div className="lb-sk-chip" />
-              </div>
-              <div className="lb-sk-line" />
-              <div className="lb-sk-line lb-sk-short" />
-            </div>
-          </div>
-        )}
-
-        {/* Compaction 4: the in-page new-tab hero is gone. An empty
+        {/* Compaction 4: the black skeleton page that used to cover the
+            content area before first paint is fully gone; the top
+            loading indicator alone communicates in-flight work. */}
             tab expands and focuses the toolbar pill instead (see the
             empty-tab effect), so there is exactly one search surface. */}
 
@@ -3070,7 +2994,7 @@ export default function BrowserView(props: Props) {
             alone remains the reveal handle. */}
         <div className="lb-dock-pill" ref={dockPillRef}>
           <m3e-toolbar variant="standard" shape="rounded" {...{ class: "lb-toolbar" + (tbExpanded && active.url ? " editing" : ""), ref: toolbarRef }}>
-          {/* Lead zone (wave 112): tabs, new tab and navigation
+          {/* Lead zone (wave 112): tabs and navigation
               travel together on the left; the omnibox centers and
               the secondary actions close the bar on the right. */}
           <span className="lb-tb-zone lb-tb-lead">
@@ -3241,10 +3165,8 @@ export default function BrowserView(props: Props) {
             <m3e-icon name="tab" aria-hidden={true} />
           </m3e-icon-button>
           <m3e-tooltip for="lb-tabs-pill" position="above">Tabs</m3e-tooltip>
-          <m3e-icon-button id="lb-newtab-btn" aria-label="New tab" onClick={() => props.newTab()}>
-            <m3e-icon name="add" aria-hidden={true} />
-          </m3e-icon-button>
-          <m3e-tooltip for="lb-newtab-btn" position="above">New tab</m3e-tooltip>
+          {/* New tab moved to the Tabs bottom sheet (next to the
+              title in its app bar); the toolbar button is gone. */}
           {/* Back / Forward are plain icon buttons (#227): the
               m3e-button-group expressive press choreography slid the
               grouped buttons into each other on every press. Tooltips

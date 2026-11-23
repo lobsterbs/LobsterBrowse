@@ -77,9 +77,10 @@ const ok = (name, cond) => {
 {
   const d = read("src/pages/DevTools.tsx");
   ok("devtools: bottom sheet host", d.includes("m3e-bottom-sheet"));
-  /* Wave 114: the tonal pill row became a connected button group
-     of toggle segments; the #239 supersession is deliberate. */
-  ok("devtools: sub-tool picker is a connected toggle group", d.includes("lb-dt-nav") && d.includes('variant="connected"') && d.includes('m3eAttrs(el, { toggle: "" })'));
+  /* 2026-11-23: the connected button group became a real m3e-tabs
+     bar (the change event mirrors into state); the toggle-attribute
+     helper contract left with the segments. */
+  ok("devtools: sub-tool picker is an m3e-tabs bar", d.includes("lb-dt-nav") && d.includes("lb-dt-nav-tabs") && d.includes("<m3e-tabs") && !d.includes('variant="connected"') && !d.includes('m3eAttrs(el, { toggle: "" })'));
   ok("devtools: section cards", d.includes("m3e-card"));
   ok("devtools: legacy copy kept", existsSync(new URL("src/pages/DevToolsLegacy.tsx", ui)));
   const walk = (dir) => {
@@ -150,7 +151,12 @@ const ok = (name, cond) => {
   const copyBtn = d.indexOf('id="lb-dt-copy-btn"');
   const erudaBtn = d.indexOf('id="lb-dt-eruda-btn"');
   ok("devtools: copy logs lives in the sheet header", copyBtn !== -1 && copyBtn > hdr && copyBtn < dpos);
-  ok("devtools: eruda lives in the sheet header", erudaBtn !== -1 && erudaBtn > hdr && erudaBtn < dpos);
+  /* 2026-11-23: the eruda button lives in the ZeoliteEngineTools
+     wrapper; its single call site in the sheet header is the truth
+     the textual check pins (the id sits inside the wrapper's
+     definition, before the header in file order). */
+  const zet = d.indexOf("<ZeoliteEngineTools");
+  ok("devtools: eruda lives in the sheet header", zet !== -1 && zet > hdr && zet < dpos && erudaBtn !== -1);
   ok("devtools: resource failures card removed", !d.includes('aria-label="Resource failures"'));
   ok("devtools: resfail explainer removed", !d.includes("resfail reports"));
   ok("devtools: empty-fails message removed", !d.includes("No resource failures captured."));
