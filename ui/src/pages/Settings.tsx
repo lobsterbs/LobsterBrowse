@@ -135,7 +135,7 @@ function SetPanel(props: {
       <div
         id={props.id + "-disc"}
         className="lb-setp-disc"
-        {...(props.open ? { "data-open": "" } : { inert: "" })}
+        {...(props.open ? { "data-open": "" } : { inert: true })}
         role="region"
         aria-label={props.headline}
       >

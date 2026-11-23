@@ -22,7 +22,7 @@ assert.ok(settings.includes('className="lb-setp-toggle"'), "the toggle button re
 assert.ok(settings.includes('aria-expanded={props.open ? "true" : "false"}'), "the toggle carries aria-expanded");
 assert.ok(settings.includes('aria-controls={props.id + "-disc"}'), "the toggle controls the region");
 assert.ok(settings.includes('className="lb-setp-disc"'), "the disclosure region renders");
-assert.ok(settings.includes('{...(props.open ? { "data-open": "" } : { inert: "" })}'), "closed regions are inert");
+assert.ok(settings.includes('{...(props.open ? { "data-open": "" } : { inert: true })}'), "closed regions are inert (React 19 boolean)");
 assert.ok(settings.includes('id={props.anchorId} tabIndex={-1}'), "anchors still render inside the body");
 assert.ok(settings.includes("anchorId=\"set-transport\""), "the transport anchor survived");
 assert.ok(theme.includes(".lb-setp-disc {") && theme.includes("grid-template-rows: 0fr;"), "disclosure collapses via grid rows");

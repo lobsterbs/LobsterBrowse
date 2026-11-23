@@ -6,6 +6,7 @@
    live in theme.css under .lb-md, all M3E tokens. */
 import DOMPurify from "dompurify";
 import { marked } from "marked";
+import type { JSX } from "react";
 
 marked.setOptions({ gfm: true, breaks: true });
 
