@@ -2906,8 +2906,6 @@ export default function BrowserView(props: Props) {
         {/* Compaction 4: the black skeleton page that used to cover the
             content area before first paint is fully gone; the top
             loading indicator alone communicates in-flight work. */}
-            tab expands and focuses the toolbar pill instead (see the
-            empty-tab effect), so there is exactly one search surface. */}
 
         {dtMounted && (
           <DevTools
