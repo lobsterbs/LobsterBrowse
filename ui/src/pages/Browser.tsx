@@ -318,17 +318,17 @@ function CtxMenu(props: {
           );
         }
         const click = () => live.current.onPick(m);
-        const state = m.enabled === false ? "" : undefined;
+        const state = m.enabled === false ? true : undefined;
         if (m.type === "checkbox") {
           return (
-            <m3e-menu-item-checkbox key={key} checked={m.checked ? "" : undefined} disabled={state} onClick={click}>
+            <m3e-menu-item-checkbox key={key} checked={m.checked} disabled={state} onClick={click}>
               {m.title}
             </m3e-menu-item-checkbox>
           );
         }
         if (m.type === "radio") {
           return (
-            <m3e-menu-item-radio key={key} checked={m.checked ? "" : undefined} disabled={state} onClick={click}>
+            <m3e-menu-item-radio key={key} checked={m.checked} disabled={state} onClick={click}>
               {m.title}
             </m3e-menu-item-radio>
           );
@@ -3269,7 +3269,7 @@ export default function BrowserView(props: Props) {
           <m3e-tooltip for="lb-overflow-btn" position="above">More actions</m3e-tooltip>
           <m3e-menu id="lb-overflow-menu" aria-label="More actions">
             <m3e-menu-item-checkbox
-              checked={activeDt.open ? "" : undefined}
+              checked={activeDt.open}
               onClick={() => {
                 const next = !activeDt.open;
                 if (next) closeSheets("dt");
@@ -3279,7 +3279,7 @@ export default function BrowserView(props: Props) {
               Developer tools
             </m3e-menu-item-checkbox>
             <m3e-menu-item-checkbox
-              checked={extPanelOpen ? "" : undefined}
+              checked={extPanelOpen}
               onClick={() => {
                 const next = !extPanelOpen;
                 if (next) closeSheets("ext");
