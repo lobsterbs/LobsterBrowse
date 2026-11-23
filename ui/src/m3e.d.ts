@@ -16,6 +16,10 @@ type M3eBase = {
   onMouseLeave?: (event: React.MouseEvent) => void;
   "aria-label"?: string;
   "aria-hidden"?: boolean;
+  /* Class-only spreads ({...{ class: "x" }}) need one shared key with
+     the all-optional prop type or TS2559 fires; React 19 sets the
+     class attribute on custom elements either way. */
+  class?: string;
 };
 
 declare module "react" {
@@ -47,7 +51,7 @@ declare module "react" {
       "m3e-chip-set": M3eBase & { vertical?: boolean };
       "m3e-chip": M3eBase & { variant?: string; selected?: boolean | string };
       "m3e-list": M3eBase;
-      "m3e-list-item": M3eBase & { role?: string; tabIndex?: number; "aria-expanded"?: string; onKeyDown?: (ev: React.KeyboardEvent) => void; };
+      "m3e-list-item": M3eBase & { role?: string; tabIndex?: number; title?: string; "aria-expanded"?: string; onKeyDown?: (ev: any) => void; };
       "m3e-nav-menu": M3eBase;
       "m3e-nav-menu-item": M3eBase & { open?: boolean };
       "m3e-nav-rail": M3eBase & { mode?: string };
