@@ -88,8 +88,7 @@ ok(theme.includes(".lb-xpi-card," + NL + ".lb-site-card {"), "xpi and site cards
 ok(theme.includes(".lb-ext-note {") && theme.slice(theme.indexOf(".lb-ext-note {")).includes("backdrop-filter: var(--lb-glass-blur);"), "extension notes are glass");
 const logIdx = theme.indexOf(".lb-log-list {");
 ok(logIdx !== -1 && theme.slice(logIdx, logIdx + 700).includes("background: var(--lb-glass-tint);"), "log list is glass");
-const cmdkIdx = theme.indexOf(".lb-cmdk-input {");
-ok(cmdkIdx !== -1 && theme.slice(cmdkIdx, cmdkIdx + 700).includes("background: var(--lb-glass-tint);"), "command palette input is glass");
+ok(!theme.includes(".lb-cmdk"), "command palette css removed with the palette");
 /* Behavior preservation: the settings surface set is unchanged. */
 const setp = read("src/pages/Settings.tsx");
 ok(setp.includes("lb-setp-disc") && setp.includes("lb-set-inline"), "settings disclosure cards and inline cards still render");

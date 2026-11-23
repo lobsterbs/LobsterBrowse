@@ -24,7 +24,7 @@ const theme = read("src/theme.css");
 ok(theme.includes("m3e-bottom-sheet {"), "sheet frost rule exists");
 ok(theme.includes("--m3e-bottom-sheet-container-color: var(--lb-glass-sheet-tint);"), "sheet container color is translucent");
 ok(theme.includes("m3e-menu {"), "menu frost rule exists");
-ok(theme.includes(".lb-cmdk {") && theme.includes("background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 74%, transparent);"), "command palette is frosted");
+ok(!theme.includes(".lb-cmdk"), "command palette css removed with the palette");
 ok(theme.includes(".lb-fv-card {") && theme.includes("--m3e-elevated-card-container-color"), "floating elevated cards are frosted");
 ok(!theme.includes("body.lb-fancy .lb-ac {"), "home suggestor frost is unscoped");
 ok(!theme.includes("body.lb-fancy .lb-tb-ac {"), "toolbar suggestor frost is unscoped");

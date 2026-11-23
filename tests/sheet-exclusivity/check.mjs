@@ -30,7 +30,7 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
   ok("diag chip gone (demo measure pass)", !b.includes('closeSheets("dt");\n                setDt(active.id, { open: true, page: "diagnostics" });'));
   ok("devtools checkbox open closes others", b.includes('if (next) closeSheets("dt");\n                setDt(active.id, { open: next });'));
   ok("ext checkbox open closes others", b.includes('if (next) closeSheets("ext");\n                setExtPanelOpen(next);'));
-  ok("ext engine-message open closes others", b.includes('const onOpenExt = () => { closeSheets("ext"); setExtPanelOpen(true); };'));
+  ok("palette ext bridge gone with the palette", !b.includes("lb-open-extensions") && !b.includes("lb-focus-omnibox"));
   ok("ad blocking open closes others", b.includes('closeSheets("ad");\n                setAdOpen(true);'));
 
   /* No open site left unguarded: the old bare forms are gone. */
