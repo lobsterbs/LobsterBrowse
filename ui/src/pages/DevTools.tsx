@@ -908,7 +908,7 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
                   variant="tonal"
                   shape="square"
                   toggle=""
-                  selected={on ? "" : undefined}
+                  selected={on}
                   aria-current={on ? "true" : undefined}
                   {...{ class: "lb-dt-nav-btn" }}
                   onClick={() => setDt({ page })}

@@ -959,14 +959,14 @@ export default function App() {
         >
           <m3e-nav-item
             id="nav-home"
-            selected={view === "home" ? "" : undefined}
+            selected={view === "home"}
             onClick={(e) => navGo(e.currentTarget, "home", () => setView("home"))}
           >
             <m3e-icon slot="icon" name="home" aria-hidden={true} />Home
           </m3e-nav-item>
           <m3e-nav-item
             id="nav-browse"
-            selected={view === "browser" ? "" : undefined}
+            selected={view === "browser"}
             onClick={(e) => navGo(e.currentTarget, "browser", () => {
               if (tabs.length === 0) newTab();
               else setView("browser");
@@ -976,14 +976,14 @@ export default function App() {
           </m3e-nav-item>
           <m3e-nav-item
             id="nav-ai"
-            selected={view === "ai" ? "" : undefined}
+            selected={view === "ai"}
             onClick={(e) => navGo(e.currentTarget, "ai", () => setView("ai"))}
           >
             <m3e-icon slot="icon" name="psychology" aria-hidden={true} />AI
           </m3e-nav-item>
           <m3e-nav-item
             id="nav-settings"
-            selected={view === "settings" ? "" : undefined}
+            selected={view === "settings"}
             onClick={(e) => navGo(e.currentTarget, "settings", openSettings)}
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
@@ -995,13 +995,13 @@ export default function App() {
             Same items and handlers as the rail. */}
         <m3e-nav-bar {...{ class: "lb-bottom-nav" }} mode="compact" aria-label="LobsterBrowse">
           <m3e-nav-item
-            selected={view === "home" ? "" : undefined}
+            selected={view === "home"}
             onClick={(e) => navGo(e.currentTarget, "home", () => setView("home"))}
           >
             <m3e-icon slot="icon" name="home" aria-hidden={true} />Home
           </m3e-nav-item>
           <m3e-nav-item
-            selected={view === "browser" ? "" : undefined}
+            selected={view === "browser"}
             onClick={(e) => navGo(e.currentTarget, "browser", () => {
               if (tabs.length === 0) newTab();
               else setView("browser");
@@ -1010,13 +1010,13 @@ export default function App() {
             <m3e-icon slot="icon" name="travel_explore" aria-hidden={true} />Browse
           </m3e-nav-item>
           <m3e-nav-item
-            selected={view === "ai" ? "" : undefined}
+            selected={view === "ai"}
             onClick={(e) => navGo(e.currentTarget, "ai", () => setView("ai"))}
           >
             <m3e-icon slot="icon" name="psychology" aria-hidden={true} />AI
           </m3e-nav-item>
           <m3e-nav-item
-            selected={view === "settings" ? "" : undefined}
+            selected={view === "settings"}
             onClick={(e) => navGo(e.currentTarget, "settings", () => setView("settings"))}
           >
             <m3e-icon slot="icon" name="settings" aria-hidden={true} />Settings
@@ -1085,7 +1085,7 @@ export default function App() {
           arming: a correct password sets the lb_access cookie and
           reloads so the boot arming retry runs. */}
       {accessGateOpen && (
-        <m3e-dialog {...{ ref: accessGateRef }} alert="">
+        <m3e-dialog {...{ ref: accessGateRef }} alert={true}>
           <span slot="header">Access password</span>
           <p>
             This deployment gates its trusted-egress wisp credentials behind an access password.
