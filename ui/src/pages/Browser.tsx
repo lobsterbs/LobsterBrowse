@@ -1383,13 +1383,12 @@ export default function BrowserView(props: Props) {
   const dockPillRef = useRef<HTMLDivElement | null>(null);
   /* #219/#223: the dock pill stays mounted so its tuck/reveal
      transform animates both directions. While it is visually
-     unavailable (tucked away, or slid out behind the open tab
-     switcher) it is inert and aria-hidden, and focus is bumped
+     unavailable (tucked away) it is inert and aria-hidden, and focus is bumped
      out of it: no hidden control keeps a tab stop or hit target. */
   useEffect(() => {
     const el = dockPillRef.current;
     if (!el) return;
-    if (dockTucked || tabsOpen) {
+    if (dockTucked) {
       el.setAttribute("inert", "");
       el.setAttribute("aria-hidden", "true");
       const a = document.activeElement as HTMLElement | null;
@@ -1398,7 +1397,7 @@ export default function BrowserView(props: Props) {
       el.removeAttribute("inert");
       el.removeAttribute("aria-hidden");
     }
-  }, [dockTucked, tabsOpen]);
+  }, [dockTucked]);
   const dockHoverRef = useRef(false);
   const hideTimer = useRef<number | null>(null);
   const gripHoldRef = useRef<number | null>(null);
@@ -3000,49 +2999,54 @@ export default function BrowserView(props: Props) {
 
       </div>
 
+      {/* Wave 124: the tabs sheet renders OUTSIDE the dock. Non-modal
+          fixed sheets no longer promo into the top layer, so riding
+          inside .lb-dock would pin them to the dock's tuck transform.
+          State and handlers stay here; the layout is TabSwitcherCard's. */}
+      {/* Tab switcher: a non-modal m3e-bottom-sheet anchored above
+          card per tab (favicon, title, live tile). Extracted to
+          browser/TabSwitcherCard; state stays here. */}
+      <TabSwitcherCard
+        tabs={tabs}
+        activeId={active.id}
+        closingIds={closingIds}
+        icons={icons}
+        open={tabsOpen}
+        onNewTab={() => { props.newTab(); setTabsOpen(false); }}
+        onClose={() => setTabsOpen(false)}
+        onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
+        onCloseTab={closeTabSmooth}
+        onCloseAll={() => {
+          /* Every non-active tab collapses through the same
+             .closing animation as a single close, so the sheet
+             empties in one choreographed wave instead of one
+             row snapping out; closeTabSmooth owns the per-tab
+             cleanup and the guarded state drop. No confirm step:
+             an Undo snackbar follows once the collapse has landed
+             (closeTabSmooth's 320ms), restoring the closed tabs. */
+          const ids = tabs.filter((t) => t.id !== active.id).map((t) => t.id);
+          for (const id of ids) closeTabSmooth(id);
+          if (ids.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
+          window.setTimeout(() => {
+            M3eSnackbar.open(ids.length === 1 ? "Closed 1 tab" : "Closed " + ids.length + " tabs", "Undo", {
+              duration: 6000,
+              actionCallback: () => props.restoreClosedTabs(ids),
+            });
+          }, 340);
+        }}
+      />
+
       {/* Bottom dock: tucks fully out of view when idle; hold the
           pointer on the grip line for 3s (or tap/Enter it, or focus
           the URL field) to bring it back. */}
       <div
-        className={"lb-dock" + (dockTucked ? " tucked" : "") + (tabsOpen ? " tabs-open" : "")}
+        className={"lb-dock" + (dockTucked ? " tucked" : "")}
         onMouseEnter={() => (dockHoverRef.current = true)}
         onMouseLeave={() => {
           dockHoverRef.current = false;
           hideSoon();
         }}
       >
-        {/* Tab switcher: a modal m3e-bottom-sheet with one preview
-            card per tab (favicon, title, live tile). Extracted to
-            browser/TabSwitcherCard; state stays here. */}
-        <TabSwitcherCard
-          tabs={tabs}
-          activeId={active.id}
-          closingIds={closingIds}
-          icons={icons}
-          open={tabsOpen}
-          onNewTab={() => { props.newTab(); setTabsOpen(false); }}
-          onClose={() => setTabsOpen(false)}
-          onSelect={(id) => { props.setActiveId(id); setTabsOpen(false); }}
-          onCloseTab={closeTabSmooth}
-          onCloseAll={() => {
-            /* Every non-active tab collapses through the same
-               .closing animation as a single close, so the sheet
-               empties in one choreographed wave instead of one
-               row snapping out; closeTabSmooth owns the per-tab
-               cleanup and the guarded state drop. No confirm step:
-               an Undo snackbar follows once the collapse has landed
-               (closeTabSmooth's 320ms), restoring the closed tabs. */
-            const ids = tabs.filter((t) => t.id !== active.id).map((t) => t.id);
-            for (const id of ids) closeTabSmooth(id);
-            if (ids.length === 0 || typeof M3eSnackbar === "undefined" || !M3eSnackbar) return;
-            window.setTimeout(() => {
-              M3eSnackbar.open(ids.length === 1 ? "Closed 1 tab" : "Closed " + ids.length + " tabs", "Undo", {
-                duration: 6000,
-                actionCallback: () => props.restoreClosedTabs(ids),
-              });
-            }, 340);
-          }}
-        />
         {/* #86: the tucked dock hides fully; the grip line is the
             only hint. Hold the pointer on it 3s to reveal, or
             tap/Enter it (touch has no hover). */}
