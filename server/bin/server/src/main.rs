@@ -3258,11 +3258,17 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         std::env::var("ZL_QUERY_ROUTES").as_deref(),
         Ok("0") | Ok("false") | Ok("FALSE") | Ok("no")
     );
+    // COI arm: ZL_CROSS_ORIGIN_ISOLATION (=1/true/yes) opts this
+    // deployment into cross-origin isolation; the UI relays it to
+    // both origin workers with the zl:config coi push so the
+    // engine-served frame documents stamp COEP as well. Inert until
+    // the operator configures it.
+    let coi = coi_isolated();
     let lb_access = access_password().is_some();
     let wisp_auth = wisp_auth_env().is_some();
     let lb_version = format!("{} Iridium", env!("CARGO_PKG_VERSION"));
     let body = format!(
-        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"lbAccess\":{},\"wispAuth\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
+        "{{\"ok\":true,\"lb\":\"{}\",\"zeolite\":\"{}\",\"zlswSha\":\"{}\",\"scramjet\":\"{}\",\"sjSha\":\"{}\",\"sjWisp\":\"{}\",\"contentOrigin\":\"{}\",\"zlQueryRoutes\":{},\"coi\":{},\"lbAccess\":{},\"wispAuth\":{},\"build\":\"{}\",\"buildShort\":\"{}\"}}",
         lb_version,
         json_escape(&zeolite),
         json_escape(&zlsw_sha),
@@ -3271,6 +3277,7 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
         json_escape(&sj_wisp),
         json_escape(&content_origin),
         zl_query_routes,
+        coi,
         lb_access,
         wisp_auth,
         json_escape(&build),
@@ -3542,6 +3549,40 @@ embed the /zlsw-register boot page and the honest engine-offline
 notice before the worker exists, so the whole origin opts in.
 Worker-served responses get the same header in the engine
 bundle (Zeolite app/src/corp.ts, at the respondWith seam). */
+/* COI arm: ZL_CROSS_ORIGIN_ISOLATION (=1/true/yes) opts this
+deployment into cross-origin isolation. The server stamps
+COOP: same-origin + COEP: credentialless on every response it
+serves (the middleware layer below), so the top document boots
+isolated even before any worker config arrives; the engine
+stamps the worker-served frame documents via the zl:config coi
+push (Zeolite app/src/corp.ts). credentialless, not require-corp,
+so no-cors cross-origin subresources of unproxied app pages keep
+loading without a CORP audit; browsers that ignore the value
+degrade to today's non-isolated behavior. COOP severs cross-origin
+window.opener property access (postMessage is unaffected). */
+fn coi_from(raw: &str) -> bool {
+    matches!(raw.trim(), "1" | "true" | "TRUE" | "yes")
+}
+
+fn coi_isolated() -> bool {
+    std::env::var("ZL_CROSS_ORIGIN_ISOLATION")
+        .ok()
+        .as_deref()
+        .map(coi_from)
+        .unwrap_or(false)
+}
+
+fn coi_headers(headers: &mut axum::http::HeaderMap) {
+    headers.insert(
+        "cross-origin-opener-policy",
+        HeaderValue::from_static("same-origin"),
+    );
+    headers.insert(
+        "cross-origin-embedder-policy",
+        HeaderValue::from_static("credentialless"),
+    );
+}
+
 fn with_static_headers(mut res: Response) -> Response {
     res.headers_mut().insert(
         "cross-origin-resource-policy",
@@ -3557,6 +3598,9 @@ fn with_static_headers(mut res: Response) -> Response {
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),
     );
+    if coi_isolated() {
+        coi_headers(res.headers_mut());
+    }
     res
 }
 
@@ -3599,6 +3643,35 @@ mod static_headers {
             out.headers().get("cross-origin-resource-policy").unwrap(),
             "cross-origin"
         );
+    }
+
+    /* COI arm: the env parse is the operator contract, the headers
+    are the load-bearing half of the isolation (an absent
+    COOP/COEP pair leaves the deployment non-isolated), so the
+    rows pin both. */
+    #[test]
+    fn coi_env_parse_accepts_only_affirmative_values() {
+        assert!(coi_from("1"));
+        assert!(coi_from(" true "));
+        assert!(coi_from("TRUE"));
+        assert!(coi_from("yes"));
+        assert!(!coi_from(""));
+        assert!(!coi_from("0"));
+        assert!(!coi_from("false"));
+        assert!(!coi_from("on"));
+        assert!(!coi_from("same-origin"));
+    }
+
+    #[test]
+    fn coi_headers_sets_the_exact_isolation_pair() {
+        let mut h = axum::http::HeaderMap::new();
+        coi_headers(&mut h);
+        assert_eq!(h.get("cross-origin-opener-policy").unwrap(), "same-origin");
+        assert_eq!(
+            h.get("cross-origin-embedder-policy").unwrap(),
+            "credentialless"
+        );
+        assert_eq!(h.len(), 2);
     }
 }
 

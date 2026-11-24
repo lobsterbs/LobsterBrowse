@@ -167,6 +167,10 @@ export default function App() {
      value into a long retry loop. The ref starts true so a push
      before /build resolves never disables the always-on injector. */
   const queryRoutesRef = useRef(true);
+  /* The server's COI arm lands the same way: read from /build into
+     a ref per push attempt. Starts false so nothing arms the
+     worker-side stamp before the deployment announces it. */
+  const coiRef = useRef(false);
   /* Trusted-egress credential arming + the access-password gate.
      The ref holds the armed credentials so controllerchange can
      re-arm after a worker restart (the engine keeps them
@@ -189,6 +193,7 @@ export default function App() {
            present, remember it and register the engine worker on
            that origin. */
         queryRoutesRef.current = b && b.zlQueryRoutes === true;
+        coiRef.current = b && b.coi === true;
         /* Arm the trusted-egress wisp credentials when the deployment
            provisions them. A 403 means the access gate is up and
            this visitor has not passed it; the small dialog offers
@@ -538,6 +543,11 @@ export default function App() {
            per attempt so a slow /build fetch cannot pin a stale
            value into this retry loop. */
         queryRoutes: queryRoutesRef.current,
+        /* COI parity: the server's isolation arm (ZL_CROSS_ORIGIN_
+           ISOLATION via /build) is ephemeral worker state like the
+           other knob, read per push from the ref. The engine stamps
+           COEP on its own frame-document responses when armed. */
+        coi: coiRef.current,
       });
       for (const d of [0, 1000, 3000, 7000, 15000, 30000]) {
         if (d) await new Promise((res) => setTimeout(res, d));
@@ -667,6 +677,11 @@ export default function App() {
         /* The query-shape opt-in is ephemeral worker state, same
            class as httpsUpgrade; keep it in the parity push. */
         queryRoutes: queryRoutesRef.current,
+        /* COI parity: the server's isolation arm (ZL_CROSS_ORIGIN_
+           ISOLATION via /build) is ephemeral worker state like the
+           other knob, read per push from the ref. The engine stamps
+           COEP on its own frame-document responses when armed. */
+        coi: coiRef.current,
       };
       void zlSend(msg, 8000);
       /* The content worker rewrites and serves the proxied
