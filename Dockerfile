@@ -2615,7 +2615,17 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair
 # unchanged (epoxy.js 5a707545, epoxy.wasm 9fcab511). Cargo-side pin
 # unchanged.
-ARG ZEOLITE_COMMIT=af80c6880ef5ba0de40f2c4afb41b717f6a66048
+# Pin 201 (2026-11-24): dist 86876d7 (Zeolite 189a3fc9 coi arm: the
+# engine stamps cross-origin-embedder-policy: credentialless on its
+# worker-served responses when the host arms coi via zl:config - the
+# LB pair (server COI env arm behind ZL_CROSS_ORIGIN_ISOLATION plus
+# the App.tsx coi parity push) drives it; dist also carries aa8c994
+# devtools netlog wire-header and pre-dispatch stage (#713); run
+# 45391313372 all five green). sw.js dd98f6516554b102 ->
+# febbf2ba70635ebd (982741 bytes); bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy artifact pair unchanged (epoxy.js
+# 5a707545, epoxy.wasm 9fcab511). Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=86876d7be4520789495062bbf1cea9d5befbedd4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2690,7 +2700,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=dd98f6516554b102 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=febbf2ba70635ebd ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
