@@ -24,7 +24,7 @@ const bar = ai.slice(ai.indexOf("<m3e-search-bar"), ai.indexOf("</m3e-search-bar
 assert.ok(bar.indexOf("<m3e-search-bar") !== -1 && bar.includes("</"), "the search bar block was found");
 assert.ok(bar.includes('name={busy ? "stop" : "arrow_upward"}'), "the arrow_upward send sits inside the search bar");
 assert.ok(bar.includes('slot="trailing"'), "the send control is a trailing element of the bar");
-assert.ok(bar.includes('class: "lb-ai-send"'), "the send control is the owned lb-ai-send button");
+assert.ok(bar.includes('className={"lb-ai-send"'), "the send control is the owned lb-ai-send button");
 assert.ok(!ai.includes('variant: "filled", shape: "square"'), "the m3e variant morph spread is gone");
 
 /* 2. Wiring is real: send fires the real send(), busy fires the real
@@ -33,7 +33,7 @@ assert.ok(ai.includes("busy ? abortRef.current?.abort() : void send()"), "one ha
 
 /* 3. The morph is owned and CSS-driven: ready adds lb-ready, the rest
    is disabling state. */
-assert.ok(ai.includes('"lb-ai-send" + (draft.trim() || attached.length ? " lb-ready" : "")'), "a ready draft morphs the button via lb-ready");
+assert.ok(ai.includes('{"lb-ai-send" + (draft.trim() || attached.length ? " lb-ready" : "")'), "a ready draft morphs the button via lb-ready");
 assert.ok(ai.includes("disabled={!busy && !draft.trim() && !attached.length}"), "the button disables when there is nothing to send");
 
 /* 4. Icons: arrow_upward sends, stop aborts. */

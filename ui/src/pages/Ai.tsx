@@ -872,7 +872,7 @@ export default function AiPage() {
             <button
               type="button"
               slot="trailing"
-              {...{ class: "lb-ai-send" + (draft.trim() || attached.length ? " lb-ready" : "") }}
+              className={"lb-ai-send" + (draft.trim() || attached.length ? " lb-ready" : "")}
               disabled={!busy && !draft.trim() && !attached.length}
               aria-label={busy ? "Stop" : "Send"}
               onClick={() => (busy ? abortRef.current?.abort() : void send())}

@@ -2693,3 +2693,6 @@ background: var(--lb-glass-tint);
   .lb-home-bg-aurora i, .lb-home-bg-shapes m3e-shape { animation: none; }
   .lb-home-bg-shapes span { transition: none; transform: none; }
 }
+
+/* native inputs default to Arial; follow the app font */
+input, textarea, button { font-family: inherit; }

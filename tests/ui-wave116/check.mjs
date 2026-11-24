@@ -46,7 +46,7 @@ assert.ok(theme.includes(".lb-log-line { animation: none; }"), "log rows rest un
 /* 5. Send morph: owned trailing button (full contract in the
    ai-send-morph gate). */
 const bar = ai.slice(ai.indexOf("<m3e-search-bar"), ai.indexOf("</m3e-search-bar>"));
-assert.ok(bar.includes('slot="trailing"') && bar.includes('class: "lb-ai-send"'), "the owned send button sits in the trailing slot");
+assert.ok(bar.includes('slot="trailing"') && bar.includes('className={"lb-ai-send"'), "the owned send button sits in the trailing slot");
 
 /* 6. AdBlock sheet: shield in a real m3e shape, no empty-state text,
    footer icon spacing, privacy deep link. */
