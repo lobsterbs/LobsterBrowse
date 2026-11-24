@@ -412,7 +412,11 @@ function dtEnter(el: Element | null, delay = 0) {
   if (!el || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   el.animate?.(
     [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }],
-    { duration: 200, easing: DT_ENTER, delay },
+    /* fill: backwards holds the first keyframe through the delay:
+       without it the entering page painted at rest for the 40ms
+       delay, then teleported down 6px and faded back in - the
+       second of the two switch jumps (2026-11-24 report). */
+    { duration: 200, easing: DT_ENTER, delay, fill: "backwards" },
   );
 }
 
@@ -501,6 +505,26 @@ export default function DevTools({ tab, dt, setDt, frame, onClose, onOpenLogs, o
     const id = requestAnimationFrame(() =>
       dtEnter(sheetRef.current?.querySelector(".lb-dt-page:not([hidden])") ?? null, 40));
     return () => cancelAnimationFrame(id);
+  }, [dt.page, open]);
+
+  /* Switch stability (2026-11-24 report), first hop: the sheet's
+     ResizeObserver refits the raw px height instantly when the
+     visible page's height changes (its snap animation is not on that
+     path), so the sheet edges snapped once per toggle. The class
+     swaps the registered --_bottom-sheet-height property into a
+     transition for the switch window only: detent drags keep
+     writing the raw height per frame and must never see it, and the
+     open entrance (transform slide) never overlaps it. */
+  const switchableRef = useRef(false);
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    if (!open) { switchableRef.current = false; return; }
+    /* The open run claims the window; only real toggles tween. */
+    if (!switchableRef.current) { switchableRef.current = true; return; }
+    if (!sheet) return;
+    sheet.classList.add("lb-dt-switch");
+    const t = setTimeout(() => sheet.classList.remove("lb-dt-switch"), 350);
+    return () => clearTimeout(t);
   }, [dt.page, open]);
 
 

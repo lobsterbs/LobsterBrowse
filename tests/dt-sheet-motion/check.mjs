@@ -38,7 +38,16 @@ const theme = readFileSync(resolve(root, "ui/src/theme.css"), "utf8");
 const dtBlock = theme.slice(theme.indexOf(".lb-dt-content"), theme.indexOf(".lb-dt-content") + 5000);
 if (dtBlock.includes("transition: all")) fail("no transition:all in the dt css block");
 
+/* Switch stability (2026-11-24 report): no rest-frame flash on the
+   delay, and the fit-detent refit tweens inside the switch window. */
+has(dt, 'fill: "backwards"', "entering elements must hold the from-frame through their delay (no rest-then-teleport)");
+has(dt, 'classList.add("lb-dt-switch")', "the switch window class must be added pre-paint");
+has(dt, 'classList.remove("lb-dt-switch")', "the switch window class must come off after the window");
+has(theme, ".lb-dt-sheet.lb-dt-switch { transition:", "the switch window height tween exists");
+has(theme, "--_bottom-sheet-height 250ms cubic-bezier(0.2, 0, 0, 1); }", "the refit height tweens on the emphasized curve");
+has(theme, ".lb-dt-sheet.lb-dt-switch { transition: none; }", "reduced motion kills the switch height tween");
+has(theme, "transform var(--md-sys-motion-duration-medium-2, 300ms) var(--md-sys-motion-easing-standard-decelerate, cubic-bezier(0, 0, 0, 1))", "the component's own host transition list is restated, so the sheet slide survives");
 /* CI registration. */
 const ci = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");
 has(ci, "tests/dt-sheet-motion/check.mjs", "gate not registered in ci.yml");
-console.log("dt-sheet-motion: OK (composite WAAPI entrance, 200ms emphasized curve, 40ms stagger, reduced-motion guard, ci-registered)");
+console.log("dt-sheet-motion: OK (composite WAAPI entrance, 200ms emphasized curve, 40ms stagger, reduced-motion guard, switch window height tween, ci-registered)");
