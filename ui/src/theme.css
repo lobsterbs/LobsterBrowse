@@ -1834,10 +1834,15 @@ body .lb-ext-panel {
 .app-content[data-view="ai"] { padding-top: var(--md-sys-measurement-space50, 4px); padding-bottom: 0; overflow: hidden; }
 .app-content[data-view="ai"] .lb-view:not([hidden]) { flex: 1; min-height: 0; display: flex; max-width: none; }
 /* 2026-11-23 report: the AI page shares the Home view's random
-   background. The isolation keeps the background's z-index -1
-   inside this view (it paints above the app shell, below the
-   frosted message area) instead of sliding behind the whole app. */
-.lb-ai { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+   background. Full-bleed fix (2026-11-24): the view keeps
+   position: relative for its own absolute children (history button,
+   model picker popover), but NOT isolation; the background overrides
+   to position: fixed so its box is the viewport, not the inset
+   1100px reading column, and its z-index -1 then joins the shell's
+   isolated context (rule above): above the shell surface, under the
+   app chrome, exactly the Home layering. */
+.lb-ai { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+.lb-ai > .lb-home-bg { position: fixed; }
 
 .lb-ai-quota { font-size: var(--md-sys-typescale-label-medium-font-size, 12px); color: var(--md-sys-color-on-surface-variant, #cac4d0); padding: 4px 10px; border-radius: var(--md-sys-shape-corner-full, 999px); background: color-mix(in srgb, var(--md-sys-color-surface-container-high, #2b2b2f) 60%, transparent); white-space: nowrap; }
 .lb-ai-quota-out { color: var(--md-sys-color-error, #f2b8b5); }
@@ -2677,7 +2682,8 @@ background: var(--lb-glass-tint);
    well as the content: the rail's frost blurs the same backdrop and
    takes on its colour. The isolated stacking context keeps z-index -1
    above the shell's surface paint but under everything else. */
-.lb-shell:has(.app-content[data-view="home"]) { position: relative; isolation: isolate; }
+.lb-shell:has(.app-content[data-view="home"]),
+.lb-shell:has(.app-content[data-view="ai"]) { position: relative; isolation: isolate; }
 .lb-home-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 .lb-home-bg-aurora i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
 .lb-home-bg-aurora i:nth-child(1) { width: 70vmax; height: 70vmax; left: -20vmax; top: -30vmax; background: radial-gradient(closest-side, color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent), transparent); animation: lb-aur-1 38s ease-in-out infinite alternate; }

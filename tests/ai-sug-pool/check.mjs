@@ -1,6 +1,7 @@
 /* Gate: the AI page refresh (2026-11-23 report).
    - The AI view shares the Home background (HomeBg renders behind
-     the conversation, inside an isolated stacking context);
+     the conversation, full-bleed: fixed to the viewport inside the
+     shell's isolated context, same layering as Home);
    - the starter chips rotate: the math prompt stays first, the other
      two roll per page visit from a generic pool (no dev-facing
      prompts);
@@ -15,10 +16,13 @@ const ai = read("../../ui/src/pages/Ai.tsx");
 const theme = read("../../ui/src/theme.css");
 const ci = read("../../.github/workflows/ci.yml");
 
-/* 1. Home background behind the conversation. */
+/* 1. Home background behind the conversation, full-bleed. */
 assert.ok(ai.includes('import HomeBg from "./HomeBg";'), "the AI page imports HomeBg");
 assert.ok(ai.includes("<HomeBg />"), "the background renders in the AI view");
-assert.ok(theme.includes(".lb-ai { position: relative; isolation: isolate;"), "the view isolates its stacking context so the background stays inside");
+assert.ok(theme.includes('.lb-shell:has(.app-content[data-view="home"]),\n.lb-shell:has(.app-content[data-view="ai"]) { position: relative; isolation: isolate; }'), "the shell isolates the background context on both views (2026-11-24 full-bleed)");
+assert.ok(theme.includes(".lb-ai > .lb-home-bg { position: fixed; }"), "the AI view's background box is the viewport, not the inset column");
+assert.ok(!theme.includes(".lb-ai { position: relative; isolation: isolate;"), "the view no longer traps the background in the inset column (the 2026-11-24 bug)");
+assert.ok(theme.includes(".lb-ai { position: relative; flex: 1;"), "the view stays positioned for its absolute children (history button, model popover)");
 
 /* 2. Rotating starter pool. */
 assert.ok(ai.includes("const MATH_PROMPT = \"Solve this: 17 * 24 - 96\";"), "the math starter stays first");
