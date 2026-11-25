@@ -19,7 +19,12 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { TOUR_STEPS, loadTourAnswer, saveTourAnswer } from "../../ui/src/tour.ts";
+
+// CI runs this from ui/ (`node --experimental-strip-types ../tests/ui-tour/check.mjs`),
+// so every readFileSync below resolves against the repo root, never the cwd.
+process.chdir(fileURLToPath(new URL("../..", import.meta.url)));
 
 const data = new Map();
 globalThis.localStorage = {
