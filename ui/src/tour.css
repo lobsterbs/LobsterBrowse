@@ -1,0 +1,12 @@
+/* ---- First-run tour (App ask + components/Tour.tsx overlay). The
+   hole draws the dim as one huge box-shadow so the spotlight moves
+   with a single transition; tokens come from the active m3e-theme. */
+.lb-tour-scrim { position: fixed; inset: 0; z-index: 3000; background: transparent; }
+.lb-tour-hole { position: fixed; z-index: 3001; border-radius: var(--md-sys-shape-corner-large, 16px); pointer-events: none; opacity: 0; box-shadow: 0 0 0 9999px var(--md-sys-color-scrim, rgba(0, 0, 0, 0.6)); outline: 2px solid var(--md-sys-color-primary, #a8c8ff); transition: left 300ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)), top 300ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)), width 300ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)), height 300ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)), opacity 200ms var(--md-sys-motion-easing-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lb-tour-card { position: fixed; z-index: 3002; padding: var(--md-sys-measurement-space150, 12px) var(--md-sys-measurement-space200, 16px) var(--md-sys-measurement-space200, 16px); border-radius: var(--md-sys-shape-corner-large, 16px); background: var(--md-sys-color-surface-container-low, #1d1d20); color: var(--md-sys-color-on-surface, #e3e2e6); box-shadow: var(--md-sys-elevation-level3, 0 4px 8px rgba(0, 0, 0, 0.35)); outline: none; }
+.lb-tour-card:focus-visible { outline: 2px solid var(--md-sys-color-primary, #a8c8ff); outline-offset: 2px; }
+.lb-tour-step { display: block; margin-bottom: var(--md-sys-measurement-space50, 4px); color: var(--md-sys-color-on-surface-variant, #c5c5cb); font-size: 0.75rem; font-weight: 500; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; }
+.lb-tour-card p.lb-tour-body { margin: var(--md-sys-measurement-space100, 8px) 0 0; color: var(--md-sys-color-on-surface-variant, #c5c5cb); }
+.lb-tour-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--md-sys-measurement-space100, 8px); margin-top: var(--md-sys-measurement-space200, 16px); }
+.lb-tour-nav { display: flex; gap: var(--md-sys-measurement-space50, 4px); }
+@media (prefers-reduced-motion: reduce) { .lb-tour-hole { transition: none; } }
