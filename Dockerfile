@@ -2755,6 +2755,13 @@ FROM debian:bookworm-slim AS zl-builder
 # bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair
 # unchanged (epoxy.js b69924f0, epoxy.wasm 675b4a6a).
 # Cargo-side pin unchanged.
+# Pin 205 (2026-11-25): epoxy glue pin only. The speed-build merge
+# (epoxy-tls multiplexed b9eeea0a, fork PR #1) adds the SPEED flag to
+# the glue info line; the shipped size variant is otherwise identical
+# (epoxy.wasm rebuilt byte-identical 675b4a6a, proven twice by CI), so
+# only the js gate moves: epoxy.js b69924f0 -> 09f8eb5a.
+# sw.js/bootstrap unchanged (18ae34eaa466e199/0a3e47fd0bcfbba3).
+# Cargo-side pin unchanged.
 ARG ZEOLITE_COMMIT=4ad22653823594243bda619625a23abc0a35093d
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
@@ -2791,7 +2798,7 @@ RUN mkdir -p /bundle/epoxy \
       -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
  && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
       -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
- && echo "b69924f0172ae3be00a1fd5861cb4a80f54587f76a3f83e74be035659d067171  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "09f8eb5ad65cd42ed132e83b95cc208ee683b5ba9d333c7c28fda12791c86179  /bundle/epoxy/epoxy.js" | sha256sum -c - \
  && echo "675b4a6a67defc647994779ee29505e49450b5ea6c43d0ede5e2db396f5223ae  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
 
 # ScramJet engine bundle (upstream MercuryWorkshop, the newest
