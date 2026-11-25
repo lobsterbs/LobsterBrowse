@@ -149,15 +149,14 @@ export default function Tour(props: Props) {
           role: "dialog",
           "aria-modal": true,
           "aria-label": st.title,
-            }}
+        }}
         style={{ left: cardL + "px", top: cardT + "px", width: cardW + "px" }}
       >
         <span className="lb-tour-step">{"Step " + (step + 1) + " of " + TOUR_STEPS.length}</span>
         <m3e-heading variant="title" size="medium" level={3}>
           {st.title}
         </m3e-heading>
-        <p className="
-b-tour-body">{st.body}</p>
+        <p className="lb-tour-body">{st.body}</p>
         <div className="lb-tour-actions">
           {/* Exit is plain text: leaving mid-tour is the quiet option,
               never the primary one. */}
@@ -165,15 +164,14 @@ b-tour-body">{st.body}</p>
             Exit
           </m3e-button>
           <span className="lb-tour-nav">
-              {step > 0 && (
-                <m3e-button onClick={() => props.onStep(step - 1)}>Back</m3e-button>
-              )}
-            {last ? ({/* merge into:*ׯCYͯ
-}
-                <m3e-button variant="filled" onClick={() => props.onStep(null)}>
-                  Done
+            {step > 0 && (
+              <m3e-button onClick={() => props.onStep(step - 1)}>Back</m3e-button>
+            )}
+            {last ? (
+              <m3e-button variant="filled" onClick={() => props.onStep(null)}>
+                Done
               </m3e-button>
-              ) : (
+            ) : (
               <m3e-button variant="filled" onClick={() => props.onStep(step + 1)}>
                 Next
               </m3e-button>
