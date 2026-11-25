@@ -2724,7 +2724,15 @@ FROM debian:bookworm-slim AS zl-builder
 # febbf2ba70635ebd (982741 bytes); bootstrap.js unchanged
 # (0a3e47fd0bcfbba3). Epoxy artifact pair unchanged (epoxy.js
 # 5a707545, epoxy.wasm 9fcab511). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=86876d7be4520789495062bbf1cea9d5befbedd4
+# Pin 202 (2026-11-25): dist 56296e2 (Zeolite 9b4be2b #716 fingerprint
+# native-toString shield incl. worker script + userAgentData builders; ci
+# d328262 epoxy pair moved with #718 wire-shape fix - page headers lead,
+# accept-encoding gains deflate; run 45579574103 all five green). sw.js
+# febbf2ba70635ebd -> 52bac384b5c03014 (983968 bytes); bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy artifact pair moved with the #718 rebuild:
+# epoxy.js 5a707545 -> 0a632707, epoxy.wasm 9fcab511 -> 1f5588aa.
+# Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=56296e27f23c7df2c7250d2b45c3092d1bcc617e
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2760,8 +2768,8 @@ RUN mkdir -p /bundle/epoxy \
       -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
  && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
       -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
- && echo "5a7075451f460aa2c969334c1e924885c6bdda36001418057b267aa13a36db52  /bundle/epoxy/epoxy.js" | sha256sum -c - \
- && echo "9fcab511a1550617a54ac97ac662b3e34d27ed59d8206865dfcb69699f8b15db  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
+ && echo "0a6327072ff85693a80eb51746da4cca64419329b4512abd066d25388b60251c  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "1f5588aa40843d68ed643785674e0f42a785a9716c9815d154f9401bbdb99d3e  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
 
 # ScramJet engine bundle (upstream MercuryWorkshop, the newest
 # published build), vendored with the same never-committed rule as
@@ -2799,7 +2807,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=febbf2ba70635ebd ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=52bac384b5c03014 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
