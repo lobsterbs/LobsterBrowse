@@ -618,7 +618,7 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                 />
               </div>
               <p className="lb-muted" style={{ marginTop: 6 }}>
-                Match user-agent derives the voice from the effective User-Agent; the other picks pin it. Applied on the next engine load.
+                Match user-agent derives the voice from the effective User-Agent and automatically falls back to the native shape when a site refuses its handshake; the other picks pin the voice and keep it even when it fails. Applied on the next engine load.
               </p>
             </SetPanel>
             <SetPanel
