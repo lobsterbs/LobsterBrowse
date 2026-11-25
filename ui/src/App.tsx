@@ -24,10 +24,13 @@ import { parseNavTab, shellGuardCancel, shellGuardDest, type ShellNavApi, type S
 import { sanitizeUrl } from "./sanitize";
 import { createPopupGate } from "./browser/popupGate";
 import { sjInit } from "./scramjet";
+import Tour from "./components/Tour";
+import { TOUR_STEPS, loadTourAnswer, saveTourAnswer } from "./tour";
 import { shapeWipe } from "./wipe";
 import { defaultExperimental, loadDebugOverrides } from "./debug";
 import type { Tab } from "./store";
 import "./extensions.css";
+import "./tour.css";
 
 type View = "home" | "browser" | "ai" | "settings" | "logs";
 
@@ -135,6 +138,39 @@ export default function App() {
       /* localStorage unavailable: behave like a first visit. */
     }
   }, []);
+  /* First-run tour: a profile without a stored answer ("done"/"skip")
+     gets the ask on EVERY login until the tour runs (answer "done",
+     set when it starts) or the user picks "Never ask again" ("skip").
+     The ask fires at boot; Escape/dismiss on the dialog reads as
+     Not now (still unanswered, asked again next login). The tour
+     itself lives in components/Tour.tsx + tour.ts; replay rides the
+     same component from Settings. */
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [tourAskOpen, setTourAskOpen] = useState(false);
+  const tourAskRef = useRef<(HTMLElement & { show: () => Promise<void>; hide: () => void }) | null>(null);
+  const tourAskClose = () => {
+    tourAskRef.current?.hide();
+  };
+  useEffect(() => {
+    if (loadTourAnswer(localStorage) === null) setTourAskOpen(true);
+  }, []);
+  /* Mirror the Settings dialog pattern: opening mounts + shows the
+     dialog, and its own `closed` event (button, Escape, backdrop
+     alike) resets the state so it can never wedge open. */
+  useEffect(() => {
+    if (!tourAskOpen) return;
+    const el = tourAskRef.current;
+    if (!el) return;
+    const onClosed = () => setTourAskOpen(false);
+    el.addEventListener("closed", onClosed);
+    void el.show();
+    return () => el.removeEventListener("closed", onClosed);
+  }, [tourAskOpen]);
+  const startTour = () => {
+    saveTourAnswer(localStorage, "done");
+    tourAskClose();
+    setTourStep(0);
+  };
   /* The engine worker broadcasts zl:engineUpdate (updates.ts) to
      every window client once it activates; the UI is a client of the
      same worker, so the update surfaces as a snackbar with a manual
@@ -348,6 +384,27 @@ export default function App() {
     setView("browser");
     store.pushLog("info", "new tab #" + tab.id + (url ? " → " + url : ""));
   }, []);
+  /* The tour can need a view the current state hides: step go()
+     mounts the Browser view (creating a tab when the strip is empty),
+     opens Settings on its first section, or lands on Home. The
+     "any" steps target the always-mounted rail and switch nothing. */
+  const tourGo = useCallback(
+    (i: number) => {
+      const st = TOUR_STEPS[i];
+      if (!st) return;
+      if (st.view === "browser") {
+        if (tabs.length === 0) newTab();
+        else setView("browser");
+        return;
+      }
+      if (st.view === "settings") {
+        openSettings("search");
+        return;
+      }
+      if (st.view === "home") setView("home");
+    },
+    [tabs.length, newTab],
+  );
 
   const closeTab = useCallback((id: number) => {
     const cur = tabsRef.current;
@@ -1000,6 +1057,7 @@ export default function App() {
                   onRulesChange={updateRules}
                   onOpenLogs={() => setView("logs")}
                   onDeleteAll={deleteAll}
+                  onOpenTour={() => setTourStep(0)}
                 />
               )}
               {view === "ai" && <AiPage />}
@@ -1036,6 +1094,39 @@ export default function App() {
           </div>
         </m3e-dialog>
       )}
+      {/* First-run tour ask: one question per login until answered.
+          Start settles it ("done") and hands over to the tour; Not
+          now leaves it unanswered (asked again next login); Never ask
+          again stores "skip". The dialog owns scrim/focus/Escape. */}
+      {tourAskOpen && (
+        <m3e-dialog {...{ ref: tourAskRef }} dismissible={true} close-label="Not now">
+          <span slot="header">New here?</span>
+          <p>
+            Want a quick tour of the toolbar, the address bar, Settings and the other
+            corners of LobsterBrowse? It takes under a minute, and you can replay it any
+            time from Settings.
+          </p>
+          <div slot="actions">
+            <m3e-button
+              variant="text"
+              onClick={() => {
+                saveTourAnswer(localStorage, "skip");
+                tourAskClose();
+              }}
+            >
+              Never ask again
+            </m3e-button>
+            <m3e-button variant="text" onClick={tourAskClose}>
+              Not now
+            </m3e-button>
+            <m3e-button variant="filled" autofocus onClick={startTour}>
+              Start tour
+            </m3e-button>
+          </div>
+        </m3e-dialog>
+      )}
+      {/* The spotlight overlay itself (scrim + hole + step card). */}
+      <Tour step={tourStep} go={tourGo} onStep={setTourStep} />
     </m3e-theme>
   );
 }
