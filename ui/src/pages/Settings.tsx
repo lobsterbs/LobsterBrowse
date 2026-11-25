@@ -29,9 +29,6 @@ type Props = {
   onRulesChange: (rules: SiteRule[]) => void;
   onOpenLogs: () => void;
   onDeleteAll: () => void;
-  /* Replay the first-run tour (components/Tour.tsx); App owns the
-     step state, so the entry just asks it to start. */
-  onOpenTour: () => void;
 };
 
 /* The default seed was the indigo-violet default
@@ -234,7 +231,7 @@ function TextInput(props: {
 
 
 
-export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll, onOpenTour, section: sectionLink }: Props) {
+export default function SettingsPanel({ settings, onChange, onOpenLogs, onDeleteAll, section: sectionLink }: Props) {
   /* Sub-card open state: independent panels (no accordion wrapper),
      several open at once. All panels start closed; the single-control
      sub options are inline row cards now, so nothing needs a head
@@ -719,15 +716,6 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                   the app log and DevTools. */}
               <m3e-button onClick={onOpenLogs}>
                 <m3e-icon name="history" aria-hidden={true} /> Open Logs
-              </m3e-button>
-            </SetInline>
-            <SetInline
-              anchorId="set-tour"
-              label="Tour"
-              desc="Walk through the toolbar, the address bar, these sections and more. Under a minute."
-            >
-              <m3e-button onClick={onOpenTour}>
-                <m3e-icon name="explore" aria-hidden={true} /> Start tour
               </m3e-button>
             </SetInline>
               </>

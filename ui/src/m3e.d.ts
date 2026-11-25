@@ -16,7 +16,6 @@ type M3eBase = {
   onMouseLeave?: (event: React.MouseEvent) => void;
   "aria-label"?: string;
   "aria-hidden"?: boolean;
-  "aria-modal"?: boolean;
   /* Class-only spreads ({...{ class: "x" }}) need one shared key with
      the all-optional prop type or TS2559 fires; React 19 sets the
      class attribute on custom elements either way. */
