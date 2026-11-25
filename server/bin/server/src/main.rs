@@ -4628,6 +4628,15 @@ fn coi_headers(headers: &mut axum::http::HeaderMap) {
 }
 
 fn with_corp(mut res: Response) -> Response {
+    /* 101 Switching Protocols (the wisp WebSocket upgrade) is not an
+    embeddable resource. Stamped COOP/COEP on the upgrade killed every
+    wisp socket with CLOSE 1006 on the coi-armed deployments (2026-11-25,
+    beta + content) while the unarmed host's bare 101 carried none of
+    these headers and stayed alive, so the upgrade alone is exempt;
+    document and asset responses keep the full coi stamp. */
+    if res.status() == StatusCode::SWITCHING_PROTOCOLS {
+        return res;
+    }
     res.headers_mut().insert(
         "cross-origin-resource-policy",
         HeaderValue::from_static("cross-origin"),
@@ -4686,6 +4695,24 @@ mod corp {
             "cross-origin"
         );
         assert_eq!(out.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test]
+    fn with_corp_leaves_the_websocket_upgrade_stamp_free() {
+        /* 2026-11-25 regression: coi-armed hosts stamped COOP/COEP onto
+        the wisp 101 upgrade and every socket died CLOSE 1006; the guard
+        in with_corp is load-bearing, so pin that the upgrade carries
+        none of the layer's headers. */
+        let res = Response::builder()
+            .status(StatusCode::SWITCHING_PROTOCOLS)
+            .header("upgrade", "websocket")
+            .body(Body::empty())
+            .unwrap();
+        let out = with_corp(res);
+        assert!(out.headers().get("cross-origin-resource-policy").is_none());
+        assert!(out.headers().get("cross-origin-opener-policy").is_none());
+        assert!(out.headers().get("cross-origin-embedder-policy").is_none());
+        assert_eq!(out.status(), StatusCode::SWITCHING_PROTOCOLS);
     }
 
     #[test]
