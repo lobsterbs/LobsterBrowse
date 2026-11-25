@@ -3584,6 +3584,15 @@ fn coi_headers(headers: &mut axum::http::HeaderMap) {
 }
 
 fn with_static_headers(mut res: Response) -> Response {
+    /* 101 Switching Protocols (the wisp WebSocket upgrade) is not an
+    embeddable resource: the coi-armed beta/content hosts died CLOSE 1006
+    exactly when this layer stamped the upgrade (2026-11-25), while the
+    bare 101 on the unarmed host stayed alive, so the upgrade is exempt
+    from all stamping; documents and assets keep it. */
+    if res.status() == StatusCode::SWITCHING_PROTOCOLS {
+        return res;
+    }
+
     res.headers_mut().insert(
         "cross-origin-resource-policy",
         HeaderValue::from_static("cross-origin"),
@@ -3613,6 +3622,24 @@ mod static_headers {
     sniffing hole the doctor's probe-assets check warns about, so the
     gate checks both exact header values and that the response is
     otherwise intact. */
+    #[test]
+    fn with_static_headers_leaves_the_websocket_upgrade_stamp_free() {
+        /* 2026-11-25 regression guard: wisp 101 upgrades must carry none
+        of this layer's headers (coi-armed hosts died CLOSE 1006 when
+        they did). */
+        let res = Response::builder()
+            .status(StatusCode::SWITCHING_PROTOCOLS)
+            .header("upgrade", "websocket")
+            .body(Body::empty())
+            .unwrap();
+        let out = with_static_headers(res);
+        assert!(out.headers().get("cross-origin-resource-policy").is_none());
+        assert!(out.headers().get("cross-origin-opener-policy").is_none());
+        assert!(out.headers().get("cross-origin-embedder-policy").is_none());
+        assert!(out.headers().get("x-content-type-options").is_none());
+        assert_eq!(out.status(), StatusCode::SWITCHING_PROTOCOLS);
+    }
+
     #[test]
     fn with_static_headers_sets_embedder_headers_and_keeps_the_response() {
         let res = Response::builder()
