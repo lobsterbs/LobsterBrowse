@@ -2794,7 +2794,17 @@ FROM debian:bookworm-slim AS zl-builder
 # 12c82b13f105c58b (985501 bytes). bootstrap.js unchanged
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,
 # epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=1f0a4ef00956fd8246153d7292818c3a7d9769bb
+# Pin 210 (2026-11-26): epoxy per-identity h2 wire profiles - the
+# transport (epoxy-tls multiplexed 9f5f4c35, h2-wasm master 5d57b1d1)
+# wires EpoxyIdentity into the h2 fork's process-global client wire
+# profile: Native keeps the Chromium handshake shape shipped
+# 2026-11-23, Brave/Firefox speak their capture-pinned h2 handshakes
+# (lyrebird tools/capture/h2shapes.py). Zeolite ci run 45903412631
+# (01a35c72) republished dist 8720d9ed; build-stamp only, sw.js
+# 12c82b13f105c58b -> 8d4c26d1942efbfb (985501 bytes). bootstrap.js
+# unchanged (0a3e47fd0bcfbba3). Epoxy pair bumped (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=8720d9edb695ca7b2a4950e7d947b64657d1adb1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2869,7 +2879,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=12c82b13f105c58b ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8d4c26d1942efbfb ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
