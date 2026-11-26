@@ -7,6 +7,10 @@
 # for weeks, so every session began on a cold instance. A failed
 # ping now fails the job, and tests/keepalive-hosts pins this
 # list to the live services. Public repo: the runner is free.
+# 2026-11-26: the 2026-11-24 workspace migration rotated the
+# hostnames, so the list pings the live b9zk/edsh/t189 origins
+# (the old canonical names 503 suspended); the fixture service
+# is suspended by owner and left the list.
 name: Keep-alive
 on:
   schedule:
@@ -19,9 +23,9 @@ jobs:
       - name: Ping free-tier services
         run: |
           for url in \
-            https://lobsterbrowse-server.onrender.com/healthz \
-            https://lobsterbrowse-beta.onrender.com/healthz \
-            https://lobsterbrowse-fixture.onrender.com/data.json ; do
+            https://lobsterbrowse-server-b9zk.onrender.com/healthz \
+            https://lobsterbrowse-beta-edsh.onrender.com/healthz \
+            https://lobsterbrowse-content-t189.onrender.com/healthz ; do
             if ! curl -fsS --max-time 120 "$url" > /dev/null; then
               echo "::error::keep-alive ping failed: $url"
               exit 1
