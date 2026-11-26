@@ -2768,7 +2768,15 @@ FROM debian:bookworm-slim AS zl-builder
 # moved sw.js 18ae34eaa466e199 -> 930ea991ddd665b1 (984603 bytes).
 # bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair unchanged
 # (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=d87ae394732b32b66a5a27fb71336cec5703b6b6
+# Pin 207 (2026-11-26): dist restamp ride after the Zeolite
+# mirror.yml removal. Zeolite ci run 45770306307 (b0b296c1, the
+# GitLab mirror workflow deletion - engine source unchanged)
+# republished dist 577030a6; only the per-run build-id stamp
+# moved sw.js 930ea991ddd665b1 -> e7093292fb3fd366 (984603
+# bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair
+# unchanged (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a).
+# Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=577030a680e48bbed9cafe5e310c75c5bf1c1cde
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2843,7 +2851,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=930ea991ddd665b1 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e7093292fb3fd366 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
