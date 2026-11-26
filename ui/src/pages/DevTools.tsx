@@ -214,13 +214,15 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
     );
   }, [clientId, source, snapshotRef, statusRef, active]);
 
-  if (!scope) {
-    return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
-  }
-  if (!current) {
-    return <p className="lb-muted">{DIAG_STATUS_TEXT[status ?? "starting"]}</p>;
-  }
-  const { stats } = current;
+  /* React counts hooks in call order, so every hook in this component
+     must run on every render - including renders that bail out at the
+     early returns below. The windowing hooks used to sit after those
+     returns: the first render (no snapshot yet) skipped them, the
+     first poll delivery then flipped the guard conditions and mounted
+     four extra hooks on the next render, and React's hook-count
+     invariant (#310) took the whole app down to the boot failure
+     screen the moment the Diagnostics tab opened on a proxied page.
+     They run unconditionally now. */
   /* Newest first, every event, with a visible boundary between
      navigations so the previous navigation's rows read as history. */
   const rows = [...history].reverse();
@@ -241,6 +243,14 @@ function ZeoliteDiagnostics({ clientId, source, snapshotRef, statusRef, active }
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.length > limit]);
+
+  if (!scope) {
+    return <p className="lb-muted">No engine identity for this document yet. Reload the page to retry the handshake; diagnostics never fall back to worker-global logs.</p>;
+  }
+  if (!current) {
+    return <p className="lb-muted">{DIAG_STATUS_TEXT[status ?? "starting"]}</p>;
+  }
+  const { stats } = current;
   const shown = rows.slice(0, limit);
   return (
     <div className="lb-net">

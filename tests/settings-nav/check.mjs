@@ -67,8 +67,10 @@ ok("active nav sub line recolors", theme.includes(".lb-set-nav-item.active .lb-s
 ok("markup: nav sub line rendered", page.includes('<span className="lb-set-nav-sub">{SECTION_META[id].sub}</span>'));
 ok("narrow screens swap the card rail for the section dropdown", theme.includes(".lb-set-nav { display: none; }") && theme.includes(".lb-set-nav-drop { display: block; grid-column: 1 / -1; }") && theme.includes(".lb-set-nav-sub { display: none; }") === false);
 
-/* The markup wires the shape, the icon and the name. */
-ok("markup: each category renders its own m3e-shape", page.includes('name={SECTION_META[id].shape}'));
+/* The markup wires the shape, the icon and the name. The active
+   category morphs its tile to the sunny shape (the m3e-shape name
+   transition tweens the swap); the resting shape stays per-category. */
+ok("markup: each category renders its own m3e-shape", page.includes('name={section === id ? "sunny" : SECTION_META[id].shape}'));
 ok("markup: the five category shapes are pinned and distinct", ["4-sided-cookie", "gem", "12-sided-cookie", "flower", "soft-burst"].every((n) => page.includes('shape: "' + n + '"')));
 ok("markup: the shape wraps the section icon", page.indexOf("<m3e-shape") < page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') && page.indexOf('<m3e-icon name={SECTION_META[id].icon} />') < page.indexOf('<span className="lb-set-nav-txt">'));
 ok("markup: title inside the text column", page.includes('<span className="lb-set-nav-title">{SECTION_TITLES[id]}</span>'));

@@ -385,8 +385,11 @@ export default function SettingsPanel({ settings, onChange, onOpenLogs, onDelete
                     inside a real m3e-shape and every category
                     carries its own shape (no one shared cookie),
                     then the category name with one plain
-                    line under it saying what the section holds. */}
-                <m3e-shape name={SECTION_META[id].shape} aria-hidden={true}>
+                    line under it saying what the section holds.
+                    The active category morphs its tile to the sunny
+                    shape: the m3e-shape transition (theme.css, .7s
+                    clip-path) tweens the swap both ways. */}
+                <m3e-shape name={section === id ? "sunny" : SECTION_META[id].shape} aria-hidden={true}>
                   <m3e-icon name={SECTION_META[id].icon} />
                 </m3e-shape>
                 <span className="lb-set-nav-txt">
