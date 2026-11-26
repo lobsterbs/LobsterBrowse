@@ -2840,8 +2840,8 @@ RUN mkdir -p /bundle/epoxy \
       -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
  && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
       -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
- && echo "09f8eb5ad65cd42ed132e83b95cc208ee683b5ba9d333c7c28fda12791c86179  /bundle/epoxy/epoxy.js" | sha256sum -c - \
- && echo "675b4a6a67defc647994779ee29505e49450b5ea6c43d0ede5e2db396f5223ae  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
+ && echo "633a94d51f22b6818fff80d5e5b07dd0abe43025d6bd5ef7e49f8603bc3040f2  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "6938320f271dd266e36a49dba5d43fba82e5797bae5a1589ecc4ba39b1f85ec6  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
 
 # ScramJet engine bundle (upstream MercuryWorkshop, the newest
 # published build), vendored with the same never-committed rule as
