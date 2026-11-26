@@ -23,13 +23,13 @@ const LIVE = [
   "https://lobsterbrowse-server-b9zk.onrender.com/healthz",
   "https://lobsterbrowse-beta-edsh.onrender.com/healthz",
   "https://lobsterbrowse-content-t189.onrender.com/healthz",
-  "lobsterbrowse-server.onrender.com",
-  "lobsterbrowse-beta.onrender.com",
-  "lobsterbrowse-fixture.onrender.com",
 ];
 for (const u of LIVE) need(wf.includes(u), "missing live origin " + u);
 
 const DEAD = [
+  "lobsterbrowse-server.onrender.com",
+  "lobsterbrowse-beta.onrender.com",
+  "lobsterbrowse-fixture.onrender.com",
   "lobsterbrowse-g0bs",
   "lobsterbrowse-beta-9bct",
   "lobsterbrowse-content-2djv",
