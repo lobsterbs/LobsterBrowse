@@ -2776,7 +2776,15 @@ FROM debian:bookworm-slim AS zl-builder
 # bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair
 # unchanged (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a).
 # Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=577030a680e48bbed9cafe5e310c75c5bf1c1cde
+# Pin 208 (2026-11-26): Zeolite #721 - YouTube live_chat embed_domain=
+# loaders name the engine origin (LegacyUnforgeable hostname); the
+# request seam virtualizes embed_domain= to the embedding page's
+# hostname. Zeolite ci run 45778457137 (8ebf4091) republished dist
+# 0a3b8480; engine source changed, sw.js e7093292fb3fd366 ->
+# 9f3217905807e213 (985501 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,
+# epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=0a3b84806cf6f5a0609564e6a7476ae487d330b1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2851,7 +2859,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e7093292fb3fd366 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=9f3217905807e213 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
