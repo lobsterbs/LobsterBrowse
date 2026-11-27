@@ -2804,7 +2804,17 @@ FROM debian:bookworm-slim AS zl-builder
 # 12c82b13f105c58b -> 8d4c26d1942efbfb (985501 bytes). bootstrap.js
 # unchanged (0a3e47fd0bcfbba3). Epoxy pair bumped (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=8720d9edb695ca7b2a4950e7d947b64657d1adb1
+# Pin 211 (2026-11-27): debugger wave slice 3 (Zeolite #723) - a
+# host-only zl:config bodyCapture toggle records the first 16KB of the
+# outgoing upstream request body, post-surgery, redacted at netLogPush,
+# surfaced in the devtools detail and the KDL export as request_body;
+# the #717 MI613e body discriminator for the Google sign-in chase.
+# Zeolite ci run 45960904023 (98a10d80) republished dist e2075e6c;
+# engine source changed, sw.js 8d4c26d1942efbfb -> d9dc95ab6a472a4d
+# (986261 bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy
+# pair unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side
+# pin unchanged.
+ARG ZEOLITE_COMMIT=e2075e6cfef4da64b418a86a5e020ef9627015ad
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2879,7 +2889,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=8d4c26d1942efbfb ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d9dc95ab6a472a4d ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
