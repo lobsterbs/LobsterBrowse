@@ -1,1 +1,2929 @@
-[{"type":"resource","resource":{"uri":"sprite://mcp-zeolite-2/file?path=%2Fhome%2Fsprite%2Flb-beta-new.dockerfile&workingDir=%2Fhome%2Fsprite","mimeType":"text/plain","text":"\n\n\n# syntax=docker/dockerfile:1\n# Multi-stage build for the LobsterBrowse single-site service:\n# the Rust Wisp server and the static M3E UI it serves from one origin.\n# Builder tracks latest stable Rust: zeroize 1.9+ manifests need cargo >= 1.85.\n# Reproducibility: same LobsterBrowse commit + same Dockerfile + pinned\n# ZEOLITE_COMMIT below must give identical build inputs. Bump the pin\n# by updating both the ARG and the zeolite-server rev in\n# server/bin/server/Cargo.toml (and the committed server/Cargo.lock via\n# the generate-rust-lockfile workflow), then clear the Render build cache.\n# Builder base is pinned to bookworm: the runtime stage is\n# debian:bookworm-slim (glibc 2.36) and the rolling rust:1-slim tag\n# moved to a newer Debian, producing a binary that needs GLIBC_2.38\n# and dies at instance start (\"version GLIBC_2.38 not found\").\nFROM rust:1-slim-bookworm AS builder\n# wreq links BoringSSL (btls-sys): cmake + g++ + perl build it and\n# bindgen needs libclang at build time (the runtime feature loads the\n# system libclang, it is not linked into the binary).\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config libclang-dev git \\\n && rm -rf /var/lib/apt/lists/*\nWORKDIR /build\nCOPY server/ ./\nRUN cargo build --release --locked -p lobster-server\n\nFROM node:22-slim AS ui-builder\nWORKDIR /ui\nCOPY ui/package.json ui/package-lock.json ./\nRUN npm ci --no-audit --no-fund\nCOPY ui/ ./\nRUN npm run build\n\n# Zeolite engine bundle: an immutable Zeolite commit carries the green\n# build of the engine service worker and its chunks (libcurl stripped\n# there: the AGPL bundle is never committed to git). Vendored here at\n# build time so the server can serve it same-origin at /zlsw/ and the\n# UI can register the worker. Pinned to an exact revision instead of a\n# moving branch so rebuilds are deterministic.\n# Old pin 5 (2026-10-07): dist e893ee6 (Zeolite main da8c0c0, CI run 38056407768)\n# 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified\n# against client payloads, loopback bind + Origin guard + fail-closed\n# auth config + security headers, JSON configs swapped for KDL, SW\n# keepalive for streaming documents (#99), SipHash length-word mask\n# for long-destination routes (#100), child-realm reemit + escape log\n# (#101), 204/205 navigation error page (#102), iframe/embed/object\n# destination classification (#103), popup activation guard (#106),\n# 30s navigate first-byte deadline + post-redirect rewrite base\n# (#107), child-realm storage/cookie isolation (#108), SWR refresh\n# coalescing. 2026-10-07 (6): #109 - popup-class activations re-open\n# through the original window.open while their user activation is\n# live (the minted re-drive outlived the activation window, so e.g.\n# Google's AI Mode pressed but never applied), and relative\n# navigation-bound writes (anchor/area href, iframe src, form\n# action) re-emit through the #101 marker instead of landing on\n# the proxy origin. sw.js stays f90129af (SW bundle untouched),\n# bootstrap.js 84c8ec97 -> 413a7bd7. Cargo-side pin stays 483aa0f\n# (no crates changed since).\n# 2026-10-07 (7): #110 - the SW re-establishes the client virtual\n# context from the post-redirect destination once the hop chain\n# resolves (google.com -> www.google.com left runtime-relative\n# URLs resolving against the apex, whose 404 on /async/hpba meant\n# Google's AI Mode panel never initialized and the button pressed\n# with no effect). sw.js f90129af -> 9c5ead20; bootstrap.js\n# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates\n# changed).\n# 2026-10-08 (8): #112 - directory-shaped JS literal destinations\n# under the keyed codec keep the last path segment visible after the\n# token (the sorry page's recaptcha enterprise loader appends \"api2/\"\n# unless its api base ends with \"enterprise/\", and the opaque token\n# broke every tail check, sending the anchor iframe to google's 404).\n# sw.js and bootstrap.js unchanged (9c5ead20 / 413a7bd7): the fix\n# rides in rewriter_wasm_bg.wasm, so the alarm pins cannot distinguish\n# this bump from the previous pin - deploy with a cleared build cache.\n# Cargo-side pin stays 483aa0f (no crates changed).\n# 2026-10-08 (9): #112 follow-up - subresource requests from a navh-\n# served document carry the navh route as referrer, which does not\n# decode as an engine path, so forwardedHeaders omitted the Referer\n# upstream; google's reCAPTCHA anchor validates the site key against\n# that header and rendered \"Invalid domain for site key\" on /sorry.\n# The SW now decodes the navh token and forwards its destination as\n# the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged\n# (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).\n# 2026-10-08 (10): #112 follow-up 2 - the Referer fix alone\n# did not repair the widget: its JS computes co= from\n# window.location.origin (LegacyUnforgeable), so upstream kept\n# receiving the engine origin and the site-key domain check kept\n# failing (\"Invalid domain for site key\"). A co= naming this\n# deployment is now rewritten to the embedding page's virtual origin\n# at the fetch seam. sw.js ae06e841 -> 247f8349; bootstrap.js\n# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates\n# changed).\n# 2026-10-08 (11): #112 follow-up 3 - the sorry doc's page JS builds\n# absolute URLs as real origin + location.pathname, and pathname is\n# the opaque engine route token, so the engine fetched\n# www.google.com/j/<token> upstream and google's 404 replaced the\n# document (the captcha vanished behind a 404 error page). The SW\n# now dereferences embedded self-route tokens in upstream\n# destinations when the token decodes to the same origin\n# (MAC-verified, fails closed). sw.js 247f8349 -> 9fa58b72;\n# bootstrap.js unchanged (413a7bd7). Cargo-side pin stays 483aa0f\n# (no crates changed).\n# 2026-10-08 (12): #113 - a cold-start session can race the boot\n# config: the first engine navigation is minted under the legacy\n# /zl/ prefix before the SW route shape is configured, decodePath\n# cannot see the tail, and the request escaped to the proxy origin\n# (the server answers it with the misleading no-worker notice).\n# The escape seam now recovers decodable legacy routes (configured\n# prefix or the reserved zl segment; keyed tails refused, host\n# routes never captured). sw.js 9fa58b72 -> b5f0f84c; bootstrap.js\n# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates\n# changed).\n# 2026-10-08 (13): #99 - every wisp fetch now carries a 30s\n# first-byte deadline in the transport seam (the vendored request\n# promise resolves on headers, so a stalled subresource - a\n# silently dropped wisp websocket - never settled and the page\n# spinner ran forever). A stall is transport state like a\n# connect-class error: singleton reset, re-init, single retry on\n# a fresh connection, then honest failure. sw.js b5f0f84c ->\n# bb61d441; bootstrap.js unchanged (413a7bd7). Cargo-side pin\n# stays 483aa0f (no crates changed).\n# 2026-10-09 (14): #113 follow-up - legacy /zl/ referrers (cold\n# starts, pre-#113 dists) now decode in forwardedHeaders and\n# referrerOrigin through the decodePath -> nav handle ->\n# decodeLegacyRoute chain, so subresources from any route family\n# carry a real upstream Referer again and the reCAPTCHA co= seam\n# resolves the page origin deterministically. Regression tests\n# pin the co= chain across keyed, navh and legacy referrers\n# (Zeolite ed23eb46). sw.js bb61d441 -> edf104c0; bootstrap.js\n# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates\n# changed).\n# 2026-10-09 (15): #115 - the page cache is conditional: stored\n# entries keep the origin's ETag/Last-Modified, the stale refresh\n# sends If-None-Match/If-Modified-Since and a wire 304 keeps the\n# stored body and bumps the stored-at time instead of re-transferring\n# it, and no-cache entries revalidate before use (RFC 9111) with a\n# failed revalidation bypassing to the live path honestly.\n# sw.js edf104c0 -> e4402f7d; bootstrap.js unchanged (413a7bd7).\n# Cargo-side pin stays 483aa0f (no crates changed).\n# 2026-10-09 (16): #116 - the child-document residuals: created\n# shadow roots get their own MutationObserver through an\n# attachShadow hook (parser-inserted frames inside them loaded\n# browser-direct - the live /j/<token> google 404 class),\n# contentWindow/contentDocument reads install the child realm\n# guard synchronously (closing the same-task write race that\n# beat the observer microtask), unquoted srcdoc attribute values\n# rewrite too, and guarded children re-emit fetch/XHR through\n# the #101 parent-relative marker. The shadow-root registry the\n# first cut shipped was dead code; the trimmed hooks fit the\n# 20 KiB bootstrap budget (20429 bytes). sw.js unchanged\n# (e4402f7d): the ride is entirely in bootstrap.js,\n# 413a7bd7 -> ee2c30cf, so the /build zlswSha cannot distinguish\n# this bump - verify the served /zlsw/bootstrap.js hash instead.\n# Cargo-side pin stays 483aa0f (no crates changed).\n# 2026-10-09 (17): #122/#123 - regex-aware JS scanner in the wasm\n# rewriter: quotes inside regex literals were parsed as string\n# delimiters, so the engine-route rewrite of a URL embedded in a\n# YouTube base.js messageRegExp injected slashes that terminated\n# the pattern and the whole 10.9 MB script failed to parse (empty\n# SPA body, video loads forever; Twitch the same class). Turnstile\n# script srcs now stay provider-direct so api.js can self-locate\n# its tag and the widget injects (#120 still owns the frames).\n# Rust-only: sw.js stays a7bb36c3, bootstrap.js stays 30e040f1;\n# the ride is in rewriter_wasm_bg.wasm, so the /build zlswSha\n# cannot distinguish this bump - verify the served\n# /zlsw/rewriter_wasm_bg.wasm hash instead.\n# Cargo-side pin stays 3d170f7 (zeolite-server unchanged; the\n# rewriter crate is not a server dependency).\n\n# 2026-10-09 (18): #124 - the script-serve import-specifier pass was\n# a raw regex and could bridge two string literals, swallowing the\n# code between them as a \"specifier\" and replacing it with an engine\n# route (Twitch player-core: \"No matches from \".concat(w,\" payloads\")\n# became a syntax error and the whole 387KB chunk failed to parse;\n# ChunkLoadError, the player never booted). The matcher is now a\n# quote-parity-aware scanner with the wasm literal pass context rules\n# (strings, comments, regex discrimination); template bodies are\n# opaque and property-name heads are skipped. sw.js a7bb36c3 ->\n# 888f6c84; bootstrap.js stays 30e040f1; the wasm is untouched\n# (78dd3ce206ab7f27, verify the served file). Cargo-side pin stays\n# 3d170f7 (no crates changed).\n\n# 2026-10-09 (19): #125 + #126 - zeolite-server upstream DNS is\n# DoH by default now: the pinned Quad9 (default) or Cloudflare IPs\n# answer over HTTPS/443 with the resolver certificate validated\n# against its DNS name (dns.quad9.net / cloudflare-dns.com, Mozilla\n# webpki roots), and there is deliberately no plaintext port-53\n# fallback - a host that blocks the DoH handshake fails closed. This\n# is the LB server's own outbound resolution too (main.rs PolicyDns\n# delegates to zeolite_server::dns). Cargo-side pin 3d170f7 ->\n# deccb43 (zeolite-server changed). #126: the wasm rewriter routes\n# inline module import specifiers (bare package names stay bare;\n# already-routed specifiers unwrap to one route). sw.js stays\n# 888f6c84, bootstrap.js stays 30e040f1; the ride is in\n# rewriter_wasm_bg.wasm, 78dd3ce206ab7f27 -> c5fe41724b40bae0 -\n# the /build zlswSha cannot distinguish this bump, verify the served\n# wasm hash instead.\n# 2026-10-09 (20): #127 - google.com (origin-only Referrer-Policy)\n# sent Referer: <engine-origin>/ for every subresource, decodePath\n# could not recover a page URL from it, the Referer was dropped, and\n# the /sorry reCAPTCHA anchor rejected the site key (\"Invalid\n# domain for site key\"). The worker now restores the upstream\n# Referer from the per-client virtual initiator origin\n# (virtualRefererFallback) before giving up. App-side only:\n# sw.js 888f6c84 -> 12ac9193; bootstrap.js stays 30e040f1; wasm\n# untouched (c5fe41724b40bae0, verify the served file). Cargo-side\n# pin stays deccb43 (no crates changed).\n\n# 2026-10-09 (21): #128 - engine-routed pages messaging their own\n# same-site frame by the frame's virtual origin had the postMessage\n# dropped by the browser (targetOrigin mismatch): reCAPTCHA\n# enterprise on google search died with \"reCAPTCHA Timeout\" and\n# \"Failed to fetch\". The bootstrap now delivers such payloads\n# locally as a synthetic message event carrying the origin the\n# caller intended; matching targets, * and / stay native, malformed\n# origins keep the native SyntaxError, ev.source is null on the\n# synthetic path. Frames stay engine-routed - provider-direct was\n# ruled out because it leaks the user IP. Plus the minimal error\n# page redesign (no cards, system type, compact facts list; the\n# zl-error meta, redaction and determinism contract unchanged).\n# sw.js 12ac9193 -> a3eff568; bootstrap.js 30e040f1 -> 9cfdbb8f\n# (21491 of the 21504 budget); wasm unchanged (c5fe41724b40bae0,\n# verify the served file). Cargo-side pin stays deccb43.\n\n# 2026-10-09 (22): #129 - the #120 provider-direct 302 for\n# challenge frames leaked the user IP (the frame committed at\n# the real provider origin) and broke the reCAPTCHA messaging\n# the #128 bootstrap fix had just repaired (cross-origin anchor,\n# postMessage targetOrigin dropped by the browser). Challenge\n# frames now stay engine-routed; the 302 is gone and a DIAG\n# event records the routing verdict. Plus the error page\n# redesign: Zeolite ASCII logo, category row back in the facts\n# list, retry is a form button. sw.js a3eff568 -> b6221208;\n# bootstrap.js stays 9cfdbb8f (21491 of the 21504 budget); wasm\n# unchanged (c5fe41724b40bae0, verify the served file).\n# Cargo-side pin stays deccb43.\n\n# 2026-10-09 (23): #128 follow-up - with challenge frames\n# engine-routed, reCAPTCHA's anchor protocol reached the\n# messaging stage and died on the frame's bare two-argument port\n# post: postMessage(msg, [port]) is the legacy WebKit overload\n# (targetOrigin defaults to *). The #128 wrapper re-emitted every\n# delegated call as (msg, targetOrigin, transfer), so the binding\n# saw a phantom third undefined argument, picked the standard\n# overload and threw \"Invalid target origin '[object\n# MessagePort]'\". The wrapper now normalizes both call shapes\n# and replays the caller's exact argument list at the native\n# boundary; the synthetic delivery keeps transfer ports live\n# (structuredClone with a transfer list neutered them into an\n# unreachable clone). sw.js stays b6221208 (198072 bytes);\n# bootstrap.js 9cfdbb8f -> 7f299840 (21551 of the 22528 budget,\n# raised with the fix, rationale recorded in the Zeolite gate);\n# wasm unchanged (c5fe41724b40bae0, verify the served file).\n# Cargo-side pin stays deccb43.\n\n# 2026-10-09 (24): #130 - the synthetic postMessage dispatch from\n# #128 is gone. With challenge frames engine-routed, every frame\n# message now stays inside the real engine origin, so postmsg.ts\n# rewrites foreign/virtual targetOrigins to the real origin and\n# delivers natively (both call shapes normalized, exact-argument\n# replay, malformed keeps the honest SyntaxError; no synthetic\n# dispatch, transfer lists stay native). vorigin.ts is new: the\n# page asks the SW for its virtual origin (zl:getVirtualOrigin)\n# and a bootstrap-side message-event filter re-exposes ev.origin\n# as the sender virtual origin on same-origin-looking events. sw.js\n# b6221208 -> 568fc624 (198147 bytes); bootstrap.js 7f299840 ->\n# c5554b40 (22483 of the 23552 budget, raised with the rationale\n# recorded in the Zeolite CI gate); wasm unchanged\n# (c5fe41724b40bae0, verify the served file). Cargo-side pin\n# stays deccb43.\n\n\n# 2026-10-10 (27): #130 finish + #131. The reCAPTCHA widget's last\n# break was sender-side: senderVirtualOrigin decoded only\n# standalone route tails, so a #112 directory-shaped anchor route\n# (<token>/api2/anchor) answered zl:getVirtualOrigin with null; the\n# page's vorigin filter never rewrote the anchor's message events\n# and grecaptcha dropped them all as foreign-origin messages\n# (reCAPTCHA Timeout, anchor retry loop). The origin decode now\n# retries with the request engine's MAC-verified recoverPath and\n# peels nested routes with unwrapDest. #131: Vite's __vite__mapDeps\n# dot-relative asset strings (\"../chunks/x.js\") now route through the\n# rewriter's module-base encoder instead of resolving to\n# engine-origin 404s (Brave Search: dead UI, no favicons, Ask AI\n# refresh loop). sw.js 568fc624 -> 9dcd3c18 (198177 bytes);\n# bootstrap.js unchanged (c5554b40); wasm c5fe4172 -> f5ad1126\n# (99153 bytes, verify the served file). Cargo-side pin stays\n# deccb43.\n\n\n# 2026-10-10 (28): #130 residual, third widget break. The\n# page's grecaptcha sends the anchor setup as a legacy\n# two-arg postMessage(\"recaptcha-setup\", [MessagePort]) with no\n# targetOrigin. The #130 exact-argument replay delivered it\n# verbatim, but Chromium drops the transfer list when the\n# legacy postMessage overload delivers same-origin, so the\n# anchor never received its private MessagePort and the\n# widget protocol died (reCAPTCHA Timeout, anchor recreation\n# loop, no bframe). bootstrap.js now re-emits legacy two-arg\n# port calls in standard order (message, explicit origin,\n# ports) so the ports survive delivery. sw.js unchanged\n# 9dcd3c18 (198177 bytes); bootstrap.js c5554b40 -> bc001db\n# (22544 bytes); wasm unchanged f5ad1126. Cargo-side pin\n# stays deccb43.\n\n\n\n# 2026-10-10 (29): fourth widget break, the last measured seam.\n# The #130 wrapper re-emits from its own realm, so the anchor's\n# parent.postMessage landed on the page's wrapper and the\n# re-emission executed in the PAGE realm: ev.source was stamped\n# with the page window (from=self), the page's grecaptcha dropped\n# the anchor's setup, and the widget spun (reCAPTCHA Timeout,\n# anchor recreation loop, no bframe). bootstrap.js now stashes\n# each realm's native postMessage (__zlNativePM) and every child\n# realm shadows its configurable window.parent (top is\n# LegacyUnforgeable) with a Proxy that executes the parent's\n# stashed native from the CHILD realm, so the browser stamps the\n# genuine caller and the ports survive delivery; navguard's\n# guarded inline child realms get the same shim. The Zeolite\n# commit title mislabels the issue as #131; the widget work is\n# tracked in #130 and its follow-up. sw.js unchanged 9dcd3c18\n# (198177 bytes); bootstrap.js bc001db -> d6f6abba (23388\n# bytes); wasm unchanged f5ad1126. Cargo-side pin stays\n# deccb43.\n# 2026-10-10 (30). #132 closes the frame-protocol duplex: the\n# contentWindow sender half (a parent messaging its child through\n# the element delivers with the genuine sender window; before, the\n# anchor heard the page's setup as ev.source = itself) + the\n# virtual-origin parity drop (a targetOrigin the recipient's marker\n# does not match is dropped, the unproxied behavior). sw.js\n# unchanged 9dcd3c18 (198177 bytes); bootstrap.js d6f6abba ->\n# a9aca861 (24172 bytes); wasm unchanged f5ad1126. Cargo-side pin\n# stays deccb43.\n\n# 2026-10-10 (31): #132 follow-up, the measured widget seam. The\n# #130 vorigin origin relabel (ev.origin -> the sender's __zlVO)\n# broke the widget: gstatic's channel establishers derive the\n# origin they expect from the rewritten src/co= URLs, which point\n# at the ENGINE, so every origin check failed, the setup port was\n# never taken, the click notification was lost, the bframe was\n# never created and the widget timed out on every anchor rebuild\n# (live probes rc45-rc53: identity, source and port checks all\n# passed, only the origin comparison failed). ev.origin now\n# deliberately stays the native engine origin; the ev.source\n# identity relabel and the __zlVO marker (postmsg sender-side\n# parity checks) stay. sw.js unchanged 9dcd3c18 (198177 bytes);\n# bootstrap.js 0b6b80e9 -> db25100b (24433 bytes, under the\n# 25088 budget); wasm unchanged f5ad1126. Cargo-side pin stays\n# deccb43.\n\n# 2026-10-10 (32): #132 follow-up 2, the window.name seam. The #37\n# isolation wrapper scoped window.name through the site-scoped\n# sessionStorage but initialized it EMPTY, dropping the browsing\n# context's real name; gstatic's bframe resolves its anchor channel\n# as parent.frames[its own name transformed to the anchor's name]\n# (recaptcha__en.js Y.o2), so the named lookup returned undefined,\n# the bframe's postMessage target was dead, and the anchor's 15s\n# establisher rejected (reCAPTCHA Timeout, challenge never opened,\n# live probes rc59/rc60: name correct at t=0, cleared by the\n# wrapper by t=200ms). A fresh scoped context now seeds its name\n# from its frameElement's name attribute; top-level windows still\n# start empty, so the #37 anti-bleed goal is preserved. sw.js\n# unchanged 9dcd3c18 (198177 bytes); bootstrap.js db25100b ->\n# 03cd3476 (24521 bytes, under the 25088 budget); wasm unchanged\n# f5ad1126. Cargo-side pin stays deccb43.\n\n# 2026-10-10 (35): #134 - cache-hit serve re-ran the streaming\n# rewriter for HTML and CSS but served JS bodies verbatim (the\n# netlog row already claimed rewritten: js). Entries stored by\n# older dists hold raw upstream bodies, so a module-relative\n# import() in such a copy resolved against the engine route and\n# the escaped-path recovery answered the document root instead of\n# the module directory: play2048.co's lazy chunk loaded the site's\n# own SPA shell as JavaScript (200 text/html, MIME rejection, the\n# game never booted; github.com's CSS chunk the same class). The\n# browser flattens a dot-relative specifier to a root-relative\n# engine path, so the recovery cannot fix the class - the fix is\n# serve parity. The cache-hit JS branch runs the same two passes\n# the fresh path runs (specifier fold + literal pass, both\n# idempotent on composed copies) and writes the repaired copy back\n# only when a pass changed the body, so a stale raw entry heals\n# once. Worker destinations keep the raw serve (their cached\n# copies are composed by the fresh path). sw.js 9dcd3c18 ->\n# aea44290 (198656 bytes); bootstrap.js unchanged 03cd3476; wasm\n# unchanged f5ad1126. Cargo-side pin stays deccb43.\n\n# 2026-10-10 (36): Zeolite #134 + #133. The SW specifier pass\n# (fresh-serve import rewriting) desynced on real module bodies\n# with nested template substitutions: a backtick inside a\n# template expression closed the outer template early, and the\n# scanner then read a // inside template text as a line comment,\n# swallowing the rest of the chunk including the import\n# specifier - play2048.co's 364KB entry chunk served with a raw\n# import despite the (35) serve-parity fix. The pass now tracks\n# template/substitution nesting recursively (brace depth, nested\n# strings, comments and templates), so specifiers inside\n# template-heavy chunks fold correctly. #133: a wisp stream\n# beyond the server's max-stream ceiling wedges the transport\n# (instant error 7 afterwards, the WebSocket never fires close,\n# the #74 watcher is blind to it); errors 7/35 join the connect\n# class and reset() busts the vendored bundle's connection-cache\n# key with a wisp URL generation, so the reset+retry rides a\n# fresh WispTransport. sw.js aea44290 -> f8c69962 (199579 bytes);\n# bootstrap.js unchanged 03cd3476; wasm unchanged f5ad1126.\n# Cargo-side pin stays deccb43 (app-only change, no crates).\n\n# 2026-10-10 (37): Zeolite #134 residual, global fix. React\n# apps (github.com) construct module.css asset names at RUNTIME\n# (flat names like xy4.86babbfb1b89d634.module.css), so no\n# serve-time pass can fold them: the flat specifier resolved\n# against the document base, escaped-path recovery answered the\n# page origin root, and the origin 404 (text/plain) was refused\n# as a stylesheet. New assetbases.ts records the CDN asset\n# directories of every successful cross-origin script/style load\n# per virtual page origin; a failed (>=400) flat-named script or\n# style request retries against those observed bases with minimal\n# safe headers (user-agent/accept/accept-language only; never\n# cookies/origin/referer). No per-site table: the heuristic is\n# global and fails closed. sw.js f8c69962 -> 1785f26f (201195\n# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged\n# f5ad1126. Cargo-side pin stays deccb43 (app-only change).\n\n# 2026-10-10 (38): two engine fixes. (1) The Anubis\n# pass-challenge repair accepts the redir shape anubis >= 1.26\n# actually emits: window.location.href of the rewritten challenge\n# page, an ABSOLUTE engine-origin URL. The old code only decoded\n# bare route paths, isEnginePath failed on the absolute string,\n# the redir went upstream untouched and the deployment rejected\n# the cross-origin redirect target (startpage: the proof of work\n# completes, verification then fails 500). Absolute redirs are\n# accepted only from the engine origin. (2) The flat asset\n# recovery now also covers runtime-built BINARY names (image,\n# video, audio, font, bare fetch): the github homepage mints\n# glb/mp4 names at runtime that 404 at the page origin. Element\n# dests require their MIME family (or octet-stream), a bare\n# fetch must carry an extension so beacon-shaped misses do not\n# mint CDN retries, and HTML/plain-text candidates are refused.\n# sw.js 1785f26f -> 25dea7e1 (201702 bytes); bootstrap.js\n# unchanged 03cd3476; wasm unchanged f5ad1126. Cargo-side pin\n# stays deccb43 (app-only changes).\n\n# 2026-10-10 (39): lazy-images opt-in rewriter pass (loading=\"lazy\" on\n# img tags without one, additive only) + the zl:config imageLazy and\n# httpsUpgrade host toggles (Zeolite main 7dc5d8a, ci gate fix 0704011).\n# sw.js 25dea7e1 -> 21dc6e6c (201932 bytes); bootstrap.js unchanged\n# 03cd3476; rewriter wasm f5ad1126 -> d86f746e. Cargo-side pin stays\n# deccb43 (the LB server consumes no rewriter change; lazy images and\n# the https toggle ride the service worker).\n\n# 2026-10-10 (40): the declarative compatibility policy engine\n# (Zeolite #135/#136): /policy.kdl rules upgrade narrowly scoped\n# requests (host/path/types) from native transport onto the rewrite\n# path, with a stable reason + ruleId in the fallback ring and the\n# TRANSPORT_FALLBACK trace; route \"rewrite\" is the only settable\n# route (native is already the default, required rewrites cannot be\n# demoted), and a rejected file keeps the defaults with a TRANSPORT\n# diag. The shipped policy.kdl is intentionally empty; LB serves it\n# from the vendored dist at the origin root. sw.js 21dc6e6c ->\n# 5b2df445 (205055 bytes); bootstrap.js unchanged 03cd3476; wasm\n# unchanged d86f746e. Cargo-side pin stays deccb43 (app-only change).\n# 2026-10-10 (41): engine error pages now attribute engine bugs\n# (the error card names a Zeolite engine bug and asks for a report\n# with the Trace ID; upstream failures stay neutral), and the\n# zl:loadState control API reports in-flight upstream requests per\n# destination host plus live rewrite streams so the LB tab spinner\n# tracks engine work, not just frame resource timing. sw.js\n# 5b2df445 -> 8edc1a9b (205898 bytes); bootstrap.js unchanged\n# 03cd3476; wasm unchanged d86f746e. Cargo-side pin stays deccb43\n# (app-only change).\n\n\n# 2026-10-10 (42): the Anubis pass-challenge repair now decodes\n# navh handle redirs. The embedder's initial navigations ride navh\n# handles, so the redir anubis 1.26.4 echoes back is the absolute\n# handle URL, isEnginePath rejected it and the repair never fired\n# (startpage: the proof of work completes, the verification 500s\n# Something went wrong). The handle decodes with its own keyed\n# decoder (tag + TTL), engine-side only, so the redir upstream\n# carries the real destination. sw.js unchanged 8edc1a9b (205898\n# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;\n# the fix rides codec.js (88437eb5 -> c29f5a19, verify the served\n# file). Cargo-side pin stays deccb43 (app-only change).\n\n# 2026-10-11 (43): the embedder fetch relay and settle guarantees.\n# Hosts that fingerprint-block the wasm TLS ClientHello (duckduckgo:\n# libcurl error 35) route onto the embedder network stack (the LB\n# /zlrelay endpoint, native TLS, the same SSRF resolver); policy\n# route \"relay\" drives it, route \"native\" (#138) demotes the JS\n# literal pass for proven hosts. Subresource bodies settle on idle\n# stalls (#140) and github repo pages boot again (#143: runtime\n# flat module.css names recover against the CDN bases). The stall\n# wrap and relayed responses carry rawHeaders, so upstream\n# set-cookie still lands in the jar. sw.js 8edc1a9b -> 60ce0fde\n# (211106 bytes); bootstrap.js unchanged 03cd3476; wasm unchanged\n# d86f746e; codec.js unchanged c29f5a19. Cargo-side pin stays\n# deccb43 (app-only change).\n\n# 2026-10-11 (44): the opaque-route relative recovery (#143\n# follow-up). github repo pages boot the React app but their\n# widget fetches arrive as /__zl_navh__/<token>/<suffix> and\n# 404 with a bad-handle strand: the page cannot read its real\n# path (LegacyUnforgeable location), so runtime URL building\n# appends to location.pathname. navhTailDest resolves\n# token-bearing tails with page-path-append semantics (the\n# token destination first, the client virtual context as the\n# fallback for expired tokens on long-lived pages) and\n# parser-resolved relative tails with ordinary URL semantics;\n# navigations keep the honest 404. sw.js 60ce0fde -> c4181cb7\n# (211757 bytes); bootstrap.js unchanged 03cd3476; wasm\n# unchanged d86f746e; codec.js unchanged c29f5a19. Cargo-side\n# pin stays deccb43 (app-only change).\n# 2026-10-11 (45): cookie jar RFC 6265 audit (Zeolite main 1e573d3,\n# CI run 541 green, dist 2757a66) - an empty Domain attribute no\n# longer demotes a host-only cookie to a bare-host domain cookie\n# (5.2.3), document.cookie reads path-match the document URL the\n# same way request cookies do (5.4), and persisted (jarLoad) plus\n# imported (jarReplace) jar records are shape-checked before\n# admission so corrupted storage or a hostile import cannot throw\n# mid-request. sw.js c4181cb7 -> e2c5ea7a (212157 bytes);\n# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;\n# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43\n# (app-only change).\n# 2026-10-11 (46): cookie jar follow-ups (Zeolite main b1b96b3, CI\n# green, dist f8135f2) - RFC 6265 5.3.11: re-admitting a cookie keeps\n# the original creation-time (send-order tie-break), and jarMerge\n# filters imported records with the stored-cookie shape gate so a\n# record missing secure/httpOnly/expires/created cannot be admitted.\n# sw.js e2c5ea7a -> 38b66986 (212039 bytes); bootstrap.js unchanged\n# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.\n# Cargo-side pin stays deccb43 (app-only change).\n# 2026-10-11 (47): #144 navh suffix navigation recovery, HTTPS-only\n# default with proceed-anyway (loopback never upgraded),\n# zl:extUninstall, optional API module detach/reattach,\n# cookies.onChanged, RFC 6265 cookie-date parser, wisp stall-storm\n# relay-first cooldown (Zeolite main 72351d4, CI green, dist\n# 0767b56). sw.js 38b66986 -> f0c7b17f (215739 bytes);\n# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;\n# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43\n# (app-only change).\n# 2026-10-11 (48): PSL site boundary for the cookie jar via tldts\n# (registrable domain, private-section suffixes included) plus the\n# RFC 6265 5.3 step 5 public-suffix admission gate; tough-cookie and\n# whatwg-url adopted as test oracles (Zeolite main cbe510a, CI\n# green, dist e6f9c7a). sw.js f0c7b17f -> 19ff69a3f5572ce9 (342614 bytes;\n# +127KB is the public-suffix trie). bootstrap.js unchanged\n# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.\n# 2026-10-11 (49): document.cookie read ordering (RFC 6265 5.4):\n# longer paths first then creation order, matching the Cookie\n# header and every browser; tough-cookie oracle pins it\n# (Zeolite main 25e28e7, CI green, dist e01015a). sw.js\n# 19ff69a3f5572ce9 -> a5e47b8e3a265fd8 (342643 bytes).\n# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;\n# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43\n# (app-only change).\n# 2026-10-11 (50): Zeolite bug-scout wave (main 1e9b7d1, CI run\n# 38154209990, dist d2315df): the extension package reader now caps\n# zip inflation DURING decompression (a decompression bomb could\n# previously expand gigabytes in the worker before the declared-size\n# check ever ran), and codec tailBytes is anchored, so a same-origin\n# path merely containing the scheme prefix mid-way no longer decodes\n# as a destination; hostile-tail recovery stays in recoverPath\n# behind its keyed gates. First tests for the package reader. sw.js\n# a5e47b8e3a265fd8 -> 230932f95cdef730 (342885 bytes); bootstrap.js\n# unchanged 03cd3476; wasm unchanged d86f746e; codec.js\n# c29f5a19 -> 950319bc59af25c9 (codec.ts changed; not startup-\n# pinned). Cargo-side pin stays deccb43 (app-only change).\n# 2026-10-11 (51): Zeolite docs wave (main 1022268, CI run\n# 38169358836, dist 1021d30): security doc retitled as an internal\n# self-review with methodology stated, session-blob iter bounds\n# documented at the check, stale Phase 3 AST comment in literals.rs\n# corrected (issue #146). sw.js 230932f95cdef730 (342885 bytes),\n# bootstrap.js 03cd3476, codec.js 950319bc59af25c9 all unchanged\n# (comment-only source changes); wasm d86f746e -> 68264b205eb4e64d\n# (byte-level shift from the literals.rs comment, functionally\n# identical). Cargo-side pin stays deccb43.\n# 2026-10-11 (52): Zeolite relay abort wave (main c4fca0c, CI run\n# 38170947855, dist d255688): relayFetch propagates AbortSignal with\n# a zl:relayCancel frame (issue #145) so an aborted page fetch drops\n# the embedder-side /zlrelay connection instead of streaming to\n# completion; the transport cooldown passes the signal through and\n# request.ts threads e.request.signal into upstreamFetch. LB ui\n# zeolite.ts aborts its /zlrelay fetch on the cancel frame. sw.js\n# 230932f95cdef730 -> acec9296b7e68c10 (343391 bytes); bootstrap.js\n# 03cd3476, codec.js 950319bc59af25c9, wasm 68264b205eb4e64d all\n# unchanged. Cargo-side pin stays deccb43.\n# 2026-10-12 (53): Zeolite navh split-identity wave (#144)\n# (main 9772360, CI run 38212107143, dist 296078c): zl:navHandle\n# now carries only the origin in the keyed token with the real\n# path and query plaintext on the route, so SPA URL bars show a\n# real pathname while the destination stays hidden from the page.\n# decodeNavHandlePath in codec/request.ts resolves token+tail;\n# legacy full-dest tokens decode unchanged and age out at 120s.\n# sw.js acec9296b7e68c10 -> 66d337316585ca15 (343611 bytes),\n# codec.js 950319bc59af25c9 -> 8dbcd20fd3c8e9ff; bootstrap.js\n# 03cd3476 unchanged; wasm 68264b205eb4e64d -> 19575746805d5da0.\n# Cargo-side pin stays deccb43.\n# 2026-10-12 (54): epoxy wisp-mux death is connect-class (Zeolite\n# #147; main 7548235, CI run 38215205394, dist e6ea8c6). A dead\n# epoxy wisp socket failed the pending hyper connect with\n# Wisp(MuxTaskEnded) (\"Multiplexor task ended\"), which matched no\n# connect-class pattern, so the #74 reset+retry never fired and\n# the navigation answered a terminal 502 error page (live trace\n# zl-tmv4vzlk7-8). CONNECT_CLASS_RE now also matches the epoxy\n# dead-transport surface (muxtaskended, multiplexor task ended,\n# wisp transport already closed, failed to send/receive\n# multiplexor message, websocket implementation error: websocket\n# closed); mid-body hyper errors stay unmatched and fail honestly.\n# sw.js 66d337316585ca15 -> 1c67b54c12821a2b (343773 bytes);\n# bootstrap.js 03cd3476, codec.js 8dbcd20fd3c8e9ff, wasm\n# 19575746805d5da0 all unchanged (only sw.js rides). Cargo-side\n# pin stays deccb43 (app-only change).\n# Zeolite dist cbd3908 (main 6782532): content scripts actually\n# execute (bridge use-strict newline, #150); NAVH pages decode as\n# control-plane destinations and are refused host-only control\n# (#151); extension onMessage reply values and promises honored\n# (#152). sw.js 1c67b54c12821a2b (343773) -> 96d70fb9d7b90b14\n# (343953); codec.js 8dbcd20fd3c8e9ff -> 8e94f6a717dc11e8;\n# bootstrap.js 03cd3476 unchanged. Cargo-side pin stays deccb43\n# (app-only change).\nFROM debian:bookworm-slim AS zl-builder\n# Pin 57: Zeolite dist f5b7327 ships the policy.kdl catch-all relay\n# (wisp-auth deployments: the wasm client cannot authenticate, so\n# every fetch rides the embedder relay). sw.js unchanged\n# (96d70fb9d7b90b14); Cargo-side pin stays deccb43 (data-only change).\n# Pin 58: Zeolite dist 8f51d86 ships the #121 refresh-spam fix (the\n# bootstrap never auto-reloads proxied pages when a new engine\n# activates; it now logs a console note and re-dispatches a\n# zl:engineUpdate window CustomEvent for a manual reload affordance).\n# sw.js 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js\n# 03cd3476 -> b0624c71; Cargo-side pin stays deccb43 (app-only change).\n# Pin 60: Zeolite dist 8e74ce7 ships the #157 top-level re-emit anchoring\n# (root-relative fetch/XHR/beacon inputs on NAVH-served pages re-emit\n# through <route>/__zl_prel__ instead of escaping to the proxy origin\n# root; NAVP parents resolve under all three route shapes; the\n# navRel/relRoute exclusion list dedupes into navExcluded). sw.js\n# 473408e5d1abe91a -> 2b92b02d0deddd5e; bootstrap.js 3c148a51 ->\n# 89314e254ca65dcd; Cargo-side pin stays deccb43 (app-only change).\n# Pin 61: Zeolite dist 8c54bd1 ships the #157/#159 own-origin\n# re-anchor (absolute engine-origin inputs re-anchor to their\n# path and re-emit through the parent route, both at the emit\n# seam and at the shared decode; script and worker destinations\n# get a JS-typed body on upstream error statuses instead of an\n# HTML error page; tokenShaped and the rel-route factory dedupe\n# into navguard). sw.js 2b92b02d0deddd5e -> 2a70658ddf60e57a;\n# bootstrap.js 89314e254ca65dcd -> 423b16b806b7f4cc; Cargo-side\n# pin stays deccb43 (app-only change).\n# Pin 62: Zeolite dist d981283 extends pin 61 with the content-type\n# honesty guard: a script or worker destination never receives an\n# HTML or CSS body, whatever the upstream status (SPA catch-alls\n# answer missing module paths with a 200 HTML document, claude\n# answers a mangled specifier with CSS; both the fresh path and\n# the cache hit serve a JS-typed comment instead, so module\n# graphs fail cleanly). sw.js 2a70658ddf60e57a -> f006bbd75da0a643;\n# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays\n# deccb43 (app-only change).\n# Pin 64: Zeolite dist ad2e571 ships two engine fixes. First,\n# the POST stream-body fix (#155/#159/#164/#166 class): every\n# request body is buffered once at the upstreamFetch choke point\n# (32MiB cap, honest overflow), so POSTs ride the embedder relay\n# and survive the wisp connect-class retry instead of dying as a\n# disturbed ReadableStream - the \"shell renders, API 502\" pattern\n# on youtube innertube, chatgpt, deepseek, twitch Apollo,\n# sketchfab and three.js. Second, the wasm rewriter never mints\n# routes for www.w3.org namespace-identity URI literals (#153):\n# createElementNS keeps the identity namespace, so the excalidraw\n# provider cascade and delta setAttributeNS NamespaceError go\n# away; the wasm is rebuilt with the guard. sw.js\n# f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js\n# 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43\n# (app + wasm-side rewriter changes, no server crate change).\n# Pin 65: Zeolite dist a9fb63e. Server crate moves to Zeolite\n# d8d6bed: wisp CONNECT now races allowed addresses (250ms stagger,\n# first success wins) instead of starving later IPs behind a\n# blackholed first address; DoH fallback (Quad9 NXDOMAIN/SERVFAIL\n# retried once through Cloudflare) so filtered domains no longer\n# look dead; wisp caps raised (streams/conn 24 -> 256, connections\n# 64 -> 256, per-IP fairness behind a trusted proxy) and the 1h\n# connection deadline drains live streams (60s grace) instead of\n# hard-killing them. App-side sw.js ships built Sec-Fetch /\n# Sec-CH-UA headers for first navigations (the #160 class),\n# conditional body replay (buffer only when a retry or relay can\n# actually happen), and mask accounting for #158/#159-class\n# rewritten script responses. sw.js 6fc87be1664e3954 ->\n# 4405ed7132900953; bootstrap.js 423b16b806b7f4cc unchanged;\n# Cargo-side pin deccb43 -> 47b8f5b (zeolite-server changed; 47b8f5b\n# additionally gives dns::LookupError the std::error::Error impl the\n# server-side reqwest DNS resolver needs, caught by the first pin-65\n# deploy build).\n# Pin 66: Zeolite dist a78c6c8. The SW never forwards proxy-injected\n# hop headers upstream anymore: the reverse proxy in front of the SW\n# origin adds x-forwarded-for/-proto/-host/-port to every inbound\n# engine request and the generic header copy sent them along - a\n# proxy tell no real browser sends, and the plausible trigger behind\n# Cloudflare edge 403 \"Bad request\" rejections of the relayed\n# document on strict WAF zones (Zeolite #160, live echo evidence:\n# postman-echo through the engine showed x-forwarded-proto riding\n# the upstream request). The LB relay allowlist also denies them\n# server-side now. sw.js 4405ed7132900953 -> c364479519b6e1ab;\n# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays\n# 47b8f5b (app-only change; 037e0d1 additionally makes the\n# connect-race test DNS override parallel-safe).\n# Pin 67: Zeolite dist 350cb06. Three engine fixes: the GREASE brand\n# and the brand-list order of Sec-CH-UA now derive from the Chromium\n# major (a fixed \"Not_A Brand\";v=\"8\" in a fixed order is a list no real\n# Chrome of that major ever sends; verified against chromium\n# user_agent_utils.cc), chPlatform maps iPhone/iPad UAs to iOS instead\n# of macOS, and routed <script src> values keep their destination's\n# filename as a fragment so CMPs that locate their stub tag by substring\n# on the original src (OneTrust script[src*=...] class, #161) find it\n# again; the fetch target is unchanged (fragments strip before the\n# request). sw.js c364479519b6e1ab -> 9c99fc3a2fef7157; bootstrap.js\n# 423b16b806b7f4cc unchanged; Cargo-side pin stays 47b8f5b (the dns.rs\n# change is test-only). Deployed together with the relay's wreq swap:\n# reqwest/rustls -> wreq/boringssl with Chrome124 TLS/h2 emulation, the\n# Zeolite #149/#160 fingerprint class.\n# Pin 68: Zeolite dist 2947881. Typed navigations now carry the exact\n# header set a real Chrome sends instead of the physical iframe's\n# facts: sec-fetch-dest document with site none and sec-fetch-user ?1\n# (dest iframe + site none + user ?1 is a combo no real Chrome emits,\n# a #160-class WAF tell), initiated frame navs keep their dest but\n# drop sec-fetch-user, the navigation Accept matches the claimed UA\n# major (Chrome 124 does not advertise image/jxl, which arrived with\n# Chrome 155's JPEG XL ship; the forwarded accept did), Accept-Language\n# gains Chrome's q-value shape (en-US,en;q=0.9, not a bare join), and\n# Sec-Fetch-Storage-Access (a Chrome 133+ header, after the persona's\n# major) is neither synthesized nor forwarded. sw.js\n# 9c99fc3a2fef7157 -> f3dfdb76467266c2; bootstrap.js 423b16b806b7f4cc\n# unchanged; Cargo-side pin stays 47b8f5b.\n# Pin 69: Zeolite dist e26dc50. 307/308 redirect hops buffer the\n# request body once (cap 32 MiB) and replay it instead of surfacing\n# the redirect to the page (only an announced Content-Length over the\n# cap still surfaces), cross-origin hops drop Authorization per the\n# fetch spec, the navigation TTFB deadline aborts the upstream fetch\n# instead of only rejecting its promise, and the default persona is\n# Chrome 149 with Sec-Fetch-Storage-Access synthesized on cross-site\n# credentialed requests (a Chrome 133+ header, so the 124 persona\n# could never carry it honestly). sw.js\n# f3dfdb76467266c2 -> e575b078e13e2193; bootstrap.js 423b16b806b7f4cc;\n# Cargo-side pin moves 47b8f5b -> 63b4f23.\n# Pin 70: Zeolite dist ced0c3f. Per-host policy route \"wisp\"\n# (#168): hosts the policy file routes to \"wisp\" (shipped rule:\n# search.brave.com, whose PoW interstitial accepts the\n# libcurl-wasm ClientHello through the public unauthenticated\n# wisp-js backend but 429s the relay transport class) ride a\n# secondary wisp client the UI announces via zl:wispRegister\n# from /build sjWisp (beta: the standalone ScramJet wisp-js\n# service; main: unset, so the route falls back to relay there).\n# The relay stays the default for everything else. sw.js\n# e575b078e13e2193 -> 2c036ac7ea643f7b; bootstrap.js\n# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23.\n# Pin 76 (main release bump; pins 71-75 were beta-only and\n# their fixes ride this bundle): Zeolite dist 7cdf6fc.\n# Engine-side fixes since pin 70: control-plane sender gates\n# fail closed, worker/blob storage scoping, tab reply binding\n# (#169, #170, #171, #185); page cache session/auth scope,\n# credentials handling, redirect-final URL keys and a body\n# size cap (#179, #184, #195); mid-body transport errors\n# surface as stream errors, not a clean EOF (#180); redirect\n# hops re-enter the full gate chain and injected headers stay\n# same-origin (#186, #194); NAVH pages recover their virtual\n# origin (#193); cookie __Host-/__Secure- prefixes (#191);\n# download partial-buffer cap with honest resume errors\n# (#192); css url() fragments survive engine-route unwrap\n# (#199); DevTools keyboard access (#220); fingerprint tz/\n# canvas consistency (#223-#226); svg paint tail, b64decode\n# len%4 rejection, bounded mint memo (#227-#229); plus the\n# wave 18-20 fixes beta rode at pins 71-73 (#200-#204,\n# #205-#208). sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30;\n# bootstrap.js 423b16b806b7f4cc -> cf8b76ad53488959.\n# Cargo-side pin moves 63b4f23 -> b0296f8: ships the\n# zeolite-server hardening wave (#181, #182, #183, #189,\n# #196, #198) and the deferred server wave (#197, #209-#213).\n# Pin 77: Zeolite dist db17179. Engine-side fix since pin 76: the\n# route search replaces a token-encoded destination query instead of\n# concatenating onto it (a query-only relative navigation \"?x\" has\n# browser replace semantics; JS-literal mints and legacy full-dest\n# tokens encode their query inside the token, and the glued-on outer\n# search produced \"?a=1?b=2\" upstream - Brave Ask on search.brave.com\n# sent the new question as a mangled double-q URL and the AI answer\n# never streamed). The same replace semantics apply at the cache-key,\n# refresh, cache-bypass and forwarded Referer seams, and a NAVH\n# full-dest token no longer drops the route search. sw.js\n# 88e39dd016c4ad30 -> 4102766dcac60856; bootstrap.js cf8b76ad53488959\n# unchanged; Cargo-side pin stays b0296f8 (app-only change).\n# Pin 78: Zeolite dist 54f2c098. SPA pathname routing: an oxc AST\n# pass in the wasm rewriter renames location reads (bare location and\n# <window|self|globalThis|document|top|parent>.location member reads)\n# to the __zl virtual location (#235), scope-aware so shadowed locals,\n# writes, delete targets and shorthand keys stay untouched, with a\n# parse-failure fallback that keeps the input unchanged and counts the\n# failure in diagnostics; the bootstrap gains applyVloc (#236): a\n# location-like view over the virtual path/query/hash (initScript\n# vpath; the host stays opaque), pushState/replaceState re-anchoring\n# through /__zl_prel__/ engine routes, popstate/hashchange sync, and\n# assign/replace/reload/toString parity. Pathname-routed SPAs (Brave\n# Ask's SvelteKit router) match their routes in-app instead of throwing\n# Not found on the opaque engine pathname. sw.js 4102766dcac60856 ->\n# 4e6e7a32ae284b67; bootstrap.js cf8b76ad53488959 -> 29bfb41d3b8e83ce\n# (bootstrap budget raised 25600 -> 27648 in the Zeolite CI gate,\n# measured 27117); rewriter_wasm_bg.wasm grows 114438 -> 663252 bytes\n# (the oxc parser rides the wasm; scripts without a location token\n# skip the pass - measured ~0.15 ms per 2 MB fast path, ~24 ms per 1\n# MB parsed and renamed). Cargo-side pin stays b0296f8 (rewriter crate\n# only; it is not a server dependency).\n# Pin 79: Zeolite dist d934d4a. #236 regression fix: the virtual\n# location anchored every re-anchored pushState/assign on the full\n# native pathname captured at bootstrap, so a document loaded at a\n# re-anchored <entry>/__zl_prel__/<encoded> URL nested the previous\n# tail inside every new encoded tail and each SPA fallback reload\n# doubled it (Brave Ask: 429 retry loops, then 414 Request-URI-Too-\n# Long). entry strips its prel tail, the NAVH native-parse decodes a\n# prel tail as the newer virtual state instead of reading it as site\n# path, and decoded tails cut at an embedded marker so legacy\n# history entries cannot re-seed the loop (Zeolite 385e55ef, CI run\n# 620 green, 4 regression tests). sw.js 4e6e7a32ae284b67 unchanged;\n# bootstrap.js 29bfb41d3b8e83ce -> 90af15190531c5df (27441 bytes,\n# under the 27648 gate); Cargo-side pin stays b0296f8 (bootstrap-\n# only change, so the /build zlswSha cannot distinguish this bump -\n# verify the served /zlsw/bootstrap.js hash instead).\n# Pin 80: Zeolite dist 47f0ab3. Bug-scout fix wave (Zeolite 8569bc71,\n# CI run 623 green, vitest 1215): #239 vloc cross-origin slip -\n# protocol-relative and whitespace-prefixed absolute URLs were\n# re-anchored as own virtual paths instead of passing through\n# natively; #240 the globals write-target peek now skips comments\n# between the member and the assignment operator (a misrenamed\n# write threw in strict mode); #241 inline event-handler\n# attributes run the same #235 globals pass as script bodies;\n# #242 a preceding \".delete\" property tail no longer suppresses\n# the rename. sw.js 4e6e7a32ae284b67 unchanged; bootstrap.js\n# 90af15190531c5df -> 20dee634ae9c98c9 (27517 bytes, under the\n# 27648 gate); rewriter_wasm_bg.wasm moves 663252 -> 1a5c2582\n# (globals.rs + handler seam). Cargo-side pin stays b0296f8\n# (rewriter crate is not a server dependency); sw.js is unchanged,\n# so verify the served /zlsw/bootstrap.js hash instead.\n# Pin 81: Zeolite dist a84c43f. #238: the Brave SERP reload\n# storm. SvelteKit client start() compares document.URL with\n# location.href and self-assigns location.href to resync (kit\n# PR 11179, a basic-auth drop); the #235 pass renamed\n# location.href reads to the virtual __zl.href but left\n# document.URL native, so against the opaque navh route the\n# compare never passed and start() re-navigated on every\n# load (43 identical document loads in ~30s live, then Brave\n# 429 + PoW interstitial). The globals pass now rewrites\n# scope-resolved document.URL and document.documentURI reads\n# (receiver 'document' only; window.URL is the URL\n# constructor) to __zl.href, so both sides of the compare see\n# the virtual URL and the check never fires (Zeolite 7c3f6c21,\n# CI run 626 green, 144 rewriter tests incl. 2 new). sw.js\n# 4e6e7a32ae284b67 unchanged; bootstrap.js 20dee634ae9c98c9\n# unchanged; rewriter_wasm_bg.wasm moves 1a5c2582 ->\n# 7acc3b508f693a5a (664473 bytes) - the ride is in the wasm,\n# so the /build alarm pins cannot distinguish this bump;\n# verify the served /zlsw/rewriter_wasm_bg.wasm hash instead.\n# Cargo-side pin stays b0296f8 (rewriter crate is not a server\n# dependency).\n# Pin 82: Zeolite dist 9b6f7f8. Two engine waves since pin 81.\n# #248 (google.com/ai reCAPTCHA solve loop): the post-solve\n# re-navigation minted a prel-of-prel URL and decodeNavHandlePath\n# leaked engine markers into the upstream path (Google's own 404),\n# so Google re-challenged forever; the prel tail now peels to the\n# deepest level (bounded 4) and vloc toVirtual decodes route-shaped\n# inputs instead of re-wrapping them (Zeolite 1dd647a, bootstrap\n# budget 27648 -> 28672 for the 27678-byte result).\n# #243-#247: new app/src/lifecycle.ts draws the host/proxied client\n# boundary structurally (host-only zl:tabsOp/zl:downloadOp/zl:notifyOp;\n# tabs.sendMessage and zl:scripting only reach the client whose\n# decoded destination matches, unmatched scripting is dropped),\n# install holds the rewriter prewarm in waitUntil, the extension\n# boot phases fail independently with EXTENSION diagnostics, and\n# startUpdateChecks runs once per worker evaluation (Zeolite 530d9ab,\n# CI run 630 all 5 jobs green, suite 1232). sw.js 4e6e7a32ae284b67\n# -> d693a74c593bb725 (359381 bytes); bootstrap.js 20dee634ae9c98c9\n# -> eced033e919dfb38; rewriter_wasm_bg.wasm unchanged\n# 7acc3b508f693a5a. Cargo-side pin stays b0296f8 (SW-only fixes).\n# Pin 83: Zeolite dist d63dd86. One engine wave since pin 82.\n# #249 (UI loads but every engine request wedges to embedder\n# timeout): the boot gates awaited unbounded promises, so a hung\n# Cache Storage or IndexedDB open stalled routeReady/engineReady\n# forever and no proxied request ever settled. lifecycle.ts now\n# races every boot step with a 10s deadline (routeReady, the\n# fetch-handler engine gate, the extension-route gate, the\n# control-plane gate, the install prewarm, the extension boot\n# phases), emits a SERVICE_WORKER \"boot step wedged; continuing\n# degraded\" diag on expiry, and still propagates rejections\n# (Zeolite a99f021, CI run 632 all 5 jobs green, suite 1236\n# incl. 4 new bounded-boot tests). sw.js d693a74c593bb725 ->\n# c19ce11c78efd751 (359826 bytes); bootstrap.js eced033e919dfb38\n# unchanged; rewriter_wasm_bg.wasm unchanged 7acc3b508f693a5a.\n# Cargo-side pin stays b0296f8 (SW-only fix).\n# Pin 84: Zeolite dist d5a2a66. Two engine waves since pin 83.\n# #258 (startpage.com fails its verification pass): the\n# pass-challenge redirect repair rebuilt bare engine-origin\n# Locations verbatim, so the Anubis PoW redirect left the\n# frame virtual home and hit the SPA 404; the fix rebuilds\n# such redirects against the frame virtual home origin and\n# route path (Zeolite 20d2b85, CI run 633 all green, suite\n# 1240 incl. 4 new challenge-redir tests).\n# #259 (search.brave.com homepage logo 404): dotted-hash\n# SvelteKit asset finals are now recoverable and the flat\n# asset recovery tries 4 bases, so the page-minted\n# virtual-origin asset recovers from the cdn.search.brave.com\n# immutable base (Zeolite 1fbac2dc, CI run 634 all 5 jobs\n# green, suite 1242 incl. 2 new assetbase tests). sw.js\n# c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);\n# bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin\n# stays b0296f8 (SW-only fixes).\n# Pin 85: Zeolite dist 65bdf61. One engine wave since pin 84, the\n# 2026-10-18 small-issue wave (Zeolite 7fca90e on top of the #290\n# deref fix, CI run 39117282705 all green, suite 1249):\n# #291 mapRefreshHeader ends a quoted url= at its closing quote and\n# an unquoted one at the next semicolon, #292 downloadFilename\n# decodes RFC 6266 filename* ext-values with a plain-filename\n# fallback, #293 the WS shims count pre-handshake queued sends in\n# bufferedAmount (page + worker realms), #294 the page-realm mint\n# memo is capped at 256 entries with LRU re-insert and eviction,\n# #295 rewrite rules bind to the from-host boundary. sw.js\n# 42dda133cb8d9a70 -> d29b017afeef63eb (360334 bytes);\n# bootstrap.js eced033e919dfb38 -> e890e6083be75719. Cargo-side\n# pin stays b0296f8 (SW-only fixes).\n# Pin 86: Zeolite dist bee555f. One engine wave since pin 85, the\n# 2026-10-18 fix-wave completion (Zeolite a43aeb10 on top of the\n# agent commits 514471f8, 79b3377a, 4aeb5e3e and the d8126d64\n# tabs.ts splice repair, CI run 39124338300 all 5 jobs green,\n# suite 1273): #270 32-bit fnv1a site hash with jar origin\n# migration, #289 durable-jar-only origins records, #262/#263/\n# #264 honest IndexedDB/cmp/caches.match shims, #265 siteconfig\n# key normalization, #272 webRequest listener detail copies,\n# #282 live webRequest permission views, #271 tabs.onUpdated\n# changeInfo gating (an empty gated changeInfo is not delivered),\n# #278 host-visible filtered tab queries, #283 tab op deadlines\n# with closed-tab rejection, #286 query title globs, #281\n# cookies.onChanged scoping with revoke-on-delivery, #285\n# content-script asset validation, #276 credentials-gated\n# cookie jar, #288 permission-correct webRequest URLs. sw.js\n# d29b017afeef63eb -> 3a6e775447488fe4 (362658 bytes);\n# bootstrap.js e890e6083be75719 -> 1e55ec0f04f848b9 (27962\n# bytes). Cargo-side pin stays b0296f8 (SW-only fixes; the\n# rewriter crate is not a server dep).\n# Pin 87: Zeolite dist 13d9b85. One engine wave since pin 86:\n# #297 (extensions appeared installed but never ran in the\n# host-embedded browsing pane): every proxied document arrives\n# with sec-fetch-dest iframe and csInjectUrls treated any\n# iframe/object destination as a genuine subframe, so\n# resolveContentScripts dropped every non-all_frames content\n# script - and with content scripts dead, MV3 backgrounds\n# never boot on demand, so extension service workers never\n# initialized. A frame whose parent referrer is a host page\n# (neither a NAVH nor an engine route) is now the pane main\n# surface for content-script matching; genuine subframes of\n# proxied documents keep subframe semantics; absent, about:,\n# or unparseable parents fail closed (Zeolite 9d33b44 on\n# 1ae6cdc, CI run 39129225053 all 5 jobs green, suite 1278\n# incl. 5 new cs-inject tests). sw.js 3a6e775447488fe4 ->\n# 8ef1ef7239120397 (362825 bytes); bootstrap.js\n# 1e55ec0f04f848b9 unchanged. Cargo-side pin stays b0296f8\n# (SW-only fix).\n# Pin 88: Zeolite dist 7e29d525. Two engine waves since pin 87.\n# #250 the control-plane messageListener (control.ts/sw.ts) keeps\n# the message event alive for the whole handler (waitUntil) and a\n# failed dispatch answers a structured {ok:false,error:\"control\n# handler failed\"} reply with a RUNTIME diag instead of an unhandled\n# rejection; #252 engine init() resolves only on ack.ok===true,\n# setSiteRoute persists only after the worker acks, post() settles\n# exactly once (settled flag, timeout cleared, port closed);\n# #253 docCookiePorts are capped at 16 per client with shift+close\n# eviction (Zeolite ce9eb6b, CI runs 39132519199 + 39133625103 all\n# 5 jobs green, suite 1288 incl. +10 tests).\n# #266 the storage-event isolation filter recognizes object-style\n# listeners ({handleEvent}) too, keyed by the raw listener so\n# removeEventListener finds both shapes; #261 the cooldown relay\n# branch carries its own first-byte deadline: an embedder that never\n# answers aborts with zl:relayCancel (WispStallError) instead of\n# hanging, and caller aborts stay honest AbortErrors (Zeolite\n# 1a70811, suite 1291 incl. +3 tests). sw.js 8ef1ef7239120397 ->\n# 49896d2b07867e9f (363469 bytes); bootstrap.js 1e55ec0f04f848b9 ->\n# d00b5e4270b011f1 (28080 bytes). Cargo-side pin stays b0296f8\n# (SW-only fixes).\n# Pin 89: Zeolite dist 9eee560. One engine wave since pin 88, the\n# bootstrap compat wave (Zeolite a3406c0 on main 6cd18b6, CI run\n# 39137417144 all 5 jobs green, suite 1297 incl. 6 new tests):\n# #268 the vorigin relabel/remove pass recognizes object-style\n# (EventListener {handleEvent}) listeners, not just functions;\n# #269 ScopedChannel subclasses the real BroadcastChannel\n# constructor with its own name getter; #273 the scoped storage\n# store is a Proxy over the backing store (named-property\n# forwarding, key(i) strips the site prefix); #274 EventSource\n# registrations dedupe with native-bound removeEventListener,\n# once-drop and AbortSignal support; #275 ZlWorker/ZlSharedWorker\n# constructors enforce new-only semantics; #284 relay listeners\n# filter object-style listeners through a wrapper registry so\n# removeEventListener finds the real listener shape.\n# bootstrap.js d00b5e4270b011f1 -> 8c7520cbfad8035d (29383 of\n# the 29696 budget, raised 28672 -> 29696 in the Zeolite CI gate);\n# sw.js unchanged 49896d2b07867e9f (bootstrap-only wave, so the\n# /build zlswSha cannot distinguish this bump - verify the served\n# /zlsw/bootstrap.js hash instead). Cargo-side pin stays b0296f8\n# (bootstrap-only change).\n# Pin 90: Zeolite dist 3826f41. Two engine waves since pin 89, the\n# 2026-10-18 bug-hunt fix wave.\n# #314 (range serving OOM): a single Range request against a cached\n# entry buffered the whole body with arrayBuffer() before deciding\n# the range lay outside it, so a byte-range probe on a huge cached\n# document could balloon the worker. The range path now prechecks\n# the cached content-length against ZL_RANGE_MAX and refuses the\n# range before buffering (Zeolite 54053ce, CI run 39139691546 all\n# 5 jobs green, suite 1300 incl. 3 new range tests). sw.js\n# 49896d2b07867e9f -> e20a18398c4d25a8 (363561 bytes);\n# bootstrap.js unchanged 8c7520cbfad8035d.\n# #322 (blocked-element swallow unbounded): drop_raw swallowed raw\n# text until the close tag, so a blocked script with no close tag\n# buffered the rest of the document without bound. The swallow\n# buffer is capped at 256 KiB and keeps only the longest suffix\n# that is a prefix of the close marker, so no close tag can be\n# missed (Zeolite 0213393, CI run 39141278968, cargo suite incl. 2\n# new bounded-drop_raw tests). Rust-only: sw.js and bootstrap.js\n# unchanged (e20a18398c4d25a8 / 8c7520cbfad8035d); the ride is in\n# rewriter_wasm_bg.wasm (7908d03c7920f8a7), so the alarm pins\n# cannot distinguish this bump - verify the served\n# /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays\n# b0296f8 (the rewriter crate is not a server dep).\n# Pin 101: Zeolite dist 15a049461aca31f1862e3f791990cfc5f18d72eb\n# (from CI build 39574090321, Zeolite main 45ed5449, all 5 jobs\n# green, app suite 1404 tests). Pin 101 carries the 2026-10-21\n# Zeolite fix wave: #385 expired navigation handles re-mint on\n# GET navigations (Zeolite 22c0755); #383 prel parents always\n# reach the handle form (a non-NAVH parent now mints a fresh\n# NAVH handle for the decoded destination too, instead of\n# parking the document on the opaque prel pathname); #382 the\n# 60s relay header deadline breach resolves null and emits a\n# TRANSPORT DIAG row so the caller falls back instead of\n# wedging (undeclared long-polls beyond 60s stay an honest\n# residual); #381 Ghostery list fetches ride the full\n# upstreamFetch transport decision (relay routing works on\n# relay-only deployments) and load failures emit TRANSPORT\n# DIAG rows (no longer silent). sw.js 4326069120ccb9dc ->\n# c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2\n# unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.\n# Cargo-side pin stays a385fa9.\n# Pin 112: Zeolite dist b7c924e5a6bb658d92922a541fbcb03a3870d534\n# (from CI build 39847696942, Zeolite main c981e19a, all 5 jobs\n# green, app suite 1459 tests). Pin 112 ships the Injector\n# phase 2 follow-up: the in-page NAVH mint (navhCleanFromPrel,\n# the prel-navigation clean 302) honors queryRoutes - with the\n# toggle on, the redirected handle rides the query shape\n# (<real path>?<real query>&zlNavh=<token>), so a reloaded\n# document owns a natively readable location.pathname; engine-\n# internal path collisions and missing route keys fall back to\n# the NAVH path form (#383 fail-closed intact). sw.js\n# 3b94ab518397c471 -> c6debef338723924 (629684 bytes);\n# bootstrap.js unchanged c7300fa9981e71b4. Cargo-side pin\n# stays a385fa9 (SW-only change).\n# Pin 111: Zeolite dist 98e24bc4ec1e13562b876ab7f852507f130686a7\n# (from CI build 39812893153, Zeolite main e293ecc5, all 5 jobs\n# green, app suite 1456 tests). Pin 111 ships the split-origin\n# URL-bar strand: decodeLegacyRoute validates the whole legacy\n# /zl/<b64u> shape (two segments, the configured prefix or the\n# reserved zl segment, a strict-UTF-8 http(s) b64u payload,\n# never a keyed tail) and wins at the escape seam ahead of the\n# settled-context recovery, so a URL-bar navigation to a legacy\n# route minted under the other origin decodes to its real\n# destination instead of a guaranteed upstream 404 resolved\n# against the previous page's virtual origin; genuine escaped\n# relative paths and undecodable tails keep the ordinary\n# recovery order. Cargo-side pin stays a385fa9.\n# Pin 110: Zeolite dist 35f36ab14aeeef3dc8720bdeb6a30748e9ee1ff8\n# (from CI build 39788565776, Zeolite main f9881a4f, all 5 jobs\n# green, app suite 1454 tests). Pin 110 ships Injector phase 2:\n# query-shape committed routes behind the queryRoutes opt-in\n# (default OFF, no live traffic change). zl:navHandle mints\n# <real path>?<real query>&zlNavh=<token> when the host opts in\n# via zl:config, so the committed pathname IS the real\n# destination path and native location.pathname reads work\n# without a shim; decodeClientUrl decodes the shape at the\n# shared client seam, handleFetch serves live tokens, re-mints\n# expired GET navigations (#385 mirror) and fails garbage\n# closed; the sender gate classifies query-shape senders as\n# proxied (never host, even at \"/\" or \"/index.html\"); vloc\n# parses the native form and re-commits real paths natively\n# keeping the token (history virtualization). Engine-internal\n# path collisions refuse the mint and fall back to the NAVH\n# form. sw.js 32303e296200b7db -> 8390cea8526d542a (629360\n# bytes); bootstrap.js 7dfd6645656bab22 -> c7300fa9981e71b4\n# (35113 bytes). Cargo-side pin stays a385fa9.\n# Pin 109: Zeolite dist 429b185188404f5373c500be906a2fe5d8fd3f5e\n# (from CI build 39770557101, Zeolite main d778ba0e, all 5 jobs\n# green, app suite 1441 tests). Pin 109 ships the 2026-10-22 scout\n# wave, Zeolite #392-#400: the antiframe sink scan emits a verbatim\n# method call instead of a bare ?.reload?. reference (#392),\n# comparison folding refuses member-chain operands (#396), a quote\n# inside a regex literal no longer opens a fake string (#398), an\n# uppercase </SCRIPT> ends the script block (#397), an expired NAVH\n# parent still resolves its prel tail (#393), an expired token head\n# resolves its tail against the context origin instead of doubling\n# the page path (#395), a storage failure answers null instead of []\n# so route keys never strand (#399), a relay stall feeds the storm\n# detector (#400), and the jar profile state persists in the Cache\n# API across idle worker restarts (#394). sw.js af5fd80829884d7b ->\n# 32303e296200b7db (628200 bytes); bootstrap.js 7dfd6645656bab22\n# unchanged (34628 bytes). Cargo-side pin stays a385fa9.\n# Pin 108: Zeolite dist a7e663ae132c89dca2d04324307fc14b87404d31\n# (from CI build 39753906400, Zeolite main 88cbc94a, all 5 jobs\n# green, app suite 1436 tests). Pin 108 ships the idle-restart\n# family, Zeolite #389/#390/#391: undecodable legacy-shaped routes\n# answer an engine 404 instead of the origin 503 (#389), the\n# transport engine choice persists in the Cache API across idle\n# worker restarts so the UI and the worker agree again (#390), and\n# the worker broadcasts zl:relayLost at every cold start so the\n# relay re-arms in seconds instead of the 30s backoff cycle (#391;\n# live pre-fix recovery was 33.9s). sw.js 71d0bd6f016437e7 ->\n# af5fd80829884d7b (627231 bytes); bootstrap.js 7dfd6645656bab22\n# unchanged (34628 bytes). Cargo-side pin stays a385fa9.\n# Pin 107: Zeolite dist 3263e6e423b7cfabb811b3e86a2a00ec15aaa565\n# (from CI build 39738165242, Zeolite main d58131c3, all 5 jobs\n# green, app suite 1427 tests). Pin 107 ships the location\n# member-write fix, LB #182: the rewriter renames the object\n# of member writes (location.hash = x becomes __zl.hash = x),\n# but the vloc view exposed getters with no setters, so\n# hash-routed SPA writes were silently lost (sloppy) or\n# threw (strict). The view now carries setters: hash mirrors\n# natively plus a synchronous cur update, search/pathname\n# rebuild the virtual URL preserving the other components\n# and navigate.\n# sw.js 71d0bd6f016437e7 unchanged (626483 bytes);\n# bootstrap.js 20589f579aa89383 -> 7dfd6645656bab22\n# (34628 bytes; the CI bootstrap size budget rose\n# 34304 -> 34816). Cargo-side pin stays a385fa9.\n# Pin 106: Zeolite dist ce1e64c606f4dd9e9a707b9b4b1270cdb16faaef\n# (from CI build 39732131533, Zeolite main 4c73252e, all 5 jobs\n# green, app suite 1423 tests). Pin 106 fixes the two audit\n# findings on the pin-105 anchor shim, Zeolite #387/#388: the\n# scan collected only the first 2*64 route values from the\n# document head on every pass and never paged, so deep anchors\n# on large pages kept native route reads (collection now skips\n# memoized and inflight values, and a capped decode reply\n# schedules the next scan, converging across many-anchor pages),\n# and SVG anchors expose href as an SVGAnimatedString whose\n# baseVal read bypassed the navguard property seam\n# (SVGAElement.prototype.href now wraps with a virtual view on\n# a memo hit, writes forward natively; the AREA half of #388 was\n# wrong, the navguard swap row already covers HTMLAreaElement).\n# sw.js 71d0bd6f016437e7 unchanged (626483 bytes); bootstrap.js\n# 509c8042d96c8ba7 -> 20589f579aa89383 (34294 bytes; the CI\n# bootstrap size budget rose 33792 -> 34304).\n# Cargo-side pin stays a385fa9.\n# Pin 105: Zeolite dist 17c5165fa30b1d05e7fac5f1035093434c527b6f\n# (from CI build 39677692896, Zeolite main 34737bc0, all 5 jobs\n# green, app suite 1420 tests). Pin 105 ships Injector phase 1,\n# the anchor read virtualization fixing LB #180: parser-inserted\n# anchors read back as engine route URLs, and Startpage derives\n# its SERP breadcrumb from the anchor href, so the opaque\n# content-origin /j/<token> route leaked into the visible display\n# text. The new bootstrap/anchorshim.ts memoizes route ->\n# virtual destination and serves the nav guard's swap-row\n# property getter plus an Element.getAttribute wrap, asking the\n# worker to decode the page's own markup routes over the new\n# zl:decodeRoutes control message (PAGE_MESSAGES admission like\n# zl:mint, bounded 64 routes per message; garbage and foreign\n# tokens decode to null). Honest limits: the first read before\n# the decode reply lands returns the native route value;\n# detached anchors never join a scan. sw.js 96b27c209b7f596e ->\n# 71d0bd6f016437e7 (626483 bytes); bootstrap.js\n# 37460e146d217cb7 -> 509c8042d96c8ba7 (33782 bytes; the CI\n# bootstrap size budget rose 31744 -> 33792 for the shim).\n# Cargo-side pin stays a385fa9.\n# Pin 104: Zeolite dist 397bce562c0f18ec0a916b00c7a149548a99f6e6\n# (from CI build 39656714434, Zeolite main fb845658, all 5 jobs\n# green, app suite 1415 tests). Pin 104 fixes LB #154: the\n# Google gapi loader sanity-validates generated module URLs\n# against an apis.google.com literal and threw before any fetch\n# because the JS literal pass rewrites the \"https://apis.google.com\"\n# literal into an opaque route token. The shipped gapi-native\n# policy rule (route \"native\", types script, host apis.google.com)\n# demotes the literal pass for that host, and the new\n# transportMatch() composes behavior rules with transport rules\n# so the load still rides the embedder relay (default-relay)\n# instead of falling through to the dead wisp transport; engine\n# issue #34 keeps every cross-origin fetch from controlled pages\n# inside the engine, so nothing leaks direct. sw.js\n# ce02ad5c6c73bd90 -> 96b27c209b7f596e (626218 bytes);\n# bootstrap.js unchanged 37460e146d217cb7. Cargo-side pin\n# stays a385fa9.\n# Pin 103: Zeolite dist ec7fd8fe27d7b10ffd7349e5a238cb1fd72bebc9\n# (from CI build 39636675089, Zeolite main 2b1633b, all 5 jobs\n# green, app suite 1411 tests). Pin 103 fixes the two roots of\n# the #107 phase 2 live gap: the fail-closed host gate (#170)\n# classified the /zlsw-register boot page as a proxied sender\n# and silently refused its host-only zl:relayRegister /\n# zl:wispRegister / zl:embedderOrigin registrations, so the\n# content-origin relay never opened and content loads rode the\n# wisp transport instead; decodeClientUrl now falls back to\n# decodeLegacyRoute so /zl/<b64u> clients decode on a\n# prefix-less (default /j/) worker. sw.js\n# 628614de5754a91f -> ce02ad5c6c73bd90 (626093 bytes);\n# bootstrap.js unchanged 37460e146d217cb7 (31406 bytes).\n# Cargo-side pin stays a385fa9.\n# Pin 102: Zeolite dist dc16a50c8e95cdc59a0460fd4ba5431861fb7bcc\n# (from CI build 39628337530, Zeolite main 0c809c2, all 5 jobs\n# green, app suite 1410 tests). Pin 102 carries the #107 phase 2\n# embedder URL/title sync: zl:getEmbedder (page-facing, in\n# PAGE_MESSAGES) answers an embedded frame with the registered\n# embedder origin plus THIS client's own SW-decoded virtual URL;\n# zl:embedderOrigin (host-only, the boot page's zlRegAsk\n# handshake) registers the embedder origin; the bootstrap gained\n# the embedsync module (posts {lb:\"nav\",url,title} to the parent\n# on load, vloc moves and title mutations) and the vloc\n# onVlocChange hook at its real-path choke points; the bootstrap\n# size gate rose 30400 -> 31744 for it. sw.js\n# c7cb3102e12f9e57 -> 628614de5754a91f (626076 bytes);\n# bootstrap.js e15f38fb1b1557e2 -> 37460e146d217cb7 (31406\n# bytes). Cargo-side pin stays a385fa9.\n# Pin 100 (re-pointed to carry ALL fixes): Zeolite dist 12d9f83c\n# (from CI build 39487725296, Zeolite main fb6f8fa0, all 5 jobs\n# green; bootstrap budget 30381/30400). Pin 100 first shipped\n# ARG 812cfd7 (Zeolite 15f8364: the fetch handler pre-deadline\n# browser-API awaits - clients.get in the jar root recovery and\n# the foreign/initiator lookups, caches.delete in the legacy\n# page cache discard, caches.open/match in pageCacheMatch - ride\n# raceBoot bounded at 1.5s; a never-settling call wedged the\n# navigation and parked the tab on an empty grey root, LB #167;\n# regression boot-wedge.test.ts). After the three open Zeolite\n# PRs merged, pin 100 was re-pointed so it is the one with all\n# fixes: PR #367 (5xx retry memoization for policy.ts/rules.ts\n# loads, 60s relay header deadline in relayfetch.ts, cookieStore\n# delete isolation; bootstrap.js 9d1cb1fba82b9ba8 ->\n# e15f38fb1b1557e2, 30381 bytes), PR #380 (runtime primary WISP\n# endpoint zl:wispPrimary + CORE_CONTROL_TYPES registry label;\n# the engine half of LB #165), PR #363 (Ghostery network filter\n# engine: ghostery.ts matcher, rules.ts GhosteryRedirect\n# redirect support, request.ts redirect wiring, sw.ts transport\n# config; @ghostery/adblocker-web 2.20.1, MPL-2.0; list fetches\n# ride the raw wisp transport by design, so on relay-only\n# deployments remote filter lists never load and local rules\n# stay active). sw.js 828ad258ba730e20 -> 4326069120ccb9dc\n# (624690 bytes, the Ghostery engine rides in sw.js);\n# rewriter_wasm_bg.wasm 38adf0597150389a unchanged. Cargo-side\n# pin stays a385fa9.\n# Pin 99: Zeolite dist c3a1d78 (from CI build 39460354394,\n# Zeolite main 2b8c802, all 5 jobs green, app suite 1389 tests).\n# Correction and completion of pin 98: the pin-98 ARG pinned\n# 7d855ef, which is not a commit on the Zeolite dist branch\n# (the Render build 404ed on the tarball fetch; no service ever\n# went live on it). Pin 99 carries both engine fixes: (1) the\n# pin-98 payload, script src split routes (Zeolite 1297742:\n# script src/href under the keyed codec mints a path-preserving\n# route so loaders validating their own script URL PATH pass,\n# the YouTube ytembeds \"writeEmbed is not defined\" class);\n# (2) prel navigation redirect (Zeolite 2b8c802: a GET\n# navigation arriving on a __zl_prel__ tail under a NAVH parent\n# answers one same-origin 302 to the visible handle form,\n# token + real path + real query, so the reloaded document owns\n# a readable location.search - the Google SERP/AI-overview sei\n# reload parked on the opaque prel pathname and re-triggered,\n# the #290 class). sw.js 63f678ad6fb2b335 -> cae2519a33479628\n# (376066 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged;\n# rewriter_wasm_bg.wasm 51a9435ac25eac23 -> 38adf0597150389a\n# (the split-route rewriter ride). Cargo-side pin stays a385fa9.\n# Pin 98: Zeolite dist 7d855ef (from CI build 39424088091,\n# Zeolite main 1297742, all 5 jobs green, app suite 1383 tests).\n# Script src split routes: script src/href attributes under the\n# keyed codec mint a path-preserving route (origin + /zl/ +\n# keyed origin-only token + the real path), decoded at the SW\n# fetch seams with the existing recoverPath, so loaders that\n# validate their own script URL PATH pass again (YouTube\n# ytembeds Oe wants \"/_/js/\" + \"/k=\": the opaque token broke\n# it, \"writeEmbed is not defined\" and Error: O on every\n# YouTube embed; the #296 src-surgery class). Long tails\n# (capped 2000 chars), query-only and bare-origin srcs keep\n# the opaque route. sw.js 63f678ad6fb2b335 -> 81253c4706ca2dae\n# (373551 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged.\n# Cargo-side pin stays a385fa9 (rewriter + SW-side only).\n# Pin 97: Zeolite dist d78bb5a (from CI build 39413168260,\n# Zeolite main 1074e6d, all 5 jobs green, app suite 1382 tests).\n# Recovery-transport wave: flag-surgery and flat-asset recovery\n# candidates ride the full upstreamFetch transport decision (the\n# raw wispTransport.fetch lambda died on relay-only embedders with\n# a wisp error-7 fan-out, the 2026-10-20 sorry-page report),\n# rejected candidate bodies are cancelled before the next base is\n# tried, and a flag-surgery recovery miss emits a per-bail reason\n# DIAG warning (#290 residual, #347 class, #296 visibility).\n# sw.js 5a88a06a57303672 -> 63f678ad6fb2b335 (373499 bytes);\n# bootstrap.js 9d1cb1fba82b9ba8 unchanged. Cargo-side pin stays\n# a385fa9 (SW-only wave; Zeolite #379 closed as honest upstream:\n# products/index.rss is a real upstream 404, and async/hpba is a\n# sync XHR Chrome never routes through the SW).\n# Pin 96: Zeolite dist 81b3474 (from CI build 39392562420,\n# Zeolite main b2c21c3, all 5 jobs green, app suite 1377\n# tests). The 2026-10-20 scout wave: rewriter-side #368\n# comment-aware frame-buster folding, #369 non-executable\n# script bodies pass through, #370 chained cross-frame\n# sinks (riding rewriter_wasm_bg.wasm; verify the served\n# wasm hash for those three), and the bootstrap/SW series\n# #364 ws:// shim SyntaxError, #371 srcdoc script bodies,\n# #372 window.open noopener mint, #373 backslash-form\n# URLs, #374 EventSource stringify, #375 postMessage\n# transfer list, #376 cache refresh redirect hop gates,\n# #377 page-cache clear on fingerprint/UA change\n# (bootstrap budget 30400). sw.js 6975a139819b198b ->\n# 5a88a06a57303672 (372972 bytes); bootstrap.js\n# eb91c2a989aa89f0 -> 9d1cb1fba82b9ba8 (30349 bytes).\n# Cargo-side pin stays a385fa9 (the wave does not touch\n# zeolite-server).\n# Pin 95: Zeolite dist de70643 (from CI build 39377475538,\n# Zeolite main 7e95110, all 5 jobs green, app suite 1359\n# tests). One engine-side change since pin 94, SW-side: the\n# #256 build-time static plugin registry (7e95110: the\n# registry generates plugins-static.mjs at build time so the\n# service worker resolves plugin modules from a static\n# origin-local map instead of dynamic import; inert until a\n# plugin is requested; e2e plugin suite 5/5 on the local\n# toolchain). sw.js 9b924b1e1e5a4d42 -> 6975a139819b198b\n# (372152 bytes); bootstrap.js unchanged eb91c2a989aa89f0\n# (29649 bytes). Cargo-side pin stays a385fa9 (no\n# zeolite-server changes since pin 92).\n# Pin 94: Zeolite dist ac68e9c (from CI build 39316637933,\n# Zeolite main 525e4de, all 5 jobs green, app suite 1354+\n# tests). Four engine-side changes since pin 93, all SW-side\n# or rewriter-side: the #331 rewriter location renames for\n# computed member reads and optional chains (Zeolite 76354a1;\n# the ride is in rewriter_wasm_bg.wasm), the #290 keyed-route\n# diagnostics fix (21bca01: request.ts diag entries name the\n# requesting page and url), the #359 bound script recovery\n# with honest unavailable-plugin reporting (PR #360,\n# ded2ef2; partial for #256, the static plugin loader stays\n# open), and the #361 client-lineage cookie jar binding\n# (PR #362, 525e4de: jar profiles key on the host-window\n# lineage so incognito and normal windows stop clobbering\n# each other's profiles - the Zeolite half of LB #109; the\n# LB two-window regression still needs a live deploy).\n# sw.js 7db69875af0b35a8 -> 9b924b1e1e5a4d42 (371639\n# bytes); bootstrap.js 790c52c7c4beb41c -> eb91c2a989aa89f0\n# (29649 bytes). Cargo-side pin stays a385fa9 (no\n# zeolite-server changes since pin 92).\n# Pin 93: Zeolite dist 6727cba (from CI build 39166714671,\n# Zeolite main a6d37ed, all 5 jobs green, suite 1318 incl. 5 new\n# tests). Three engine-side changes since pin 92: the Vary\n# honor fix #346 (Zeolite PR #355, conservative form: any\n# non-empty Vary makes a response non-storable, so the URL-only\n# cache key can never serve a variant; the roadmap docs #353\n# ride along, docs-only), the relay re-registration fix #354\n# (Zeolite 7292e71: a relay-routed fetch that finds no channel\n# broadcasts zl:relayLost to window clients and waits once,\n# bounded 3s with a 30s backoff; the LB App.tsx listener\n# re-registers at once - fixes the fast.com/chatgpt.com SSL\n# error 35 class after an idle SW restart, LB #156), and the\n# SharedWorker identity scoping fix #260 (Zeolite a6d37ed: the\n# ctor folds the opaque site token into the worker name, both\n# arg forms, so two virtual sites on the one engine origin\n# never share a worker context). sw.js 248fc6aea789e2f2 ->\n# 7db69875af0b35a8 (366753 bytes); bootstrap.js\n# 8c7520cbfad8035d -> 790c52c7c4beb41c (29462 bytes).\n# Cargo-side pin stays a385fa9 (all fixes SW-side).\n# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Two\n# waves plus a fix since pin 91: the 2026-10-18 rewriter wave\n# (Zeolite e4f997f on main: #345/#342/#339; the ride is in\n# rewriter_wasm_bg.wasm 7908d03c7920f8a7 -> fc58b70eee7ab936b,\n# so the alarm pins cannot distinguish it - verify the served\n# wasm hash instead), the 2026-10-18 server wave (Zeolite\n# a515b17 on main: #343/#350/#351/#352/#340; server-side only,\n# not in the dist bundle - it ships via the Cargo-side rev bump\n# below), and the app fix #296 flag-surgery script URL recovery\n# (Zeolite a385fa9 on main, CI run 39162909529 all 5 jobs green,\n# suite 1313 incl. 4 new tests; fixes the Google\n# /sorry/httpd=1/... script 404 class that broke search results\n# and the AI overview). sw.js 54e173c073e5de4b ->\n# 248fc6aea789e2f2 (366108 bytes); bootstrap.js unchanged\n# 8c7520cbfad8035d. Cargo-side pin b0296f8 -> a385fa9 (first\n# server-dep bump since pin 76; ships the 2026-10-18 server wave\n# a515b17 with the regenerated server/Cargo.lock).\n# Pin 91: Zeolite dist 9927bd7. One engine wave since pin 90, the\n# 2026-10-18 app security wave (Zeolite 60b9404a on main, CI run\n# 39142882453 all 5 jobs green, suite 1309 incl. 9 new tests):\n# #337 document.cookie cannot overwrite or delete an HttpOnly\n# cookie, #338 the x-zl-cached-at / x-zl-final-url internal view\n# headers are stripped from served cache copies, #341 an If-Range\n# validator mismatch serves the full body instead of a range\n# slice, #344 WEBNAV.domContentLoaded fires from the\n# sender-derived dest, #349 cookie names and values reject\n# control characters at jar admission, #336 the compat doc\n# discloses the zl:ext one-world limit (the page-visible bridge\n# cfg URL makes per-token scoping impossible). sw.js\n# e20a18398c4d25a8 -> 54e173c073e5de4b (364388 bytes);\n# bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged\n# 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only\n# fixes).\n# Pin 113: Zeolite dist 07bb4ce0a48650b7e72c8043557efc1fd5af48fd\n# (from CI build 39856666415, Zeolite main f8ea0553, all 5 jobs\n# green, app suite 1464 tests). Pin 113 ships COEP embedder\n# parity: the engine worker rebuilds every default/cors Response\n# with cross-origin-resource-policy: cross-origin at the\n# respondWith seam (app/src/corp.ts withCorp; status, headers\n# and body preserved, opaque and error responses pass through\n# untouched), so a COEP require-corp embedder (Quartz and any\n# crossOriginIsolation shell) can embed the /zlsw-register boot\n# page and /zl/ content instead of ERR_BLOCKED_BY_RESPONSE. The\n# server half ships in the same wave (main.rs with_corp layer).\n# sw.js c6debef338723924 -> 0a62d321a5b09828 (630095 bytes);\n# bootstrap.js unchanged c7300fa9981e71b4 (35113 bytes); wasm\n# unchanged. Cargo-side pin stays a385fa9.\n# Pin 114: Zeolite dist 0497c201beadb7ccbb0dc5bc984eecc6b2eb165c\n# (from CI build 39919675076, Zeolite main 0b72b3f8, all 5 jobs\n# green, app suite 1469 tests). Pin 114 ships the query-handle\n# slash contract + vloc query-arm route-shape gate, Zeolite\n# #410/#411: buildQueryHandleUrl percent-escapes a surplus\n# leading-slash run in the committed query-shape path (a\n# handle opening // resolves protocol-relative on host\n# assignment) with decodeQueryHandle and the expired-handle\n# re-mint restoring it (#202 parity with the NAVH form); the\n# vloc presence-only query arm never wins on a route-shaped\n# pathname, so a NAVH page whose real destination query\n# carries a zlNavh impostor reads the real path instead of\n# the opaque handle (#180 leak class), and the query-mode\n# re-commit keeps the escaped form. sw.js 0a62d321a5b09828 ->\n# 559dd986814b1a53 (630107 bytes); bootstrap.js c7300fa9981e71b4\n# -> 66d387dbf16ee2c3 (35288 bytes, CI ceiling 35328). Cargo-side\n# pin stays a385fa9 (SW-only change).\n# Pin 115: Zeolite dist bdbce2d77c15651424ef64648ce6664e6af4125c (from CI build\n# 39947197172, Zeolite main 8882da6, all 5 jobs green, app\n# suite 1470 tests). Pin 115 ships the always-on Injector:\n# queryRoutes defaults to true at module eval (swstate.ts), so\n# query-shape committed routes are the default route shape; a\n# host zl:config remains the runtime opt-out. sw.js\n# 559dd986814b1a53 -> 378e4396918d9393 (630107 bytes);\n# bootstrap.js unchanged 66d387dbf16ee2c3. Cargo-side pin\n# stays a385fa9 (SW-only change).\n# Pin 116: Zeolite dist 75b2196efbcbd37c7284971fdd8be5380afb23a9 (from CI build\n# 39988823338, Zeolite main 7b957af3, all 5 jobs green, app\n# suite 1471 tests). Pin 116 ships Zeolite #412/#413: a\n# window.open popup opens the key-free marker route\n# /__zl_nav__/<b64u> directly (no minted keyed token: a fresh\n# tab with no installed worker can still decode the\n# destination instead of the engine-offline notice), and lazy\n# images default to true at module eval, so the\n# loading=\"lazy\" rewrite pass survives worker restarts (a\n# host zl:config stays the runtime opt-out). sw.js\n# 378e4396918d9393 -> 9d7a233a5f2a00c6 (630107 bytes);\n# bootstrap.js 66d387dbf16ee2c3 -> 9a2224f65bff6141 (35111\n# bytes, CI ceiling 35328). Cargo-side pin stays a385fa9\n# (SW-only change).\n# Pin 117: Zeolite dist 7b1a4eed52b4d31cdc054486acb8207826a54c3a (from CI\n# build 40007080132, Zeolite main 5e6b87d8, all 5 jobs green, app suite\n# 1473 tests). Pin 117 ships the Google /zl/ 404 fix: a query-shape\n# route whose pathname is engine-route-shaped (a keyed zlNavh token\n# copied by page JS) is no longer decoded as a control-plane\n# destination (queryHandlePathShaped gates decodeQueryHandle and the\n# expired re-mint arm), and the zl:ping reply echoes imageLazy so the\n# debug menu readout matches the worker state. sw.js\n# 9d7a233a5f2a00c6 -> c3e4e7f4c1e41e0c (630146 bytes); bootstrap.js\n# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays\n# a385fa9 (SW-only change).\n# Pin 118: Zeolite dist 535d045d612f1d46f82c738caac45c5382ea91c6 (from CI\n# build 40027192164, Zeolite main 6b2f7ac, all 5 jobs green; the app\n# suite gained the ogs-origin regression file). Pin 118 ships Zeolite\n# #420: the Google apps widget (ogs.google.com /widget/) embeds the\n# engine origin in its percent-encoded origin= query param, so the\n# widget frame never matched the page and the 9-dot products menu\n# stayed empty; the fetch seam now virtualizes that origin= to the\n# page origin at the same seam as the #112 reCAPTCHA co= fix\n# (fail-closed without a usable referrer). sw.js\n# c3e4e7f4c1e41e0c -> 13b00d3970710c96 (630808 bytes); bootstrap.js\n# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays\n# a385fa9 (SW-only change).\n# Pin 119 rides Zeolite main 2e1d1edf (#414 + cloudflare managed challenge):\n# /cdn-cgi/ challenge bytes now serve verbatim at every seam and fetch/XHR\n# HTML (dest \"\") no longer gets the __ZL init/bootstrap injection.\n# sw.js 13b00d3970710c96 -> 5343f47d3a5d80c8 (631236 bytes);\n# bootstrap.js unchanged 9a2224f65bff6141 (35111 bytes);\n# Cargo-side zeolite-server pin stays a385fa9 (SW-only change).\n# Pin 120 rides Zeolite main ca4e944b (wave 56: #415 #418 #419 #421\n# #422 #423 #424 #430; dist 63bb15be from CI build 40092642353, all\n# 5 jobs green). Chatgpt singleton-reset stall fan (#415), Startpage\n# engine-content links (#418), blooket Colyseus \"Game not found\"\n# (#419, ws subprotocol allow-list), wisp close_reason no-op (#421),\n# wisp handshake accepts major<2 (#422), b64u non-canonical input\n# (#423), zero-length UDP datagrams dropped (#424), content-origin\n# error pages state plainly they are a bug (#430). sw.js\n# 5343f47d3a5d80c8 -> 7997fd3e068d0c45 (631750 bytes); bootstrap.js\n# 9a2224f65bff6141 -> 665b64d76f4113a5 (35662 bytes; Zeolite CI\n# bootstrap size gate raised 35328 -> 36352). Cargo-side pin stays\n# a385fa9 (SW-only wave).\n# Pin 121 rides Zeolite main 20f13bf4 + 725c64eb (wave 57: #414\n# reopened fix + #433; dist 552e3d7f from CI build 40097710930, all\n# 5 jobs green). #414: HTML rewriting and injection are gated on\n# document destinations, so an HTML-typed fetch/XHR response (dest\n# \"\") keeps its body verbatim (the catbox /user/api.php class), and\n# the initiator fallbacks decode through decodeClientUrl so\n# query-shape routes yield a real initiator and the upstream Referer\n# is restored (the claude.ai challenge warning class). #433: the\n# hCaptcha host= (widget frame + checksiteconfig/getcaptcha) is\n# virtualized to the page hostname at the fetch seam (#112 co=\n# class), so hCaptcha's sitekey hostname validation sees the real\n# page host. sw.js 7997fd3e068d0c45 -> 8ee8dfcc1fa6a015 (632813\n# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin\n# stays a385fa9 (SW-only wave).\n# Pin 122 rides Zeolite main 8b9274dd (wave 58: cf-mitigated\n# challenge documents serve verbatim; dist d8c1759 from CI build\n# 40106176498, all 5 jobs green). Cloudflare flags the managed-\n# challenge interstitial with cf-mitigated: challenge; the engine\n# now serves those documents verbatim (isChallengeMitigated +\n# CF_CHALLENGE_VERBATIM, gated off every rewrite/injection seam),\n# because the widget rejects rewritten challenge documents (nonce\n# CSP + corrupted _cf_chl_opt: the claude.ai Unable to connect\n# class). sw.js 8ee8dfcc1fa6a015 -> 820f9c301b91a2c7 (634810\n# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin\n# stays a385fa9 (SW-only wave).\n# Pin 123 rides Zeolite main 2751acb (wave 59: the seven-issue\n# scout patch, #435 #436 #438 #439 #442 #443 #444, plus the\n# #429/#437 UA seam; dist bd5ef545 from CI build 40183809857,\n# all 5 jobs green). #435 the engine-route Referer carries the\n# zlNavh token again so the referrer decodes on query-shape\n# navigations; #436 the widget origin seams (reCAPTCHA co=,\n# apps widget origin=, hCaptcha host=) take the initiator so\n# the referrer resolves on query-shape routes; #438 the shared\n# transport reset is a synchronous generation bump (no in-flight\n# promise left wedged); #439 lifecycle host events broadcast to\n# extension contexts; #442 relay delivery answers\n# RelayDeliveryUnknownError and only idempotent methods (GET\n# HEAD OPTIONS PUT DELETE TRACE) may fall back, with the relay\n# header deadline upload-gated (RELAY_UPLOAD_HEADER_DEADLINE_MS\n# 600000 for size and multipart requests); #443 netlog redacts\n# headers and clientId at push and diag redaction covers\n# userinfo; #444 canReplayAfterFailure gates policy wisp\n# retries; #429/#437 the UA derives from the real fingerprint\n# profile (app/src/useragent.ts), default on. sw.js\n# 820f9c301b91a2c7 -> af77ce39fc42e6c2 (641658 bytes);\n# bootstrap.js 665b64d76f4113a5 -> d4a04eb5947837ef (37311\n# bytes). Cargo-side pin stays a385fa9 (SW-only wave).\n# Pin 124 rides Zeolite main 42bdef9: the #428 keyed-tail\n# recovery plus the claude.ai challenge-document revert\n# (dist 8f19b6a4 from CI build 40192665545, all 5 jobs\n# green). decodeLegacyRoute now attempts keyedDecode with\n# every held route key on keyed-shaped tails, so MAC-verified\n# mints minted under a different prefix decode instead of\n# 404ing with \"undecodable legacy route\" (the google.com\n# Sign in target=_top and Outlook MSAL strand class, #428);\n# foreign keys and garbage still fail closed. The challenge\n# verbatim demotion is reverted: cf-mitigated challenge\n# documents are rewritten with the engine init again (the\n# pin-121 behavior) because verbatim serving left the\n# claude.ai challenge document with a native page surface\n# and the orchestration went silent; isChallengeMitigated\n# stays in transit.ts for detection. sw.js af77ce39fc42e6c2\n# -> ccd2defa6ca73ba4 (641434 bytes); bootstrap.js unchanged\n# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only\n# wave).\n# Pin 125 rides Zeolite main c76f77e (wave 61: the MSAL/AAD\n# authorize redirect_uri virtualization, #431; dist 9a50a0a3\n# from CI build 40196894817, all 5 jobs green). MSAL names the\n# content origin in redirect_uri (window.location.origin is\n# LegacyUnforgeable, the #112 co= class), so the AAD authorize\n# round-trip returned top-level to the content origin and the\n# chain stranded. virtualAuthorizeRedirect in request.ts now\n# virtualizes redirect_uri at the fetch seam: host-gated to\n# login.microsoftonline.com / login.microsoft.com /\n# login.live.com on /oauth2/ paths ending /authorize, the\n# percent-decoded redirect_uri that parses to the engine\n# origin is rewritten to the page origin (referrer-derived,\n# fail-closed, state untouched). sw.js ccd2defa6ca73ba4 ->\n# acdc15f7f76b4273 (642319 bytes); bootstrap.js unchanged\n# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only\n# wave).\n# Pin 126 rides Zeolite main 5016767 + 95cff205 (wave 62: the\n# route-search union merge, the Outlook MSAL AADSTS900144 strand\n# of #431; dist 0e528d1f from CI build 40201261209, all 5 jobs\n# green). A page appending an outer route search\n# (?iframe-request-id=...) onto an opaque keyed token made\n# mergeRouteSearch REPLACE the token-owned query (the wave-25\n# Brave Ask semantics), so the top-level MSAL escape fetched the\n# AAD authorize endpoint without client_id/redirect_uri and AAD\n# answered AADSTS900144. mergeRouteSearch in request.ts is now\n# a UNION: a pure append keeps the token query bytes exact when\n# no key conflicts, a key conflict resolves via a URLSearchParams\n# rebuild with the outer value winning per key, and a query-free\n# decode keeps the plain concat. sw.js acdc15f7f76b4273 ->\n# d4423f428f4e1279 (642595 bytes); bootstrap.js unchanged\n# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only wave).\n# Pin 127: script escape-state and exact MIME attribute parsing (#447/#448).\n# CI 40207272135; only rewriter_wasm_bg.wasm changes, JS hashes stay identical.\n# Pin 128: origin-pinning script literal skip (#449). A script whose\n# body carries an anchored ^https?: origin-pinning regex keeps its\n# URL literals verbatim through the JS-literal pass (the gapi\n# client.js class: the pin regex rejects route tokens, so rewriting\n# the literals would make the loader throw before any fetch), while\n# the runtime seams (fetch, anchors, window.open) keep every\n# destination on the engine. CI 40221562394 all 5 jobs green;\n# sw.js d4423f428f4e1279 -> 048ee077dab2ace1 (643413 bytes),\n# rewriter_wasm_bg.wasm 9f59b59cdca87ca9 -> c1d626bde245279e;\n# bootstrap.js unchanged d4a04eb5947837ef. Cargo-side pin stays\n# a385fa9 (SW-side wave).\n# Pin 129: scout queue wave (#457, #458, #459, #463, #464, #468,\n# #469, #472, #473, #474, #475). Beacon POSTs are never replayed\n# natively on rejection (#457: uncertain delivery risks a double\n# write) and pageshow clears the pagehide unload latch (#458);\n# mint memo identity guard (#459); relay deadline waiter\n# self-removal (#463); zl:relayLost broadcast is host-clients-only\n# (#464); strong-comparison If-Range (#468); the empty 416 drops\n# content-length (#469); SW registration scope parity and\n# exact-origin compares with native TypeError contracts (#473,\n# #474); storage listener once/signal/capture parity (#475);\n# message wrapper capture-aware identity and reuse (#472).\n# CI 40229815052 all 5 jobs green; sw.js 048ee077dab2ace1 ->\n# 13def9cfde0b253c (643614 bytes), bootstrap.js d4a04eb5947837ef\n# -> d1ac5f255c2c56ed (38471 bytes, budget 39424); wasm\n# unchanged c1d626bde245279e. Cargo-side pin stays a385fa9\n# (SW-side wave).\n# Pin 130: zl:reloadBypass one-shot page-cache bypass for embedder\n# reloads (#211 LB): the reload split button's bypass action asks\n# the SW (zl:reloadBypass) to refetch the top document once with\n# cache: reload semantics; the SW clears the one-shot latch when\n# the bypass reload completes.\n# CI 40231938609 green; sw.js 13def9cfde0b253c -> a697f1fd702f2c30\n# (643773 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471\n# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays\n# a385fa9 (SW-side wave).\n# Pin 131: cache-refresh cookie admission + jar profile restore\n# fail-closed + relay credit grants (Zeolite #466, #470, #471):\n# refresh responses admit Set-Cookie into the owner jar (and\n# refuse store on credentialed refreshes per #179); a corrupt\n# jar profile record fails closed to the unbound profile; the\n# relay port grants byte credits (2 MiB upfront, grant-back per\n# drained chunk) so a slow consumer cannot flood the port.\n# CI 40287664049 green; sw.js a697f1fd702f2c30 -> b09a2bedaa8f77f0\n# (644519 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471\n# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays\n# a385fa9 (SW-side wave).\n# Pin 132: PR #480 engine compatibility wave (Zeolite issues\n# #452, #477, #503, #508, #509): the CSP translation layer is\n# deny-only with worker/frame/child audited (#452); virtual\n# service worker phase 2 gives guests a fetch handler with a\n# 250 ms budget and scope-routed live request-path bridging,\n# serving guest answers verbatim minus set-cookie (#477);\n# long-path asset recovery gets the generic 5-8 segment gate\n# under the mint-marker discipline (#503); the routekey\n# rotation keeps its lifecycle audit (#508); origin= Telegram\n# URLs virtualize their origin (#509); the streaming\n# CssRewriter carries its boundary byte, riding in the wasm\n# (#507). CI 40677887471 green (Zeolite main d4ca407, PR #480\n# merged); sw.js b09a2bedaa8f77f0 -> 207f93aacf2b0f5b\n# (697523 bytes); bootstrap.js d1ac5f255c2c56ed ->\n# 435087f83b79c0e1 (39223 bytes, budget 39424); wasm\n# c1d626bde245279e -> 4853d08234b4a35a (675013 bytes).\n# Cargo-side pin moves a385fa9 -> d4ca407: zeolite-server\n# lib.rs, wisp-core handshake.rs and wisp-wasm lib.rs changed\n# since a385fa9.\n# Pin 133 (2026-10-28): dist 107bd7d (Zeolite main 59bf14d, CI run\n# 1182, build 40696089310) ships #477 wave 3, the client virtual\n# service worker: per-tab virtual SW contexts, register() dispatch,\n# capture and forward semantics, postMessage bridging and the\n# guest-host page (docs/virtual-service-worker-phase2.md), plus the\n# one-shot wedge-restart retest in the e2e torture harness. sw.js\n# 207f93aacf2b0f5b -> 49b602e9abc78923 (698533 bytes); bootstrap.js\n# 435087f83b79c0e1 -> 22429c1203f3c8f5 (39501 bytes); wasm\n# unchanged 4853d08234b4a35a. Cargo-side pin stays d4ca407: no\n# crates changed since pin 132 (wave 3 touched app/ and suite/\n# only; the engine bundle bytes match the 34de2eb build, now from\n# a green run).\n# Pin 134 (2026-10-28): dist c2bb017 (Zeolite main 8e0fb18, CI run\n# 1184, build 40745551849) ships the #510 URL parse seam: the scan\n# harvests route-shaped literals from inline script text (SvelteKit-\n# style hydration data islands) and the wrapped realm URL\n# constructor serves the decoded virtual destination, so Brave's\n# SERP infobox website row shows telegram.org instead of the\n# engine content host (#112/#420 class); page-realm engine\n# internals (swshim, vloc, embedsync, postmsg, ws, siteid) keep the\n# captured NativeURL after the first CI round caught swshim's\n# origin check parsing through the seam. sw.js 49b602e9abc78923 ->\n# ecc27c096d6323d1 (698539 bytes); bootstrap.js 22429c1203f3c8f5 ->\n# 6d0b04860be9077f (40522 bytes; the CI budget gate rose\n# 39680 -> 40704). Cargo-side pin stays d4ca407: no crates changed.\n# Pin 135 (2026-10-29): dist 90f65c8 (Zeolite main d5a8f54, CI run\n# 1187, build 40862364041) ships the #501 relay pre-dispatch\n# classification: the LB relay stamps x-zl-relay-delivery: no when\n# a rejection proves the upstream never saw the request, the\n# embedder forwards it on zl:relayError and the engine unlatches\n# its dispatched mark, so an authenticated non-idempotent POST can\n# replay on the fallback transport instead of failing terminally\n# (the amiunique login shape). sw.js ecc27c096d6323d1 ->\n# e6c1874b7b0f8222 (698623 bytes); bootstrap.js 6d0b04860be9077f\n# unchanged; wasm unchanged 4853d08234b4a35a. Cargo-side pin stays\n# d4ca407: no crates changed. The bundle was published by run\n# 1187's app job; that run's browser job failed on runner\n# timeouts (not reproduced locally with this exact bundle).\n# Pin 137 (2026-10-29): dist fce7466 (Zeolite main eab792b, CI run\n# 40976199122, all 5 jobs green) ships the #492 RFC 2606 demotion:\n# exact reserved documentation hosts (example.com/.net/.org) stay\n# verbatim in the JS URL literal pass, so Startpage's placeholder\n# base idiom (a `http://example.com` default base; the page fetches\n# the derived pathname+search against its own origin) no longer\n# mints a live route to the documentation host: SERP favicon\n# fetches (/sp/favicon?fqdn=...) serve through the content origin\n# instead of 404ing upstream. sw.js stays ff73bac6fd111fe2 (699138\n# bytes); bootstrap.js stays 3936718bd9dcdd64 (40587 bytes; budget\n# 40704); the fix rides in rewriter_wasm_bg.wasm, 6e0f11c9bd64bed4\n# -> 0fcad50982ab7686 (675565 bytes) - the /build zlswSha cannot\n# distinguish this bump, verify the served wasm hash instead.\n# Cargo-side pin stays d4ca407: no crates changed.\n# Pin 138 (2026-10-30): dist c1ad7a4 (Zeolite main 7cbac22f, CI run\n# 41038517509) ships the #511 WebSocket-over-relay bridge: when a\n# relay channel is registered, page WebSockets ride it as typed\n# zl:ws* frames through the LB /zlws egress instead of the primary\n# wisp transport (auth-refused on LB-class deployments, so every\n# socket wedged in readyState 0 with no error: the Blooket\n# \"Joining Game\" hang). Close parity: onclose fires when the\n# handshake completes (the echoed close envelope or a bounded 5 s\n# fallback), the conn stays registered while closing, sends after\n# close drop, a dead relay channel surfaces as onerror, pre-open\n# sockets end 1006. The embedder side (LB /zlws egress + relay ws\n# arms in zeolite.ts and the boot page) ships in this same deploy.\n# Pinned from a run whose browser job is red: the redirect-semantics\n# torture probe failed first in all five red runs today (the\n# intermittent engine transport death of Zeolite #514, present on\n# pre-#511 bytes too); the app job that builds this bundle is green\n# and the pin 135 precedent applies with the diagnosis on record.\n# sw.js ff73bac6fd111fe2 -> c4208f42a1552246 (701903 bytes);\n# bootstrap.js unchanged 3936718bd9dcdd64 (40587 bytes);\n# rewriter_wasm_bg.wasm 0fcad50982ab7686 -> 4701b161cab34b27\n# (678984 bytes) with NO Rust source change since pin 137 (only a\n# cfg-gated test landed): the wasm tracks crates.io because Zeolite\n# commits no Cargo.lock (Zeolite #513); rustc and wasm-pack were\n# identical in both builds. Cargo-side pin stays d4ca407: no crates\n# changed.\n# Pin 139 (2026-10-30): dist cd11717 (Zeolite main 01bf05aa, CI run\n# 41136428811, all 5 jobs green) ships the storage wave (#557/#548/#555)\n# and the #543 fragment seams: page-cache entries carry Vary variant\n# metadata behind a fail-closed varyMatches gate (supported Vary\n# request headers finally cache; Vary:* stays refused), the page cache\n# holds a hard 60-entry bound with evict-before-put plus a fail-closed\n# pageCacheDisabled flag, and indexedDB.databases() is site-scoped in\n# both the page and worker realms. Navigations keep destination\n# fragments on the committed URL: mapped Location/Refresh routes carry\n# the fragment raw, marker/prel payloads stay fragment-free, and\n# decodeClientUrl joins the committed fragment (native hash wins over\n# a payload hash). sw.js c4208f42a1552246 -> 1b4a979dff9f3dbf\n# (702633 bytes); bootstrap.js 3936718bd9dcdd64 -> 77fb46f864491a2b\n# (41025 bytes; the Zeolite CI budget gate rose 40704 -> 41216 in\n# 4fd5870). Cargo-side pin unchanged: no crates changed (both waves\n# touched app/ and suite/ only).\n# Pin 140 (2026-10-30): dist afe08b6a (Zeolite main 59fb2bac, CI run\n# 41143099257, all 5 jobs green) ships the engine fix wave for\n# #558/#559/#560/#561: decodeQueryHandle strips every MAC-verifying\n# zlNavh occurrence and the mint strips live tokens from the\n# destination search (the stacked-handle loop on google.com sign-in),\n# a stale-relay probe drops a registered port whose embedder is gone\n# (a top-level escape destroys the register page; the fetch falls\n# back instead of parking on the 60 s header deadline, and the next\n# fetch re-registers), and extension background scripts run against\n# a sandboxed self (Tampermonkey 5.5.0).\n# sw.js 1b4a979dff9f3dbf ->\n# 53b198940dc5e311 (705406 bytes); bootstrap.js unchanged\n# 77fb46f864491a2b (41025 bytes). Cargo-side pin unchanged: no crates\n# changed (app/ TS only).\n# Pin 141 (2026-10-30): dist 790178cb (Zeolite main 7d14bb41, CI run\n# 41147759573, all 5 jobs green) ships the residual fixes of the\n# #558-#561 wave: the vloc anchor strips every zlNavh token a page\n# carries back into pushState/replaceState or a location write and\n# appends the live token once (google.com's home page stacked the\n# same handle three times via re-anchored replaceState), and Firefox\n# MV2 background pages get a sandboxed document stub and a real\n# script-tag loader as Function-scope params (Tampermonkey 5.5.0\n# boots past its document reads; the compat matrix states the stub\n# contract). sw.js 53b198940dc5e311 -> b7b9a7fcaee5990f (724053\n# bytes); bootstrap.js 77fb46f864491a2b -> 38807f6fe95d006f (41350\n# bytes; the vloc anchor ships in the bootstrap bundle). Cargo-side\n# pin unchanged: no crates changed (app/ TS only).\n# Pin 142 (2026-10-31): dist d2119ddd (Zeolite main 4a8ee773, CI run\n# 41198199949) ships the #560 residual fix plus the merged #554\n# import-map wave: the MV2 chrome.extension namespace mounts for\n# MV2 records only (inIncognitoContext false, getURL shared with\n# runtime, getBackgroundPage null, getViews []; MV3 gets no\n# namespace, Chrome parity) and the page bridge materializes MV2\n# extension and permission-gated webRequest namespace objects\n# (filterResponseData stays undefined), so Tampermonkey 5.5.0's\n# background passes its chrome.extension.inIncognitoContext read\n# and its options page no longer crashes at module load on\n# webRequest.filterResponseData. sw.js b7b9a7fcaee5990f ->\n# 27b03c7346e6df73 (736681 bytes); bootstrap.js 38807f6fe95d006f ->\n# 1fc347670b10a066 (42761 bytes). CI stated plainly: app, compat,\n# rust and wasm green; the browser job fails only the #537 module\n# blob worker boot checks, a pre-existing failure identical without\n# this commit (reproduced on e1eefb08 and 3a33fbe6, the #537\n# wrapper wave's own runs).\n# Pin 143 (2026-10-31): dist 44309725 (Zeolite main 66a2df40, which\n# includes 19131379) ships chrome.i18n (#560 residual): getMessage\n# answers from the package _locales (navigator.language, its primary\n# subtag, then default_locale; the first messages.json that exists\n# wins) with Chrome case-insensitive folding, $NAME$ placeholders\n# expanded before $1..$9 substitutions, and an empty string for a\n# missing name; getUILanguage/getAcceptLanguages report the resolved\n# locale and i18n.getAcceptLanguages also accepts the Chrome callback\n# shape; serve.ts embeds the resolved locales in ZL_PAGE_CFG so the\n# page bridge answers i18n synchronously. Tampermonkey 5.5.0 background\n# died on chrome.i18n.getMessage of undefined (w572 on pin 142); this\n# pin is the live re-test. sw.js 27b03c7346e6df73 -> ae03d9108ff1100e\n# (741802 bytes); bootstrap.js unchanged at 1fc347670b10a066 (42761\n# bytes; the app TS changes ship in sw.js only). CI on 19131379: app,\n# compat, rust and wasm green; the browser job fails only the\n# parallel-lane location-targeting csp-enforce probe and the\n# #556-bounded replay-spool 480s timeout, both unrelated to this wave;\n# browser E2E 58/58 and torture 20/20 passed.\n# Pin 144 (2026-10-31): dist ad092203 (Zeolite main 1fc7ef74, which\n# includes d6f947e) ships page-world runtime.connect ports (#560\n# residual): the page bridge runtime.connect transfers one\n# MessageChannel end to the SW, which pairs it with the extension's\n# real port so background onConnect listeners receive the far end;\n# both port surfaces are Chrome-shaped (onMessage/onDisconnect as\n# event objects). Tampermonkey 5.5.0 options pages died on\n# runtime.connect is not a function (w572 on pin 143); this pin is\n# the live re-test. sw.js ae03d9108ff1100e -> 3623c60ce8174c8d\n# (744688 bytes); bootstrap.js 1fc347670b10a066 -> d91833dc41f5f7c2\n# (42842 bytes). CI on d6f947e: app, compat, rust and wasm green;\n# browser E2E 58/58, torture flaked one transport timing test under\n# double CI load and the same suite passed 20/20 on the follow-up\n# main run (the remaining failures there are the known #556-bounded\n# replay-spool 480s timeout and a parallel-lane #533 vorigin item).\n# Pin 145 (2026-10-31): dist c724a79 (Zeolite main 62f46df, which\n# merges 5dcf687 rooted extension pages + 050ceef adapter docs\n# with 5af37bf virtual document.baseURI #532) ships rooted\n# extension pages (#560 residual): zl:openExtPage answers a ROOTED\n# /<page>?zlExt=<id>&zlPageTok=<token> URL so pathname-keyed page\n# boot dispatch (Tampermonkey options worlds) matches the real\n# extension origin, plus sync runtime.getManifest, Chrome-shaped\n# callback page calls, and an injected base tag so relative\n# subresources resolve. sw.js 3623c60ce8174c8d -> fd4ea7f266d03215\n# (748779 bytes); bootstrap.js d91833dc41f5f7c2 -> d1c3881a6d190b9a\n# (44382 bytes, changed by #532). CI on 62f46df: all five jobs\n# green; the 1271 blob-worker failure on 5dcf687 was a load flake\n# disproven by the green 1272 rerun of the same runtime code.\n\n# Pin 146 (2026-10-31): dist 71367403 (Zeolite main 109e6eac, which\n# includes 5aee1975) ships the runtime platform identity and\n# Chrome-parity message senders (#560 residual): MessageSender\n# carries the extension id on every sender surface, page\n# sendMessage/connect senders carry url null (the Tampermonkey\n# 5.5.0 options-page sender classifier), and runtime\n# getPlatformInfo/getBrowserInfo answer navigator-derived values\n# through the Chrome callback shape (CALLBACK_METHODS), with\n# compat matrix rows pinned. sw.js fd4ea7f266d03215 ->\n# cd57de1a4dde5771 (751251 bytes); bootstrap.js unchanged at\n# d1c3881a6d190b9a (44382 bytes). CI on 109e6eac: run 1280 all\n# five jobs green; the run 1279 blob-workers and run 1281 e2e\n# browser failures were runner flakes (blob-workers passed 16/16\n# three times locally on the 1279 tree; 1280 is content-identical\n# to 1281 except a ci.yml comment position). Cargo-side pin stays\n# d4ca407 (app TS only, no crates changed).\n\n# Pin 147 (2026-10-31): dist 9bf04db8 (Zeolite main 6bfc8394, which\n# includes 7d754384 and d9a68582) ships the jar-backed cookieStore\n# facade (#534): cookieStore is exposed again, backed by the engine\n# jar, with schemeful SameSite (schemeful-site and top-level\n# navigation context, not referrer-derived) and deletion parity (a\n# local delete reaches the worker-owned jar immediately, not only\n# after a later jar reply). And Disqus page-URL virtualization\n# (#565): the comments embed builds t_u=/t_i= from window.location\n# (LegacyUnforgeable), which named the opaque engine origin on\n# virtualized pages; the fetch seam now virtualizes those query\n# parameters so the thread URL names the page's virtual origin.\n# sw.js cd57de1a4dde5771 -> 17ac1af1efa84398 (753544 bytes);\n# bootstrap.js d1c3881a6d190b9a -> e1cd770802a5db67 (46170 bytes).\n# CI on 6bfc8394: run 1290 rust, wasm, app and compat green; the\n# browser job fails only the #537 blob-worker suite, the day's\n# known runner-load flake (the same suite failed runs 1255/1279\n# with green sibling runs), corroborated green by run 1287 on\n# 7d754384 - identical engine content, since 6bfc8394 only changes\n# test polling - and by runs 1282/1283, green twice on d9a68582.\n# Cargo-side pin stays d4ca407 (app TS only, no crates changed).\n\n# Pin 148 (2026-11-01): dist f5d9183 (Zeolite main 939fdd67, which\n# includes 2298abeb) ships truthful proxied-site service-worker\n# registration (#576): engine-origin register arguments decode back\n# to real page URLs through the bounded zl:decodeRoutes oracle (a\n# null decode is an honest TypeError(\"Origin\"), never an\n# opaque-route mint), the shim waits for the virtual base with a\n# 25 ms bounded poll that fails closed to \"\" (a raw engine route\n# is never used), and register forwards to the kernel with confirm\n# semantics so the page promise settles only when the kernel\n# confirms the guest realm is running (rejections carry the kernel\n# real reason: no guest host page connected / a different guest\n# script already active for the origin / spawn failed / handshake\n# timeout); a same-identity re-register on a running realm is a\n# native-style ok with no respawn. The browser e2e api check now\n# asserts the honest no-guest-host rejection. sw.js\n# 17ac1af1efa84398 -> 6eff076e95de07c1 (754828 bytes); bootstrap.js\n# e1cd770802a5db67 -> de6c46494c6fa117 (47288 bytes). CI on\n# 939fdd67: run 1301 all five jobs green. Cargo-side pin stays\n# d4ca407 (app TS only, no crates changed).\n\n# Pin 149 (2026-11-01): dist abe0df83 (Zeolite main 920582e, which\n# includes 29e1ac2) ships the #456 operator flip: hybridLocation, the\n# hybrid pre-execution location rewrite, now defaults ON in the\n# engine (per-site rules still win, including explicit off;\n# zl:config experimental hybridLocation:false is the per-origin\n# opt-out, zl:config locationTargeting:false the kill switch). LB\n# beta flips its debug-menu default to ON in the same wave. sw.js\n# 6eff076e95de07c1 -> 74d1159b69313158 (754925 bytes); bootstrap.js\n# unchanged at de6c46494c6fa117 (47288 bytes). CI on 920582e: run\n# 1345 all five jobs green. Cargo-side pin stays d4ca407 (app TS\n# only, no crates changed).\n# Pin 151 (2026-11-03): dist 9866c5e8 (build 41610671597) ships\n# the DoubleClick f.txt ad-artefact download filter (Zeolite main\n# c3268850: downloads.ts isAdArtefact + AD_HOST_SUFFIX + unit\n# tests): Google serves ad/DoubleClick responses with\n# Content-Disposition: attachment; filename=\"f.txt\" (their 2014\n# anti-Flash RFD mitigation), and the download registry no longer\n# registers those artefacts, so DevTools download rows stay clean.\n# This entry also documents the skipped Pin 150 comment: pin 150\n# (dist 8223b1ff, green run 41483811807) shipped the 3.0.1\n# Diamond wave: the jar-backed cookie jar (#604), control routes\n# (#603), SW orchestration (#601/#602) and the transport deferred\n# reset (228518a). sw.js 008cd5e5219e27d0 -> 0be67794d1c15e81\n# (817519 bytes); bootstrap.js 1c323643d670ba22 -> 097df230849e3d50\n# (49787 bytes). Pinned per operator instruction from a run whose\n# browser job is red with the diagnosis on record (six wedge\n# strikes 2026-11-03, docs/ci-torture-wedge.md; rust/wasm/app/\n# compat green in all six, and the app job that builds this bundle\n# green in all six; the pin 135 precedent). Cargo-side pin stays\n# d4ca407: no crates changed.\n# Pin 152 (2026-11-03): dist 4c58a57 (build 41636866431; Zeolite\n# wave head e3d0cebf over docs-only retrigger 709dc215) ships the\n# #546 WebSocket observability wave: the shim constructor maps\n# explicit and base-implied http(s):// scheme arguments to ws(s)://\n# like the Chromium WHATWG constructor (the old explicit-scheme\n# SyntaxError throw was a real divergence), and a failed handshake\n# now reaches CLOSED (readyState 3) before dispatching error per\n# the fail-the-connection steps. New CI browser gate\n# ws-negotiation.mjs differentials the shim against native\n# Chromium: URL serialization for nine inputs including the\n# http/https upgrade, subprotocol negotiation and token throws,\n# failed-handshake error-at-closed ordering, server close(1000)\n# with socket end, and worker-vs-page bufferedAmount slow-drain\n# decay - PASSED in CI twice (runs 41635594824 and 41636866431),\n# with the main e2e suite green on the wave's own head. Pinned per\n# operator instruction from runs whose browser job is red with\n# the diagnosis on record (the red arms are the non-engine img#uni\n# direct-oracle flake and the documented #514 main-e2e wedge\n# signature; docs/ci-torture-wedge.md; the pin 135 precedent).\n# sw.js 0be67794d1c15e81 -> 73e4dccabc9335e8 (819769 bytes);\n# bootstrap.js 097df230849e3d50 -> ba7e8e010a356496 (49682 bytes).\n# Cargo-side pin stays d4ca407 (app TS only, no crates changed).\n\n# Pin 153 (2026-11-03): dist 20acf52 (build 41685158963) ships\n# the #558 partition-strand fix: a target=_top activation in an\n# embedded realm no longer commits the top document on the engine\n# origin. Chromium third-party storage partitioning gives the\n# first-party content-origin worker its own instance with a\n# different route key and no transport config, so the minted\n# query handle failed its MAC by construction and the host SPA\n# shell rendered (the Google sign-in strand). navguard now hands\n# the destination to the embedder (lb:navigateTab rides the\n# embedsync popup queue; the SPA navigates the active tab through\n# the content-worker query-handle mint), so the destination loads\n# in the embedded realm where decode and relay transport both\n# work. Standalone realms keep the native drive; a fail-closed\n# terminal treats a queued top activation like a queued popup\n# (not routed, not driven). bootstrap.js ba7e8e010a356496 ->\n# 0c81efb9ba343dff (49682 -> 49786 bytes, budget 49800: the first\n# two shapes of the handoff measured 50341 and 49907 and were\n# golfed - the ack round trip was dropped because its fallback\n# only ever re-entered the broken native drive). sw.js\n# 73e4dccabc9335e8 unchanged (bootstrap-side change only). CI on\n# 3d4e4234: rust/wasm/app/compat green; browser red on the\n# documented non-engine img#uni direct-oracle flake (main e2e\n# 66/66 green, torture 19/20; docs/ci-torture-wedge.md; the pin\n# 135/151/152 precedent). Cargo-side pin stays d4ca407 (app TS\n# only, no crates changed).\n# Pin 154 (2026-11-03): dist 305e6859ae1be00e (build 41706739889)\n# ships the #611 sign-in fix: main-surface tab navigations now\n# stamp sec-fetch-dest: document on the upstream request.\n# accounts.google.com/ServiceLogin answers a dest: iframe request\n# with a hard 401 (Google's own malformed-request page), and the\n# sign-in pane is an iframe on the engine origin, so the pane died\n# in-frame. The SW marks the client context mainSurface when the\n# client URL is a minted query handle or a NAVH route shape (serve\n# seam, redirect hop, and rehydrate after an SW restart), and\n# secFetchHeaders gains a mainSurface arm (mode: navigate, dest:\n# document, upgrade-insecure-requests, no sec-fetch-user). Panes\n# without a minted handle still fail closed to iframe. sw.js\n# 73e4dccabc9335e8 -> 657d9ced9f7af2ac (820125 bytes); bootstrap.js\n# 0c81efb9ba343dff unchanged (SW-side change only). CI on 9c278c61:\n# rust/wasm/app/compat green; browser red on the documented\n# non-engine img#uni direct-oracle flake (main e2e 66/66 green,\n# torture 19/20; docs/ci-torture-wedge.md; the pin 135/151/152/153\n# precedent). Cargo-side pin stays d4ca407 (app TS only, no crates\n# changed).\n# Pin 155 (2026-11-03): dist 0b19023271e37171 (build 41726480973)\n# ships #617: the running build is nameable. CI stamps the\n# workflow run id into the bundle build (VITE_ZEOLITE_BUILD_ID\n# on the typecheck+build step), so ZEOLITE_VERSION answers\n# \"3.0.1 Diamond (build 41726480973)\" in zl:ping, the doctor\n# KDL, the console banner and zl:engineUpdate, and the same id\n# rides the dist commit message: a stale active worker is now\n# distinguishable from the served bundle. sw.js\n# 657d9ced9f7af2ac -> 788c77125bc5b111 (820226 bytes);\n# bootstrap.js 0c81efb9ba343dff unchanged (SW-side change\n# only). CI on a2a1c440: rust/wasm/app/compat green; browser\n# red on the documented torture 700ms-TTFB wedge cascade\n# (wedge signature detected, restart did not recover, every\n# failure a 30s goto timeout on the single wedged embedder\n# URL; e2e 66/66 green; the 1279/41351728517 runner-load\n# precedent, docs/ci-torture-wedge.md). Cargo-side pin stays\n# d4ca407 (app TS only, no crates changed).\n# Pin 156 (2026-11-03): dist 41198e8a (build 41736313102) ships\n# the #618 Google signup fix: the #449 origin-pinning literal\n# skip (^https?: needle) also fires on generic scheme-sanity\n# regexes inside the accounts.google.com signup/signin module\n# chunks, so the whole-script skip left endpoint URL literals\n# verbatim and the runtime passed those cross-origin fetches\n# native - their responses are CORS-unreadable, which killed the\n# signup Next button (dead button, restart popup, /restart 400).\n# The owner page host now decides (same principle as the location\n# policy): transform.ts relaxes the skip for accounts.google.com\n# via the additive JsRewriter.set_origin_pinning_skip wasm setter,\n# honored by the document stream, the external-script pass (fresh\n# and cache-hit seams) and the inline script path; older wasm\n# without the setter keeps the skip (fail-safe). sw.js\n# 788c77125bc5b111 -> 027b379fce9eb979 (820226 -> 820730 bytes);\n# bootstrap.js 0c81efb9ba343dff unchanged (wasm + app TS only).\n# rewriter_wasm_bg.wasm changed but carries no alarm pin (the\n# served-artifact check covers sw.js and bootstrap.js; deploy\n# with a cleared build cache). CI on 7d2ebec: rust/wasm/app/compat\n# green; browser red on the documented #545-worker-initiator\n# main-e2e wedge cascade (57/66, every failure a 30s goto timeout\n# on the wedged embedder; the 41524458112/41607524709 signature\n# class, docs/ci-torture-wedge.md; the pin 135/151/152/155\n# precedent). Cargo-side pin stays d4ca407 (wasm + app TS only,\n# no crates changed).\n# Pin 157 (2026-11-04): dist 385007fe (build 41876450170) ships\n# the #636 NVIDIA GeForce NOW pricing-matrix fix: the gfn-product\n# -matrix chunks read window.top through minified variable\n# indirection ((null===(t=window.top)||void 0===t?void 0:\n# t.location.search)||window.location.search) and a\n# window.top.document.documentElement.lang walk at matrix mount;\n# through the engine window.top is the cross-origin app shell, so\n# the read threw SecurityError and the React error boundary\n# rendered NVIDIA's \"Unexpected Error\" instead of the pricing\n# tiers (the paywall API fetch never fired). antiframe.rs folds\n# window.top to window in two ordered rules: window.top.location\n# -> top.location first (keeps the existing write-sink/read-fold\n# pipeline), then the bare window.top -> window identity fold\n# for indirect reads and document walks; window.parent is\n# deliberately untouched (nested same-origin proxied frames\n# legitimately use it). sw.js 027b379fce9eb979 -> 67d06ae53876b4ec\n# (820730 bytes); bootstrap.js 0c81efb9ba343dff unchanged;\n# rewriter_wasm_bg.wasm carries the fix (sha256-16\n# 85a23042a2968e1f; wasm-only change with no alarm pin, so the\n# served wasm must be hash-checked post-deploy; deploy with a\n# cleared build cache). CI on 3fe8999: rust/wasm/app/compat\n# green; browser red on the documented #514/#545 torture wedge\n# cascade (61/66, every failure a 30s goto timeout on the wedged\n# embedder plus the #96 NativeTransit HUNG cascade; the pin\n# 135/151/155/156 precedent, docs/ci-torture-wedge.md).\n# Cargo-side pin stays d4ca407 (rewriter wasm only, no crates\n# changed).\n# Pin 158 (2026-11-04): dist 59f0c621 (build 41919212238) ships the\n# #619-#632 engine scout wave: #619 self-closed script/style inside\n# SVG/MathML foreign content; #620 wisp CONNECT hostname >= 256\n# silent truncation (encode_packet now fails ProtocolViolation and\n# parse_hostname keeps a strict trailing check); #621 trailing-dot\n# host bypass in every app rule matcher; #622 SRI data-src\n# shadowing; #623 relay tab reload WS registry wedge; #624 rewriter\n# Tag-state retention cap (256 KiB TAG_HOLD_CAP); #625 legacy\n# no-semicolon HTML5 named refs; #626 wsbridge close 1006 and\n# wasClean; #627 siteconfig 5xx memoization; #628 bodyspool live\n# budget; #629 CSP :443 default port; #630 unterminated close-tag\n# prefix; #631 KDL junk suffix; #632 keepView x-zl-vary leak.\n# sw.js 67d06ae53876b4ec -> d02a3ee946ecaf61 (821572 bytes);\n# bootstrap.js 0c81efb9ba343dff unchanged; rewriter_wasm_bg.wasm\n# sha256-16 61929dfbd3076a4f (hash-check the served wasm\n# post-deploy; deploy with a cleared build cache). CI on 5073f316:\n# rust/wasm/app/compat green; browser e2e 66/66; torture wedged\n# 4/20, every failure a page.goto or page-evaluate 30s timeout\n# cascade (the documented #514/#545 wedge, docs/ci-torture-wedge.md).\n# Cargo-side pin bumps d4ca407 -> 5073f316 (#620 changed wisp-core\n# and zeolite-server; dns/policy public API verified unchanged for\n# the LB calls; Cargo.lock regenerated with cargo generate-lockfile).\n# Pin 159 (2026-11-05): dist 85a6f7d (build 41983152916) ships the\n# #637 giscus origin= virtualization: the giscus.app widget loader\n# names the page in origin= (backLink=, mapping=url term=) from the\n# LegacyUnforgeable cleaned location, so the strict-mode giscus.json\n# origins check refused the widget frame; virtualGiscusOrigin\n# rewrites a parameter whose URL names this deployment to the\n# referrer-derived page URL at the fetch seam (anchor preserved,\n# :443/:80 normalize, fail closed without a referrer). Regression\n# giscus-origin.test.ts, 13 cases. sw.js d02a3ee946ecaf61 ->\n# da868598848f1802 (822437 bytes); bootstrap.js 0c81efb9ba343dff\n# unchanged; rewriter_wasm_bg.wasm sha256-16 61929dfbd3076a4f\n# unchanged (app-side fix only; hash-check the served wasm\n# post-deploy; deploy with a cleared build cache). CI on 9e3dede:\n# rust/wasm/app/compat green; browser e2e 60 passed 6 failed, every\n# failure the documented #514/#545 wedge (the #96 NativeTransit\n# HUNG cascade and its page.goto 30s timeout fallout; no giscus\n# path is exercised by the e2e suite). Cargo-side pin stays\n# 5073f316 (no crates changed since; only app TS moved).\n# Pin 160 (2026-11-06): dist 416892e (build 42212991969) ships the\n# #633/#612/#634 wave (Zeolite main 0acaedb + the e5b0d06 e2e\n# contract): expired zlNavh tokens stripped at the query-handle\n# mint and resolved at nav-marker decode, closing the #618-class\n# stacking loop (Google sign-in capture: two zlNavh tokens nested\n# inside the percent-encoded continue param on a third top-level\n# token); markerPathDest rescues destination paths still carrying\n# the /__zl_nav__/<b64u> marker (the One Outlook MSAL 400 class,\n# login.microsoftonline.com HTTP.sys rejecting a 1175-char marker\n# as a site path); marker-route document requests 302 once to the\n# visible handle form and serve the target; the browser e2e\n# marker-route test pins the 302-to-handle contract (#28 SW\n# branch): one hop, committed URL free of the marker. sw.js\n# da868598848f1802 -> b5ebb1dd50f10c7a (823951 bytes);\n# bootstrap.js unchanged 0c81efb9ba343dff. CI on e5b0d065:\n# rust/wasm/app/compat green; browser e2e 66/66, torture wedged\n# 7/20, wedge signature seen, restart did not recover, every\n# failure a 30s goto/evaluate timeout on the ttfb=6000 torture\n# embedder (the documented #514/#545 wedge,\n# docs/ci-torture-wedge.md; the pin 135/151-159 precedent).\n# Cargo-side pin stays 5073f316 (app TS only, no crates changed).\n# Pin 161 (2026-11-06): dist e0c67e6 (build 42222084937) ships the\n# #639 wisp control-stream CLOSE guard: zeolite-server answers every\n# wisp handshake rejection with a CLOSE frame on stream 0 (0xc0\n# AuthBadCredentials, 0xc1 AuthBadSignature, 0xc2 AuthRequired,\n# InvalidInfo) and then closes the websocket, but the vendored\n# libcurl bundle's WispConnection guards unknown NONZERO streams\n# only, so the control-stream CLOSE reached close_stream(undefined)\n# and threw \"Cannot set properties of undefined (setting 'open')\"\n# inside on_ws_msg, wedging the shared connection in the bundle's\n# _wisp_connections cache: every later proxied socket reused it and\n# failed instantly (the Google sign-in ERR_FAILED storm, #633/#638).\n# installWispCloseGuard wraps the WebSocket ctor outermost (after\n# the #74 watcher and the #496 auth socket) and hides exactly the\n# inbound type-4 stream-0 CLOSE frames from the vendor listeners:\n# the auth wrapper still maps outcomes and fails closed, the server\n# websocket close event evicts the connection, and only the libcurl\n# engine on the configured wisp endpoints is armed. Pure classifier\n# isStreamZeroClose exported; 5 regression tests in\n# transport-select.test.ts (Zeolite e6731d6). sw.js\n# b5ebb1dd50f10c7a -> 2e9e52d4f166c00f (824727 bytes); bootstrap.js\n# unchanged 0c81efb9ba343dff. CI on e6731d6: rust/wasm/app/compat\n# green; browser e2e red with the documented passthrough-#96 wedge\n# signature (61/66, NativeTransit HUNG marks then the page.goto 30s\n# cascade, the #514/#545 wedge; the pin 135/151-160 precedent,\n# docs/ci-torture-wedge.md; locally 66/66 on the same head).\n# Cargo-side pin stays 5073f316 (app TS only, no crates changed).\n# Pin 162 (2026-11-06): dist 3157fdb (build 42246542499) ships the\n# README ASCII banner in the DevTools console: the SW prints the\n# Zeolite ASCII art with a top-level console.info on every worker\n# evaluation (engine init), plain console only - deliberately NOT\n# routed through netLog/DIAG so it never rides into the embedder's\n# in-app console. The pinned \"[Zeolite] runtime <version>\" line is\n# unchanged; version.test.ts now also pins the two leading art\n# lines in the source (Zeolite 6f1279f). sw.js\n# 2e9e52d4f166c00f -> 2337cd1084d158a0 (824903 bytes); bootstrap.js\n# unchanged 0c81efb9ba343dff. CI on 6f1279f: rust/wasm/app/compat\n# green; browser e2e red with the documented passthrough-#96 wedge\n# signature (58/66, NativeTransit HUNG marks then the page.goto 30s\n# cascade, the #514/#545 wedge; the pin 135/151-161 precedent,\n# docs/ci-torture-wedge.md run 42246542499). Cargo-side pin stays\n# 5073f316 (app TS only, no crates changed).\n# Pin 163 (2026-11-07): dist 02e58ac (build 42383331239) ships the\n# #633/#612/#640 engine fix wave (Zeolite main 728ed78 + docs-only\n# wedge records): the route shape survives idle kills (an absent\n# zl:config knob keeps the live value, the query-routes flag\n# persists in the route-config KDL and restores on worker\n# restart), Referer, initiator and widget page-URL derivation\n# recover from an expired NAVH whose MAC still verifies while\n# committed navigation decode stays live-only (#633), a navguard\n# NAV marker inside a NAVH handle tail decodes as the engine route\n# it names instead of composing <site>/__zl_nav__/<b64> upstream\n# while a marker-shaped tail that does not decode keeps the honest\n# composition (#612), and the Discourse embed.js embed_url=\n# parameter virtualizes to the real page URL via referrerPageUrl,\n# mirroring the #565 Disqus seam, failing closed without a\n# decodable referrer (#640). Also carries the unwired Rust\n# rewrite crates zeolite-cookies (#614) and zeolite-csp (#615):\n# no engine byte differs from 728ed78's app. sw.js\n# 2337cd1084d158a0 -> 0c9c92048b2a0aaa (826132 bytes);\n# bootstrap.js unchanged 0c81efb9ba343dff. CI on 14ca12f and\n# f1a073b: rust/wasm/app/compat green; browser red with the\n# documented wedge signatures on both runs (the torture cascade\n# pair plus img#uni on 42381860014, the #96 NativeTransit hang\n# cascade on 42383331239; docs/ci-torture-wedge.md; the pin\n# 135/151-162 precedent, operator approved 2026-11-07).\n# Cargo-side pin stays 5073f316 (no crates in the server tree\n# changed; cookies/csp are unwired siblings). Deploy with a\n# cleared Render build cache.\n# Pin 164 (2026-11-07): dist 5881b90 (build 42422624039) ships the\n# #633 query-shape expired handle Referer recovery: the deployed\n# sign-in commits on the query shape (?zlNavh=), and an expired\n# committed query route lost the upstream Referer exactly like the\n# path shape the #633 seam wave already recovers. decodeQueryHandle\n# gains the {expired} opt-in (committed decode stays live-only) and\n# forwardedHeaders derives the Referer from the expired MAC-verified\n# token; tests cover opt-in recovery, the token-bound origin, tamper\n# fail-closed and the strip (Zeolite 26926b6c on main). sw.js\n# 0c9c92048b2a0aaa -> 42d69f0827cbb2f7 (831503 bytes); bootstrap.js\n# unchanged 0c81efb9ba343dff. CI on the pushed head: rust/wasm/app\n# green. Cargo-side pin stays 5073f316 (app TS only). Deploy with a\n# cleared Render build cache.\n# Pin 165 (2026-11-08): dist 1dda795 (build 42481264827) fixes the\n# seam wasm bare-origin redaction trap (#633): redact_url_userinfo\n# indexed bytes[k] at k == len after the host when the value was a\n# bare origin (an Origin or access-control-allow-origin header of\n# exactly https://accounts.google.com), so every wasm redactSecrets\n# call over the sign-in page's CORS subresource headers trapped with\n# RuntimeError: unreachable and the AccountsSignInUi JS bundle and\n# the Google Sans woff2 failed, leaving the sign-in page unstyled\n# (the placeholder painting over the typed email) and broken before\n# MI613e; the scanner now terminates and redactSecrets,\n# planCspTranslation and planEngineCsp degrade to their TS fallback\n# bodies on any trap (Zeolite a4b450a on main). sw.js\n# 42d69f0827cbb2f7 -> f7a032a10c7a93fc (841377 bytes); bootstrap.js\n# unchanged 0c81efb9ba343dff; seam_wasm_bg.wasm rebuilt (blob\n# 26c66c12). CI on a4b450a: rust/wasm/app/compat green. Cargo-side\n# pin stays 5073f316 (config and seam-wasm crates are engine-side\n# only). Deploy with a cleared Render build cache.\n# Pin 166 (2026-11-09): dist c04e4e9 (build 42612351784) deploys\n# the ERR_FAILED orchestration catch (#633): pre-pipeline SW\n# rejections (boot gates, handle decoding, virtual-context\n# resolution) died as bare Response.error() fetches with no netlog\n# row and surfaced client-side as ERR_FAILED storms on\n# play.google.com/log; respondWith now catches the orchestration\n# promise, answers an honest 502 and pushes a DIAG row (\"request\n# orchestration failed before the engine pipeline\") (Zeolite\n# a54c97a on main). The bundle also carries the #553 popup facade\n# slices (2dcc870, 030e19b), the #523 CSS __MSG__ substitution,\n# the #544 ws/rtc marker fix (148c8f5) and the popups-before-torture\n# CI reorder (50bdd3c). sw.js f7a032a10c7a93fc -> d066a19cbee1969a\n# (859280 bytes); bootstrap.js 0c81efb9ba343dff -> 0ddd6edd9485c8ab\n# (51030 bytes). CI on 50bdd3c: rust/wasm/app/compat green; the two\n# duplicate browser jobs overlapped on the runner and closed red on\n# the documented rotating wedge (one red at the main e2e battery,\n# its byte-identical twin green there and red at the torture\n# battery; docs/ci-torture-wedge.md). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 167 (2026-11-11): dist f44176c4 (build 43018138385) deploys the\n# #634 OAuth round-trip fix: the #431 seam rewrote only the authorize\n# request's redirect_uri, so AAD bound the code to the page origin and\n# then refused the token exchange presenting the engine origin\n# (AADSTS50011); the urlencoded token POST body is now rewritten with\n# the identical match set and honest-fallback rule\n# (virtualAuthorizeTokenBody + isAuthorizeTokenEndpoint, Zeolite\n# e8268db). Also carries the #645 Cloudflare fix (cspGate never gates\n# the /cdn-cgi/ namespace and an unsupported directive no longer\n# falls back to default-src; Perplexity's challenge page, Zeolite\n# 93996d1), the #644 diagnostics fix (a mid-stream body error is no\n# longer masked as a stall), the extension-surface waves\n# (#517/#518/#521/#523), the #643 blocked-notice marker and DNR\n# engine-internal re-entry + getMatchedRules. sw.js\n# d066a19cbee1969a -> 2b29ead4488f92c2 (886531 bytes); bootstrap.js\n# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on 137d0751:\n# rust/wasm/app/compat green; the browser battery closed red on the\n# documented rotating wedge (docs/ci-torture-wedge.md). Cargo-side\n# pin stays 5073f316 (app TS only). Deploy with a cleared Render\n# build cache.\n# Pin 168 (2026-11-11): dist b72324ac (build 43080960090) deploys the\n# #521 slice 3 DNR semantics (Zeolite f09b8e5): upgradeScheme rides the\n# slice-2 redirect seam (scheme-derived target, engine-internal re-entry,\n# host-permission gated), allowAllRequests arms a bounded TTL-scoped\n# frame bypass keyed on document origin (documented divergence from\n# Chrome's frame-subtree identity), and getMatchedRules/\n# onRuleMatchedDebug are mounted only with the\n# declarativeNetRequestFeedback permission. sw.js\n# 2b29ead4488f92c2 -> 09b6ee10ce6b3f18 (888041 bytes); bootstrap.js\n# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on f09b8e5: run\n# 43080960090 rust/wasm/app/compat green; the browser battery closed\n# red on the documented rotating wedge only (docs/ci-torture-wedge.md);\n# the retrigger run 43087051481 failed app on the documented one-off\n# ws-shim MIME flake (#493) while the original run app suite was green.\n# Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared\n# Render build cache.\n# Pin 169 (2026-11-11): dist ad1ff922 (build 43105043278) deploys the\n# #648 devtools self-heal (Zeolite 12258b0): a redundant or\n# never-activated registration left the /zlsw/devtools.html page\n# waiting forever on navigator.serviceWorker.controller (the byte-churn\n# redeploy class); the page now re-registers the sibling sw.js\n# (scope \"/\", Service-Worker-Allowed) once per 10s while waiting.\n# sw.js 09b6ee10ce6b3f18 -> 5de381a916e3c88f (888050 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on\n# 12258b0: run 43105043278 rust/wasm/app/compat green; the browser\n# battery closed red on the documented rotating wedge only\n# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS\n# only). Deploy with a cleared Render build cache.\n# Pin 170 (2026-11-12): dist 7c24b313 (build 43175749489) deploys the\n# #649 devtools host-gate fix (Zeolite da61925): /zlsw/devtools.html was\n# missing from HOST_PATHS, so the #170 fail-closed gate classified the\n# inspector itself as an untrusted sender and refused every\n# zl:getNetLog/zl:doctor poll with \"host-only control message\" (zero\n# rows, empty stats, a lying \"Worker restarted\" banner). The gate now\n# admits the engine-bundle mount path, and devtools.ts renders a\n# refused poll honestly. sw.js 5de381a916e3c88f -> c88466a3ec1898c2\n# (888925 bytes); bootstrap.js unchanged 0ddd6edd9485c8ab (51030\n# bytes). CI on da61925: rust/wasm/app/compat green (dist published).\n# Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared\n# Render build cache.\n# Pin 171 (2026-11-12): dist 6b76707 (build 43187277069) deploys the\n# Zeolite aab00e0c lineage since pin 170: the #556 fresh-session upload\n# controller fix (POST uploads arm the streaming upload seam instead of\n# silently materializing via Request.arrayBuffer()), the 3.4.2\n# Ferrierite release with the #647 bounded redacted 4xx body-prefix\n# capture (#651), and the #652 guest clients.matchAll fix\n# (install-time matchAll is [] natively; the unconditional live-context\n# enumeration broke the guest-sw oracle twice).\n# sw.js c88466a3ec1898c2 -> acdd65650003e6db (889657 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on\n# aab00e0c: run 43187277069 rust/wasm/app/compat green (dist\n# published); the browser battery closed red on the goto-timeout\n# cascade class (#514, docs/ci-torture-wedge.md). Cargo-side pin stays\n# 5073f316 (no zeolite-server crate change since). Deploy with a\n# cleared Render build cache.\n# Pin 172 (2026-11-14): dist 17442ed8 (build 43598607246) deploys the\n# download-registry destination gate (Zeolite cb15413): only a\n# navigation (request destination \"document\") registers an attachment\n# response, so background fetches that carry Content-Disposition:\n# attachment (beacons, fetch(), images, iframes) stop forging f.txt\n# and .bin rows no user asked for; the doubleclick f.txt host filter\n# stays as the second layer. sw.js acdd65650003e6db ->\n# 0e605bbc1001e94b (889709 bytes); bootstrap.js unchanged\n# 0ddd6edd9485c8ab (51030 bytes). CI on cb154132: wasm and app green\n# (the app suite is the dist-publish gate); rust closed red on the\n# pre-existing clippy failure (red on the two runs before this push\n# too, no crates touched). Cargo-side pin stays 5073f316 (app TS\n# only; note the zeolite-server crate moved on main with 730e562a,\n# the wisp v1 send window: ride it on the next cargo-side bump).\n# Deploy with a cleared Render build cache.\n# Pin 173 (2026-11-14): dist e34b1024 (build 43639864619) deploys the\n# Zeolite main cde7cf0d pair: DL.load() purges persisted ad-artefact\n# rows (the f.txt/.bin ghost entries registered before the c3268850\n# filter aged out of the IndexedDB ring), and the JS body buffering\n# cap goes 2 MiB -> 8 MiB (#456 bound) so multi-megabyte SPA entry\n# bundles (icloud.com main.js, the duck.ai entry script #663) get\n# their specifier/URL-literal passes instead of verbatim RAW_BODY_CAP\n# serving. sw.js 0e605bbc1001e94b -> 528d640167af0297 (889851 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side\n# pin stays 5073f316. Deploy with a cleared Render build cache.\n# Pin 172 (2026-11-15): dist fdec33ae (Zeolite main fdf72ccc, CI run 43718055933).\n# Merge wave: PRs #656 #658 #660 #661 #662 #665 #666 #668 #671 - webRequest\n# observe lifecycle + per-listener extraInfoSpec (#521), cookie jar bug-scouts\n# 1-3 (#614, #667, #670), relay draining-body fix (#644), Google payframe +\n# OAuth iframerpc origin= virtualization (#653/#654), CI gate fixes (#652).\n# sw 75c2427e835506a3, bootstrap unchanged 0ddd6edd9485c8ab. Cargo-side\n# zeolite-server rev unchanged (no server-crate changes in the wave).\n# Pin 174 (2026-11-17): dist da4dbaa, the same engine build as main\n# pin 173 (Zeolite main 1163c3db, CI run 44173326999); beta continues past\n# its historical rolled-back 173 (dist e34b1024). Fix wave: googlevideo.com\n# allow for YouTube watch streams (#647), post-first-byte idle bound,\n# first-party CSP gating exemption (github chunk loads), real 8s race on\n# flat-asset recovery candidates, comment cleanup.\n# sw 75c2427e835506a3 -> 764f36ef694ac9a8 (895726 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (no zeolite-server crate change in the wave). Deploy with a\n# cleared Render build cache.\n# Pin 175 (2026-11-17): dist 0448e765 (Zeolite main f67b1f79, CI run\n# 44195669245). Fix wave: CaptchaFox site= virtualization (#672, the\n# config site= and challenge host= seams) and VK Open API url=/location=\n# virtualization (#669, the widget_*.php and act=openapi shapes), both\n# from the #112 reCAPTCHA co= class. CI green across rust, wasm, app,\n# browser and compat; one test-fixture iteration on 1629e5e7 (the\n# nav-handle fixture dropped the page query from the visible route\n# suffix).\n# sw 764f36ef694ac9a8 -> 6ef96471895945be (899332 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 176 (2026-11-18): dist 8e16b6f (Zeolite main 3ce918cb, CI run\n# 44253346334). Yandex SmartCaptcha host=/href= virtualization on the\n# widget pages (#673, the #112 co= class): captcha-api.yandex.ru and\n# smartcaptcha.yandexcloud.net checkbox/advanced/backend widget\n# documents rewrite their host= (engine-origin forms incl. :443/:80)\n# to the embedding page's virtual origin and the challenge href= to\n# the page URL; /captcha.js and /check stay untouched; fail-closed\n# passthrough. CI green across rust, wasm, app, browser and compat.\n# sw 6ef96471895945be -> b8e515023cdc4814 (900649 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 177 (2026-11-18): dist 7576c60 (Zeolite main bf8ff950, CI run 44262982308).\n# WebSocket open-attempt DIAG row (#664/#511 triage): every page websocket\n# that reaches the ws bridge lands an info event immediately, so a\n# never-settling handshake or a page-side failure is triagable from a\n# diagnostics export instead of only via the abnormal close after the 20s\n# open deadline. CI green across rust/wasm/app/browser/compat. sw\n# b8e515023cdc4814 -> 27c5adc6eb706dd5 (900793 bytes); bootstrap unchanged\n# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316 (app TS\n# only). Deploy with a cleared Render build cache.\n# Pin 178 (2026-11-18): dist 31dad9ca (Zeolite main 639ac8be, CI run\n# 44275927339, all five jobs green). Microsoft OAuth redirect_uri fix\n# (#634, two arms): referrerOrigin and referrerPageUrl now recover\n# EXPIRED nav-handle and query-shape referrers (the {expired: true}\n# mirror of the #633 Referer seam), so a page parked past NAVH_TTL_MS\n# keeps its authorize redirect_uri virtualization; and both authorize\n# seams fail closed when the recovered parent is itself a Microsoft\n# login host (the auto-replayed sso_reload flow minted a\n# login.live.com/mail/ parent the ESTS hop rejected invalid_request,\n# the captured crash). DevTools gained an \"Export all KDL\" button: one\n# zeolite-devtools-all.kdl artifact holding netlog, tracing,\n# diagnostics and the last doctor report. sw 27c5adc6eb706dd5 ->\n# 1fb45966860c501c (900961 bytes); bootstrap unchanged 0ddd6edd9485c8ab\n# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy\n# with a cleared Render build cache.\n# Pin 179 (2026-11-18): dist 81dc0ab4 (Zeolite main 68129665, CI run\n# 44306784056, all five jobs green). Shell navigation lockdown\n# (#416 slice 1): a hijacked top-level navigation whose initiator is\n# an engine pane (replacesClientId differs from clientId, names a\n# same-origin shell window client) is recaptured as an in-app tab:\n# the engine answers Response.error() and posts zlescape to the shell,\n# whose UI opens the destination as a new tab, so no site can move\n# the LB shell URL and only LB changes its own location. Honest\n# fail-open exclusions stand: POST hijacks, engine assets, popup and\n# pane self navigations, cross-origin parked shells, unresolvable\n# clients. CI note: run 44304252459 hit the app-job intermittent\n# single-test wedge (ws-shim port-delivery race, documented in\n# docs/ci-torture-wedge.md); the retrigger run greened the identical\n# code and the prior run's browser job was green. sw\n# 1fb45966860c501c -> 4215194e8ecb1a45 (902068 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 180 (2026-11-18): dist 693aebdc (Zeolite main 5486164b, CI run\n# 44348977127, all five jobs green). Shell navigation lockdown\n# (#416 slice 2). The pin 179 worker gate proved blind to the real\n# ESTS breakout class: a pane script assigns top.location and the\n# navigate-document fetch consults the gate without the fields it\n# needs, so the gate answers null and the shell commits the hijack\n# (probe-reproduced independently on live beta). This closes the\n# class with a second layer: the LB shell now guards its own window\n# with the Navigation API (ui/src/frameNav.ts shellGuardCancel and\n# shellGuardDest, wired at the app root in App.tsx, mounted for every\n# view, not just the browser page): a script-initiated cross-document\n# push or replace of the top document is cancelled before commit and\n# its destination reopens as an in-app tab, mirroring the worker\n# zlescape recapture; user navigations, reloads, hash moves and\n# history traverses pass untouched (live probe verified both the\n# discriminator fields and the cancellation). The Zeolite side adds\n# gate evidence rows: every navigate-document consultation now emits\n# an escape-gate cid/rid/dec netLog row naming the exact decision, so\n# any residual escape is diagnosable from one exported KDL.\n# Regression check: tests/shell-navguard/check.mjs in the ci ui job.\n# sw 4215194e8ecb1a45 -> 9ad13002dce949d0 (902727 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 181 (2026-11-18): dist 5d22c2a4 (Zeolite main d5b3cf3c, CI run\n# 44406213985, all five jobs green). Carries the double-HTML-rewrite\n# fixpoint (#681): the second rewrite pass re-wrapped the injected\n# bootstrap into a site route and double-booted the page, the class\n# behind the outlook.com ESTS authorize white tab and its MSAL tab\n# spam (pin 180 predates #681; the user repro shipped before any pin\n# could carry it). Also rides the #683 site-repros wave: wasm traps\n# classify connect-class so a poisoned transport singleton resets\n# and self-heals, and videoplayback numeric fields round-trip\n# byte-exact through the MAC-verified codec. sw\n# 9ad13002dce949d0 -> eba962f01a855b69 (934511 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (engine bundle only; the #556 v1-grant zeolite-server\n# change still needs its own verified lock-regen wave). Deploy with a\n# cleared Render build cache.\n# Pin 182 (2026-11-19): dist a175b10e (Zeolite main 812e34ee, CI run\n# 44485767626, all five jobs green). Closes the #681 follow-up class\n# that pin 181 could not\n# fix: pin 181 ended the double-rewrite white tab (the authorize\n# document that never reached the pipe), but a relayed authorize\n# document whose head LANDS can still die mid-body (the 15 s\n# keep-alive re-registration replaces the embedder MessagePort\n# mid-fetch, or the host page freezes), and the body pull had no\n# liveness bound: the tab sat white forever with zero events past\n# the head and no DIAG evidence (the favicon never even issued; user\n# KDL trace zl-tmwn8jmg8-7p). The engine now races every body pull\n# against RELAY_BODY_IDLE_MS = 20 s: a breach errors the stream\n# honestly, emits a TRANSPORT DIAG row naming the dead channel and\n# cancels the embedder upstream, so every silent white-tab subclass\n# becomes an honest failure with observable evidence instead of an\n# eternal hang; relayRegister also pins the last eight registered\n# ports so a re-registration cannot orphan an in-flight relay\n# channel to the GC in the first place (regressions: the relayfetch\n# body-idle watchdog and port-pinning suites). sw\n# eba962f01a855b69 -> e1009108f092d41f (934908 bytes); bootstrap\n# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays\n# 5073f316 (app TS only). Deploy with a cleared Render build cache.\n# Pin 183 (2026-11-19): dist d85d24bf (Zeolite main c1b2fa22, CI run\n# 44532038965, all five jobs green; the #556 replay-spool step\n# reports its documented bounded RSPOOL 124 continue-on-error row,\n# non-blocking by design). Restores engine mediation for the\n# reCAPTCHA widget release scripts (#451 sorry-wall press class):\n# the #449 anchored-origin-pinning skip swept recaptcha__*.js in\n# with the gapi loader it was built for, so the widget kept its\n# single RPC-base literal verbatim\n# (\"https://www.google.com/recaptcha/api2/\"), every anchor/reload\n# call escaped to a real cross-origin google.com iframe outside the\n# SW, the #112 co= seam never fired, and each press carried the\n# deployment origin into the site-key domain check: the \"Error:\n# Invalid API parameter(s). Try reloading the page.\" failure on the\n# Google sorry wall (user KDL trace zl-tmwn95ire-ak, pin 182).\n# Release scripts keyed by their own URL\n# (gstatic/google/recaptcha.net /recaptcha/releases/<v>/recaptcha__\n# *.js) now keep the literal pass at both serve arms (fresh +\n# page-cache) and the wasm origin-pinning skip lifts for them, so\n# the widget rides the engine again and co= virtualizes to the owner\n# page origin; gapi-class scripts keep the full #449 protection\n# (regressions: the pinned-script predicate suite + the\n# location-transform relaxation wiring). sw e1009108f092d41f ->\n# f8ef86785761ffc6 (935150 bytes); bootstrap unchanged\n# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316\n# (app TS only). Deploy with a cleared Render build cache.\n# Pin 184 (2026-11-20): dist 5e0d7ca9 (Zeolite main 7d3c0a6, CI run\n# 44723856533, all five jobs green; runs 1860/1861 on the fix series\n# landed red on tsc and generated-docs row order, repaired by\n# 93dcfe5 + 7d3c0a6, both inside this build). Ships the Tampermonkey\n# options-page fix (#697): the argument validator rejected\n# explicitly forwarded trailing undefined arguments\n# (setIcon(details, undefined) died as \"expected at most 1\n# argument(s), got 2\"), which killed the TM background init and\n# queued every runtime.onMessage behind registerLateCallback = the\n# fully white /options.html page; resolveCallArgs now trims trailing\n# undefined above min and honors exactly one trailing function\n# beyond max as the optional response callback, and the runtime\n# surface gained the inert onUpdateAvailable member (regressions:\n# the arg-schemas arity suite). Also rides: antiframe replace passes\n# gated on pattern presence (#693/#664 speedtest.net black screen),\n# location-pass caps raised to 8 MiB so duck.ai keeps location\n# virtualization (#691/#663), and the inline cZone relabeled to\n# location.hostname in cf-mitigated challenge docs so the Turnstile\n# widget mounts (#692/#685). sw f8ef86785761ffc6 ->\n# c226a03d40fe414e (937667 bytes); bootstrap unchanged\n# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316\n# (app TS + rewriter only). Deploy with a cleared Render build cache.\n# Pin 185 (2026-11-20): dist f07c68e4 (Zeolite main 4b61a836 over the\n# 36932d2 fix, CI run 44758879429, all five jobs green; run 1864 on the\n# fix head landed red only on the standing torture large-document\n# wedge - single victim, record docs/ci-torture-wedge-1864.md).\n# Ships the second half of the Tampermonkey options-page fix (#697):\n# pin 184's arity repair was necessary but not sufficient. The engine\n# storage.get answered never-set keys with {[key]: null}; Chrome and\n# Firefox omit missing keys. Tampermonkey's storage-backend probe\n# fell through its \"n in items\" guard, unpacked the null as a packed\n# record (reads .value) and threw TypeError inside the storage\n# callback, wedging the background boot before bg:ready; late stayed\n# false and every options-page runtime.onMessage ping was deferred\n# forever = the fully white /options.html. storage.get now omits\n# never-set keys (object-form defaults still answer; regressions:\n# the storage-parity suite, sprite-verified 30/30 across the\n# extensions suites). sw c226a03d40fe414e -> ea5a26979fc5bccd\n# (937682 bytes); bootstrap unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Cargo-side pin stays 5073f316 (app TS + rewriter only). Deploy with\n# a cleared Render build cache.\n# Pin 186 (2026-11-20): dist 5f14b734 (Zeolite main 2d1b489, CI run\n# 44784026869, all five jobs green). Ships the extension i18n parity\n# fixes from the #523 lane that surfaced in Tampermonkey 5.5.0's\n# options header: getMessage falls back per key to the default_locale\n# catalog (nb does not define v0version0; en does), and __MSG_*__\n# manifest strings resolve onto the raw manifest copy that\n# runtime.getManifest and the pagejs bridge expose, including records\n# that predate the fix, which get the same treatment at serve time.\n# The header now reads Tampermonkey by Jan Biniok and v5.5.0 instead\n# of __MSG_extName__ and v0version0. sw ea5a26979fc5bccd ->\n# 39f3f86a873eee80 (938155 bytes); bootstrap unchanged 0ddd6edd9485c8ab\n# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy\n# with a cleared Render build cache.\n# Pin 187 (2026-11-21): dist 16d89cbd (build 44897192830; Zeolite\n# main ef66f29, all five jobs green on the scheduled run\n# 44899232015; the bundle's own push-event run landed red only on\n# the browser job - environment-level mass page.goto timeouts with\n# zero assertion failures, green on the rerun). Ships the extension\n# bare-root navigation rescue (#698, also reported as #699): rooted\n# pages inject <base href=\"/zl-ext/<id>/\">, so a fragment-only\n# anchor (Tampermonkey options \"Get some scripts...\") resolved to a\n# FULL top-level navigation to the bare package root, which is\n# neither a declared page nor a WAR, and the tab dead-ended on a raw\n# 404. Two layers: the page bridge restores same-document fragment\n# semantics so a \"#\" anchor never leaves the document, and a\n# bare-root navigation that still reaches the engine answers 302 to\n# the granted, tokened options page (subresource fetches and\n# options-less extensions keep the honest 404; regressions: the\n# ext-root-nav suite). Also rides #541: the a[download] anchor intent\n# seam - a click posts the engine URL it is about to navigate to,\n# and the navigation's response seam registers the download\n# (single-use, client-bound, TTL-etched; zl:dlIntent control-plane\n# case, torture coverage, downloads-anchor e2e harness).\n# sw.js 39f3f86a873eee80 -> d77346d284798bf1 (941778 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Cargo-side pin stays 5073f316 (app TS only). Deploy with a\n# cleared Render build cache.\n# Pin 188 (2026-11-21): dist 36aa42ed (build 44932854637; Zeolite\n# main 2ddef39, all five jobs green). Ships the #703 apps-widget\n# rebase: Google's 9-dot launcher builds its widget URL from\n# window.location.origin (LegacyUnforgeable), so the fetch landed\n# as a bare engine-origin /widget/app/so path with no route mint\n# and the LB server answered 404 (x23); the bare path now rebases\n# to https://ogs.google.com/widget/app/so ahead of the same-origin\n# else-branch, fail-closed (client context or decodable route\n# referrer), and the #420 virtualOgsOrigin repairs origin= from\n# the referrer page origin (regressions: the widget-rebase suite).\n# Also rides the #515-wave extension history/content-script\n# registration stores and the vendored libcurljs client fork\n# (PR #676; vendor JS+C only, no crates).\n# sw.js d77346d284798bf1 -> ec181360430ef033 (947394 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Cargo-side pin stays 5073f316 (app TS only). Deploy with a\n# cleared Render build cache.\n# Pin 189 (2026-11-21): dist 2162839e (build 44943292385; Zeolite\n# main abb83aa3, all five jobs green). Version bump to 3.4.3, the\n# release wave only: the bundle delta is the embedded build id,\n# no functional change ships.\n# sw.js ec181360430ef033 -> fce0135d1b99d8d3 (947394 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Deploy with a cleared Render build cache.\n# Pin 190 (2026-11-21): dist 8b8edb79 (build 44946699306; Zeolite\n# main e8f63699, all five jobs green). Release wave follow-up:\n# the release workflow package-naming and npm unpack fixes landed\n# on Zeolite main, only the embedded build id moves; no functional\n# change ships in the bundle.\n# sw.js fce0135d1b99d8d3 -> 7df24a17983a2c82 (947394 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Deploy with a cleared Render build cache.\n# Pin 191 (2026-11-21): dist 8f35da9 (build 44953221976; Zeolite\n# main 1184dfc, all five jobs green). The #703 apps-widget origin=\n# repair ships: the committed-query decode cedes /widget/app/so to\n# the widget surface, the guard arms on the riding zlNavh token,\n# and virtualOgsOrigin re-derives the page origin from the token\n# and strips every MAC-verifying zlNavh before upstream. Tagged\n# 3.4.4 (engine patch bump: a fix pin that changes engine bytes).\n# Cargo-side pin stays 5073f316 (no zeolite-server code change;\n# only the TS engine and the workspace version stamps moved).\n# sw.js 7df24a17983a2c82 -> 2ba4232414965a63 (947844 bytes);\n# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).\n# Deploy with a cleared Render build cache.\n# Pin 192 (2026-11-22): dist 1048b03a (build 45026329077; Zeolite\n# main 3a0d54cd, all five jobs green). The Google/Outlook auth wave:\n# committed-query prel tails resolve against the parent document\n# (#708 bscframe handshake), the authorize-token rootHome recovery\n# and the MS iframe-request-id dedupe ship (#706 ESTS white page);\n# the #700 workers-grant fix rides the same bundle. Cargo-side pin\n# stays 5073f316 (no zeolite-server code change; app TS only).\n# sw.js 2ba4232414965a63 -> 733c925ba2fbc22e (950241 bytes);\n# bootstrap.js 0ddd6edd9485c8ab -> 0a3e47fd0bcfbba3 (51347 bytes).\n# Deploy with a cleared Render build cache.\n# Pin 193 (2026-11-22): dist b5818886 (build 45053752865; Zeolite\n# main f67eba38, all four jobs green). The egress switch wave rides\n# the bundle: epoxy transit owns the default egress path with the\n# active fingerprint UA wired into EpoxyClientOptions.user_agent and\n# a lazy client rebuild on change (#708), deployments announce the\n# public wisp through /build sjWisp=SCRAMJET_WISP_URL with the\n# engine-side zl:wispPrimary seam (#642 trusted egress), and the\n# #695 context-less realm fallback narrows to the CDN challenge arm.\n# Cargo-side pin stays 5073f316 (no zeolite-server code change; the\n# TS engine, transports and test mocks moved).\n# sw.js 733c925ba2fbc22e -> 97d0269a7ff264e7 (952889 bytes);\n# bootstrap.js unchanged 0a3e47fd0bcfbba3 (51347 bytes).\n# Pin 194 (2026-11-22): dist 493dc1ad (build 45067258713; Zeolite\n# main cbde9fc0, all five jobs green). The #711 C0 event-loop lag\n# instrument rides the bundle: the composition-root interval counts\n# the loop-lag sampler, zl:getDiag piggybacks the histogram (devtools\n# utf-8 ellipsis fix along), and the workspace version stamps to 3.4.5\n# Ferrierite, the pin-194 patch bump for the extensions member-slice\n# (#520/#523 wave-2 members shipped IN pin 194; only the bb71532 notifications member missed it and rides the next pin).\n# Cargo-side pin stays 5073f316 (no zeolite-server code change; app TS\n# and the workspace version stamps only moved).\n# sw.js 97d0269a7ff264e7 -> f7a3d29691b1847b (954413 bytes);\n# bootstrap.js unchanged 0a3e47fd0bcfbba3 (51347 bytes).\n# Deploy with a cleared Render build cache.\n# Pin 195 (2026-11-23): dist abf2399 (build 45130303332; Zeolite\n# main cf20acca, all five jobs green). Stack since pin 194: the #696\n# 4 MiB wasm AST bound, the #688 persistent asset cache, the #708\n# pre-dispatch netlog rows, the #516 member-gap reasons, and the\n# #519/#520/#523 extension member slices. sw.js sha re-derived\n# f7a3d29691b1847b -> a110739b1756ec01 (964648 bytes), bootstrap.js\n# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays\n# 5073f316 (no zeolite-server/wisp-core/wisp-extensions source change).\n# Pin 196 (2026-11-23): dist 2bbe5b88 (build 45137973707; Zeolite main\n# 6efdd5a1, all five jobs green). On top of pin 195 the epoxy transport\n# now rides the sha-pinned epoxy-tls fork artifact (lyrebird identity\n# seam, real-browser ClientHello shaping) with the UA-synced voice.\n# Pin 195's beta clearCache deploy failed the served-sha gate by\n# design: dist republished two minutes after the pin commits and the\n# builder fetches refs/heads/dist HEAD, so this pin takes the current\n# bundle on its own verified shas. sw.js re-derived\n# a110739b1756ec01 -> 4756af33df4de184 (964745 bytes), bootstrap.js\n# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays\n# 5073f316 (5209ad8d touched app, CI and docs only; no crate change).\n# Pin 197 (2026-11-23): dist 0e109fb3 (build 45148055568; Zeolite main\n# f76eee61, all five jobs green, the voice seam 85783e65 plus the\n# extensions removeCSS slice). On top of pin 196 the engine carries\n# the explicit TLS voice seam: the zl:fingerprint profile may now\n# carry tlsVoice (chromium | firefox | native; absent = UA-synced\n# derivation), applied on the next transport init; the beta UI ships\n# the Settings transit picker that pushes it. This pin also makes\n# the epoxy vendor honest: pin 196's comment claimed the fork\n# artifact but the RUN still copied the npm package, so the shipped\n# epoxy ignored the identity arm entirely. The vendor now fetches\n# the sha-pinned epoxy-tls fork artifact (lyrebird ClientHello\n# profiles) with a sha256sum gate. sw.js re-derived\n# 4756af33df4de184 -> 2e41369452f851c3 (973788 bytes), bootstrap.js\n# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays\n# 5073f316 (app TS and tests only; no crate changed).\n# Pin 198 (2026-11-23): dist 4dd6ed50 (build 45156263793; Zeolite\n# main e1c8a67d, all five jobs green): the Chromium-shaped h2\n# epoxy transport artifact plus the 0a5e7f82 breakout mark push\n# (#706) - the engine stamps the breakout-required mark into the\n# netlog and tracing ring and pushes zl:breakout with {dest, rule}\n# to the host pages, where the beta shell opens the real top-level\n# window. The epoxy-tls release moved under its tag (the h2\n# handshake bytes), so the vendor gates follow: epoxy.js\n# c3f79beb -> 5a707545 and epoxy.wasm 5bee4469 -> 9fcab511\n# (a rebuild with the old gate fails sha256sum -c honestly).\n# sw.js re-derived 2e41369452f851c3 -> 801a773ab7b21bb3\n# (974005 bytes), bootstrap.js unchanged 0a3e47fd0bcfbba3\n# (51347 bytes). Cargo-side pin stays 5073f316 (no crate changed).\n# Pin 199 (2026-11-23): dist 3322f39 (Zeolite 8e9f445 signed module runtime:\n# manifest schema, Ed25519 verify against compiled-in signer keys, modules idb\n# store install/revoke/revokeKey/list, boot bind seam with typed permission\n# gating, zl:modules* control verbs; c374c1d fixture trim; 2ce7b399 docs\n# alignment; run 45183716622 all five green). sw.js 801a773ab7b21bb3 ->\n# 23119912d4117837 (983330 bytes); bootstrap.js unchanged (0a3e47fd0bcfbba3).\n# Epoxy artifact pair unchanged (the Chromium-shaped h2 fix rides on):\n# epoxy.js 5a707545, epoxy.wasm 9fcab511. Cargo-side pin unchanged.\n# Pin 200 (2026-11-23): dist af80c688 (Zeolite 7eb4a1d: the #706 breakout\n# lane is removed end-to-end by operator order - the policy route and\n# validator, the three interactive-auth marks in policy.kdl, the\n# fetch-handler stamp and the zl:breakout host-page push, docs,\n# both breakout regression suites; run 45210987282 all five green).\n# sw.js 23119912d4117837 -> dd98f6516554b102 (982465 bytes);\n# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair\n# unchanged (epoxy.js 5a707545, epoxy.wasm 9fcab511). Cargo-side pin\n# unchanged.\n# Pin 201 (2026-11-24): dist 86876d7 (Zeolite 189a3fc9 coi arm: the\n# engine stamps cross-origin-embedder-policy: credentialless on its\n# worker-served responses when the host arms coi via zl:config - the\n# LB pair (server COI env arm behind ZL_CROSS_ORIGIN_ISOLATION plus\n# the App.tsx coi parity push) drives it; dist also carries aa8c994\n# devtools netlog wire-header and pre-dispatch stage (#713); run\n# 45391313372 all five green). sw.js dd98f6516554b102 ->\n# febbf2ba70635ebd (982741 bytes); bootstrap.js unchanged\n# (0a3e47fd0bcfbba3). Epoxy artifact pair unchanged (epoxy.js\n# 5a707545, epoxy.wasm 9fcab511). Cargo-side pin unchanged.\n# Pin 202 (2026-11-25): dist 56296e2 (Zeolite 9b4be2b #716 fingerprint\n# native-toString shield incl. worker script + userAgentData builders; ci\n# d328262 epoxy pair moved with #718 wire-shape fix - page headers lead,\n# accept-encoding gains deflate; run 45579574103 all five green). sw.js\n# febbf2ba70635ebd -> 52bac384b5c03014 (983968 bytes); bootstrap.js unchanged\n# (0a3e47fd0bcfbba3). Epoxy artifact pair moved with the #718 rebuild:\n# epoxy.js 5a707545 -> 0a632707, epoxy.wasm 9fcab511 -> 1f5588aa.\n# Cargo-side pin unchanged.\n# Pin 203 (2026-11-25): dist 4f5eb43 (Zeolite 76c4e7ee ci pair-pin\n# for the lyrebird ad1ef42 rebuild - the #712 conviction: lyrebird\n# statically offered TLS extensions rustls cannot honor (ALPS 0x44cd\n# and SCT 0x0012 on the brave profile, SCT plus delegated credentials\n# on firefox), so every real upstream aborted the epoxy handshake\n# with a fatal DecodeError alert while the tls.peet.ws CI oracle\n# never parsed those extensions and stayed green; lyrebird ad1ef42\n# drops them from the static profile arms and repins the fixtures;\n# run 45615585837 all five green). sw.js 52bac384b5c03014 ->\n# d4eff6408c0c32d5 (983968 bytes); bootstrap.js unchanged\n# (0a3e47fd0bcfbba3). Epoxy artifact pair moved with the rebuild:\n# epoxy.js 0a632707 -> b69924f0, epoxy.wasm 1f5588aa -> 675b4a6a.\n# Pin 204 (2026-11-25): dist 4ad22653 (Zeolite 0910233, the TLS\n# voice auto-fallback: a UA-derived epoxy voice whose shaped hello\n# is refused at the TLS layer - peer alert or handshake parse\n# failure, the #712 class - switches the worker to the native\n# hello and retries the request once, with a TRANSPORT diagnosis\n# event; an explicitly pinned voice keeps its honest failure;\n# workspace patch 3.4.6; run 45647908049 all five green). sw.js\n# d4eff6408c0c32d5 -> 18ae34eaa466e199 (984603 bytes);\n# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair\n# unchanged (epoxy.js b69924f0, epoxy.wasm 675b4a6a).\n# Cargo-side pin unchanged.\n# Pin 205 (2026-11-25): epoxy glue pin only. The speed-build merge\n# (epoxy-tls multiplexed b9eeea0a, fork PR #1) adds the SPEED flag to\n# the glue info line; the shipped size variant is otherwise identical\n# (epoxy.wasm rebuilt byte-identical 675b4a6a, proven twice by CI), so\n# only the js gate moves: epoxy.js b69924f0 -> 09f8eb5a.\n# sw.js/bootstrap unchanged (18ae34eaa466e199/0a3e47fd0bcfbba3).\n# Cargo-side pin unchanged.\n# Pin 206 (2026-11-25): dist restamp ride after pin 205. Zeolite ci\n# run 45709794995 (the ci-side 09f8eb5a glue swing) republished dist\n# d87ae394; engine source unchanged, only the per-run build-id stamp\n# moved sw.js 18ae34eaa466e199 -> 930ea991ddd665b1 (984603 bytes).\n# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair unchanged\n# (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a). Cargo-side pin unchanged.\n# Pin 207 (2026-11-26): dist restamp ride after the Zeolite\n# mirror.yml removal. Zeolite ci run 45770306307 (b0b296c1, the\n# GitLab mirror workflow deletion - engine source unchanged)\n# republished dist 577030a6; only the per-run build-id stamp\n# moved sw.js 930ea991ddd665b1 -> e7093292fb3fd366 (984603\n# bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair\n# unchanged (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a).\n# Cargo-side pin unchanged.\n# Pin 208 (2026-11-26): Zeolite #721 - YouTube live_chat embed_domain=\n# loaders name the engine origin (LegacyUnforgeable hostname); the\n# request seam virtualizes embed_domain= to the embedding page's\n# hostname. Zeolite ci run 45778457137 (8ebf4091) republished dist\n# 0a3b8480; engine source changed, sw.js e7093292fb3fd366 ->\n# 9f3217905807e213 (985501 bytes). bootstrap.js unchanged\n# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,\n# epoxy.wasm 675b4a6a). Cargo-side pin unchanged.\n# Pin 209 (2026-11-26): Zeolite #715 - the rewriter folds constant\n# computed location keys ('loc'+'ation', parenthesized literals,\n# no-substitution templates) to the virtual view, closing the\n# obfuscated computed-read gap behind the MI613e [13] sign-in\n# refusal; rules.kdl allows play.google.com fetch telemetry\n# (#720 hygiene). Zeolite ci run 45900040052 (0e18bc2e) republished\n# dist 1f0a4ef0; engine source changed, sw.js 9f3217905807e213 ->\n# 12c82b13f105c58b (985501 bytes). bootstrap.js unchanged\n# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,\n# epoxy.wasm 675b4a6a). Cargo-side pin unchanged.\n# Pin 210 (2026-11-26): epoxy per-identity h2 wire profiles - the\n# transport (epoxy-tls multiplexed 9f5f4c35, h2-wasm master 5d57b1d1)\n# wires EpoxyIdentity into the h2 fork's process-global client wire\n# profile: Native keeps the Chromium handshake shape shipped\n# 2026-11-23, Brave/Firefox speak their capture-pinned h2 handshakes\n# (lyrebird tools/capture/h2shapes.py). Zeolite ci run 45903412631\n# (01a35c72) republished dist 8720d9ed; build-stamp only, sw.js\n# 12c82b13f105c58b -> 8d4c26d1942efbfb (985501 bytes). bootstrap.js\n# unchanged (0a3e47fd0bcfbba3). Epoxy pair bumped (epoxy.js 633a94d5,\n# epoxy.wasm 6938320f). Cargo-side pin unchanged.\n# Pin 211 (2026-11-27): debugger wave slice 3 (Zeolite #723) - a\n# host-only zl:config bodyCapture toggle records the first 16KB of the\n# outgoing upstream request body, post-surgery, redacted at netLogPush,\n# surfaced in the devtools detail and the KDL export as request_body;\n# the #717 MI613e body discriminator for the Google sign-in chase.\n# Zeolite ci run 45960904023 (98a10d80) republished dist e2075e6c;\n# engine source changed, sw.js 8d4c26d1942efbfb -> d9dc95ab6a472a4d\n# (986261 bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy\n# pair unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side\n# pin unchanged.\n# Pin 212 (2026-11-27): Zeolite #708 - the bscframe same-origin\n# escape class: the Google sign-in page committed at the content\n# origin root with ?zlNavh= builds its botguard iframe with a\n# relative /_/bscframe src no rewriter arm minted; the\n# parser-initiated subframe navigation arrives context-less and the\n# SW answered \"escape: same-origin unknown home\", so the content\n# origin SPA catch-all served the LB shell into the botguard frame.\n# Fix: referrerDest (codec.ts) gains a query-handle arm - a bare\n# same-origin src resolves against the referrer's committed query\n# handle (MAC-verified, live-token-only, engine-shaped pathnames\n# refused, prel tails peeled), engine 3.4.8 -> 3.4.9 Ferrierite.\n# Zeolite ci run 46036186877 (97f2f358, test-contract fix abaa8788,\n# all five jobs green) republished dist 3106558e; engine source\n# changed, sw.js d9dc95ab6a472a4d -> 3c7ed692dce99520 (986261\n# bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair\n# unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side pin\n# unchanged.\nARG ZEOLITE_COMMIT=3106558e0ca51e2525b12e0e6ba16f8f6320901c\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends curl ca-certificates npm \\\n && rm -rf /var/lib/apt/lists/*\nWORKDIR /bundle\n# GitHub archive 503/504 truncations killed pin builds; the pipe to\n# tar also silently disables curl --retry (stdout is not rewindable), so\n# fetch to a file first, retry, then extract.\n# Per-sha archives 404 for CI-created dist commits (codeload cannot\n# generate them; the pin 171 deploy failed 5x404 on the archive/<sha>\n# URL). The dist branch head IS the pinned commit at bump time; the\n# sha-verification gate below fails the build honestly if it moved.\nRUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \\\n      -o /zlsrc.tar.gz \"https://codeload.github.com/lobsterbs/Zeolite/tar.gz/refs/heads/dist\" \\\n && tar xzf /zlsrc.tar.gz --strip-components=1 && rm -f /zlsrc.tar.gz\n# The libcurl transport (TLS termination for the wisp hop): pulled\n# from npm at build time, same pinned version the Zeolite CI vendors.\nRUN mkdir -p /bundle/libcurl \\\n && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \\\n && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/\n# The epoxy transport (selectable second engine, Zeolite #64):\n# pulled from the lobsterbs/epoxy-tls fork artifact release, the\n# lyrebird-patched rustls that signs real-browser ClientHello\n# profiles (the identity arm: chromium, firefox, or native shapes).\n# Same never-committed vendoring rule as libcurl - the bundle is\n# AGPL-3.0-only, fetched pinned at build time only; the sha256 pair\n# IS the pin and the -c gate fails the build honestly if a release\n# asset moves. Same full variant the npm package exposed (the\n# WebSocket bridge + gzip/brotli + HTTP/2 sit behind \"full\"). The SW\n# resolves it at the origin root (/epoxy/epoxy.js + epoxy.wasm); the\n# server serves /epoxy from this bundle directory.\nRUN mkdir -p /bundle/epoxy \\\n && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \\\n      -o /bundle/epoxy/epoxy.js \"https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js\" \\\n && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \\\n      -o /bundle/epoxy/epoxy.wasm \"https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm\" \\\n && echo \"633a94d51f22b6818fff80d5e5b07dd0abe43025d6bd5ef7e49f8603bc3040f2  /bundle/epoxy/epoxy.js\" | sha256sum -c - \\\n && echo \"6938320f271dd266e36a49dba5d43fba82e5797bae5a1589ecc4ba39b1f85ec6  /bundle/epoxy/epoxy.wasm\" | sha256sum -c -\n\n# ScramJet engine bundle (upstream MercuryWorkshop, the newest\n# published build), vendored with the same never-committed rule as\n# the Zeolite bundle and served same-origin at /sj/. Pin:\n# scramjet 2.0.67-alpha.2 + controller 0.0.14 + utils 0.0.3 +\n# libcurl-transport 2.0.5 (the same libcurl pin the zl-builder\n# vendors). The controller worker scope is /sj/ (default from the\n# script path), so it never competes with the Zeolite root worker.\n# Bump these pins together with SCRAMJET_VERSION in the final stage.\nFROM node:22-slim AS sj-builder\nRUN npm install --prefix /sjvendor --no-audit --no-fund \\\n      @mercuryworkshop/scramjet@2.0.67-alpha.2 \\\n      @mercuryworkshop/scramjet-controller@0.0.14 \\\n      @mercuryworkshop/scramjet-utils@0.0.3 \\\n      @mercuryworkshop/libcurl-transport@2.0.5 \\\n && mkdir -p /sj \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.js /sj/scramjet.js \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.wasm /sj/scramjet.wasm \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js /sj/controller.api.js \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js /sj/controller.inject.js \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.sw.js /sj/controller.sw.js \\\n && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-utils/dist/scramjet-utils.js /sj/scramjet-utils.js \\\n && cp /sjvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/index.js /sj/libcurl-client.js \n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends ca-certificates \\\n && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder /build/target/release/lobster-server /app/lobster-server\nCOPY --from=ui-builder /ui/dist /app/ui\nCOPY --from=zl-builder /bundle /app/zlsw\nCOPY --from=sj-builder /sj /app/sj\n# Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at\n# ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them\n# at startup and flags /build stale when the zl-builder layer cache\n# serves an older tarball.\nENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3c7ed692dce99520 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2\n# #129/#143: verify the SERVED artifacts against the pins at build\n# time: a mismatch (poisoned or stale cached tarball) fails the\n# Docker build itself instead of shipping silently. Stronger than\n# hashing the tarball: this proves what /zlsw/ actually serves.\nRUN set -e; \\\n    sw_sha=$(sha256sum /app/zlsw/sw.js | cut -c1-16); \\\n    boot_sha=$(sha256sum /app/zlsw/bootstrap.js | cut -c1-16); \\\n    if [ \"$sw_sha\" != \"$ZEOLITE_SW_SHA\" ] || [ \"$boot_sha\" != \"$ZEOLITE_BOOTSTRAP_SHA\" ]; then \\\n      echo \"FATAL: zlsw bundle sha mismatch (sw $sw_sha, bootstrap $boot_sha)\" >&2; \\\n      exit 1; \\\n    fi\nEXPOSE 6001\n# #132: drop root - the server needs no privilege to read /app.\nRUN useradd --system --uid 10001 --no-create-home appuser \\\n && chown -R appuser:appuser /app\nUSER appuser\nENTRYPOINT [\"/app/lobster-server\"]\n\n\n\n"}}]
+
+
+
+# syntax=docker/dockerfile:1
+# Multi-stage build for the LobsterBrowse single-site service:
+# the Rust Wisp server and the static M3E UI it serves from one origin.
+# Builder tracks latest stable Rust: zeroize 1.9+ manifests need cargo >= 1.85.
+# Reproducibility: same LobsterBrowse commit + same Dockerfile + pinned
+# ZEOLITE_COMMIT below must give identical build inputs. Bump the pin
+# by updating both the ARG and the zeolite-server rev in
+# server/bin/server/Cargo.toml (and the committed server/Cargo.lock via
+# the generate-rust-lockfile workflow), then clear the Render build cache.
+# Builder base is pinned to bookworm: the runtime stage is
+# debian:bookworm-slim (glibc 2.36) and the rolling rust:1-slim tag
+# moved to a newer Debian, producing a binary that needs GLIBC_2.38
+# and dies at instance start ("version GLIBC_2.38 not found").
+FROM rust:1-slim-bookworm AS builder
+# wreq links BoringSSL (btls-sys): cmake + g++ + perl build it and
+# bindgen needs libclang at build time (the runtime feature loads the
+# system libclang, it is not linked into the binary).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config libclang-dev git \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY server/ ./
+RUN cargo build --release --locked -p lobster-server
+
+FROM node:22-slim AS ui-builder
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY ui/ ./
+RUN npm run build
+
+# Zeolite engine bundle: an immutable Zeolite commit carries the green
+# build of the engine service worker and its chunks (libcurl stripped
+# there: the AGPL bundle is never committed to git). Vendored here at
+# build time so the server can serve it same-origin at /zlsw/ and the
+# UI can register the worker. Pinned to an exact revision instead of a
+# moving branch so rebuilds are deterministic.
+# Old pin 5 (2026-10-07): dist e893ee6 (Zeolite main da8c0c0, CI run 38056407768)
+# 2026-10-07 (5). The engine week since 13ae7da8: wisp auth verified
+# against client payloads, loopback bind + Origin guard + fail-closed
+# auth config + security headers, JSON configs swapped for KDL, SW
+# keepalive for streaming documents (#99), SipHash length-word mask
+# for long-destination routes (#100), child-realm reemit + escape log
+# (#101), 204/205 navigation error page (#102), iframe/embed/object
+# destination classification (#103), popup activation guard (#106),
+# 30s navigate first-byte deadline + post-redirect rewrite base
+# (#107), child-realm storage/cookie isolation (#108), SWR refresh
+# coalescing. 2026-10-07 (6): #109 - popup-class activations re-open
+# through the original window.open while their user activation is
+# live (the minted re-drive outlived the activation window, so e.g.
+# Google's AI Mode pressed but never applied), and relative
+# navigation-bound writes (anchor/area href, iframe src, form
+# action) re-emit through the #101 marker instead of landing on
+# the proxy origin. sw.js stays f90129af (SW bundle untouched),
+# bootstrap.js 84c8ec97 -> 413a7bd7. Cargo-side pin stays 483aa0f
+# (no crates changed since).
+# 2026-10-07 (7): #110 - the SW re-establishes the client virtual
+# context from the post-redirect destination once the hop chain
+# resolves (google.com -> www.google.com left runtime-relative
+# URLs resolving against the apex, whose 404 on /async/hpba meant
+# Google's AI Mode panel never initialized and the button pressed
+# with no effect). sw.js f90129af -> 9c5ead20; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
+# 2026-10-08 (8): #112 - directory-shaped JS literal destinations
+# under the keyed codec keep the last path segment visible after the
+# token (the sorry page's recaptcha enterprise loader appends "api2/"
+# unless its api base ends with "enterprise/", and the opaque token
+# broke every tail check, sending the anchor iframe to google's 404).
+# sw.js and bootstrap.js unchanged (9c5ead20 / 413a7bd7): the fix
+# rides in rewriter_wasm_bg.wasm, so the alarm pins cannot distinguish
+# this bump from the previous pin - deploy with a cleared build cache.
+# Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-08 (9): #112 follow-up - subresource requests from a navh-
+# served document carry the navh route as referrer, which does not
+# decode as an engine path, so forwardedHeaders omitted the Referer
+# upstream; google's reCAPTCHA anchor validates the site key against
+# that header and rendered "Invalid domain for site key" on /sorry.
+# The SW now decodes the navh token and forwards its destination as
+# the Referer. sw.js 9c5ead20 -> ae06e841; bootstrap.js unchanged
+# (413a7bd7). Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-08 (10): #112 follow-up 2 - the Referer fix alone
+# did not repair the widget: its JS computes co= from
+# window.location.origin (LegacyUnforgeable), so upstream kept
+# receiving the engine origin and the site-key domain check kept
+# failing ("Invalid domain for site key"). A co= naming this
+# deployment is now rewritten to the embedding page's virtual origin
+# at the fetch seam. sw.js ae06e841 -> 247f8349; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
+# 2026-10-08 (11): #112 follow-up 3 - the sorry doc's page JS builds
+# absolute URLs as real origin + location.pathname, and pathname is
+# the opaque engine route token, so the engine fetched
+# www.google.com/j/<token> upstream and google's 404 replaced the
+# document (the captcha vanished behind a 404 error page). The SW
+# now dereferences embedded self-route tokens in upstream
+# destinations when the token decodes to the same origin
+# (MAC-verified, fails closed). sw.js 247f8349 -> 9fa58b72;
+# bootstrap.js unchanged (413a7bd7). Cargo-side pin stays 483aa0f
+# (no crates changed).
+# 2026-10-08 (12): #113 - a cold-start session can race the boot
+# config: the first engine navigation is minted under the legacy
+# /zl/ prefix before the SW route shape is configured, decodePath
+# cannot see the tail, and the request escaped to the proxy origin
+# (the server answers it with the misleading no-worker notice).
+# The escape seam now recovers decodable legacy routes (configured
+# prefix or the reserved zl segment; keyed tails refused, host
+# routes never captured). sw.js 9fa58b72 -> b5f0f84c; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
+# 2026-10-08 (13): #99 - every wisp fetch now carries a 30s
+# first-byte deadline in the transport seam (the vendored request
+# promise resolves on headers, so a stalled subresource - a
+# silently dropped wisp websocket - never settled and the page
+# spinner ran forever). A stall is transport state like a
+# connect-class error: singleton reset, re-init, single retry on
+# a fresh connection, then honest failure. sw.js b5f0f84c ->
+# bb61d441; bootstrap.js unchanged (413a7bd7). Cargo-side pin
+# stays 483aa0f (no crates changed).
+# 2026-10-09 (14): #113 follow-up - legacy /zl/ referrers (cold
+# starts, pre-#113 dists) now decode in forwardedHeaders and
+# referrerOrigin through the decodePath -> nav handle ->
+# decodeLegacyRoute chain, so subresources from any route family
+# carry a real upstream Referer again and the reCAPTCHA co= seam
+# resolves the page origin deterministically. Regression tests
+# pin the co= chain across keyed, navh and legacy referrers
+# (Zeolite ed23eb46). sw.js bb61d441 -> edf104c0; bootstrap.js
+# unchanged (413a7bd7). Cargo-side pin stays 483aa0f (no crates
+# changed).
+# 2026-10-09 (15): #115 - the page cache is conditional: stored
+# entries keep the origin's ETag/Last-Modified, the stale refresh
+# sends If-None-Match/If-Modified-Since and a wire 304 keeps the
+# stored body and bumps the stored-at time instead of re-transferring
+# it, and no-cache entries revalidate before use (RFC 9111) with a
+# failed revalidation bypassing to the live path honestly.
+# sw.js edf104c0 -> e4402f7d; bootstrap.js unchanged (413a7bd7).
+# Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-09 (16): #116 - the child-document residuals: created
+# shadow roots get their own MutationObserver through an
+# attachShadow hook (parser-inserted frames inside them loaded
+# browser-direct - the live /j/<token> google 404 class),
+# contentWindow/contentDocument reads install the child realm
+# guard synchronously (closing the same-task write race that
+# beat the observer microtask), unquoted srcdoc attribute values
+# rewrite too, and guarded children re-emit fetch/XHR through
+# the #101 parent-relative marker. The shadow-root registry the
+# first cut shipped was dead code; the trimmed hooks fit the
+# 20 KiB bootstrap budget (20429 bytes). sw.js unchanged
+# (e4402f7d): the ride is entirely in bootstrap.js,
+# 413a7bd7 -> ee2c30cf, so the /build zlswSha cannot distinguish
+# this bump - verify the served /zlsw/bootstrap.js hash instead.
+# Cargo-side pin stays 483aa0f (no crates changed).
+# 2026-10-09 (17): #122/#123 - regex-aware JS scanner in the wasm
+# rewriter: quotes inside regex literals were parsed as string
+# delimiters, so the engine-route rewrite of a URL embedded in a
+# YouTube base.js messageRegExp injected slashes that terminated
+# the pattern and the whole 10.9 MB script failed to parse (empty
+# SPA body, video loads forever; Twitch the same class). Turnstile
+# script srcs now stay provider-direct so api.js can self-locate
+# its tag and the widget injects (#120 still owns the frames).
+# Rust-only: sw.js stays a7bb36c3, bootstrap.js stays 30e040f1;
+# the ride is in rewriter_wasm_bg.wasm, so the /build zlswSha
+# cannot distinguish this bump - verify the served
+# /zlsw/rewriter_wasm_bg.wasm hash instead.
+# Cargo-side pin stays 3d170f7 (zeolite-server unchanged; the
+# rewriter crate is not a server dependency).
+
+# 2026-10-09 (18): #124 - the script-serve import-specifier pass was
+# a raw regex and could bridge two string literals, swallowing the
+# code between them as a "specifier" and replacing it with an engine
+# route (Twitch player-core: "No matches from ".concat(w," payloads")
+# became a syntax error and the whole 387KB chunk failed to parse;
+# ChunkLoadError, the player never booted). The matcher is now a
+# quote-parity-aware scanner with the wasm literal pass context rules
+# (strings, comments, regex discrimination); template bodies are
+# opaque and property-name heads are skipped. sw.js a7bb36c3 ->
+# 888f6c84; bootstrap.js stays 30e040f1; the wasm is untouched
+# (78dd3ce206ab7f27, verify the served file). Cargo-side pin stays
+# 3d170f7 (no crates changed).
+
+# 2026-10-09 (19): #125 + #126 - zeolite-server upstream DNS is
+# DoH by default now: the pinned Quad9 (default) or Cloudflare IPs
+# answer over HTTPS/443 with the resolver certificate validated
+# against its DNS name (dns.quad9.net / cloudflare-dns.com, Mozilla
+# webpki roots), and there is deliberately no plaintext port-53
+# fallback - a host that blocks the DoH handshake fails closed. This
+# is the LB server's own outbound resolution too (main.rs PolicyDns
+# delegates to zeolite_server::dns). Cargo-side pin 3d170f7 ->
+# deccb43 (zeolite-server changed). #126: the wasm rewriter routes
+# inline module import specifiers (bare package names stay bare;
+# already-routed specifiers unwrap to one route). sw.js stays
+# 888f6c84, bootstrap.js stays 30e040f1; the ride is in
+# rewriter_wasm_bg.wasm, 78dd3ce206ab7f27 -> c5fe41724b40bae0 -
+# the /build zlswSha cannot distinguish this bump, verify the served
+# wasm hash instead.
+# 2026-10-09 (20): #127 - google.com (origin-only Referrer-Policy)
+# sent Referer: <engine-origin>/ for every subresource, decodePath
+# could not recover a page URL from it, the Referer was dropped, and
+# the /sorry reCAPTCHA anchor rejected the site key ("Invalid
+# domain for site key"). The worker now restores the upstream
+# Referer from the per-client virtual initiator origin
+# (virtualRefererFallback) before giving up. App-side only:
+# sw.js 888f6c84 -> 12ac9193; bootstrap.js stays 30e040f1; wasm
+# untouched (c5fe41724b40bae0, verify the served file). Cargo-side
+# pin stays deccb43 (no crates changed).
+
+# 2026-10-09 (21): #128 - engine-routed pages messaging their own
+# same-site frame by the frame's virtual origin had the postMessage
+# dropped by the browser (targetOrigin mismatch): reCAPTCHA
+# enterprise on google search died with "reCAPTCHA Timeout" and
+# "Failed to fetch". The bootstrap now delivers such payloads
+# locally as a synthetic message event carrying the origin the
+# caller intended; matching targets, * and / stay native, malformed
+# origins keep the native SyntaxError, ev.source is null on the
+# synthetic path. Frames stay engine-routed - provider-direct was
+# ruled out because it leaks the user IP. Plus the minimal error
+# page redesign (no cards, system type, compact facts list; the
+# zl-error meta, redaction and determinism contract unchanged).
+# sw.js 12ac9193 -> a3eff568; bootstrap.js 30e040f1 -> 9cfdbb8f
+# (21491 of the 21504 budget); wasm unchanged (c5fe41724b40bae0,
+# verify the served file). Cargo-side pin stays deccb43.
+
+# 2026-10-09 (22): #129 - the #120 provider-direct 302 for
+# challenge frames leaked the user IP (the frame committed at
+# the real provider origin) and broke the reCAPTCHA messaging
+# the #128 bootstrap fix had just repaired (cross-origin anchor,
+# postMessage targetOrigin dropped by the browser). Challenge
+# frames now stay engine-routed; the 302 is gone and a DIAG
+# event records the routing verdict. Plus the error page
+# redesign: Zeolite ASCII logo, category row back in the facts
+# list, retry is a form button. sw.js a3eff568 -> b6221208;
+# bootstrap.js stays 9cfdbb8f (21491 of the 21504 budget); wasm
+# unchanged (c5fe41724b40bae0, verify the served file).
+# Cargo-side pin stays deccb43.
+
+# 2026-10-09 (23): #128 follow-up - with challenge frames
+# engine-routed, reCAPTCHA's anchor protocol reached the
+# messaging stage and died on the frame's bare two-argument port
+# post: postMessage(msg, [port]) is the legacy WebKit overload
+# (targetOrigin defaults to *). The #128 wrapper re-emitted every
+# delegated call as (msg, targetOrigin, transfer), so the binding
+# saw a phantom third undefined argument, picked the standard
+# overload and threw "Invalid target origin '[object
+# MessagePort]'". The wrapper now normalizes both call shapes
+# and replays the caller's exact argument list at the native
+# boundary; the synthetic delivery keeps transfer ports live
+# (structuredClone with a transfer list neutered them into an
+# unreachable clone). sw.js stays b6221208 (198072 bytes);
+# bootstrap.js 9cfdbb8f -> 7f299840 (21551 of the 22528 budget,
+# raised with the fix, rationale recorded in the Zeolite gate);
+# wasm unchanged (c5fe41724b40bae0, verify the served file).
+# Cargo-side pin stays deccb43.
+
+# 2026-10-09 (24): #130 - the synthetic postMessage dispatch from
+# #128 is gone. With challenge frames engine-routed, every frame
+# message now stays inside the real engine origin, so postmsg.ts
+# rewrites foreign/virtual targetOrigins to the real origin and
+# delivers natively (both call shapes normalized, exact-argument
+# replay, malformed keeps the honest SyntaxError; no synthetic
+# dispatch, transfer lists stay native). vorigin.ts is new: the
+# page asks the SW for its virtual origin (zl:getVirtualOrigin)
+# and a bootstrap-side message-event filter re-exposes ev.origin
+# as the sender virtual origin on same-origin-looking events. sw.js
+# b6221208 -> 568fc624 (198147 bytes); bootstrap.js 7f299840 ->
+# c5554b40 (22483 of the 23552 budget, raised with the rationale
+# recorded in the Zeolite CI gate); wasm unchanged
+# (c5fe41724b40bae0, verify the served file). Cargo-side pin
+# stays deccb43.
+
+
+# 2026-10-10 (27): #130 finish + #131. The reCAPTCHA widget's last
+# break was sender-side: senderVirtualOrigin decoded only
+# standalone route tails, so a #112 directory-shaped anchor route
+# (<token>/api2/anchor) answered zl:getVirtualOrigin with null; the
+# page's vorigin filter never rewrote the anchor's message events
+# and grecaptcha dropped them all as foreign-origin messages
+# (reCAPTCHA Timeout, anchor retry loop). The origin decode now
+# retries with the request engine's MAC-verified recoverPath and
+# peels nested routes with unwrapDest. #131: Vite's __vite__mapDeps
+# dot-relative asset strings ("../chunks/x.js") now route through the
+# rewriter's module-base encoder instead of resolving to
+# engine-origin 404s (Brave Search: dead UI, no favicons, Ask AI
+# refresh loop). sw.js 568fc624 -> 9dcd3c18 (198177 bytes);
+# bootstrap.js unchanged (c5554b40); wasm c5fe4172 -> f5ad1126
+# (99153 bytes, verify the served file). Cargo-side pin stays
+# deccb43.
+
+
+# 2026-10-10 (28): #130 residual, third widget break. The
+# page's grecaptcha sends the anchor setup as a legacy
+# two-arg postMessage("recaptcha-setup", [MessagePort]) with no
+# targetOrigin. The #130 exact-argument replay delivered it
+# verbatim, but Chromium drops the transfer list when the
+# legacy postMessage overload delivers same-origin, so the
+# anchor never received its private MessagePort and the
+# widget protocol died (reCAPTCHA Timeout, anchor recreation
+# loop, no bframe). bootstrap.js now re-emits legacy two-arg
+# port calls in standard order (message, explicit origin,
+# ports) so the ports survive delivery. sw.js unchanged
+# 9dcd3c18 (198177 bytes); bootstrap.js c5554b40 -> bc001db
+# (22544 bytes); wasm unchanged f5ad1126. Cargo-side pin
+# stays deccb43.
+
+
+
+# 2026-10-10 (29): fourth widget break, the last measured seam.
+# The #130 wrapper re-emits from its own realm, so the anchor's
+# parent.postMessage landed on the page's wrapper and the
+# re-emission executed in the PAGE realm: ev.source was stamped
+# with the page window (from=self), the page's grecaptcha dropped
+# the anchor's setup, and the widget spun (reCAPTCHA Timeout,
+# anchor recreation loop, no bframe). bootstrap.js now stashes
+# each realm's native postMessage (__zlNativePM) and every child
+# realm shadows its configurable window.parent (top is
+# LegacyUnforgeable) with a Proxy that executes the parent's
+# stashed native from the CHILD realm, so the browser stamps the
+# genuine caller and the ports survive delivery; navguard's
+# guarded inline child realms get the same shim. The Zeolite
+# commit title mislabels the issue as #131; the widget work is
+# tracked in #130 and its follow-up. sw.js unchanged 9dcd3c18
+# (198177 bytes); bootstrap.js bc001db -> d6f6abba (23388
+# bytes); wasm unchanged f5ad1126. Cargo-side pin stays
+# deccb43.
+# 2026-10-10 (30). #132 closes the frame-protocol duplex: the
+# contentWindow sender half (a parent messaging its child through
+# the element delivers with the genuine sender window; before, the
+# anchor heard the page's setup as ev.source = itself) + the
+# virtual-origin parity drop (a targetOrigin the recipient's marker
+# does not match is dropped, the unproxied behavior). sw.js
+# unchanged 9dcd3c18 (198177 bytes); bootstrap.js d6f6abba ->
+# a9aca861 (24172 bytes); wasm unchanged f5ad1126. Cargo-side pin
+# stays deccb43.
+
+# 2026-10-10 (31): #132 follow-up, the measured widget seam. The
+# #130 vorigin origin relabel (ev.origin -> the sender's __zlVO)
+# broke the widget: gstatic's channel establishers derive the
+# origin they expect from the rewritten src/co= URLs, which point
+# at the ENGINE, so every origin check failed, the setup port was
+# never taken, the click notification was lost, the bframe was
+# never created and the widget timed out on every anchor rebuild
+# (live probes rc45-rc53: identity, source and port checks all
+# passed, only the origin comparison failed). ev.origin now
+# deliberately stays the native engine origin; the ev.source
+# identity relabel and the __zlVO marker (postmsg sender-side
+# parity checks) stay. sw.js unchanged 9dcd3c18 (198177 bytes);
+# bootstrap.js 0b6b80e9 -> db25100b (24433 bytes, under the
+# 25088 budget); wasm unchanged f5ad1126. Cargo-side pin stays
+# deccb43.
+
+# 2026-10-10 (32): #132 follow-up 2, the window.name seam. The #37
+# isolation wrapper scoped window.name through the site-scoped
+# sessionStorage but initialized it EMPTY, dropping the browsing
+# context's real name; gstatic's bframe resolves its anchor channel
+# as parent.frames[its own name transformed to the anchor's name]
+# (recaptcha__en.js Y.o2), so the named lookup returned undefined,
+# the bframe's postMessage target was dead, and the anchor's 15s
+# establisher rejected (reCAPTCHA Timeout, challenge never opened,
+# live probes rc59/rc60: name correct at t=0, cleared by the
+# wrapper by t=200ms). A fresh scoped context now seeds its name
+# from its frameElement's name attribute; top-level windows still
+# start empty, so the #37 anti-bleed goal is preserved. sw.js
+# unchanged 9dcd3c18 (198177 bytes); bootstrap.js db25100b ->
+# 03cd3476 (24521 bytes, under the 25088 budget); wasm unchanged
+# f5ad1126. Cargo-side pin stays deccb43.
+
+# 2026-10-10 (35): #134 - cache-hit serve re-ran the streaming
+# rewriter for HTML and CSS but served JS bodies verbatim (the
+# netlog row already claimed rewritten: js). Entries stored by
+# older dists hold raw upstream bodies, so a module-relative
+# import() in such a copy resolved against the engine route and
+# the escaped-path recovery answered the document root instead of
+# the module directory: play2048.co's lazy chunk loaded the site's
+# own SPA shell as JavaScript (200 text/html, MIME rejection, the
+# game never booted; github.com's CSS chunk the same class). The
+# browser flattens a dot-relative specifier to a root-relative
+# engine path, so the recovery cannot fix the class - the fix is
+# serve parity. The cache-hit JS branch runs the same two passes
+# the fresh path runs (specifier fold + literal pass, both
+# idempotent on composed copies) and writes the repaired copy back
+# only when a pass changed the body, so a stale raw entry heals
+# once. Worker destinations keep the raw serve (their cached
+# copies are composed by the fresh path). sw.js 9dcd3c18 ->
+# aea44290 (198656 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged f5ad1126. Cargo-side pin stays deccb43.
+
+# 2026-10-10 (36): Zeolite #134 + #133. The SW specifier pass
+# (fresh-serve import rewriting) desynced on real module bodies
+# with nested template substitutions: a backtick inside a
+# template expression closed the outer template early, and the
+# scanner then read a // inside template text as a line comment,
+# swallowing the rest of the chunk including the import
+# specifier - play2048.co's 364KB entry chunk served with a raw
+# import despite the (35) serve-parity fix. The pass now tracks
+# template/substitution nesting recursively (brace depth, nested
+# strings, comments and templates), so specifiers inside
+# template-heavy chunks fold correctly. #133: a wisp stream
+# beyond the server's max-stream ceiling wedges the transport
+# (instant error 7 afterwards, the WebSocket never fires close,
+# the #74 watcher is blind to it); errors 7/35 join the connect
+# class and reset() busts the vendored bundle's connection-cache
+# key with a wisp URL generation, so the reset+retry rides a
+# fresh WispTransport. sw.js aea44290 -> f8c69962 (199579 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged f5ad1126.
+# Cargo-side pin stays deccb43 (app-only change, no crates).
+
+# 2026-10-10 (37): Zeolite #134 residual, global fix. React
+# apps (github.com) construct module.css asset names at RUNTIME
+# (flat names like xy4.86babbfb1b89d634.module.css), so no
+# serve-time pass can fold them: the flat specifier resolved
+# against the document base, escaped-path recovery answered the
+# page origin root, and the origin 404 (text/plain) was refused
+# as a stylesheet. New assetbases.ts records the CDN asset
+# directories of every successful cross-origin script/style load
+# per virtual page origin; a failed (>=400) flat-named script or
+# style request retries against those observed bases with minimal
+# safe headers (user-agent/accept/accept-language only; never
+# cookies/origin/referer). No per-site table: the heuristic is
+# global and fails closed. sw.js f8c69962 -> 1785f26f (201195
+# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
+# f5ad1126. Cargo-side pin stays deccb43 (app-only change).
+
+# 2026-10-10 (38): two engine fixes. (1) The Anubis
+# pass-challenge repair accepts the redir shape anubis >= 1.26
+# actually emits: window.location.href of the rewritten challenge
+# page, an ABSOLUTE engine-origin URL. The old code only decoded
+# bare route paths, isEnginePath failed on the absolute string,
+# the redir went upstream untouched and the deployment rejected
+# the cross-origin redirect target (startpage: the proof of work
+# completes, verification then fails 500). Absolute redirs are
+# accepted only from the engine origin. (2) The flat asset
+# recovery now also covers runtime-built BINARY names (image,
+# video, audio, font, bare fetch): the github homepage mints
+# glb/mp4 names at runtime that 404 at the page origin. Element
+# dests require their MIME family (or octet-stream), a bare
+# fetch must carry an extension so beacon-shaped misses do not
+# mint CDN retries, and HTML/plain-text candidates are refused.
+# sw.js 1785f26f -> 25dea7e1 (201702 bytes); bootstrap.js
+# unchanged 03cd3476; wasm unchanged f5ad1126. Cargo-side pin
+# stays deccb43 (app-only changes).
+
+# 2026-10-10 (39): lazy-images opt-in rewriter pass (loading="lazy" on
+# img tags without one, additive only) + the zl:config imageLazy and
+# httpsUpgrade host toggles (Zeolite main 7dc5d8a, ci gate fix 0704011).
+# sw.js 25dea7e1 -> 21dc6e6c (201932 bytes); bootstrap.js unchanged
+# 03cd3476; rewriter wasm f5ad1126 -> d86f746e. Cargo-side pin stays
+# deccb43 (the LB server consumes no rewriter change; lazy images and
+# the https toggle ride the service worker).
+
+# 2026-10-10 (40): the declarative compatibility policy engine
+# (Zeolite #135/#136): /policy.kdl rules upgrade narrowly scoped
+# requests (host/path/types) from native transport onto the rewrite
+# path, with a stable reason + ruleId in the fallback ring and the
+# TRANSPORT_FALLBACK trace; route "rewrite" is the only settable
+# route (native is already the default, required rewrites cannot be
+# demoted), and a rejected file keeps the defaults with a TRANSPORT
+# diag. The shipped policy.kdl is intentionally empty; LB serves it
+# from the vendored dist at the origin root. sw.js 21dc6e6c ->
+# 5b2df445 (205055 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged d86f746e. Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-10 (41): engine error pages now attribute engine bugs
+# (the error card names a Zeolite engine bug and asks for a report
+# with the Trace ID; upstream failures stay neutral), and the
+# zl:loadState control API reports in-flight upstream requests per
+# destination host plus live rewrite streams so the LB tab spinner
+# tracks engine work, not just frame resource timing. sw.js
+# 5b2df445 -> 8edc1a9b (205898 bytes); bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e. Cargo-side pin stays deccb43
+# (app-only change).
+
+
+# 2026-10-10 (42): the Anubis pass-challenge repair now decodes
+# navh handle redirs. The embedder's initial navigations ride navh
+# handles, so the redir anubis 1.26.4 echoes back is the absolute
+# handle URL, isEnginePath rejected it and the repair never fired
+# (startpage: the proof of work completes, the verification 500s
+# Something went wrong). The handle decodes with its own keyed
+# decoder (tag + TTL), engine-side only, so the redir upstream
+# carries the real destination. sw.js unchanged 8edc1a9b (205898
+# bytes); bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# the fix rides codec.js (88437eb5 -> c29f5a19, verify the served
+# file). Cargo-side pin stays deccb43 (app-only change).
+
+# 2026-10-11 (43): the embedder fetch relay and settle guarantees.
+# Hosts that fingerprint-block the wasm TLS ClientHello (duckduckgo:
+# libcurl error 35) route onto the embedder network stack (the LB
+# /zlrelay endpoint, native TLS, the same SSRF resolver); policy
+# route "relay" drives it, route "native" (#138) demotes the JS
+# literal pass for proven hosts. Subresource bodies settle on idle
+# stalls (#140) and github repo pages boot again (#143: runtime
+# flat module.css names recover against the CDN bases). The stall
+# wrap and relayed responses carry rawHeaders, so upstream
+# set-cookie still lands in the jar. sw.js 8edc1a9b -> 60ce0fde
+# (211106 bytes); bootstrap.js unchanged 03cd3476; wasm unchanged
+# d86f746e; codec.js unchanged c29f5a19. Cargo-side pin stays
+# deccb43 (app-only change).
+
+# 2026-10-11 (44): the opaque-route relative recovery (#143
+# follow-up). github repo pages boot the React app but their
+# widget fetches arrive as /__zl_navh__/<token>/<suffix> and
+# 404 with a bad-handle strand: the page cannot read its real
+# path (LegacyUnforgeable location), so runtime URL building
+# appends to location.pathname. navhTailDest resolves
+# token-bearing tails with page-path-append semantics (the
+# token destination first, the client virtual context as the
+# fallback for expired tokens on long-lived pages) and
+# parser-resolved relative tails with ordinary URL semantics;
+# navigations keep the honest 404. sw.js 60ce0fde -> c4181cb7
+# (211757 bytes); bootstrap.js unchanged 03cd3476; wasm
+# unchanged d86f746e; codec.js unchanged c29f5a19. Cargo-side
+# pin stays deccb43 (app-only change).
+# 2026-10-11 (45): cookie jar RFC 6265 audit (Zeolite main 1e573d3,
+# CI run 541 green, dist 2757a66) - an empty Domain attribute no
+# longer demotes a host-only cookie to a bare-host domain cookie
+# (5.2.3), document.cookie reads path-match the document URL the
+# same way request cookies do (5.4), and persisted (jarLoad) plus
+# imported (jarReplace) jar records are shape-checked before
+# admission so corrupted storage or a hostile import cannot throw
+# mid-request. sw.js c4181cb7 -> e2c5ea7a (212157 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
+# 2026-10-11 (46): cookie jar follow-ups (Zeolite main b1b96b3, CI
+# green, dist f8135f2) - RFC 6265 5.3.11: re-admitting a cookie keeps
+# the original creation-time (send-order tie-break), and jarMerge
+# filters imported records with the stored-cookie shape gate so a
+# record missing secure/httpOnly/expires/created cannot be admitted.
+# sw.js e2c5ea7a -> 38b66986 (212039 bytes); bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
+# Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-11 (47): #144 navh suffix navigation recovery, HTTPS-only
+# default with proceed-anyway (loopback never upgraded),
+# zl:extUninstall, optional API module detach/reattach,
+# cookies.onChanged, RFC 6265 cookie-date parser, wisp stall-storm
+# relay-first cooldown (Zeolite main 72351d4, CI green, dist
+# 0767b56). sw.js 38b66986 -> f0c7b17f (215739 bytes);
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
+# 2026-10-11 (48): PSL site boundary for the cookie jar via tldts
+# (registrable domain, private-section suffixes included) plus the
+# RFC 6265 5.3 step 5 public-suffix admission gate; tough-cookie and
+# whatwg-url adopted as test oracles (Zeolite main cbe510a, CI
+# green, dist e6f9c7a). sw.js f0c7b17f -> 19ff69a3f5572ce9 (342614 bytes;
+# +127KB is the public-suffix trie). bootstrap.js unchanged
+# 03cd3476; wasm unchanged d86f746e; codec.js unchanged c29f5a19.
+# 2026-10-11 (49): document.cookie read ordering (RFC 6265 5.4):
+# longer paths first then creation order, matching the Cookie
+# header and every browser; tough-cookie oracle pins it
+# (Zeolite main 25e28e7, CI green, dist e01015a). sw.js
+# 19ff69a3f5572ce9 -> a5e47b8e3a265fd8 (342643 bytes).
+# bootstrap.js unchanged 03cd3476; wasm unchanged d86f746e;
+# codec.js unchanged c29f5a19. Cargo-side pin stays deccb43
+# (app-only change).
+# 2026-10-11 (50): Zeolite bug-scout wave (main 1e9b7d1, CI run
+# 38154209990, dist d2315df): the extension package reader now caps
+# zip inflation DURING decompression (a decompression bomb could
+# previously expand gigabytes in the worker before the declared-size
+# check ever ran), and codec tailBytes is anchored, so a same-origin
+# path merely containing the scheme prefix mid-way no longer decodes
+# as a destination; hostile-tail recovery stays in recoverPath
+# behind its keyed gates. First tests for the package reader. sw.js
+# a5e47b8e3a265fd8 -> 230932f95cdef730 (342885 bytes); bootstrap.js
+# unchanged 03cd3476; wasm unchanged d86f746e; codec.js
+# c29f5a19 -> 950319bc59af25c9 (codec.ts changed; not startup-
+# pinned). Cargo-side pin stays deccb43 (app-only change).
+# 2026-10-11 (51): Zeolite docs wave (main 1022268, CI run
+# 38169358836, dist 1021d30): security doc retitled as an internal
+# self-review with methodology stated, session-blob iter bounds
+# documented at the check, stale Phase 3 AST comment in literals.rs
+# corrected (issue #146). sw.js 230932f95cdef730 (342885 bytes),
+# bootstrap.js 03cd3476, codec.js 950319bc59af25c9 all unchanged
+# (comment-only source changes); wasm d86f746e -> 68264b205eb4e64d
+# (byte-level shift from the literals.rs comment, functionally
+# identical). Cargo-side pin stays deccb43.
+# 2026-10-11 (52): Zeolite relay abort wave (main c4fca0c, CI run
+# 38170947855, dist d255688): relayFetch propagates AbortSignal with
+# a zl:relayCancel frame (issue #145) so an aborted page fetch drops
+# the embedder-side /zlrelay connection instead of streaming to
+# completion; the transport cooldown passes the signal through and
+# request.ts threads e.request.signal into upstreamFetch. LB ui
+# zeolite.ts aborts its /zlrelay fetch on the cancel frame. sw.js
+# 230932f95cdef730 -> acec9296b7e68c10 (343391 bytes); bootstrap.js
+# 03cd3476, codec.js 950319bc59af25c9, wasm 68264b205eb4e64d all
+# unchanged. Cargo-side pin stays deccb43.
+# 2026-10-12 (53): Zeolite navh split-identity wave (#144)
+# (main 9772360, CI run 38212107143, dist 296078c): zl:navHandle
+# now carries only the origin in the keyed token with the real
+# path and query plaintext on the route, so SPA URL bars show a
+# real pathname while the destination stays hidden from the page.
+# decodeNavHandlePath in codec/request.ts resolves token+tail;
+# legacy full-dest tokens decode unchanged and age out at 120s.
+# sw.js acec9296b7e68c10 -> 66d337316585ca15 (343611 bytes),
+# codec.js 950319bc59af25c9 -> 8dbcd20fd3c8e9ff; bootstrap.js
+# 03cd3476 unchanged; wasm 68264b205eb4e64d -> 19575746805d5da0.
+# Cargo-side pin stays deccb43.
+# 2026-10-12 (54): epoxy wisp-mux death is connect-class (Zeolite
+# #147; main 7548235, CI run 38215205394, dist e6ea8c6). A dead
+# epoxy wisp socket failed the pending hyper connect with
+# Wisp(MuxTaskEnded) ("Multiplexor task ended"), which matched no
+# connect-class pattern, so the #74 reset+retry never fired and
+# the navigation answered a terminal 502 error page (live trace
+# zl-tmv4vzlk7-8). CONNECT_CLASS_RE now also matches the epoxy
+# dead-transport surface (muxtaskended, multiplexor task ended,
+# wisp transport already closed, failed to send/receive
+# multiplexor message, websocket implementation error: websocket
+# closed); mid-body hyper errors stay unmatched and fail honestly.
+# sw.js 66d337316585ca15 -> 1c67b54c12821a2b (343773 bytes);
+# bootstrap.js 03cd3476, codec.js 8dbcd20fd3c8e9ff, wasm
+# 19575746805d5da0 all unchanged (only sw.js rides). Cargo-side
+# pin stays deccb43 (app-only change).
+# Zeolite dist cbd3908 (main 6782532): content scripts actually
+# execute (bridge use-strict newline, #150); NAVH pages decode as
+# control-plane destinations and are refused host-only control
+# (#151); extension onMessage reply values and promises honored
+# (#152). sw.js 1c67b54c12821a2b (343773) -> 96d70fb9d7b90b14
+# (343953); codec.js 8dbcd20fd3c8e9ff -> 8e94f6a717dc11e8;
+# bootstrap.js 03cd3476 unchanged. Cargo-side pin stays deccb43
+# (app-only change).
+FROM debian:bookworm-slim AS zl-builder
+# Pin 57: Zeolite dist f5b7327 ships the policy.kdl catch-all relay
+# (wisp-auth deployments: the wasm client cannot authenticate, so
+# every fetch rides the embedder relay). sw.js unchanged
+# (96d70fb9d7b90b14); Cargo-side pin stays deccb43 (data-only change).
+# Pin 58: Zeolite dist 8f51d86 ships the #121 refresh-spam fix (the
+# bootstrap never auto-reloads proxied pages when a new engine
+# activates; it now logs a console note and re-dispatches a
+# zl:engineUpdate window CustomEvent for a manual reload affordance).
+# sw.js 96d70fb9d7b90b14 -> 473408e5d1abe91a; bootstrap.js
+# 03cd3476 -> b0624c71; Cargo-side pin stays deccb43 (app-only change).
+# Pin 60: Zeolite dist 8e74ce7 ships the #157 top-level re-emit anchoring
+# (root-relative fetch/XHR/beacon inputs on NAVH-served pages re-emit
+# through <route>/__zl_prel__ instead of escaping to the proxy origin
+# root; NAVP parents resolve under all three route shapes; the
+# navRel/relRoute exclusion list dedupes into navExcluded). sw.js
+# 473408e5d1abe91a -> 2b92b02d0deddd5e; bootstrap.js 3c148a51 ->
+# 89314e254ca65dcd; Cargo-side pin stays deccb43 (app-only change).
+# Pin 61: Zeolite dist 8c54bd1 ships the #157/#159 own-origin
+# re-anchor (absolute engine-origin inputs re-anchor to their
+# path and re-emit through the parent route, both at the emit
+# seam and at the shared decode; script and worker destinations
+# get a JS-typed body on upstream error statuses instead of an
+# HTML error page; tokenShaped and the rel-route factory dedupe
+# into navguard). sw.js 2b92b02d0deddd5e -> 2a70658ddf60e57a;
+# bootstrap.js 89314e254ca65dcd -> 423b16b806b7f4cc; Cargo-side
+# pin stays deccb43 (app-only change).
+# Pin 62: Zeolite dist d981283 extends pin 61 with the content-type
+# honesty guard: a script or worker destination never receives an
+# HTML or CSS body, whatever the upstream status (SPA catch-alls
+# answer missing module paths with a 200 HTML document, claude
+# answers a mangled specifier with CSS; both the fresh path and
+# the cache hit serve a JS-typed comment instead, so module
+# graphs fail cleanly). sw.js 2a70658ddf60e57a -> f006bbd75da0a643;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# deccb43 (app-only change).
+# Pin 64: Zeolite dist ad2e571 ships two engine fixes. First,
+# the POST stream-body fix (#155/#159/#164/#166 class): every
+# request body is buffered once at the upstreamFetch choke point
+# (32MiB cap, honest overflow), so POSTs ride the embedder relay
+# and survive the wisp connect-class retry instead of dying as a
+# disturbed ReadableStream - the "shell renders, API 502" pattern
+# on youtube innertube, chatgpt, deepseek, twitch Apollo,
+# sketchfab and three.js. Second, the wasm rewriter never mints
+# routes for www.w3.org namespace-identity URI literals (#153):
+# createElementNS keeps the identity namespace, so the excalidraw
+# provider cascade and delta setAttributeNS NamespaceError go
+# away; the wasm is rebuilt with the guard. sw.js
+# f006bbd75da0a643 -> 6fc87be1664e3954; bootstrap.js
+# 423b16b806b7f4cc unchanged. Cargo-side pin stays deccb43
+# (app + wasm-side rewriter changes, no server crate change).
+# Pin 65: Zeolite dist a9fb63e. Server crate moves to Zeolite
+# d8d6bed: wisp CONNECT now races allowed addresses (250ms stagger,
+# first success wins) instead of starving later IPs behind a
+# blackholed first address; DoH fallback (Quad9 NXDOMAIN/SERVFAIL
+# retried once through Cloudflare) so filtered domains no longer
+# look dead; wisp caps raised (streams/conn 24 -> 256, connections
+# 64 -> 256, per-IP fairness behind a trusted proxy) and the 1h
+# connection deadline drains live streams (60s grace) instead of
+# hard-killing them. App-side sw.js ships built Sec-Fetch /
+# Sec-CH-UA headers for first navigations (the #160 class),
+# conditional body replay (buffer only when a retry or relay can
+# actually happen), and mask accounting for #158/#159-class
+# rewritten script responses. sw.js 6fc87be1664e3954 ->
+# 4405ed7132900953; bootstrap.js 423b16b806b7f4cc unchanged;
+# Cargo-side pin deccb43 -> 47b8f5b (zeolite-server changed; 47b8f5b
+# additionally gives dns::LookupError the std::error::Error impl the
+# server-side reqwest DNS resolver needs, caught by the first pin-65
+# deploy build).
+# Pin 66: Zeolite dist a78c6c8. The SW never forwards proxy-injected
+# hop headers upstream anymore: the reverse proxy in front of the SW
+# origin adds x-forwarded-for/-proto/-host/-port to every inbound
+# engine request and the generic header copy sent them along - a
+# proxy tell no real browser sends, and the plausible trigger behind
+# Cloudflare edge 403 "Bad request" rejections of the relayed
+# document on strict WAF zones (Zeolite #160, live echo evidence:
+# postman-echo through the engine showed x-forwarded-proto riding
+# the upstream request). The LB relay allowlist also denies them
+# server-side now. sw.js 4405ed7132900953 -> c364479519b6e1ab;
+# bootstrap.js 423b16b806b7f4cc unchanged; Cargo-side pin stays
+# 47b8f5b (app-only change; 037e0d1 additionally makes the
+# connect-race test DNS override parallel-safe).
+# Pin 67: Zeolite dist 350cb06. Three engine fixes: the GREASE brand
+# and the brand-list order of Sec-CH-UA now derive from the Chromium
+# major (a fixed "Not_A Brand";v="8" in a fixed order is a list no real
+# Chrome of that major ever sends; verified against chromium
+# user_agent_utils.cc), chPlatform maps iPhone/iPad UAs to iOS instead
+# of macOS, and routed <script src> values keep their destination's
+# filename as a fragment so CMPs that locate their stub tag by substring
+# on the original src (OneTrust script[src*=...] class, #161) find it
+# again; the fetch target is unchanged (fragments strip before the
+# request). sw.js c364479519b6e1ab -> 9c99fc3a2fef7157; bootstrap.js
+# 423b16b806b7f4cc unchanged; Cargo-side pin stays 47b8f5b (the dns.rs
+# change is test-only). Deployed together with the relay's wreq swap:
+# reqwest/rustls -> wreq/boringssl with Chrome124 TLS/h2 emulation, the
+# Zeolite #149/#160 fingerprint class.
+# Pin 68: Zeolite dist 2947881. Typed navigations now carry the exact
+# header set a real Chrome sends instead of the physical iframe's
+# facts: sec-fetch-dest document with site none and sec-fetch-user ?1
+# (dest iframe + site none + user ?1 is a combo no real Chrome emits,
+# a #160-class WAF tell), initiated frame navs keep their dest but
+# drop sec-fetch-user, the navigation Accept matches the claimed UA
+# major (Chrome 124 does not advertise image/jxl, which arrived with
+# Chrome 155's JPEG XL ship; the forwarded accept did), Accept-Language
+# gains Chrome's q-value shape (en-US,en;q=0.9, not a bare join), and
+# Sec-Fetch-Storage-Access (a Chrome 133+ header, after the persona's
+# major) is neither synthesized nor forwarded. sw.js
+# 9c99fc3a2fef7157 -> f3dfdb76467266c2; bootstrap.js 423b16b806b7f4cc
+# unchanged; Cargo-side pin stays 47b8f5b.
+# Pin 69: Zeolite dist e26dc50. 307/308 redirect hops buffer the
+# request body once (cap 32 MiB) and replay it instead of surfacing
+# the redirect to the page (only an announced Content-Length over the
+# cap still surfaces), cross-origin hops drop Authorization per the
+# fetch spec, the navigation TTFB deadline aborts the upstream fetch
+# instead of only rejecting its promise, and the default persona is
+# Chrome 149 with Sec-Fetch-Storage-Access synthesized on cross-site
+# credentialed requests (a Chrome 133+ header, so the 124 persona
+# could never carry it honestly). sw.js
+# f3dfdb76467266c2 -> e575b078e13e2193; bootstrap.js 423b16b806b7f4cc;
+# Cargo-side pin moves 47b8f5b -> 63b4f23.
+# Pin 70: Zeolite dist ced0c3f. Per-host policy route "wisp"
+# (#168): hosts the policy file routes to "wisp" (shipped rule:
+# search.brave.com, whose PoW interstitial accepts the
+# libcurl-wasm ClientHello through the public unauthenticated
+# wisp-js backend but 429s the relay transport class) ride a
+# secondary wisp client the UI announces via zl:wispRegister
+# from /build sjWisp (beta: the standalone ScramJet wisp-js
+# service; main: unset, so the route falls back to relay there).
+# The relay stays the default for everything else. sw.js
+# e575b078e13e2193 -> 2c036ac7ea643f7b; bootstrap.js
+# 423b16b806b7f4cc unchanged; Cargo-side pin stays 63b4f23.
+# Pin 76 (main release bump; pins 71-75 were beta-only and
+# their fixes ride this bundle): Zeolite dist 7cdf6fc.
+# Engine-side fixes since pin 70: control-plane sender gates
+# fail closed, worker/blob storage scoping, tab reply binding
+# (#169, #170, #171, #185); page cache session/auth scope,
+# credentials handling, redirect-final URL keys and a body
+# size cap (#179, #184, #195); mid-body transport errors
+# surface as stream errors, not a clean EOF (#180); redirect
+# hops re-enter the full gate chain and injected headers stay
+# same-origin (#186, #194); NAVH pages recover their virtual
+# origin (#193); cookie __Host-/__Secure- prefixes (#191);
+# download partial-buffer cap with honest resume errors
+# (#192); css url() fragments survive engine-route unwrap
+# (#199); DevTools keyboard access (#220); fingerprint tz/
+# canvas consistency (#223-#226); svg paint tail, b64decode
+# len%4 rejection, bounded mint memo (#227-#229); plus the
+# wave 18-20 fixes beta rode at pins 71-73 (#200-#204,
+# #205-#208). sw.js 2c036ac7ea643f7b -> 88e39dd016c4ad30;
+# bootstrap.js 423b16b806b7f4cc -> cf8b76ad53488959.
+# Cargo-side pin moves 63b4f23 -> b0296f8: ships the
+# zeolite-server hardening wave (#181, #182, #183, #189,
+# #196, #198) and the deferred server wave (#197, #209-#213).
+# Pin 77: Zeolite dist db17179. Engine-side fix since pin 76: the
+# route search replaces a token-encoded destination query instead of
+# concatenating onto it (a query-only relative navigation "?x" has
+# browser replace semantics; JS-literal mints and legacy full-dest
+# tokens encode their query inside the token, and the glued-on outer
+# search produced "?a=1?b=2" upstream - Brave Ask on search.brave.com
+# sent the new question as a mangled double-q URL and the AI answer
+# never streamed). The same replace semantics apply at the cache-key,
+# refresh, cache-bypass and forwarded Referer seams, and a NAVH
+# full-dest token no longer drops the route search. sw.js
+# 88e39dd016c4ad30 -> 4102766dcac60856; bootstrap.js cf8b76ad53488959
+# unchanged; Cargo-side pin stays b0296f8 (app-only change).
+# Pin 78: Zeolite dist 54f2c098. SPA pathname routing: an oxc AST
+# pass in the wasm rewriter renames location reads (bare location and
+# <window|self|globalThis|document|top|parent>.location member reads)
+# to the __zl virtual location (#235), scope-aware so shadowed locals,
+# writes, delete targets and shorthand keys stay untouched, with a
+# parse-failure fallback that keeps the input unchanged and counts the
+# failure in diagnostics; the bootstrap gains applyVloc (#236): a
+# location-like view over the virtual path/query/hash (initScript
+# vpath; the host stays opaque), pushState/replaceState re-anchoring
+# through /__zl_prel__/ engine routes, popstate/hashchange sync, and
+# assign/replace/reload/toString parity. Pathname-routed SPAs (Brave
+# Ask's SvelteKit router) match their routes in-app instead of throwing
+# Not found on the opaque engine pathname. sw.js 4102766dcac60856 ->
+# 4e6e7a32ae284b67; bootstrap.js cf8b76ad53488959 -> 29bfb41d3b8e83ce
+# (bootstrap budget raised 25600 -> 27648 in the Zeolite CI gate,
+# measured 27117); rewriter_wasm_bg.wasm grows 114438 -> 663252 bytes
+# (the oxc parser rides the wasm; scripts without a location token
+# skip the pass - measured ~0.15 ms per 2 MB fast path, ~24 ms per 1
+# MB parsed and renamed). Cargo-side pin stays b0296f8 (rewriter crate
+# only; it is not a server dependency).
+# Pin 79: Zeolite dist d934d4a. #236 regression fix: the virtual
+# location anchored every re-anchored pushState/assign on the full
+# native pathname captured at bootstrap, so a document loaded at a
+# re-anchored <entry>/__zl_prel__/<encoded> URL nested the previous
+# tail inside every new encoded tail and each SPA fallback reload
+# doubled it (Brave Ask: 429 retry loops, then 414 Request-URI-Too-
+# Long). entry strips its prel tail, the NAVH native-parse decodes a
+# prel tail as the newer virtual state instead of reading it as site
+# path, and decoded tails cut at an embedded marker so legacy
+# history entries cannot re-seed the loop (Zeolite 385e55ef, CI run
+# 620 green, 4 regression tests). sw.js 4e6e7a32ae284b67 unchanged;
+# bootstrap.js 29bfb41d3b8e83ce -> 90af15190531c5df (27441 bytes,
+# under the 27648 gate); Cargo-side pin stays b0296f8 (bootstrap-
+# only change, so the /build zlswSha cannot distinguish this bump -
+# verify the served /zlsw/bootstrap.js hash instead).
+# Pin 80: Zeolite dist 47f0ab3. Bug-scout fix wave (Zeolite 8569bc71,
+# CI run 623 green, vitest 1215): #239 vloc cross-origin slip -
+# protocol-relative and whitespace-prefixed absolute URLs were
+# re-anchored as own virtual paths instead of passing through
+# natively; #240 the globals write-target peek now skips comments
+# between the member and the assignment operator (a misrenamed
+# write threw in strict mode); #241 inline event-handler
+# attributes run the same #235 globals pass as script bodies;
+# #242 a preceding ".delete" property tail no longer suppresses
+# the rename. sw.js 4e6e7a32ae284b67 unchanged; bootstrap.js
+# 90af15190531c5df -> 20dee634ae9c98c9 (27517 bytes, under the
+# 27648 gate); rewriter_wasm_bg.wasm moves 663252 -> 1a5c2582
+# (globals.rs + handler seam). Cargo-side pin stays b0296f8
+# (rewriter crate is not a server dependency); sw.js is unchanged,
+# so verify the served /zlsw/bootstrap.js hash instead.
+# Pin 81: Zeolite dist a84c43f. #238: the Brave SERP reload
+# storm. SvelteKit client start() compares document.URL with
+# location.href and self-assigns location.href to resync (kit
+# PR 11179, a basic-auth drop); the #235 pass renamed
+# location.href reads to the virtual __zl.href but left
+# document.URL native, so against the opaque navh route the
+# compare never passed and start() re-navigated on every
+# load (43 identical document loads in ~30s live, then Brave
+# 429 + PoW interstitial). The globals pass now rewrites
+# scope-resolved document.URL and document.documentURI reads
+# (receiver 'document' only; window.URL is the URL
+# constructor) to __zl.href, so both sides of the compare see
+# the virtual URL and the check never fires (Zeolite 7c3f6c21,
+# CI run 626 green, 144 rewriter tests incl. 2 new). sw.js
+# 4e6e7a32ae284b67 unchanged; bootstrap.js 20dee634ae9c98c9
+# unchanged; rewriter_wasm_bg.wasm moves 1a5c2582 ->
+# 7acc3b508f693a5a (664473 bytes) - the ride is in the wasm,
+# so the /build alarm pins cannot distinguish this bump;
+# verify the served /zlsw/rewriter_wasm_bg.wasm hash instead.
+# Cargo-side pin stays b0296f8 (rewriter crate is not a server
+# dependency).
+# Pin 82: Zeolite dist 9b6f7f8. Two engine waves since pin 81.
+# #248 (google.com/ai reCAPTCHA solve loop): the post-solve
+# re-navigation minted a prel-of-prel URL and decodeNavHandlePath
+# leaked engine markers into the upstream path (Google's own 404),
+# so Google re-challenged forever; the prel tail now peels to the
+# deepest level (bounded 4) and vloc toVirtual decodes route-shaped
+# inputs instead of re-wrapping them (Zeolite 1dd647a, bootstrap
+# budget 27648 -> 28672 for the 27678-byte result).
+# #243-#247: new app/src/lifecycle.ts draws the host/proxied client
+# boundary structurally (host-only zl:tabsOp/zl:downloadOp/zl:notifyOp;
+# tabs.sendMessage and zl:scripting only reach the client whose
+# decoded destination matches, unmatched scripting is dropped),
+# install holds the rewriter prewarm in waitUntil, the extension
+# boot phases fail independently with EXTENSION diagnostics, and
+# startUpdateChecks runs once per worker evaluation (Zeolite 530d9ab,
+# CI run 630 all 5 jobs green, suite 1232). sw.js 4e6e7a32ae284b67
+# -> d693a74c593bb725 (359381 bytes); bootstrap.js 20dee634ae9c98c9
+# -> eced033e919dfb38; rewriter_wasm_bg.wasm unchanged
+# 7acc3b508f693a5a. Cargo-side pin stays b0296f8 (SW-only fixes).
+# Pin 83: Zeolite dist d63dd86. One engine wave since pin 82.
+# #249 (UI loads but every engine request wedges to embedder
+# timeout): the boot gates awaited unbounded promises, so a hung
+# Cache Storage or IndexedDB open stalled routeReady/engineReady
+# forever and no proxied request ever settled. lifecycle.ts now
+# races every boot step with a 10s deadline (routeReady, the
+# fetch-handler engine gate, the extension-route gate, the
+# control-plane gate, the install prewarm, the extension boot
+# phases), emits a SERVICE_WORKER "boot step wedged; continuing
+# degraded" diag on expiry, and still propagates rejections
+# (Zeolite a99f021, CI run 632 all 5 jobs green, suite 1236
+# incl. 4 new bounded-boot tests). sw.js d693a74c593bb725 ->
+# c19ce11c78efd751 (359826 bytes); bootstrap.js eced033e919dfb38
+# unchanged; rewriter_wasm_bg.wasm unchanged 7acc3b508f693a5a.
+# Cargo-side pin stays b0296f8 (SW-only fix).
+# Pin 84: Zeolite dist d5a2a66. Two engine waves since pin 83.
+# #258 (startpage.com fails its verification pass): the
+# pass-challenge redirect repair rebuilt bare engine-origin
+# Locations verbatim, so the Anubis PoW redirect left the
+# frame virtual home and hit the SPA 404; the fix rebuilds
+# such redirects against the frame virtual home origin and
+# route path (Zeolite 20d2b85, CI run 633 all green, suite
+# 1240 incl. 4 new challenge-redir tests).
+# #259 (search.brave.com homepage logo 404): dotted-hash
+# SvelteKit asset finals are now recoverable and the flat
+# asset recovery tries 4 bases, so the page-minted
+# virtual-origin asset recovers from the cdn.search.brave.com
+# immutable base (Zeolite 1fbac2dc, CI run 634 all 5 jobs
+# green, suite 1242 incl. 2 new assetbase tests). sw.js
+# c19ce11c78efd751 -> 42dda133cb8d9a70 (359976 bytes);
+# bootstrap.js eced033e919dfb38 unchanged. Cargo-side pin
+# stays b0296f8 (SW-only fixes).
+# Pin 85: Zeolite dist 65bdf61. One engine wave since pin 84, the
+# 2026-10-18 small-issue wave (Zeolite 7fca90e on top of the #290
+# deref fix, CI run 39117282705 all green, suite 1249):
+# #291 mapRefreshHeader ends a quoted url= at its closing quote and
+# an unquoted one at the next semicolon, #292 downloadFilename
+# decodes RFC 6266 filename* ext-values with a plain-filename
+# fallback, #293 the WS shims count pre-handshake queued sends in
+# bufferedAmount (page + worker realms), #294 the page-realm mint
+# memo is capped at 256 entries with LRU re-insert and eviction,
+# #295 rewrite rules bind to the from-host boundary. sw.js
+# 42dda133cb8d9a70 -> d29b017afeef63eb (360334 bytes);
+# bootstrap.js eced033e919dfb38 -> e890e6083be75719. Cargo-side
+# pin stays b0296f8 (SW-only fixes).
+# Pin 86: Zeolite dist bee555f. One engine wave since pin 85, the
+# 2026-10-18 fix-wave completion (Zeolite a43aeb10 on top of the
+# agent commits 514471f8, 79b3377a, 4aeb5e3e and the d8126d64
+# tabs.ts splice repair, CI run 39124338300 all 5 jobs green,
+# suite 1273): #270 32-bit fnv1a site hash with jar origin
+# migration, #289 durable-jar-only origins records, #262/#263/
+# #264 honest IndexedDB/cmp/caches.match shims, #265 siteconfig
+# key normalization, #272 webRequest listener detail copies,
+# #282 live webRequest permission views, #271 tabs.onUpdated
+# changeInfo gating (an empty gated changeInfo is not delivered),
+# #278 host-visible filtered tab queries, #283 tab op deadlines
+# with closed-tab rejection, #286 query title globs, #281
+# cookies.onChanged scoping with revoke-on-delivery, #285
+# content-script asset validation, #276 credentials-gated
+# cookie jar, #288 permission-correct webRequest URLs. sw.js
+# d29b017afeef63eb -> 3a6e775447488fe4 (362658 bytes);
+# bootstrap.js e890e6083be75719 -> 1e55ec0f04f848b9 (27962
+# bytes). Cargo-side pin stays b0296f8 (SW-only fixes; the
+# rewriter crate is not a server dep).
+# Pin 87: Zeolite dist 13d9b85. One engine wave since pin 86:
+# #297 (extensions appeared installed but never ran in the
+# host-embedded browsing pane): every proxied document arrives
+# with sec-fetch-dest iframe and csInjectUrls treated any
+# iframe/object destination as a genuine subframe, so
+# resolveContentScripts dropped every non-all_frames content
+# script - and with content scripts dead, MV3 backgrounds
+# never boot on demand, so extension service workers never
+# initialized. A frame whose parent referrer is a host page
+# (neither a NAVH nor an engine route) is now the pane main
+# surface for content-script matching; genuine subframes of
+# proxied documents keep subframe semantics; absent, about:,
+# or unparseable parents fail closed (Zeolite 9d33b44 on
+# 1ae6cdc, CI run 39129225053 all 5 jobs green, suite 1278
+# incl. 5 new cs-inject tests). sw.js 3a6e775447488fe4 ->
+# 8ef1ef7239120397 (362825 bytes); bootstrap.js
+# 1e55ec0f04f848b9 unchanged. Cargo-side pin stays b0296f8
+# (SW-only fix).
+# Pin 88: Zeolite dist 7e29d525. Two engine waves since pin 87.
+# #250 the control-plane messageListener (control.ts/sw.ts) keeps
+# the message event alive for the whole handler (waitUntil) and a
+# failed dispatch answers a structured {ok:false,error:"control
+# handler failed"} reply with a RUNTIME diag instead of an unhandled
+# rejection; #252 engine init() resolves only on ack.ok===true,
+# setSiteRoute persists only after the worker acks, post() settles
+# exactly once (settled flag, timeout cleared, port closed);
+# #253 docCookiePorts are capped at 16 per client with shift+close
+# eviction (Zeolite ce9eb6b, CI runs 39132519199 + 39133625103 all
+# 5 jobs green, suite 1288 incl. +10 tests).
+# #266 the storage-event isolation filter recognizes object-style
+# listeners ({handleEvent}) too, keyed by the raw listener so
+# removeEventListener finds both shapes; #261 the cooldown relay
+# branch carries its own first-byte deadline: an embedder that never
+# answers aborts with zl:relayCancel (WispStallError) instead of
+# hanging, and caller aborts stay honest AbortErrors (Zeolite
+# 1a70811, suite 1291 incl. +3 tests). sw.js 8ef1ef7239120397 ->
+# 49896d2b07867e9f (363469 bytes); bootstrap.js 1e55ec0f04f848b9 ->
+# d00b5e4270b011f1 (28080 bytes). Cargo-side pin stays b0296f8
+# (SW-only fixes).
+# Pin 89: Zeolite dist 9eee560. One engine wave since pin 88, the
+# bootstrap compat wave (Zeolite a3406c0 on main 6cd18b6, CI run
+# 39137417144 all 5 jobs green, suite 1297 incl. 6 new tests):
+# #268 the vorigin relabel/remove pass recognizes object-style
+# (EventListener {handleEvent}) listeners, not just functions;
+# #269 ScopedChannel subclasses the real BroadcastChannel
+# constructor with its own name getter; #273 the scoped storage
+# store is a Proxy over the backing store (named-property
+# forwarding, key(i) strips the site prefix); #274 EventSource
+# registrations dedupe with native-bound removeEventListener,
+# once-drop and AbortSignal support; #275 ZlWorker/ZlSharedWorker
+# constructors enforce new-only semantics; #284 relay listeners
+# filter object-style listeners through a wrapper registry so
+# removeEventListener finds the real listener shape.
+# bootstrap.js d00b5e4270b011f1 -> 8c7520cbfad8035d (29383 of
+# the 29696 budget, raised 28672 -> 29696 in the Zeolite CI gate);
+# sw.js unchanged 49896d2b07867e9f (bootstrap-only wave, so the
+# /build zlswSha cannot distinguish this bump - verify the served
+# /zlsw/bootstrap.js hash instead). Cargo-side pin stays b0296f8
+# (bootstrap-only change).
+# Pin 90: Zeolite dist 3826f41. Two engine waves since pin 89, the
+# 2026-10-18 bug-hunt fix wave.
+# #314 (range serving OOM): a single Range request against a cached
+# entry buffered the whole body with arrayBuffer() before deciding
+# the range lay outside it, so a byte-range probe on a huge cached
+# document could balloon the worker. The range path now prechecks
+# the cached content-length against ZL_RANGE_MAX and refuses the
+# range before buffering (Zeolite 54053ce, CI run 39139691546 all
+# 5 jobs green, suite 1300 incl. 3 new range tests). sw.js
+# 49896d2b07867e9f -> e20a18398c4d25a8 (363561 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d.
+# #322 (blocked-element swallow unbounded): drop_raw swallowed raw
+# text until the close tag, so a blocked script with no close tag
+# buffered the rest of the document without bound. The swallow
+# buffer is capped at 256 KiB and keeps only the longest suffix
+# that is a prefix of the close marker, so no close tag can be
+# missed (Zeolite 0213393, CI run 39141278968, cargo suite incl. 2
+# new bounded-drop_raw tests). Rust-only: sw.js and bootstrap.js
+# unchanged (e20a18398c4d25a8 / 8c7520cbfad8035d); the ride is in
+# rewriter_wasm_bg.wasm (7908d03c7920f8a7), so the alarm pins
+# cannot distinguish this bump - verify the served
+# /zlsw/rewriter_wasm_bg.wasm hash instead. Cargo-side pin stays
+# b0296f8 (the rewriter crate is not a server dep).
+# Pin 101: Zeolite dist 15a049461aca31f1862e3f791990cfc5f18d72eb
+# (from CI build 39574090321, Zeolite main 45ed5449, all 5 jobs
+# green, app suite 1404 tests). Pin 101 carries the 2026-10-21
+# Zeolite fix wave: #385 expired navigation handles re-mint on
+# GET navigations (Zeolite 22c0755); #383 prel parents always
+# reach the handle form (a non-NAVH parent now mints a fresh
+# NAVH handle for the decoded destination too, instead of
+# parking the document on the opaque prel pathname); #382 the
+# 60s relay header deadline breach resolves null and emits a
+# TRANSPORT DIAG row so the caller falls back instead of
+# wedging (undeclared long-polls beyond 60s stay an honest
+# residual); #381 Ghostery list fetches ride the full
+# upstreamFetch transport decision (relay routing works on
+# relay-only deployments) and load failures emit TRANSPORT
+# DIAG rows (no longer silent). sw.js 4326069120ccb9dc ->
+# c7cb3102e12f9e57 (625725 bytes); bootstrap.js e15f38fb1b1557e2
+# unchanged (30381 bytes); rewriter_wasm_bg.wasm unchanged.
+# Cargo-side pin stays a385fa9.
+# Pin 112: Zeolite dist b7c924e5a6bb658d92922a541fbcb03a3870d534
+# (from CI build 39847696942, Zeolite main c981e19a, all 5 jobs
+# green, app suite 1459 tests). Pin 112 ships the Injector
+# phase 2 follow-up: the in-page NAVH mint (navhCleanFromPrel,
+# the prel-navigation clean 302) honors queryRoutes - with the
+# toggle on, the redirected handle rides the query shape
+# (<real path>?<real query>&zlNavh=<token>), so a reloaded
+# document owns a natively readable location.pathname; engine-
+# internal path collisions and missing route keys fall back to
+# the NAVH path form (#383 fail-closed intact). sw.js
+# 3b94ab518397c471 -> c6debef338723924 (629684 bytes);
+# bootstrap.js unchanged c7300fa9981e71b4. Cargo-side pin
+# stays a385fa9 (SW-only change).
+# Pin 111: Zeolite dist 98e24bc4ec1e13562b876ab7f852507f130686a7
+# (from CI build 39812893153, Zeolite main e293ecc5, all 5 jobs
+# green, app suite 1456 tests). Pin 111 ships the split-origin
+# URL-bar strand: decodeLegacyRoute validates the whole legacy
+# /zl/<b64u> shape (two segments, the configured prefix or the
+# reserved zl segment, a strict-UTF-8 http(s) b64u payload,
+# never a keyed tail) and wins at the escape seam ahead of the
+# settled-context recovery, so a URL-bar navigation to a legacy
+# route minted under the other origin decodes to its real
+# destination instead of a guaranteed upstream 404 resolved
+# against the previous page's virtual origin; genuine escaped
+# relative paths and undecodable tails keep the ordinary
+# recovery order. Cargo-side pin stays a385fa9.
+# Pin 110: Zeolite dist 35f36ab14aeeef3dc8720bdeb6a30748e9ee1ff8
+# (from CI build 39788565776, Zeolite main f9881a4f, all 5 jobs
+# green, app suite 1454 tests). Pin 110 ships Injector phase 2:
+# query-shape committed routes behind the queryRoutes opt-in
+# (default OFF, no live traffic change). zl:navHandle mints
+# <real path>?<real query>&zlNavh=<token> when the host opts in
+# via zl:config, so the committed pathname IS the real
+# destination path and native location.pathname reads work
+# without a shim; decodeClientUrl decodes the shape at the
+# shared client seam, handleFetch serves live tokens, re-mints
+# expired GET navigations (#385 mirror) and fails garbage
+# closed; the sender gate classifies query-shape senders as
+# proxied (never host, even at "/" or "/index.html"); vloc
+# parses the native form and re-commits real paths natively
+# keeping the token (history virtualization). Engine-internal
+# path collisions refuse the mint and fall back to the NAVH
+# form. sw.js 32303e296200b7db -> 8390cea8526d542a (629360
+# bytes); bootstrap.js 7dfd6645656bab22 -> c7300fa9981e71b4
+# (35113 bytes). Cargo-side pin stays a385fa9.
+# Pin 109: Zeolite dist 429b185188404f5373c500be906a2fe5d8fd3f5e
+# (from CI build 39770557101, Zeolite main d778ba0e, all 5 jobs
+# green, app suite 1441 tests). Pin 109 ships the 2026-10-22 scout
+# wave, Zeolite #392-#400: the antiframe sink scan emits a verbatim
+# method call instead of a bare ?.reload?. reference (#392),
+# comparison folding refuses member-chain operands (#396), a quote
+# inside a regex literal no longer opens a fake string (#398), an
+# uppercase </SCRIPT> ends the script block (#397), an expired NAVH
+# parent still resolves its prel tail (#393), an expired token head
+# resolves its tail against the context origin instead of doubling
+# the page path (#395), a storage failure answers null instead of []
+# so route keys never strand (#399), a relay stall feeds the storm
+# detector (#400), and the jar profile state persists in the Cache
+# API across idle worker restarts (#394). sw.js af5fd80829884d7b ->
+# 32303e296200b7db (628200 bytes); bootstrap.js 7dfd6645656bab22
+# unchanged (34628 bytes). Cargo-side pin stays a385fa9.
+# Pin 108: Zeolite dist a7e663ae132c89dca2d04324307fc14b87404d31
+# (from CI build 39753906400, Zeolite main 88cbc94a, all 5 jobs
+# green, app suite 1436 tests). Pin 108 ships the idle-restart
+# family, Zeolite #389/#390/#391: undecodable legacy-shaped routes
+# answer an engine 404 instead of the origin 503 (#389), the
+# transport engine choice persists in the Cache API across idle
+# worker restarts so the UI and the worker agree again (#390), and
+# the worker broadcasts zl:relayLost at every cold start so the
+# relay re-arms in seconds instead of the 30s backoff cycle (#391;
+# live pre-fix recovery was 33.9s). sw.js 71d0bd6f016437e7 ->
+# af5fd80829884d7b (627231 bytes); bootstrap.js 7dfd6645656bab22
+# unchanged (34628 bytes). Cargo-side pin stays a385fa9.
+# Pin 107: Zeolite dist 3263e6e423b7cfabb811b3e86a2a00ec15aaa565
+# (from CI build 39738165242, Zeolite main d58131c3, all 5 jobs
+# green, app suite 1427 tests). Pin 107 ships the location
+# member-write fix, LB #182: the rewriter renames the object
+# of member writes (location.hash = x becomes __zl.hash = x),
+# but the vloc view exposed getters with no setters, so
+# hash-routed SPA writes were silently lost (sloppy) or
+# threw (strict). The view now carries setters: hash mirrors
+# natively plus a synchronous cur update, search/pathname
+# rebuild the virtual URL preserving the other components
+# and navigate.
+# sw.js 71d0bd6f016437e7 unchanged (626483 bytes);
+# bootstrap.js 20589f579aa89383 -> 7dfd6645656bab22
+# (34628 bytes; the CI bootstrap size budget rose
+# 34304 -> 34816). Cargo-side pin stays a385fa9.
+# Pin 106: Zeolite dist ce1e64c606f4dd9e9a707b9b4b1270cdb16faaef
+# (from CI build 39732131533, Zeolite main 4c73252e, all 5 jobs
+# green, app suite 1423 tests). Pin 106 fixes the two audit
+# findings on the pin-105 anchor shim, Zeolite #387/#388: the
+# scan collected only the first 2*64 route values from the
+# document head on every pass and never paged, so deep anchors
+# on large pages kept native route reads (collection now skips
+# memoized and inflight values, and a capped decode reply
+# schedules the next scan, converging across many-anchor pages),
+# and SVG anchors expose href as an SVGAnimatedString whose
+# baseVal read bypassed the navguard property seam
+# (SVGAElement.prototype.href now wraps with a virtual view on
+# a memo hit, writes forward natively; the AREA half of #388 was
+# wrong, the navguard swap row already covers HTMLAreaElement).
+# sw.js 71d0bd6f016437e7 unchanged (626483 bytes); bootstrap.js
+# 509c8042d96c8ba7 -> 20589f579aa89383 (34294 bytes; the CI
+# bootstrap size budget rose 33792 -> 34304).
+# Cargo-side pin stays a385fa9.
+# Pin 105: Zeolite dist 17c5165fa30b1d05e7fac5f1035093434c527b6f
+# (from CI build 39677692896, Zeolite main 34737bc0, all 5 jobs
+# green, app suite 1420 tests). Pin 105 ships Injector phase 1,
+# the anchor read virtualization fixing LB #180: parser-inserted
+# anchors read back as engine route URLs, and Startpage derives
+# its SERP breadcrumb from the anchor href, so the opaque
+# content-origin /j/<token> route leaked into the visible display
+# text. The new bootstrap/anchorshim.ts memoizes route ->
+# virtual destination and serves the nav guard's swap-row
+# property getter plus an Element.getAttribute wrap, asking the
+# worker to decode the page's own markup routes over the new
+# zl:decodeRoutes control message (PAGE_MESSAGES admission like
+# zl:mint, bounded 64 routes per message; garbage and foreign
+# tokens decode to null). Honest limits: the first read before
+# the decode reply lands returns the native route value;
+# detached anchors never join a scan. sw.js 96b27c209b7f596e ->
+# 71d0bd6f016437e7 (626483 bytes); bootstrap.js
+# 37460e146d217cb7 -> 509c8042d96c8ba7 (33782 bytes; the CI
+# bootstrap size budget rose 31744 -> 33792 for the shim).
+# Cargo-side pin stays a385fa9.
+# Pin 104: Zeolite dist 397bce562c0f18ec0a916b00c7a149548a99f6e6
+# (from CI build 39656714434, Zeolite main fb845658, all 5 jobs
+# green, app suite 1415 tests). Pin 104 fixes LB #154: the
+# Google gapi loader sanity-validates generated module URLs
+# against an apis.google.com literal and threw before any fetch
+# because the JS literal pass rewrites the "https://apis.google.com"
+# literal into an opaque route token. The shipped gapi-native
+# policy rule (route "native", types script, host apis.google.com)
+# demotes the literal pass for that host, and the new
+# transportMatch() composes behavior rules with transport rules
+# so the load still rides the embedder relay (default-relay)
+# instead of falling through to the dead wisp transport; engine
+# issue #34 keeps every cross-origin fetch from controlled pages
+# inside the engine, so nothing leaks direct. sw.js
+# ce02ad5c6c73bd90 -> 96b27c209b7f596e (626218 bytes);
+# bootstrap.js unchanged 37460e146d217cb7. Cargo-side pin
+# stays a385fa9.
+# Pin 103: Zeolite dist ec7fd8fe27d7b10ffd7349e5a238cb1fd72bebc9
+# (from CI build 39636675089, Zeolite main 2b1633b, all 5 jobs
+# green, app suite 1411 tests). Pin 103 fixes the two roots of
+# the #107 phase 2 live gap: the fail-closed host gate (#170)
+# classified the /zlsw-register boot page as a proxied sender
+# and silently refused its host-only zl:relayRegister /
+# zl:wispRegister / zl:embedderOrigin registrations, so the
+# content-origin relay never opened and content loads rode the
+# wisp transport instead; decodeClientUrl now falls back to
+# decodeLegacyRoute so /zl/<b64u> clients decode on a
+# prefix-less (default /j/) worker. sw.js
+# 628614de5754a91f -> ce02ad5c6c73bd90 (626093 bytes);
+# bootstrap.js unchanged 37460e146d217cb7 (31406 bytes).
+# Cargo-side pin stays a385fa9.
+# Pin 102: Zeolite dist dc16a50c8e95cdc59a0460fd4ba5431861fb7bcc
+# (from CI build 39628337530, Zeolite main 0c809c2, all 5 jobs
+# green, app suite 1410 tests). Pin 102 carries the #107 phase 2
+# embedder URL/title sync: zl:getEmbedder (page-facing, in
+# PAGE_MESSAGES) answers an embedded frame with the registered
+# embedder origin plus THIS client's own SW-decoded virtual URL;
+# zl:embedderOrigin (host-only, the boot page's zlRegAsk
+# handshake) registers the embedder origin; the bootstrap gained
+# the embedsync module (posts {lb:"nav",url,title} to the parent
+# on load, vloc moves and title mutations) and the vloc
+# onVlocChange hook at its real-path choke points; the bootstrap
+# size gate rose 30400 -> 31744 for it. sw.js
+# c7cb3102e12f9e57 -> 628614de5754a91f (626076 bytes);
+# bootstrap.js e15f38fb1b1557e2 -> 37460e146d217cb7 (31406
+# bytes). Cargo-side pin stays a385fa9.
+# Pin 100 (re-pointed to carry ALL fixes): Zeolite dist 12d9f83c
+# (from CI build 39487725296, Zeolite main fb6f8fa0, all 5 jobs
+# green; bootstrap budget 30381/30400). Pin 100 first shipped
+# ARG 812cfd7 (Zeolite 15f8364: the fetch handler pre-deadline
+# browser-API awaits - clients.get in the jar root recovery and
+# the foreign/initiator lookups, caches.delete in the legacy
+# page cache discard, caches.open/match in pageCacheMatch - ride
+# raceBoot bounded at 1.5s; a never-settling call wedged the
+# navigation and parked the tab on an empty grey root, LB #167;
+# regression boot-wedge.test.ts). After the three open Zeolite
+# PRs merged, pin 100 was re-pointed so it is the one with all
+# fixes: PR #367 (5xx retry memoization for policy.ts/rules.ts
+# loads, 60s relay header deadline in relayfetch.ts, cookieStore
+# delete isolation; bootstrap.js 9d1cb1fba82b9ba8 ->
+# e15f38fb1b1557e2, 30381 bytes), PR #380 (runtime primary WISP
+# endpoint zl:wispPrimary + CORE_CONTROL_TYPES registry label;
+# the engine half of LB #165), PR #363 (Ghostery network filter
+# engine: ghostery.ts matcher, rules.ts GhosteryRedirect
+# redirect support, request.ts redirect wiring, sw.ts transport
+# config; @ghostery/adblocker-web 2.20.1, MPL-2.0; list fetches
+# ride the raw wisp transport by design, so on relay-only
+# deployments remote filter lists never load and local rules
+# stay active). sw.js 828ad258ba730e20 -> 4326069120ccb9dc
+# (624690 bytes, the Ghostery engine rides in sw.js);
+# rewriter_wasm_bg.wasm 38adf0597150389a unchanged. Cargo-side
+# pin stays a385fa9.
+# Pin 99: Zeolite dist c3a1d78 (from CI build 39460354394,
+# Zeolite main 2b8c802, all 5 jobs green, app suite 1389 tests).
+# Correction and completion of pin 98: the pin-98 ARG pinned
+# 7d855ef, which is not a commit on the Zeolite dist branch
+# (the Render build 404ed on the tarball fetch; no service ever
+# went live on it). Pin 99 carries both engine fixes: (1) the
+# pin-98 payload, script src split routes (Zeolite 1297742:
+# script src/href under the keyed codec mints a path-preserving
+# route so loaders validating their own script URL PATH pass,
+# the YouTube ytembeds "writeEmbed is not defined" class);
+# (2) prel navigation redirect (Zeolite 2b8c802: a GET
+# navigation arriving on a __zl_prel__ tail under a NAVH parent
+# answers one same-origin 302 to the visible handle form,
+# token + real path + real query, so the reloaded document owns
+# a readable location.search - the Google SERP/AI-overview sei
+# reload parked on the opaque prel pathname and re-triggered,
+# the #290 class). sw.js 63f678ad6fb2b335 -> cae2519a33479628
+# (376066 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged;
+# rewriter_wasm_bg.wasm 51a9435ac25eac23 -> 38adf0597150389a
+# (the split-route rewriter ride). Cargo-side pin stays a385fa9.
+# Pin 98: Zeolite dist 7d855ef (from CI build 39424088091,
+# Zeolite main 1297742, all 5 jobs green, app suite 1383 tests).
+# Script src split routes: script src/href attributes under the
+# keyed codec mint a path-preserving route (origin + /zl/ +
+# keyed origin-only token + the real path), decoded at the SW
+# fetch seams with the existing recoverPath, so loaders that
+# validate their own script URL PATH pass again (YouTube
+# ytembeds Oe wants "/_/js/" + "/k=": the opaque token broke
+# it, "writeEmbed is not defined" and Error: O on every
+# YouTube embed; the #296 src-surgery class). Long tails
+# (capped 2000 chars), query-only and bare-origin srcs keep
+# the opaque route. sw.js 63f678ad6fb2b335 -> 81253c4706ca2dae
+# (373551 bytes); bootstrap.js 9d1cb1fba82b9ba8 unchanged.
+# Cargo-side pin stays a385fa9 (rewriter + SW-side only).
+# Pin 97: Zeolite dist d78bb5a (from CI build 39413168260,
+# Zeolite main 1074e6d, all 5 jobs green, app suite 1382 tests).
+# Recovery-transport wave: flag-surgery and flat-asset recovery
+# candidates ride the full upstreamFetch transport decision (the
+# raw wispTransport.fetch lambda died on relay-only embedders with
+# a wisp error-7 fan-out, the 2026-10-20 sorry-page report),
+# rejected candidate bodies are cancelled before the next base is
+# tried, and a flag-surgery recovery miss emits a per-bail reason
+# DIAG warning (#290 residual, #347 class, #296 visibility).
+# sw.js 5a88a06a57303672 -> 63f678ad6fb2b335 (373499 bytes);
+# bootstrap.js 9d1cb1fba82b9ba8 unchanged. Cargo-side pin stays
+# a385fa9 (SW-only wave; Zeolite #379 closed as honest upstream:
+# products/index.rss is a real upstream 404, and async/hpba is a
+# sync XHR Chrome never routes through the SW).
+# Pin 96: Zeolite dist 81b3474 (from CI build 39392562420,
+# Zeolite main b2c21c3, all 5 jobs green, app suite 1377
+# tests). The 2026-10-20 scout wave: rewriter-side #368
+# comment-aware frame-buster folding, #369 non-executable
+# script bodies pass through, #370 chained cross-frame
+# sinks (riding rewriter_wasm_bg.wasm; verify the served
+# wasm hash for those three), and the bootstrap/SW series
+# #364 ws:// shim SyntaxError, #371 srcdoc script bodies,
+# #372 window.open noopener mint, #373 backslash-form
+# URLs, #374 EventSource stringify, #375 postMessage
+# transfer list, #376 cache refresh redirect hop gates,
+# #377 page-cache clear on fingerprint/UA change
+# (bootstrap budget 30400). sw.js 6975a139819b198b ->
+# 5a88a06a57303672 (372972 bytes); bootstrap.js
+# eb91c2a989aa89f0 -> 9d1cb1fba82b9ba8 (30349 bytes).
+# Cargo-side pin stays a385fa9 (the wave does not touch
+# zeolite-server).
+# Pin 95: Zeolite dist de70643 (from CI build 39377475538,
+# Zeolite main 7e95110, all 5 jobs green, app suite 1359
+# tests). One engine-side change since pin 94, SW-side: the
+# #256 build-time static plugin registry (7e95110: the
+# registry generates plugins-static.mjs at build time so the
+# service worker resolves plugin modules from a static
+# origin-local map instead of dynamic import; inert until a
+# plugin is requested; e2e plugin suite 5/5 on the local
+# toolchain). sw.js 9b924b1e1e5a4d42 -> 6975a139819b198b
+# (372152 bytes); bootstrap.js unchanged eb91c2a989aa89f0
+# (29649 bytes). Cargo-side pin stays a385fa9 (no
+# zeolite-server changes since pin 92).
+# Pin 94: Zeolite dist ac68e9c (from CI build 39316637933,
+# Zeolite main 525e4de, all 5 jobs green, app suite 1354+
+# tests). Four engine-side changes since pin 93, all SW-side
+# or rewriter-side: the #331 rewriter location renames for
+# computed member reads and optional chains (Zeolite 76354a1;
+# the ride is in rewriter_wasm_bg.wasm), the #290 keyed-route
+# diagnostics fix (21bca01: request.ts diag entries name the
+# requesting page and url), the #359 bound script recovery
+# with honest unavailable-plugin reporting (PR #360,
+# ded2ef2; partial for #256, the static plugin loader stays
+# open), and the #361 client-lineage cookie jar binding
+# (PR #362, 525e4de: jar profiles key on the host-window
+# lineage so incognito and normal windows stop clobbering
+# each other's profiles - the Zeolite half of LB #109; the
+# LB two-window regression still needs a live deploy).
+# sw.js 7db69875af0b35a8 -> 9b924b1e1e5a4d42 (371639
+# bytes); bootstrap.js 790c52c7c4beb41c -> eb91c2a989aa89f0
+# (29649 bytes). Cargo-side pin stays a385fa9 (no
+# zeolite-server changes since pin 92).
+# Pin 93: Zeolite dist 6727cba (from CI build 39166714671,
+# Zeolite main a6d37ed, all 5 jobs green, suite 1318 incl. 5 new
+# tests). Three engine-side changes since pin 92: the Vary
+# honor fix #346 (Zeolite PR #355, conservative form: any
+# non-empty Vary makes a response non-storable, so the URL-only
+# cache key can never serve a variant; the roadmap docs #353
+# ride along, docs-only), the relay re-registration fix #354
+# (Zeolite 7292e71: a relay-routed fetch that finds no channel
+# broadcasts zl:relayLost to window clients and waits once,
+# bounded 3s with a 30s backoff; the LB App.tsx listener
+# re-registers at once - fixes the fast.com/chatgpt.com SSL
+# error 35 class after an idle SW restart, LB #156), and the
+# SharedWorker identity scoping fix #260 (Zeolite a6d37ed: the
+# ctor folds the opaque site token into the worker name, both
+# arg forms, so two virtual sites on the one engine origin
+# never share a worker context). sw.js 248fc6aea789e2f2 ->
+# 7db69875af0b35a8 (366753 bytes); bootstrap.js
+# 8c7520cbfad8035d -> 790c52c7c4beb41c (29462 bytes).
+# Cargo-side pin stays a385fa9 (all fixes SW-side).
+# Pin 92: Zeolite dist 7b9593f (from CI build 39162909529). Two
+# waves plus a fix since pin 91: the 2026-10-18 rewriter wave
+# (Zeolite e4f997f on main: #345/#342/#339; the ride is in
+# rewriter_wasm_bg.wasm 7908d03c7920f8a7 -> fc58b70eee7ab936b,
+# so the alarm pins cannot distinguish it - verify the served
+# wasm hash instead), the 2026-10-18 server wave (Zeolite
+# a515b17 on main: #343/#350/#351/#352/#340; server-side only,
+# not in the dist bundle - it ships via the Cargo-side rev bump
+# below), and the app fix #296 flag-surgery script URL recovery
+# (Zeolite a385fa9 on main, CI run 39162909529 all 5 jobs green,
+# suite 1313 incl. 4 new tests; fixes the Google
+# /sorry/httpd=1/... script 404 class that broke search results
+# and the AI overview). sw.js 54e173c073e5de4b ->
+# 248fc6aea789e2f2 (366108 bytes); bootstrap.js unchanged
+# 8c7520cbfad8035d. Cargo-side pin b0296f8 -> a385fa9 (first
+# server-dep bump since pin 76; ships the 2026-10-18 server wave
+# a515b17 with the regenerated server/Cargo.lock).
+# Pin 91: Zeolite dist 9927bd7. One engine wave since pin 90, the
+# 2026-10-18 app security wave (Zeolite 60b9404a on main, CI run
+# 39142882453 all 5 jobs green, suite 1309 incl. 9 new tests):
+# #337 document.cookie cannot overwrite or delete an HttpOnly
+# cookie, #338 the x-zl-cached-at / x-zl-final-url internal view
+# headers are stripped from served cache copies, #341 an If-Range
+# validator mismatch serves the full body instead of a range
+# slice, #344 WEBNAV.domContentLoaded fires from the
+# sender-derived dest, #349 cookie names and values reject
+# control characters at jar admission, #336 the compat doc
+# discloses the zl:ext one-world limit (the page-visible bridge
+# cfg URL makes per-token scoping impossible). sw.js
+# e20a18398c4d25a8 -> 54e173c073e5de4b (364388 bytes);
+# bootstrap.js unchanged 8c7520cbfad8035d; wasm unchanged
+# 7908d03c7920f8a7. Cargo-side pin stays b0296f8 (SW-only
+# fixes).
+# Pin 113: Zeolite dist 07bb4ce0a48650b7e72c8043557efc1fd5af48fd
+# (from CI build 39856666415, Zeolite main f8ea0553, all 5 jobs
+# green, app suite 1464 tests). Pin 113 ships COEP embedder
+# parity: the engine worker rebuilds every default/cors Response
+# with cross-origin-resource-policy: cross-origin at the
+# respondWith seam (app/src/corp.ts withCorp; status, headers
+# and body preserved, opaque and error responses pass through
+# untouched), so a COEP require-corp embedder (Quartz and any
+# crossOriginIsolation shell) can embed the /zlsw-register boot
+# page and /zl/ content instead of ERR_BLOCKED_BY_RESPONSE. The
+# server half ships in the same wave (main.rs with_corp layer).
+# sw.js c6debef338723924 -> 0a62d321a5b09828 (630095 bytes);
+# bootstrap.js unchanged c7300fa9981e71b4 (35113 bytes); wasm
+# unchanged. Cargo-side pin stays a385fa9.
+# Pin 114: Zeolite dist 0497c201beadb7ccbb0dc5bc984eecc6b2eb165c
+# (from CI build 39919675076, Zeolite main 0b72b3f8, all 5 jobs
+# green, app suite 1469 tests). Pin 114 ships the query-handle
+# slash contract + vloc query-arm route-shape gate, Zeolite
+# #410/#411: buildQueryHandleUrl percent-escapes a surplus
+# leading-slash run in the committed query-shape path (a
+# handle opening // resolves protocol-relative on host
+# assignment) with decodeQueryHandle and the expired-handle
+# re-mint restoring it (#202 parity with the NAVH form); the
+# vloc presence-only query arm never wins on a route-shaped
+# pathname, so a NAVH page whose real destination query
+# carries a zlNavh impostor reads the real path instead of
+# the opaque handle (#180 leak class), and the query-mode
+# re-commit keeps the escaped form. sw.js 0a62d321a5b09828 ->
+# 559dd986814b1a53 (630107 bytes); bootstrap.js c7300fa9981e71b4
+# -> 66d387dbf16ee2c3 (35288 bytes, CI ceiling 35328). Cargo-side
+# pin stays a385fa9 (SW-only change).
+# Pin 115: Zeolite dist bdbce2d77c15651424ef64648ce6664e6af4125c (from CI build
+# 39947197172, Zeolite main 8882da6, all 5 jobs green, app
+# suite 1470 tests). Pin 115 ships the always-on Injector:
+# queryRoutes defaults to true at module eval (swstate.ts), so
+# query-shape committed routes are the default route shape; a
+# host zl:config remains the runtime opt-out. sw.js
+# 559dd986814b1a53 -> 378e4396918d9393 (630107 bytes);
+# bootstrap.js unchanged 66d387dbf16ee2c3. Cargo-side pin
+# stays a385fa9 (SW-only change).
+# Pin 116: Zeolite dist 75b2196efbcbd37c7284971fdd8be5380afb23a9 (from CI build
+# 39988823338, Zeolite main 7b957af3, all 5 jobs green, app
+# suite 1471 tests). Pin 116 ships Zeolite #412/#413: a
+# window.open popup opens the key-free marker route
+# /__zl_nav__/<b64u> directly (no minted keyed token: a fresh
+# tab with no installed worker can still decode the
+# destination instead of the engine-offline notice), and lazy
+# images default to true at module eval, so the
+# loading="lazy" rewrite pass survives worker restarts (a
+# host zl:config stays the runtime opt-out). sw.js
+# 378e4396918d9393 -> 9d7a233a5f2a00c6 (630107 bytes);
+# bootstrap.js 66d387dbf16ee2c3 -> 9a2224f65bff6141 (35111
+# bytes, CI ceiling 35328). Cargo-side pin stays a385fa9
+# (SW-only change).
+# Pin 117: Zeolite dist 7b1a4eed52b4d31cdc054486acb8207826a54c3a (from CI
+# build 40007080132, Zeolite main 5e6b87d8, all 5 jobs green, app suite
+# 1473 tests). Pin 117 ships the Google /zl/ 404 fix: a query-shape
+# route whose pathname is engine-route-shaped (a keyed zlNavh token
+# copied by page JS) is no longer decoded as a control-plane
+# destination (queryHandlePathShaped gates decodeQueryHandle and the
+# expired re-mint arm), and the zl:ping reply echoes imageLazy so the
+# debug menu readout matches the worker state. sw.js
+# 9d7a233a5f2a00c6 -> c3e4e7f4c1e41e0c (630146 bytes); bootstrap.js
+# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
+# a385fa9 (SW-only change).
+# Pin 118: Zeolite dist 535d045d612f1d46f82c738caac45c5382ea91c6 (from CI
+# build 40027192164, Zeolite main 6b2f7ac, all 5 jobs green; the app
+# suite gained the ogs-origin regression file). Pin 118 ships Zeolite
+# #420: the Google apps widget (ogs.google.com /widget/) embeds the
+# engine origin in its percent-encoded origin= query param, so the
+# widget frame never matched the page and the 9-dot products menu
+# stayed empty; the fetch seam now virtualizes that origin= to the
+# page origin at the same seam as the #112 reCAPTCHA co= fix
+# (fail-closed without a usable referrer). sw.js
+# c3e4e7f4c1e41e0c -> 13b00d3970710c96 (630808 bytes); bootstrap.js
+# unchanged 9a2224f65bff6141 (35111 bytes). Cargo-side pin stays
+# a385fa9 (SW-only change).
+# Pin 119 rides Zeolite main 2e1d1edf (#414 + cloudflare managed challenge):
+# /cdn-cgi/ challenge bytes now serve verbatim at every seam and fetch/XHR
+# HTML (dest "") no longer gets the __ZL init/bootstrap injection.
+# sw.js 13b00d3970710c96 -> 5343f47d3a5d80c8 (631236 bytes);
+# bootstrap.js unchanged 9a2224f65bff6141 (35111 bytes);
+# Cargo-side zeolite-server pin stays a385fa9 (SW-only change).
+# Pin 120 rides Zeolite main ca4e944b (wave 56: #415 #418 #419 #421
+# #422 #423 #424 #430; dist 63bb15be from CI build 40092642353, all
+# 5 jobs green). Chatgpt singleton-reset stall fan (#415), Startpage
+# engine-content links (#418), blooket Colyseus "Game not found"
+# (#419, ws subprotocol allow-list), wisp close_reason no-op (#421),
+# wisp handshake accepts major<2 (#422), b64u non-canonical input
+# (#423), zero-length UDP datagrams dropped (#424), content-origin
+# error pages state plainly they are a bug (#430). sw.js
+# 5343f47d3a5d80c8 -> 7997fd3e068d0c45 (631750 bytes); bootstrap.js
+# 9a2224f65bff6141 -> 665b64d76f4113a5 (35662 bytes; Zeolite CI
+# bootstrap size gate raised 35328 -> 36352). Cargo-side pin stays
+# a385fa9 (SW-only wave).
+# Pin 121 rides Zeolite main 20f13bf4 + 725c64eb (wave 57: #414
+# reopened fix + #433; dist 552e3d7f from CI build 40097710930, all
+# 5 jobs green). #414: HTML rewriting and injection are gated on
+# document destinations, so an HTML-typed fetch/XHR response (dest
+# "") keeps its body verbatim (the catbox /user/api.php class), and
+# the initiator fallbacks decode through decodeClientUrl so
+# query-shape routes yield a real initiator and the upstream Referer
+# is restored (the claude.ai challenge warning class). #433: the
+# hCaptcha host= (widget frame + checksiteconfig/getcaptcha) is
+# virtualized to the page hostname at the fetch seam (#112 co=
+# class), so hCaptcha's sitekey hostname validation sees the real
+# page host. sw.js 7997fd3e068d0c45 -> 8ee8dfcc1fa6a015 (632813
+# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
+# stays a385fa9 (SW-only wave).
+# Pin 122 rides Zeolite main 8b9274dd (wave 58: cf-mitigated
+# challenge documents serve verbatim; dist d8c1759 from CI build
+# 40106176498, all 5 jobs green). Cloudflare flags the managed-
+# challenge interstitial with cf-mitigated: challenge; the engine
+# now serves those documents verbatim (isChallengeMitigated +
+# CF_CHALLENGE_VERBATIM, gated off every rewrite/injection seam),
+# because the widget rejects rewritten challenge documents (nonce
+# CSP + corrupted _cf_chl_opt: the claude.ai Unable to connect
+# class). sw.js 8ee8dfcc1fa6a015 -> 820f9c301b91a2c7 (634810
+# bytes); bootstrap.js unchanged 665b64d76f4113a5. Cargo-side pin
+# stays a385fa9 (SW-only wave).
+# Pin 123 rides Zeolite main 2751acb (wave 59: the seven-issue
+# scout patch, #435 #436 #438 #439 #442 #443 #444, plus the
+# #429/#437 UA seam; dist bd5ef545 from CI build 40183809857,
+# all 5 jobs green). #435 the engine-route Referer carries the
+# zlNavh token again so the referrer decodes on query-shape
+# navigations; #436 the widget origin seams (reCAPTCHA co=,
+# apps widget origin=, hCaptcha host=) take the initiator so
+# the referrer resolves on query-shape routes; #438 the shared
+# transport reset is a synchronous generation bump (no in-flight
+# promise left wedged); #439 lifecycle host events broadcast to
+# extension contexts; #442 relay delivery answers
+# RelayDeliveryUnknownError and only idempotent methods (GET
+# HEAD OPTIONS PUT DELETE TRACE) may fall back, with the relay
+# header deadline upload-gated (RELAY_UPLOAD_HEADER_DEADLINE_MS
+# 600000 for size and multipart requests); #443 netlog redacts
+# headers and clientId at push and diag redaction covers
+# userinfo; #444 canReplayAfterFailure gates policy wisp
+# retries; #429/#437 the UA derives from the real fingerprint
+# profile (app/src/useragent.ts), default on. sw.js
+# 820f9c301b91a2c7 -> af77ce39fc42e6c2 (641658 bytes);
+# bootstrap.js 665b64d76f4113a5 -> d4a04eb5947837ef (37311
+# bytes). Cargo-side pin stays a385fa9 (SW-only wave).
+# Pin 124 rides Zeolite main 42bdef9: the #428 keyed-tail
+# recovery plus the claude.ai challenge-document revert
+# (dist 8f19b6a4 from CI build 40192665545, all 5 jobs
+# green). decodeLegacyRoute now attempts keyedDecode with
+# every held route key on keyed-shaped tails, so MAC-verified
+# mints minted under a different prefix decode instead of
+# 404ing with "undecodable legacy route" (the google.com
+# Sign in target=_top and Outlook MSAL strand class, #428);
+# foreign keys and garbage still fail closed. The challenge
+# verbatim demotion is reverted: cf-mitigated challenge
+# documents are rewritten with the engine init again (the
+# pin-121 behavior) because verbatim serving left the
+# claude.ai challenge document with a native page surface
+# and the orchestration went silent; isChallengeMitigated
+# stays in transit.ts for detection. sw.js af77ce39fc42e6c2
+# -> ccd2defa6ca73ba4 (641434 bytes); bootstrap.js unchanged
+# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only
+# wave).
+# Pin 125 rides Zeolite main c76f77e (wave 61: the MSAL/AAD
+# authorize redirect_uri virtualization, #431; dist 9a50a0a3
+# from CI build 40196894817, all 5 jobs green). MSAL names the
+# content origin in redirect_uri (window.location.origin is
+# LegacyUnforgeable, the #112 co= class), so the AAD authorize
+# round-trip returned top-level to the content origin and the
+# chain stranded. virtualAuthorizeRedirect in request.ts now
+# virtualizes redirect_uri at the fetch seam: host-gated to
+# login.microsoftonline.com / login.microsoft.com /
+# login.live.com on /oauth2/ paths ending /authorize, the
+# percent-decoded redirect_uri that parses to the engine
+# origin is rewritten to the page origin (referrer-derived,
+# fail-closed, state untouched). sw.js ccd2defa6ca73ba4 ->
+# acdc15f7f76b4273 (642319 bytes); bootstrap.js unchanged
+# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only
+# wave).
+# Pin 126 rides Zeolite main 5016767 + 95cff205 (wave 62: the
+# route-search union merge, the Outlook MSAL AADSTS900144 strand
+# of #431; dist 0e528d1f from CI build 40201261209, all 5 jobs
+# green). A page appending an outer route search
+# (?iframe-request-id=...) onto an opaque keyed token made
+# mergeRouteSearch REPLACE the token-owned query (the wave-25
+# Brave Ask semantics), so the top-level MSAL escape fetched the
+# AAD authorize endpoint without client_id/redirect_uri and AAD
+# answered AADSTS900144. mergeRouteSearch in request.ts is now
+# a UNION: a pure append keeps the token query bytes exact when
+# no key conflicts, a key conflict resolves via a URLSearchParams
+# rebuild with the outer value winning per key, and a query-free
+# decode keeps the plain concat. sw.js acdc15f7f76b4273 ->
+# d4423f428f4e1279 (642595 bytes); bootstrap.js unchanged
+# d4a04eb5947837ef. Cargo-side pin stays a385fa9 (SW-only wave).
+# Pin 127: script escape-state and exact MIME attribute parsing (#447/#448).
+# CI 40207272135; only rewriter_wasm_bg.wasm changes, JS hashes stay identical.
+# Pin 128: origin-pinning script literal skip (#449). A script whose
+# body carries an anchored ^https?: origin-pinning regex keeps its
+# URL literals verbatim through the JS-literal pass (the gapi
+# client.js class: the pin regex rejects route tokens, so rewriting
+# the literals would make the loader throw before any fetch), while
+# the runtime seams (fetch, anchors, window.open) keep every
+# destination on the engine. CI 40221562394 all 5 jobs green;
+# sw.js d4423f428f4e1279 -> 048ee077dab2ace1 (643413 bytes),
+# rewriter_wasm_bg.wasm 9f59b59cdca87ca9 -> c1d626bde245279e;
+# bootstrap.js unchanged d4a04eb5947837ef. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+# Pin 129: scout queue wave (#457, #458, #459, #463, #464, #468,
+# #469, #472, #473, #474, #475). Beacon POSTs are never replayed
+# natively on rejection (#457: uncertain delivery risks a double
+# write) and pageshow clears the pagehide unload latch (#458);
+# mint memo identity guard (#459); relay deadline waiter
+# self-removal (#463); zl:relayLost broadcast is host-clients-only
+# (#464); strong-comparison If-Range (#468); the empty 416 drops
+# content-length (#469); SW registration scope parity and
+# exact-origin compares with native TypeError contracts (#473,
+# #474); storage listener once/signal/capture parity (#475);
+# message wrapper capture-aware identity and reuse (#472).
+# CI 40229815052 all 5 jobs green; sw.js 048ee077dab2ace1 ->
+# 13def9cfde0b253c (643614 bytes), bootstrap.js d4a04eb5947837ef
+# -> d1ac5f255c2c56ed (38471 bytes, budget 39424); wasm
+# unchanged c1d626bde245279e. Cargo-side pin stays a385fa9
+# (SW-side wave).
+# Pin 130: zl:reloadBypass one-shot page-cache bypass for embedder
+# reloads (#211 LB): the reload split button's bypass action asks
+# the SW (zl:reloadBypass) to refetch the top document once with
+# cache: reload semantics; the SW clears the one-shot latch when
+# the bypass reload completes.
+# CI 40231938609 green; sw.js 13def9cfde0b253c -> a697f1fd702f2c30
+# (643773 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
+# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+# Pin 131: cache-refresh cookie admission + jar profile restore
+# fail-closed + relay credit grants (Zeolite #466, #470, #471):
+# refresh responses admit Set-Cookie into the owner jar (and
+# refuse store on credentialed refreshes per #179); a corrupt
+# jar profile record fails closed to the unbound profile; the
+# relay port grants byte credits (2 MiB upfront, grant-back per
+# drained chunk) so a slow consumer cannot flood the port.
+# CI 40287664049 green; sw.js a697f1fd702f2c30 -> b09a2bedaa8f77f0
+# (644519 bytes); bootstrap.js unchanged d1ac5f255c2c56ed (38471
+# bytes); wasm unchanged c1d626bde245279e. Cargo-side pin stays
+# a385fa9 (SW-side wave).
+# Pin 132: PR #480 engine compatibility wave (Zeolite issues
+# #452, #477, #503, #508, #509): the CSP translation layer is
+# deny-only with worker/frame/child audited (#452); virtual
+# service worker phase 2 gives guests a fetch handler with a
+# 250 ms budget and scope-routed live request-path bridging,
+# serving guest answers verbatim minus set-cookie (#477);
+# long-path asset recovery gets the generic 5-8 segment gate
+# under the mint-marker discipline (#503); the routekey
+# rotation keeps its lifecycle audit (#508); origin= Telegram
+# URLs virtualize their origin (#509); the streaming
+# CssRewriter carries its boundary byte, riding in the wasm
+# (#507). CI 40677887471 green (Zeolite main d4ca407, PR #480
+# merged); sw.js b09a2bedaa8f77f0 -> 207f93aacf2b0f5b
+# (697523 bytes); bootstrap.js d1ac5f255c2c56ed ->
+# 435087f83b79c0e1 (39223 bytes, budget 39424); wasm
+# c1d626bde245279e -> 4853d08234b4a35a (675013 bytes).
+# Cargo-side pin moves a385fa9 -> d4ca407: zeolite-server
+# lib.rs, wisp-core handshake.rs and wisp-wasm lib.rs changed
+# since a385fa9.
+# Pin 133 (2026-10-28): dist 107bd7d (Zeolite main 59bf14d, CI run
+# 1182, build 40696089310) ships #477 wave 3, the client virtual
+# service worker: per-tab virtual SW contexts, register() dispatch,
+# capture and forward semantics, postMessage bridging and the
+# guest-host page (docs/virtual-service-worker-phase2.md), plus the
+# one-shot wedge-restart retest in the e2e torture harness. sw.js
+# 207f93aacf2b0f5b -> 49b602e9abc78923 (698533 bytes); bootstrap.js
+# 435087f83b79c0e1 -> 22429c1203f3c8f5 (39501 bytes); wasm
+# unchanged 4853d08234b4a35a. Cargo-side pin stays d4ca407: no
+# crates changed since pin 132 (wave 3 touched app/ and suite/
+# only; the engine bundle bytes match the 34de2eb build, now from
+# a green run).
+# Pin 134 (2026-10-28): dist c2bb017 (Zeolite main 8e0fb18, CI run
+# 1184, build 40745551849) ships the #510 URL parse seam: the scan
+# harvests route-shaped literals from inline script text (SvelteKit-
+# style hydration data islands) and the wrapped realm URL
+# constructor serves the decoded virtual destination, so Brave's
+# SERP infobox website row shows telegram.org instead of the
+# engine content host (#112/#420 class); page-realm engine
+# internals (swshim, vloc, embedsync, postmsg, ws, siteid) keep the
+# captured NativeURL after the first CI round caught swshim's
+# origin check parsing through the seam. sw.js 49b602e9abc78923 ->
+# ecc27c096d6323d1 (698539 bytes); bootstrap.js 22429c1203f3c8f5 ->
+# 6d0b04860be9077f (40522 bytes; the CI budget gate rose
+# 39680 -> 40704). Cargo-side pin stays d4ca407: no crates changed.
+# Pin 135 (2026-10-29): dist 90f65c8 (Zeolite main d5a8f54, CI run
+# 1187, build 40862364041) ships the #501 relay pre-dispatch
+# classification: the LB relay stamps x-zl-relay-delivery: no when
+# a rejection proves the upstream never saw the request, the
+# embedder forwards it on zl:relayError and the engine unlatches
+# its dispatched mark, so an authenticated non-idempotent POST can
+# replay on the fallback transport instead of failing terminally
+# (the amiunique login shape). sw.js ecc27c096d6323d1 ->
+# e6c1874b7b0f8222 (698623 bytes); bootstrap.js 6d0b04860be9077f
+# unchanged; wasm unchanged 4853d08234b4a35a. Cargo-side pin stays
+# d4ca407: no crates changed. The bundle was published by run
+# 1187's app job; that run's browser job failed on runner
+# timeouts (not reproduced locally with this exact bundle).
+# Pin 137 (2026-10-29): dist fce7466 (Zeolite main eab792b, CI run
+# 40976199122, all 5 jobs green) ships the #492 RFC 2606 demotion:
+# exact reserved documentation hosts (example.com/.net/.org) stay
+# verbatim in the JS URL literal pass, so Startpage's placeholder
+# base idiom (a `http://example.com` default base; the page fetches
+# the derived pathname+search against its own origin) no longer
+# mints a live route to the documentation host: SERP favicon
+# fetches (/sp/favicon?fqdn=...) serve through the content origin
+# instead of 404ing upstream. sw.js stays ff73bac6fd111fe2 (699138
+# bytes); bootstrap.js stays 3936718bd9dcdd64 (40587 bytes; budget
+# 40704); the fix rides in rewriter_wasm_bg.wasm, 6e0f11c9bd64bed4
+# -> 0fcad50982ab7686 (675565 bytes) - the /build zlswSha cannot
+# distinguish this bump, verify the served wasm hash instead.
+# Cargo-side pin stays d4ca407: no crates changed.
+# Pin 138 (2026-10-30): dist c1ad7a4 (Zeolite main 7cbac22f, CI run
+# 41038517509) ships the #511 WebSocket-over-relay bridge: when a
+# relay channel is registered, page WebSockets ride it as typed
+# zl:ws* frames through the LB /zlws egress instead of the primary
+# wisp transport (auth-refused on LB-class deployments, so every
+# socket wedged in readyState 0 with no error: the Blooket
+# "Joining Game" hang). Close parity: onclose fires when the
+# handshake completes (the echoed close envelope or a bounded 5 s
+# fallback), the conn stays registered while closing, sends after
+# close drop, a dead relay channel surfaces as onerror, pre-open
+# sockets end 1006. The embedder side (LB /zlws egress + relay ws
+# arms in zeolite.ts and the boot page) ships in this same deploy.
+# Pinned from a run whose browser job is red: the redirect-semantics
+# torture probe failed first in all five red runs today (the
+# intermittent engine transport death of Zeolite #514, present on
+# pre-#511 bytes too); the app job that builds this bundle is green
+# and the pin 135 precedent applies with the diagnosis on record.
+# sw.js ff73bac6fd111fe2 -> c4208f42a1552246 (701903 bytes);
+# bootstrap.js unchanged 3936718bd9dcdd64 (40587 bytes);
+# rewriter_wasm_bg.wasm 0fcad50982ab7686 -> 4701b161cab34b27
+# (678984 bytes) with NO Rust source change since pin 137 (only a
+# cfg-gated test landed): the wasm tracks crates.io because Zeolite
+# commits no Cargo.lock (Zeolite #513); rustc and wasm-pack were
+# identical in both builds. Cargo-side pin stays d4ca407: no crates
+# changed.
+# Pin 139 (2026-10-30): dist cd11717 (Zeolite main 01bf05aa, CI run
+# 41136428811, all 5 jobs green) ships the storage wave (#557/#548/#555)
+# and the #543 fragment seams: page-cache entries carry Vary variant
+# metadata behind a fail-closed varyMatches gate (supported Vary
+# request headers finally cache; Vary:* stays refused), the page cache
+# holds a hard 60-entry bound with evict-before-put plus a fail-closed
+# pageCacheDisabled flag, and indexedDB.databases() is site-scoped in
+# both the page and worker realms. Navigations keep destination
+# fragments on the committed URL: mapped Location/Refresh routes carry
+# the fragment raw, marker/prel payloads stay fragment-free, and
+# decodeClientUrl joins the committed fragment (native hash wins over
+# a payload hash). sw.js c4208f42a1552246 -> 1b4a979dff9f3dbf
+# (702633 bytes); bootstrap.js 3936718bd9dcdd64 -> 77fb46f864491a2b
+# (41025 bytes; the Zeolite CI budget gate rose 40704 -> 41216 in
+# 4fd5870). Cargo-side pin unchanged: no crates changed (both waves
+# touched app/ and suite/ only).
+# Pin 140 (2026-10-30): dist afe08b6a (Zeolite main 59fb2bac, CI run
+# 41143099257, all 5 jobs green) ships the engine fix wave for
+# #558/#559/#560/#561: decodeQueryHandle strips every MAC-verifying
+# zlNavh occurrence and the mint strips live tokens from the
+# destination search (the stacked-handle loop on google.com sign-in),
+# a stale-relay probe drops a registered port whose embedder is gone
+# (a top-level escape destroys the register page; the fetch falls
+# back instead of parking on the 60 s header deadline, and the next
+# fetch re-registers), and extension background scripts run against
+# a sandboxed self (Tampermonkey 5.5.0).
+# sw.js 1b4a979dff9f3dbf ->
+# 53b198940dc5e311 (705406 bytes); bootstrap.js unchanged
+# 77fb46f864491a2b (41025 bytes). Cargo-side pin unchanged: no crates
+# changed (app/ TS only).
+# Pin 141 (2026-10-30): dist 790178cb (Zeolite main 7d14bb41, CI run
+# 41147759573, all 5 jobs green) ships the residual fixes of the
+# #558-#561 wave: the vloc anchor strips every zlNavh token a page
+# carries back into pushState/replaceState or a location write and
+# appends the live token once (google.com's home page stacked the
+# same handle three times via re-anchored replaceState), and Firefox
+# MV2 background pages get a sandboxed document stub and a real
+# script-tag loader as Function-scope params (Tampermonkey 5.5.0
+# boots past its document reads; the compat matrix states the stub
+# contract). sw.js 53b198940dc5e311 -> b7b9a7fcaee5990f (724053
+# bytes); bootstrap.js 77fb46f864491a2b -> 38807f6fe95d006f (41350
+# bytes; the vloc anchor ships in the bootstrap bundle). Cargo-side
+# pin unchanged: no crates changed (app/ TS only).
+# Pin 142 (2026-10-31): dist d2119ddd (Zeolite main 4a8ee773, CI run
+# 41198199949) ships the #560 residual fix plus the merged #554
+# import-map wave: the MV2 chrome.extension namespace mounts for
+# MV2 records only (inIncognitoContext false, getURL shared with
+# runtime, getBackgroundPage null, getViews []; MV3 gets no
+# namespace, Chrome parity) and the page bridge materializes MV2
+# extension and permission-gated webRequest namespace objects
+# (filterResponseData stays undefined), so Tampermonkey 5.5.0's
+# background passes its chrome.extension.inIncognitoContext read
+# and its options page no longer crashes at module load on
+# webRequest.filterResponseData. sw.js b7b9a7fcaee5990f ->
+# 27b03c7346e6df73 (736681 bytes); bootstrap.js 38807f6fe95d006f ->
+# 1fc347670b10a066 (42761 bytes). CI stated plainly: app, compat,
+# rust and wasm green; the browser job fails only the #537 module
+# blob worker boot checks, a pre-existing failure identical without
+# this commit (reproduced on e1eefb08 and 3a33fbe6, the #537
+# wrapper wave's own runs).
+# Pin 143 (2026-10-31): dist 44309725 (Zeolite main 66a2df40, which
+# includes 19131379) ships chrome.i18n (#560 residual): getMessage
+# answers from the package _locales (navigator.language, its primary
+# subtag, then default_locale; the first messages.json that exists
+# wins) with Chrome case-insensitive folding, $NAME$ placeholders
+# expanded before $1..$9 substitutions, and an empty string for a
+# missing name; getUILanguage/getAcceptLanguages report the resolved
+# locale and i18n.getAcceptLanguages also accepts the Chrome callback
+# shape; serve.ts embeds the resolved locales in ZL_PAGE_CFG so the
+# page bridge answers i18n synchronously. Tampermonkey 5.5.0 background
+# died on chrome.i18n.getMessage of undefined (w572 on pin 142); this
+# pin is the live re-test. sw.js 27b03c7346e6df73 -> ae03d9108ff1100e
+# (741802 bytes); bootstrap.js unchanged at 1fc347670b10a066 (42761
+# bytes; the app TS changes ship in sw.js only). CI on 19131379: app,
+# compat, rust and wasm green; the browser job fails only the
+# parallel-lane location-targeting csp-enforce probe and the
+# #556-bounded replay-spool 480s timeout, both unrelated to this wave;
+# browser E2E 58/58 and torture 20/20 passed.
+# Pin 144 (2026-10-31): dist ad092203 (Zeolite main 1fc7ef74, which
+# includes d6f947e) ships page-world runtime.connect ports (#560
+# residual): the page bridge runtime.connect transfers one
+# MessageChannel end to the SW, which pairs it with the extension's
+# real port so background onConnect listeners receive the far end;
+# both port surfaces are Chrome-shaped (onMessage/onDisconnect as
+# event objects). Tampermonkey 5.5.0 options pages died on
+# runtime.connect is not a function (w572 on pin 143); this pin is
+# the live re-test. sw.js ae03d9108ff1100e -> 3623c60ce8174c8d
+# (744688 bytes); bootstrap.js 1fc347670b10a066 -> d91833dc41f5f7c2
+# (42842 bytes). CI on d6f947e: app, compat, rust and wasm green;
+# browser E2E 58/58, torture flaked one transport timing test under
+# double CI load and the same suite passed 20/20 on the follow-up
+# main run (the remaining failures there are the known #556-bounded
+# replay-spool 480s timeout and a parallel-lane #533 vorigin item).
+# Pin 145 (2026-10-31): dist c724a79 (Zeolite main 62f46df, which
+# merges 5dcf687 rooted extension pages + 050ceef adapter docs
+# with 5af37bf virtual document.baseURI #532) ships rooted
+# extension pages (#560 residual): zl:openExtPage answers a ROOTED
+# /<page>?zlExt=<id>&zlPageTok=<token> URL so pathname-keyed page
+# boot dispatch (Tampermonkey options worlds) matches the real
+# extension origin, plus sync runtime.getManifest, Chrome-shaped
+# callback page calls, and an injected base tag so relative
+# subresources resolve. sw.js 3623c60ce8174c8d -> fd4ea7f266d03215
+# (748779 bytes); bootstrap.js d91833dc41f5f7c2 -> d1c3881a6d190b9a
+# (44382 bytes, changed by #532). CI on 62f46df: all five jobs
+# green; the 1271 blob-worker failure on 5dcf687 was a load flake
+# disproven by the green 1272 rerun of the same runtime code.
+
+# Pin 146 (2026-10-31): dist 71367403 (Zeolite main 109e6eac, which
+# includes 5aee1975) ships the runtime platform identity and
+# Chrome-parity message senders (#560 residual): MessageSender
+# carries the extension id on every sender surface, page
+# sendMessage/connect senders carry url null (the Tampermonkey
+# 5.5.0 options-page sender classifier), and runtime
+# getPlatformInfo/getBrowserInfo answer navigator-derived values
+# through the Chrome callback shape (CALLBACK_METHODS), with
+# compat matrix rows pinned. sw.js fd4ea7f266d03215 ->
+# cd57de1a4dde5771 (751251 bytes); bootstrap.js unchanged at
+# d1c3881a6d190b9a (44382 bytes). CI on 109e6eac: run 1280 all
+# five jobs green; the run 1279 blob-workers and run 1281 e2e
+# browser failures were runner flakes (blob-workers passed 16/16
+# three times locally on the 1279 tree; 1280 is content-identical
+# to 1281 except a ci.yml comment position). Cargo-side pin stays
+# d4ca407 (app TS only, no crates changed).
+
+# Pin 147 (2026-10-31): dist 9bf04db8 (Zeolite main 6bfc8394, which
+# includes 7d754384 and d9a68582) ships the jar-backed cookieStore
+# facade (#534): cookieStore is exposed again, backed by the engine
+# jar, with schemeful SameSite (schemeful-site and top-level
+# navigation context, not referrer-derived) and deletion parity (a
+# local delete reaches the worker-owned jar immediately, not only
+# after a later jar reply). And Disqus page-URL virtualization
+# (#565): the comments embed builds t_u=/t_i= from window.location
+# (LegacyUnforgeable), which named the opaque engine origin on
+# virtualized pages; the fetch seam now virtualizes those query
+# parameters so the thread URL names the page's virtual origin.
+# sw.js cd57de1a4dde5771 -> 17ac1af1efa84398 (753544 bytes);
+# bootstrap.js d1c3881a6d190b9a -> e1cd770802a5db67 (46170 bytes).
+# CI on 6bfc8394: run 1290 rust, wasm, app and compat green; the
+# browser job fails only the #537 blob-worker suite, the day's
+# known runner-load flake (the same suite failed runs 1255/1279
+# with green sibling runs), corroborated green by run 1287 on
+# 7d754384 - identical engine content, since 6bfc8394 only changes
+# test polling - and by runs 1282/1283, green twice on d9a68582.
+# Cargo-side pin stays d4ca407 (app TS only, no crates changed).
+
+# Pin 148 (2026-11-01): dist f5d9183 (Zeolite main 939fdd67, which
+# includes 2298abeb) ships truthful proxied-site service-worker
+# registration (#576): engine-origin register arguments decode back
+# to real page URLs through the bounded zl:decodeRoutes oracle (a
+# null decode is an honest TypeError("Origin"), never an
+# opaque-route mint), the shim waits for the virtual base with a
+# 25 ms bounded poll that fails closed to "" (a raw engine route
+# is never used), and register forwards to the kernel with confirm
+# semantics so the page promise settles only when the kernel
+# confirms the guest realm is running (rejections carry the kernel
+# real reason: no guest host page connected / a different guest
+# script already active for the origin / spawn failed / handshake
+# timeout); a same-identity re-register on a running realm is a
+# native-style ok with no respawn. The browser e2e api check now
+# asserts the honest no-guest-host rejection. sw.js
+# 17ac1af1efa84398 -> 6eff076e95de07c1 (754828 bytes); bootstrap.js
+# e1cd770802a5db67 -> de6c46494c6fa117 (47288 bytes). CI on
+# 939fdd67: run 1301 all five jobs green. Cargo-side pin stays
+# d4ca407 (app TS only, no crates changed).
+
+# Pin 149 (2026-11-01): dist abe0df83 (Zeolite main 920582e, which
+# includes 29e1ac2) ships the #456 operator flip: hybridLocation, the
+# hybrid pre-execution location rewrite, now defaults ON in the
+# engine (per-site rules still win, including explicit off;
+# zl:config experimental hybridLocation:false is the per-origin
+# opt-out, zl:config locationTargeting:false the kill switch). LB
+# beta flips its debug-menu default to ON in the same wave. sw.js
+# 6eff076e95de07c1 -> 74d1159b69313158 (754925 bytes); bootstrap.js
+# unchanged at de6c46494c6fa117 (47288 bytes). CI on 920582e: run
+# 1345 all five jobs green. Cargo-side pin stays d4ca407 (app TS
+# only, no crates changed).
+# Pin 151 (2026-11-03): dist 9866c5e8 (build 41610671597) ships
+# the DoubleClick f.txt ad-artefact download filter (Zeolite main
+# c3268850: downloads.ts isAdArtefact + AD_HOST_SUFFIX + unit
+# tests): Google serves ad/DoubleClick responses with
+# Content-Disposition: attachment; filename="f.txt" (their 2014
+# anti-Flash RFD mitigation), and the download registry no longer
+# registers those artefacts, so DevTools download rows stay clean.
+# This entry also documents the skipped Pin 150 comment: pin 150
+# (dist 8223b1ff, green run 41483811807) shipped the 3.0.1
+# Diamond wave: the jar-backed cookie jar (#604), control routes
+# (#603), SW orchestration (#601/#602) and the transport deferred
+# reset (228518a). sw.js 008cd5e5219e27d0 -> 0be67794d1c15e81
+# (817519 bytes); bootstrap.js 1c323643d670ba22 -> 097df230849e3d50
+# (49787 bytes). Pinned per operator instruction from a run whose
+# browser job is red with the diagnosis on record (six wedge
+# strikes 2026-11-03, docs/ci-torture-wedge.md; rust/wasm/app/
+# compat green in all six, and the app job that builds this bundle
+# green in all six; the pin 135 precedent). Cargo-side pin stays
+# d4ca407: no crates changed.
+# Pin 152 (2026-11-03): dist 4c58a57 (build 41636866431; Zeolite
+# wave head e3d0cebf over docs-only retrigger 709dc215) ships the
+# #546 WebSocket observability wave: the shim constructor maps
+# explicit and base-implied http(s):// scheme arguments to ws(s)://
+# like the Chromium WHATWG constructor (the old explicit-scheme
+# SyntaxError throw was a real divergence), and a failed handshake
+# now reaches CLOSED (readyState 3) before dispatching error per
+# the fail-the-connection steps. New CI browser gate
+# ws-negotiation.mjs differentials the shim against native
+# Chromium: URL serialization for nine inputs including the
+# http/https upgrade, subprotocol negotiation and token throws,
+# failed-handshake error-at-closed ordering, server close(1000)
+# with socket end, and worker-vs-page bufferedAmount slow-drain
+# decay - PASSED in CI twice (runs 41635594824 and 41636866431),
+# with the main e2e suite green on the wave's own head. Pinned per
+# operator instruction from runs whose browser job is red with
+# the diagnosis on record (the red arms are the non-engine img#uni
+# direct-oracle flake and the documented #514 main-e2e wedge
+# signature; docs/ci-torture-wedge.md; the pin 135 precedent).
+# sw.js 0be67794d1c15e81 -> 73e4dccabc9335e8 (819769 bytes);
+# bootstrap.js 097df230849e3d50 -> ba7e8e010a356496 (49682 bytes).
+# Cargo-side pin stays d4ca407 (app TS only, no crates changed).
+
+# Pin 153 (2026-11-03): dist 20acf52 (build 41685158963) ships
+# the #558 partition-strand fix: a target=_top activation in an
+# embedded realm no longer commits the top document on the engine
+# origin. Chromium third-party storage partitioning gives the
+# first-party content-origin worker its own instance with a
+# different route key and no transport config, so the minted
+# query handle failed its MAC by construction and the host SPA
+# shell rendered (the Google sign-in strand). navguard now hands
+# the destination to the embedder (lb:navigateTab rides the
+# embedsync popup queue; the SPA navigates the active tab through
+# the content-worker query-handle mint), so the destination loads
+# in the embedded realm where decode and relay transport both
+# work. Standalone realms keep the native drive; a fail-closed
+# terminal treats a queued top activation like a queued popup
+# (not routed, not driven). bootstrap.js ba7e8e010a356496 ->
+# 0c81efb9ba343dff (49682 -> 49786 bytes, budget 49800: the first
+# two shapes of the handoff measured 50341 and 49907 and were
+# golfed - the ack round trip was dropped because its fallback
+# only ever re-entered the broken native drive). sw.js
+# 73e4dccabc9335e8 unchanged (bootstrap-side change only). CI on
+# 3d4e4234: rust/wasm/app/compat green; browser red on the
+# documented non-engine img#uni direct-oracle flake (main e2e
+# 66/66 green, torture 19/20; docs/ci-torture-wedge.md; the pin
+# 135/151/152 precedent). Cargo-side pin stays d4ca407 (app TS
+# only, no crates changed).
+# Pin 154 (2026-11-03): dist 305e6859ae1be00e (build 41706739889)
+# ships the #611 sign-in fix: main-surface tab navigations now
+# stamp sec-fetch-dest: document on the upstream request.
+# accounts.google.com/ServiceLogin answers a dest: iframe request
+# with a hard 401 (Google's own malformed-request page), and the
+# sign-in pane is an iframe on the engine origin, so the pane died
+# in-frame. The SW marks the client context mainSurface when the
+# client URL is a minted query handle or a NAVH route shape (serve
+# seam, redirect hop, and rehydrate after an SW restart), and
+# secFetchHeaders gains a mainSurface arm (mode: navigate, dest:
+# document, upgrade-insecure-requests, no sec-fetch-user). Panes
+# without a minted handle still fail closed to iframe. sw.js
+# 73e4dccabc9335e8 -> 657d9ced9f7af2ac (820125 bytes); bootstrap.js
+# 0c81efb9ba343dff unchanged (SW-side change only). CI on 9c278c61:
+# rust/wasm/app/compat green; browser red on the documented
+# non-engine img#uni direct-oracle flake (main e2e 66/66 green,
+# torture 19/20; docs/ci-torture-wedge.md; the pin 135/151/152/153
+# precedent). Cargo-side pin stays d4ca407 (app TS only, no crates
+# changed).
+# Pin 155 (2026-11-03): dist 0b19023271e37171 (build 41726480973)
+# ships #617: the running build is nameable. CI stamps the
+# workflow run id into the bundle build (VITE_ZEOLITE_BUILD_ID
+# on the typecheck+build step), so ZEOLITE_VERSION answers
+# "3.0.1 Diamond (build 41726480973)" in zl:ping, the doctor
+# KDL, the console banner and zl:engineUpdate, and the same id
+# rides the dist commit message: a stale active worker is now
+# distinguishable from the served bundle. sw.js
+# 657d9ced9f7af2ac -> 788c77125bc5b111 (820226 bytes);
+# bootstrap.js 0c81efb9ba343dff unchanged (SW-side change
+# only). CI on a2a1c440: rust/wasm/app/compat green; browser
+# red on the documented torture 700ms-TTFB wedge cascade
+# (wedge signature detected, restart did not recover, every
+# failure a 30s goto timeout on the single wedged embedder
+# URL; e2e 66/66 green; the 1279/41351728517 runner-load
+# precedent, docs/ci-torture-wedge.md). Cargo-side pin stays
+# d4ca407 (app TS only, no crates changed).
+# Pin 156 (2026-11-03): dist 41198e8a (build 41736313102) ships
+# the #618 Google signup fix: the #449 origin-pinning literal
+# skip (^https?: needle) also fires on generic scheme-sanity
+# regexes inside the accounts.google.com signup/signin module
+# chunks, so the whole-script skip left endpoint URL literals
+# verbatim and the runtime passed those cross-origin fetches
+# native - their responses are CORS-unreadable, which killed the
+# signup Next button (dead button, restart popup, /restart 400).
+# The owner page host now decides (same principle as the location
+# policy): transform.ts relaxes the skip for accounts.google.com
+# via the additive JsRewriter.set_origin_pinning_skip wasm setter,
+# honored by the document stream, the external-script pass (fresh
+# and cache-hit seams) and the inline script path; older wasm
+# without the setter keeps the skip (fail-safe). sw.js
+# 788c77125bc5b111 -> 027b379fce9eb979 (820226 -> 820730 bytes);
+# bootstrap.js 0c81efb9ba343dff unchanged (wasm + app TS only).
+# rewriter_wasm_bg.wasm changed but carries no alarm pin (the
+# served-artifact check covers sw.js and bootstrap.js; deploy
+# with a cleared build cache). CI on 7d2ebec: rust/wasm/app/compat
+# green; browser red on the documented #545-worker-initiator
+# main-e2e wedge cascade (57/66, every failure a 30s goto timeout
+# on the wedged embedder; the 41524458112/41607524709 signature
+# class, docs/ci-torture-wedge.md; the pin 135/151/152/155
+# precedent). Cargo-side pin stays d4ca407 (wasm + app TS only,
+# no crates changed).
+# Pin 157 (2026-11-04): dist 385007fe (build 41876450170) ships
+# the #636 NVIDIA GeForce NOW pricing-matrix fix: the gfn-product
+# -matrix chunks read window.top through minified variable
+# indirection ((null===(t=window.top)||void 0===t?void 0:
+# t.location.search)||window.location.search) and a
+# window.top.document.documentElement.lang walk at matrix mount;
+# through the engine window.top is the cross-origin app shell, so
+# the read threw SecurityError and the React error boundary
+# rendered NVIDIA's "Unexpected Error" instead of the pricing
+# tiers (the paywall API fetch never fired). antiframe.rs folds
+# window.top to window in two ordered rules: window.top.location
+# -> top.location first (keeps the existing write-sink/read-fold
+# pipeline), then the bare window.top -> window identity fold
+# for indirect reads and document walks; window.parent is
+# deliberately untouched (nested same-origin proxied frames
+# legitimately use it). sw.js 027b379fce9eb979 -> 67d06ae53876b4ec
+# (820730 bytes); bootstrap.js 0c81efb9ba343dff unchanged;
+# rewriter_wasm_bg.wasm carries the fix (sha256-16
+# 85a23042a2968e1f; wasm-only change with no alarm pin, so the
+# served wasm must be hash-checked post-deploy; deploy with a
+# cleared build cache). CI on 3fe8999: rust/wasm/app/compat
+# green; browser red on the documented #514/#545 torture wedge
+# cascade (61/66, every failure a 30s goto timeout on the wedged
+# embedder plus the #96 NativeTransit HUNG cascade; the pin
+# 135/151/155/156 precedent, docs/ci-torture-wedge.md).
+# Cargo-side pin stays d4ca407 (rewriter wasm only, no crates
+# changed).
+# Pin 158 (2026-11-04): dist 59f0c621 (build 41919212238) ships the
+# #619-#632 engine scout wave: #619 self-closed script/style inside
+# SVG/MathML foreign content; #620 wisp CONNECT hostname >= 256
+# silent truncation (encode_packet now fails ProtocolViolation and
+# parse_hostname keeps a strict trailing check); #621 trailing-dot
+# host bypass in every app rule matcher; #622 SRI data-src
+# shadowing; #623 relay tab reload WS registry wedge; #624 rewriter
+# Tag-state retention cap (256 KiB TAG_HOLD_CAP); #625 legacy
+# no-semicolon HTML5 named refs; #626 wsbridge close 1006 and
+# wasClean; #627 siteconfig 5xx memoization; #628 bodyspool live
+# budget; #629 CSP :443 default port; #630 unterminated close-tag
+# prefix; #631 KDL junk suffix; #632 keepView x-zl-vary leak.
+# sw.js 67d06ae53876b4ec -> d02a3ee946ecaf61 (821572 bytes);
+# bootstrap.js 0c81efb9ba343dff unchanged; rewriter_wasm_bg.wasm
+# sha256-16 61929dfbd3076a4f (hash-check the served wasm
+# post-deploy; deploy with a cleared build cache). CI on 5073f316:
+# rust/wasm/app/compat green; browser e2e 66/66; torture wedged
+# 4/20, every failure a page.goto or page-evaluate 30s timeout
+# cascade (the documented #514/#545 wedge, docs/ci-torture-wedge.md).
+# Cargo-side pin bumps d4ca407 -> 5073f316 (#620 changed wisp-core
+# and zeolite-server; dns/policy public API verified unchanged for
+# the LB calls; Cargo.lock regenerated with cargo generate-lockfile).
+# Pin 159 (2026-11-05): dist 85a6f7d (build 41983152916) ships the
+# #637 giscus origin= virtualization: the giscus.app widget loader
+# names the page in origin= (backLink=, mapping=url term=) from the
+# LegacyUnforgeable cleaned location, so the strict-mode giscus.json
+# origins check refused the widget frame; virtualGiscusOrigin
+# rewrites a parameter whose URL names this deployment to the
+# referrer-derived page URL at the fetch seam (anchor preserved,
+# :443/:80 normalize, fail closed without a referrer). Regression
+# giscus-origin.test.ts, 13 cases. sw.js d02a3ee946ecaf61 ->
+# da868598848f1802 (822437 bytes); bootstrap.js 0c81efb9ba343dff
+# unchanged; rewriter_wasm_bg.wasm sha256-16 61929dfbd3076a4f
+# unchanged (app-side fix only; hash-check the served wasm
+# post-deploy; deploy with a cleared build cache). CI on 9e3dede:
+# rust/wasm/app/compat green; browser e2e 60 passed 6 failed, every
+# failure the documented #514/#545 wedge (the #96 NativeTransit
+# HUNG cascade and its page.goto 30s timeout fallout; no giscus
+# path is exercised by the e2e suite). Cargo-side pin stays
+# 5073f316 (no crates changed since; only app TS moved).
+# Pin 160 (2026-11-06): dist 416892e (build 42212991969) ships the
+# #633/#612/#634 wave (Zeolite main 0acaedb + the e5b0d06 e2e
+# contract): expired zlNavh tokens stripped at the query-handle
+# mint and resolved at nav-marker decode, closing the #618-class
+# stacking loop (Google sign-in capture: two zlNavh tokens nested
+# inside the percent-encoded continue param on a third top-level
+# token); markerPathDest rescues destination paths still carrying
+# the /__zl_nav__/<b64u> marker (the One Outlook MSAL 400 class,
+# login.microsoftonline.com HTTP.sys rejecting a 1175-char marker
+# as a site path); marker-route document requests 302 once to the
+# visible handle form and serve the target; the browser e2e
+# marker-route test pins the 302-to-handle contract (#28 SW
+# branch): one hop, committed URL free of the marker. sw.js
+# da868598848f1802 -> b5ebb1dd50f10c7a (823951 bytes);
+# bootstrap.js unchanged 0c81efb9ba343dff. CI on e5b0d065:
+# rust/wasm/app/compat green; browser e2e 66/66, torture wedged
+# 7/20, wedge signature seen, restart did not recover, every
+# failure a 30s goto/evaluate timeout on the ttfb=6000 torture
+# embedder (the documented #514/#545 wedge,
+# docs/ci-torture-wedge.md; the pin 135/151-159 precedent).
+# Cargo-side pin stays 5073f316 (app TS only, no crates changed).
+# Pin 161 (2026-11-06): dist e0c67e6 (build 42222084937) ships the
+# #639 wisp control-stream CLOSE guard: zeolite-server answers every
+# wisp handshake rejection with a CLOSE frame on stream 0 (0xc0
+# AuthBadCredentials, 0xc1 AuthBadSignature, 0xc2 AuthRequired,
+# InvalidInfo) and then closes the websocket, but the vendored
+# libcurl bundle's WispConnection guards unknown NONZERO streams
+# only, so the control-stream CLOSE reached close_stream(undefined)
+# and threw "Cannot set properties of undefined (setting 'open')"
+# inside on_ws_msg, wedging the shared connection in the bundle's
+# _wisp_connections cache: every later proxied socket reused it and
+# failed instantly (the Google sign-in ERR_FAILED storm, #633/#638).
+# installWispCloseGuard wraps the WebSocket ctor outermost (after
+# the #74 watcher and the #496 auth socket) and hides exactly the
+# inbound type-4 stream-0 CLOSE frames from the vendor listeners:
+# the auth wrapper still maps outcomes and fails closed, the server
+# websocket close event evicts the connection, and only the libcurl
+# engine on the configured wisp endpoints is armed. Pure classifier
+# isStreamZeroClose exported; 5 regression tests in
+# transport-select.test.ts (Zeolite e6731d6). sw.js
+# b5ebb1dd50f10c7a -> 2e9e52d4f166c00f (824727 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on e6731d6: rust/wasm/app/compat
+# green; browser e2e red with the documented passthrough-#96 wedge
+# signature (61/66, NativeTransit HUNG marks then the page.goto 30s
+# cascade, the #514/#545 wedge; the pin 135/151-160 precedent,
+# docs/ci-torture-wedge.md; locally 66/66 on the same head).
+# Cargo-side pin stays 5073f316 (app TS only, no crates changed).
+# Pin 162 (2026-11-06): dist 3157fdb (build 42246542499) ships the
+# README ASCII banner in the DevTools console: the SW prints the
+# Zeolite ASCII art with a top-level console.info on every worker
+# evaluation (engine init), plain console only - deliberately NOT
+# routed through netLog/DIAG so it never rides into the embedder's
+# in-app console. The pinned "[Zeolite] runtime <version>" line is
+# unchanged; version.test.ts now also pins the two leading art
+# lines in the source (Zeolite 6f1279f). sw.js
+# 2e9e52d4f166c00f -> 2337cd1084d158a0 (824903 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on 6f1279f: rust/wasm/app/compat
+# green; browser e2e red with the documented passthrough-#96 wedge
+# signature (58/66, NativeTransit HUNG marks then the page.goto 30s
+# cascade, the #514/#545 wedge; the pin 135/151-161 precedent,
+# docs/ci-torture-wedge.md run 42246542499). Cargo-side pin stays
+# 5073f316 (app TS only, no crates changed).
+# Pin 163 (2026-11-07): dist 02e58ac (build 42383331239) ships the
+# #633/#612/#640 engine fix wave (Zeolite main 728ed78 + docs-only
+# wedge records): the route shape survives idle kills (an absent
+# zl:config knob keeps the live value, the query-routes flag
+# persists in the route-config KDL and restores on worker
+# restart), Referer, initiator and widget page-URL derivation
+# recover from an expired NAVH whose MAC still verifies while
+# committed navigation decode stays live-only (#633), a navguard
+# NAV marker inside a NAVH handle tail decodes as the engine route
+# it names instead of composing <site>/__zl_nav__/<b64> upstream
+# while a marker-shaped tail that does not decode keeps the honest
+# composition (#612), and the Discourse embed.js embed_url=
+# parameter virtualizes to the real page URL via referrerPageUrl,
+# mirroring the #565 Disqus seam, failing closed without a
+# decodable referrer (#640). Also carries the unwired Rust
+# rewrite crates zeolite-cookies (#614) and zeolite-csp (#615):
+# no engine byte differs from 728ed78's app. sw.js
+# 2337cd1084d158a0 -> 0c9c92048b2a0aaa (826132 bytes);
+# bootstrap.js unchanged 0c81efb9ba343dff. CI on 14ca12f and
+# f1a073b: rust/wasm/app/compat green; browser red with the
+# documented wedge signatures on both runs (the torture cascade
+# pair plus img#uni on 42381860014, the #96 NativeTransit hang
+# cascade on 42383331239; docs/ci-torture-wedge.md; the pin
+# 135/151-162 precedent, operator approved 2026-11-07).
+# Cargo-side pin stays 5073f316 (no crates in the server tree
+# changed; cookies/csp are unwired siblings). Deploy with a
+# cleared Render build cache.
+# Pin 164 (2026-11-07): dist 5881b90 (build 42422624039) ships the
+# #633 query-shape expired handle Referer recovery: the deployed
+# sign-in commits on the query shape (?zlNavh=), and an expired
+# committed query route lost the upstream Referer exactly like the
+# path shape the #633 seam wave already recovers. decodeQueryHandle
+# gains the {expired} opt-in (committed decode stays live-only) and
+# forwardedHeaders derives the Referer from the expired MAC-verified
+# token; tests cover opt-in recovery, the token-bound origin, tamper
+# fail-closed and the strip (Zeolite 26926b6c on main). sw.js
+# 0c9c92048b2a0aaa -> 42d69f0827cbb2f7 (831503 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff. CI on the pushed head: rust/wasm/app
+# green. Cargo-side pin stays 5073f316 (app TS only). Deploy with a
+# cleared Render build cache.
+# Pin 165 (2026-11-08): dist 1dda795 (build 42481264827) fixes the
+# seam wasm bare-origin redaction trap (#633): redact_url_userinfo
+# indexed bytes[k] at k == len after the host when the value was a
+# bare origin (an Origin or access-control-allow-origin header of
+# exactly https://accounts.google.com), so every wasm redactSecrets
+# call over the sign-in page's CORS subresource headers trapped with
+# RuntimeError: unreachable and the AccountsSignInUi JS bundle and
+# the Google Sans woff2 failed, leaving the sign-in page unstyled
+# (the placeholder painting over the typed email) and broken before
+# MI613e; the scanner now terminates and redactSecrets,
+# planCspTranslation and planEngineCsp degrade to their TS fallback
+# bodies on any trap (Zeolite a4b450a on main). sw.js
+# 42d69f0827cbb2f7 -> f7a032a10c7a93fc (841377 bytes); bootstrap.js
+# unchanged 0c81efb9ba343dff; seam_wasm_bg.wasm rebuilt (blob
+# 26c66c12). CI on a4b450a: rust/wasm/app/compat green. Cargo-side
+# pin stays 5073f316 (config and seam-wasm crates are engine-side
+# only). Deploy with a cleared Render build cache.
+# Pin 166 (2026-11-09): dist c04e4e9 (build 42612351784) deploys
+# the ERR_FAILED orchestration catch (#633): pre-pipeline SW
+# rejections (boot gates, handle decoding, virtual-context
+# resolution) died as bare Response.error() fetches with no netlog
+# row and surfaced client-side as ERR_FAILED storms on
+# play.google.com/log; respondWith now catches the orchestration
+# promise, answers an honest 502 and pushes a DIAG row ("request
+# orchestration failed before the engine pipeline") (Zeolite
+# a54c97a on main). The bundle also carries the #553 popup facade
+# slices (2dcc870, 030e19b), the #523 CSS __MSG__ substitution,
+# the #544 ws/rtc marker fix (148c8f5) and the popups-before-torture
+# CI reorder (50bdd3c). sw.js f7a032a10c7a93fc -> d066a19cbee1969a
+# (859280 bytes); bootstrap.js 0c81efb9ba343dff -> 0ddd6edd9485c8ab
+# (51030 bytes). CI on 50bdd3c: rust/wasm/app/compat green; the two
+# duplicate browser jobs overlapped on the runner and closed red on
+# the documented rotating wedge (one red at the main e2e battery,
+# its byte-identical twin green there and red at the torture
+# battery; docs/ci-torture-wedge.md). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 167 (2026-11-11): dist f44176c4 (build 43018138385) deploys the
+# #634 OAuth round-trip fix: the #431 seam rewrote only the authorize
+# request's redirect_uri, so AAD bound the code to the page origin and
+# then refused the token exchange presenting the engine origin
+# (AADSTS50011); the urlencoded token POST body is now rewritten with
+# the identical match set and honest-fallback rule
+# (virtualAuthorizeTokenBody + isAuthorizeTokenEndpoint, Zeolite
+# e8268db). Also carries the #645 Cloudflare fix (cspGate never gates
+# the /cdn-cgi/ namespace and an unsupported directive no longer
+# falls back to default-src; Perplexity's challenge page, Zeolite
+# 93996d1), the #644 diagnostics fix (a mid-stream body error is no
+# longer masked as a stall), the extension-surface waves
+# (#517/#518/#521/#523), the #643 blocked-notice marker and DNR
+# engine-internal re-entry + getMatchedRules. sw.js
+# d066a19cbee1969a -> 2b29ead4488f92c2 (886531 bytes); bootstrap.js
+# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on 137d0751:
+# rust/wasm/app/compat green; the browser battery closed red on the
+# documented rotating wedge (docs/ci-torture-wedge.md). Cargo-side
+# pin stays 5073f316 (app TS only). Deploy with a cleared Render
+# build cache.
+# Pin 168 (2026-11-11): dist b72324ac (build 43080960090) deploys the
+# #521 slice 3 DNR semantics (Zeolite f09b8e5): upgradeScheme rides the
+# slice-2 redirect seam (scheme-derived target, engine-internal re-entry,
+# host-permission gated), allowAllRequests arms a bounded TTL-scoped
+# frame bypass keyed on document origin (documented divergence from
+# Chrome's frame-subtree identity), and getMatchedRules/
+# onRuleMatchedDebug are mounted only with the
+# declarativeNetRequestFeedback permission. sw.js
+# 2b29ead4488f92c2 -> 09b6ee10ce6b3f18 (888041 bytes); bootstrap.js
+# unchanged 0ddd6edd9485c8ab (51030 bytes). CI on f09b8e5: run
+# 43080960090 rust/wasm/app/compat green; the browser battery closed
+# red on the documented rotating wedge only (docs/ci-torture-wedge.md);
+# the retrigger run 43087051481 failed app on the documented one-off
+# ws-shim MIME flake (#493) while the original run app suite was green.
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
+# Render build cache.
+# Pin 169 (2026-11-11): dist ad1ff922 (build 43105043278) deploys the
+# #648 devtools self-heal (Zeolite 12258b0): a redundant or
+# never-activated registration left the /zlsw/devtools.html page
+# waiting forever on navigator.serviceWorker.controller (the byte-churn
+# redeploy class); the page now re-registers the sibling sw.js
+# (scope "/", Service-Worker-Allowed) once per 10s while waiting.
+# sw.js 09b6ee10ce6b3f18 -> 5de381a916e3c88f (888050 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on
+# 12258b0: run 43105043278 rust/wasm/app/compat green; the browser
+# battery closed red on the documented rotating wedge only
+# (docs/ci-torture-wedge.md). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
+# Pin 170 (2026-11-12): dist 7c24b313 (build 43175749489) deploys the
+# #649 devtools host-gate fix (Zeolite da61925): /zlsw/devtools.html was
+# missing from HOST_PATHS, so the #170 fail-closed gate classified the
+# inspector itself as an untrusted sender and refused every
+# zl:getNetLog/zl:doctor poll with "host-only control message" (zero
+# rows, empty stats, a lying "Worker restarted" banner). The gate now
+# admits the engine-bundle mount path, and devtools.ts renders a
+# refused poll honestly. sw.js 5de381a916e3c88f -> c88466a3ec1898c2
+# (888925 bytes); bootstrap.js unchanged 0ddd6edd9485c8ab (51030
+# bytes). CI on da61925: rust/wasm/app/compat green (dist published).
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a cleared
+# Render build cache.
+# Pin 171 (2026-11-12): dist 6b76707 (build 43187277069) deploys the
+# Zeolite aab00e0c lineage since pin 170: the #556 fresh-session upload
+# controller fix (POST uploads arm the streaming upload seam instead of
+# silently materializing via Request.arrayBuffer()), the 3.4.2
+# Ferrierite release with the #647 bounded redacted 4xx body-prefix
+# capture (#651), and the #652 guest clients.matchAll fix
+# (install-time matchAll is [] natively; the unconditional live-context
+# enumeration broke the guest-sw oracle twice).
+# sw.js c88466a3ec1898c2 -> acdd65650003e6db (889657 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). CI on
+# aab00e0c: run 43187277069 rust/wasm/app/compat green (dist
+# published); the browser battery closed red on the goto-timeout
+# cascade class (#514, docs/ci-torture-wedge.md). Cargo-side pin stays
+# 5073f316 (no zeolite-server crate change since). Deploy with a
+# cleared Render build cache.
+# Pin 172 (2026-11-14): dist 17442ed8 (build 43598607246) deploys the
+# download-registry destination gate (Zeolite cb15413): only a
+# navigation (request destination "document") registers an attachment
+# response, so background fetches that carry Content-Disposition:
+# attachment (beacons, fetch(), images, iframes) stop forging f.txt
+# and .bin rows no user asked for; the doubleclick f.txt host filter
+# stays as the second layer. sw.js acdd65650003e6db ->
+# 0e605bbc1001e94b (889709 bytes); bootstrap.js unchanged
+# 0ddd6edd9485c8ab (51030 bytes). CI on cb154132: wasm and app green
+# (the app suite is the dist-publish gate); rust closed red on the
+# pre-existing clippy failure (red on the two runs before this push
+# too, no crates touched). Cargo-side pin stays 5073f316 (app TS
+# only; note the zeolite-server crate moved on main with 730e562a,
+# the wisp v1 send window: ride it on the next cargo-side bump).
+# Deploy with a cleared Render build cache.
+# Pin 173 (2026-11-14): dist e34b1024 (build 43639864619) deploys the
+# Zeolite main cde7cf0d pair: DL.load() purges persisted ad-artefact
+# rows (the f.txt/.bin ghost entries registered before the c3268850
+# filter aged out of the IndexedDB ring), and the JS body buffering
+# cap goes 2 MiB -> 8 MiB (#456 bound) so multi-megabyte SPA entry
+# bundles (icloud.com main.js, the duck.ai entry script #663) get
+# their specifier/URL-literal passes instead of verbatim RAW_BODY_CAP
+# serving. sw.js 0e605bbc1001e94b -> 528d640167af0297 (889851 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side
+# pin stays 5073f316. Deploy with a cleared Render build cache.
+# Pin 172 (2026-11-15): dist fdec33ae (Zeolite main fdf72ccc, CI run 43718055933).
+# Merge wave: PRs #656 #658 #660 #661 #662 #665 #666 #668 #671 - webRequest
+# observe lifecycle + per-listener extraInfoSpec (#521), cookie jar bug-scouts
+# 1-3 (#614, #667, #670), relay draining-body fix (#644), Google payframe +
+# OAuth iframerpc origin= virtualization (#653/#654), CI gate fixes (#652).
+# sw 75c2427e835506a3, bootstrap unchanged 0ddd6edd9485c8ab. Cargo-side
+# zeolite-server rev unchanged (no server-crate changes in the wave).
+# Pin 174 (2026-11-17): dist da4dbaa, the same engine build as main
+# pin 173 (Zeolite main 1163c3db, CI run 44173326999); beta continues past
+# its historical rolled-back 173 (dist e34b1024). Fix wave: googlevideo.com
+# allow for YouTube watch streams (#647), post-first-byte idle bound,
+# first-party CSP gating exemption (github chunk loads), real 8s race on
+# flat-asset recovery candidates, comment cleanup.
+# sw 75c2427e835506a3 -> 764f36ef694ac9a8 (895726 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (no zeolite-server crate change in the wave). Deploy with a
+# cleared Render build cache.
+# Pin 175 (2026-11-17): dist 0448e765 (Zeolite main f67b1f79, CI run
+# 44195669245). Fix wave: CaptchaFox site= virtualization (#672, the
+# config site= and challenge host= seams) and VK Open API url=/location=
+# virtualization (#669, the widget_*.php and act=openapi shapes), both
+# from the #112 reCAPTCHA co= class. CI green across rust, wasm, app,
+# browser and compat; one test-fixture iteration on 1629e5e7 (the
+# nav-handle fixture dropped the page query from the visible route
+# suffix).
+# sw 764f36ef694ac9a8 -> 6ef96471895945be (899332 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 176 (2026-11-18): dist 8e16b6f (Zeolite main 3ce918cb, CI run
+# 44253346334). Yandex SmartCaptcha host=/href= virtualization on the
+# widget pages (#673, the #112 co= class): captcha-api.yandex.ru and
+# smartcaptcha.yandexcloud.net checkbox/advanced/backend widget
+# documents rewrite their host= (engine-origin forms incl. :443/:80)
+# to the embedding page's virtual origin and the challenge href= to
+# the page URL; /captcha.js and /check stay untouched; fail-closed
+# passthrough. CI green across rust, wasm, app, browser and compat.
+# sw 6ef96471895945be -> b8e515023cdc4814 (900649 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 177 (2026-11-18): dist 7576c60 (Zeolite main bf8ff950, CI run 44262982308).
+# WebSocket open-attempt DIAG row (#664/#511 triage): every page websocket
+# that reaches the ws bridge lands an info event immediately, so a
+# never-settling handshake or a page-side failure is triagable from a
+# diagnostics export instead of only via the abnormal close after the 20s
+# open deadline. CI green across rust/wasm/app/browser/compat. sw
+# b8e515023cdc4814 -> 27c5adc6eb706dd5 (900793 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316 (app TS
+# only). Deploy with a cleared Render build cache.
+# Pin 178 (2026-11-18): dist 31dad9ca (Zeolite main 639ac8be, CI run
+# 44275927339, all five jobs green). Microsoft OAuth redirect_uri fix
+# (#634, two arms): referrerOrigin and referrerPageUrl now recover
+# EXPIRED nav-handle and query-shape referrers (the {expired: true}
+# mirror of the #633 Referer seam), so a page parked past NAVH_TTL_MS
+# keeps its authorize redirect_uri virtualization; and both authorize
+# seams fail closed when the recovered parent is itself a Microsoft
+# login host (the auto-replayed sso_reload flow minted a
+# login.live.com/mail/ parent the ESTS hop rejected invalid_request,
+# the captured crash). DevTools gained an "Export all KDL" button: one
+# zeolite-devtools-all.kdl artifact holding netlog, tracing,
+# diagnostics and the last doctor report. sw 27c5adc6eb706dd5 ->
+# 1fb45966860c501c (900961 bytes); bootstrap unchanged 0ddd6edd9485c8ab
+# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy
+# with a cleared Render build cache.
+# Pin 179 (2026-11-18): dist 81dc0ab4 (Zeolite main 68129665, CI run
+# 44306784056, all five jobs green). Shell navigation lockdown
+# (#416 slice 1): a hijacked top-level navigation whose initiator is
+# an engine pane (replacesClientId differs from clientId, names a
+# same-origin shell window client) is recaptured as an in-app tab:
+# the engine answers Response.error() and posts zlescape to the shell,
+# whose UI opens the destination as a new tab, so no site can move
+# the LB shell URL and only LB changes its own location. Honest
+# fail-open exclusions stand: POST hijacks, engine assets, popup and
+# pane self navigations, cross-origin parked shells, unresolvable
+# clients. CI note: run 44304252459 hit the app-job intermittent
+# single-test wedge (ws-shim port-delivery race, documented in
+# docs/ci-torture-wedge.md); the retrigger run greened the identical
+# code and the prior run's browser job was green. sw
+# 1fb45966860c501c -> 4215194e8ecb1a45 (902068 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 180 (2026-11-18): dist 693aebdc (Zeolite main 5486164b, CI run
+# 44348977127, all five jobs green). Shell navigation lockdown
+# (#416 slice 2). The pin 179 worker gate proved blind to the real
+# ESTS breakout class: a pane script assigns top.location and the
+# navigate-document fetch consults the gate without the fields it
+# needs, so the gate answers null and the shell commits the hijack
+# (probe-reproduced independently on live beta). This closes the
+# class with a second layer: the LB shell now guards its own window
+# with the Navigation API (ui/src/frameNav.ts shellGuardCancel and
+# shellGuardDest, wired at the app root in App.tsx, mounted for every
+# view, not just the browser page): a script-initiated cross-document
+# push or replace of the top document is cancelled before commit and
+# its destination reopens as an in-app tab, mirroring the worker
+# zlescape recapture; user navigations, reloads, hash moves and
+# history traverses pass untouched (live probe verified both the
+# discriminator fields and the cancellation). The Zeolite side adds
+# gate evidence rows: every navigate-document consultation now emits
+# an escape-gate cid/rid/dec netLog row naming the exact decision, so
+# any residual escape is diagnosable from one exported KDL.
+# Regression check: tests/shell-navguard/check.mjs in the ci ui job.
+# sw 4215194e8ecb1a45 -> 9ad13002dce949d0 (902727 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 181 (2026-11-18): dist 5d22c2a4 (Zeolite main d5b3cf3c, CI run
+# 44406213985, all five jobs green). Carries the double-HTML-rewrite
+# fixpoint (#681): the second rewrite pass re-wrapped the injected
+# bootstrap into a site route and double-booted the page, the class
+# behind the outlook.com ESTS authorize white tab and its MSAL tab
+# spam (pin 180 predates #681; the user repro shipped before any pin
+# could carry it). Also rides the #683 site-repros wave: wasm traps
+# classify connect-class so a poisoned transport singleton resets
+# and self-heals, and videoplayback numeric fields round-trip
+# byte-exact through the MAC-verified codec. sw
+# 9ad13002dce949d0 -> eba962f01a855b69 (934511 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (engine bundle only; the #556 v1-grant zeolite-server
+# change still needs its own verified lock-regen wave). Deploy with a
+# cleared Render build cache.
+# Pin 182 (2026-11-19): dist a175b10e (Zeolite main 812e34ee, CI run
+# 44485767626, all five jobs green). Closes the #681 follow-up class
+# that pin 181 could not
+# fix: pin 181 ended the double-rewrite white tab (the authorize
+# document that never reached the pipe), but a relayed authorize
+# document whose head LANDS can still die mid-body (the 15 s
+# keep-alive re-registration replaces the embedder MessagePort
+# mid-fetch, or the host page freezes), and the body pull had no
+# liveness bound: the tab sat white forever with zero events past
+# the head and no DIAG evidence (the favicon never even issued; user
+# KDL trace zl-tmwn8jmg8-7p). The engine now races every body pull
+# against RELAY_BODY_IDLE_MS = 20 s: a breach errors the stream
+# honestly, emits a TRANSPORT DIAG row naming the dead channel and
+# cancels the embedder upstream, so every silent white-tab subclass
+# becomes an honest failure with observable evidence instead of an
+# eternal hang; relayRegister also pins the last eight registered
+# ports so a re-registration cannot orphan an in-flight relay
+# channel to the GC in the first place (regressions: the relayfetch
+# body-idle watchdog and port-pinning suites). sw
+# eba962f01a855b69 -> e1009108f092d41f (934908 bytes); bootstrap
+# unchanged 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays
+# 5073f316 (app TS only). Deploy with a cleared Render build cache.
+# Pin 183 (2026-11-19): dist d85d24bf (Zeolite main c1b2fa22, CI run
+# 44532038965, all five jobs green; the #556 replay-spool step
+# reports its documented bounded RSPOOL 124 continue-on-error row,
+# non-blocking by design). Restores engine mediation for the
+# reCAPTCHA widget release scripts (#451 sorry-wall press class):
+# the #449 anchored-origin-pinning skip swept recaptcha__*.js in
+# with the gapi loader it was built for, so the widget kept its
+# single RPC-base literal verbatim
+# ("https://www.google.com/recaptcha/api2/"), every anchor/reload
+# call escaped to a real cross-origin google.com iframe outside the
+# SW, the #112 co= seam never fired, and each press carried the
+# deployment origin into the site-key domain check: the "Error:
+# Invalid API parameter(s). Try reloading the page." failure on the
+# Google sorry wall (user KDL trace zl-tmwn95ire-ak, pin 182).
+# Release scripts keyed by their own URL
+# (gstatic/google/recaptcha.net /recaptcha/releases/<v>/recaptcha__
+# *.js) now keep the literal pass at both serve arms (fresh +
+# page-cache) and the wasm origin-pinning skip lifts for them, so
+# the widget rides the engine again and co= virtualizes to the owner
+# page origin; gapi-class scripts keep the full #449 protection
+# (regressions: the pinned-script predicate suite + the
+# location-transform relaxation wiring). sw e1009108f092d41f ->
+# f8ef86785761ffc6 (935150 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
+# (app TS only). Deploy with a cleared Render build cache.
+# Pin 184 (2026-11-20): dist 5e0d7ca9 (Zeolite main 7d3c0a6, CI run
+# 44723856533, all five jobs green; runs 1860/1861 on the fix series
+# landed red on tsc and generated-docs row order, repaired by
+# 93dcfe5 + 7d3c0a6, both inside this build). Ships the Tampermonkey
+# options-page fix (#697): the argument validator rejected
+# explicitly forwarded trailing undefined arguments
+# (setIcon(details, undefined) died as "expected at most 1
+# argument(s), got 2"), which killed the TM background init and
+# queued every runtime.onMessage behind registerLateCallback = the
+# fully white /options.html page; resolveCallArgs now trims trailing
+# undefined above min and honors exactly one trailing function
+# beyond max as the optional response callback, and the runtime
+# surface gained the inert onUpdateAvailable member (regressions:
+# the arg-schemas arity suite). Also rides: antiframe replace passes
+# gated on pattern presence (#693/#664 speedtest.net black screen),
+# location-pass caps raised to 8 MiB so duck.ai keeps location
+# virtualization (#691/#663), and the inline cZone relabeled to
+# location.hostname in cf-mitigated challenge docs so the Turnstile
+# widget mounts (#692/#685). sw f8ef86785761ffc6 ->
+# c226a03d40fe414e (937667 bytes); bootstrap unchanged
+# 0ddd6edd9485c8ab (51030 bytes). Cargo-side pin stays 5073f316
+# (app TS + rewriter only). Deploy with a cleared Render build cache.
+# Pin 185 (2026-11-20): dist f07c68e4 (Zeolite main 4b61a836 over the
+# 36932d2 fix, CI run 44758879429, all five jobs green; run 1864 on the
+# fix head landed red only on the standing torture large-document
+# wedge - single victim, record docs/ci-torture-wedge-1864.md).
+# Ships the second half of the Tampermonkey options-page fix (#697):
+# pin 184's arity repair was necessary but not sufficient. The engine
+# storage.get answered never-set keys with {[key]: null}; Chrome and
+# Firefox omit missing keys. Tampermonkey's storage-backend probe
+# fell through its "n in items" guard, unpacked the null as a packed
+# record (reads .value) and threw TypeError inside the storage
+# callback, wedging the background boot before bg:ready; late stayed
+# false and every options-page runtime.onMessage ping was deferred
+# forever = the fully white /options.html. storage.get now omits
+# never-set keys (object-form defaults still answer; regressions:
+# the storage-parity suite, sprite-verified 30/30 across the
+# extensions suites). sw c226a03d40fe414e -> ea5a26979fc5bccd
+# (937682 bytes); bootstrap unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Cargo-side pin stays 5073f316 (app TS + rewriter only). Deploy with
+# a cleared Render build cache.
+# Pin 186 (2026-11-20): dist 5f14b734 (Zeolite main 2d1b489, CI run
+# 44784026869, all five jobs green). Ships the extension i18n parity
+# fixes from the #523 lane that surfaced in Tampermonkey 5.5.0's
+# options header: getMessage falls back per key to the default_locale
+# catalog (nb does not define v0version0; en does), and __MSG_*__
+# manifest strings resolve onto the raw manifest copy that
+# runtime.getManifest and the pagejs bridge expose, including records
+# that predate the fix, which get the same treatment at serve time.
+# The header now reads Tampermonkey by Jan Biniok and v5.5.0 instead
+# of __MSG_extName__ and v0version0. sw ea5a26979fc5bccd ->
+# 39f3f86a873eee80 (938155 bytes); bootstrap unchanged 0ddd6edd9485c8ab
+# (51030 bytes). Cargo-side pin stays 5073f316 (app TS only). Deploy
+# with a cleared Render build cache.
+# Pin 187 (2026-11-21): dist 16d89cbd (build 44897192830; Zeolite
+# main ef66f29, all five jobs green on the scheduled run
+# 44899232015; the bundle's own push-event run landed red only on
+# the browser job - environment-level mass page.goto timeouts with
+# zero assertion failures, green on the rerun). Ships the extension
+# bare-root navigation rescue (#698, also reported as #699): rooted
+# pages inject <base href="/zl-ext/<id>/">, so a fragment-only
+# anchor (Tampermonkey options "Get some scripts...") resolved to a
+# FULL top-level navigation to the bare package root, which is
+# neither a declared page nor a WAR, and the tab dead-ended on a raw
+# 404. Two layers: the page bridge restores same-document fragment
+# semantics so a "#" anchor never leaves the document, and a
+# bare-root navigation that still reaches the engine answers 302 to
+# the granted, tokened options page (subresource fetches and
+# options-less extensions keep the honest 404; regressions: the
+# ext-root-nav suite). Also rides #541: the a[download] anchor intent
+# seam - a click posts the engine URL it is about to navigate to,
+# and the navigation's response seam registers the download
+# (single-use, client-bound, TTL-etched; zl:dlIntent control-plane
+# case, torture coverage, downloads-anchor e2e harness).
+# sw.js 39f3f86a873eee80 -> d77346d284798bf1 (941778 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a
+# cleared Render build cache.
+# Pin 188 (2026-11-21): dist 36aa42ed (build 44932854637; Zeolite
+# main 2ddef39, all five jobs green). Ships the #703 apps-widget
+# rebase: Google's 9-dot launcher builds its widget URL from
+# window.location.origin (LegacyUnforgeable), so the fetch landed
+# as a bare engine-origin /widget/app/so path with no route mint
+# and the LB server answered 404 (x23); the bare path now rebases
+# to https://ogs.google.com/widget/app/so ahead of the same-origin
+# else-branch, fail-closed (client context or decodable route
+# referrer), and the #420 virtualOgsOrigin repairs origin= from
+# the referrer page origin (regressions: the widget-rebase suite).
+# Also rides the #515-wave extension history/content-script
+# registration stores and the vendored libcurljs client fork
+# (PR #676; vendor JS+C only, no crates).
+# sw.js d77346d284798bf1 -> ec181360430ef033 (947394 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Cargo-side pin stays 5073f316 (app TS only). Deploy with a
+# cleared Render build cache.
+# Pin 189 (2026-11-21): dist 2162839e (build 44943292385; Zeolite
+# main abb83aa3, all five jobs green). Version bump to 3.4.3, the
+# release wave only: the bundle delta is the embedded build id,
+# no functional change ships.
+# sw.js ec181360430ef033 -> fce0135d1b99d8d3 (947394 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Deploy with a cleared Render build cache.
+# Pin 190 (2026-11-21): dist 8b8edb79 (build 44946699306; Zeolite
+# main e8f63699, all five jobs green). Release wave follow-up:
+# the release workflow package-naming and npm unpack fixes landed
+# on Zeolite main, only the embedded build id moves; no functional
+# change ships in the bundle.
+# sw.js fce0135d1b99d8d3 -> 7df24a17983a2c82 (947394 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Deploy with a cleared Render build cache.
+# Pin 191 (2026-11-21): dist 8f35da9 (build 44953221976; Zeolite
+# main 1184dfc, all five jobs green). The #703 apps-widget origin=
+# repair ships: the committed-query decode cedes /widget/app/so to
+# the widget surface, the guard arms on the riding zlNavh token,
+# and virtualOgsOrigin re-derives the page origin from the token
+# and strips every MAC-verifying zlNavh before upstream. Tagged
+# 3.4.4 (engine patch bump: a fix pin that changes engine bytes).
+# Cargo-side pin stays 5073f316 (no zeolite-server code change;
+# only the TS engine and the workspace version stamps moved).
+# sw.js 7df24a17983a2c82 -> 2ba4232414965a63 (947844 bytes);
+# bootstrap.js unchanged 0ddd6edd9485c8ab (51030 bytes).
+# Deploy with a cleared Render build cache.
+# Pin 192 (2026-11-22): dist 1048b03a (build 45026329077; Zeolite
+# main 3a0d54cd, all five jobs green). The Google/Outlook auth wave:
+# committed-query prel tails resolve against the parent document
+# (#708 bscframe handshake), the authorize-token rootHome recovery
+# and the MS iframe-request-id dedupe ship (#706 ESTS white page);
+# the #700 workers-grant fix rides the same bundle. Cargo-side pin
+# stays 5073f316 (no zeolite-server code change; app TS only).
+# sw.js 2ba4232414965a63 -> 733c925ba2fbc22e (950241 bytes);
+# bootstrap.js 0ddd6edd9485c8ab -> 0a3e47fd0bcfbba3 (51347 bytes).
+# Deploy with a cleared Render build cache.
+# Pin 193 (2026-11-22): dist b5818886 (build 45053752865; Zeolite
+# main f67eba38, all four jobs green). The egress switch wave rides
+# the bundle: epoxy transit owns the default egress path with the
+# active fingerprint UA wired into EpoxyClientOptions.user_agent and
+# a lazy client rebuild on change (#708), deployments announce the
+# public wisp through /build sjWisp=SCRAMJET_WISP_URL with the
+# engine-side zl:wispPrimary seam (#642 trusted egress), and the
+# #695 context-less realm fallback narrows to the CDN challenge arm.
+# Cargo-side pin stays 5073f316 (no zeolite-server code change; the
+# TS engine, transports and test mocks moved).
+# sw.js 733c925ba2fbc22e -> 97d0269a7ff264e7 (952889 bytes);
+# bootstrap.js unchanged 0a3e47fd0bcfbba3 (51347 bytes).
+# Pin 194 (2026-11-22): dist 493dc1ad (build 45067258713; Zeolite
+# main cbde9fc0, all five jobs green). The #711 C0 event-loop lag
+# instrument rides the bundle: the composition-root interval counts
+# the loop-lag sampler, zl:getDiag piggybacks the histogram (devtools
+# utf-8 ellipsis fix along), and the workspace version stamps to 3.4.5
+# Ferrierite, the pin-194 patch bump for the extensions member-slice
+# (#520/#523 wave-2 members shipped IN pin 194; only the bb71532 notifications member missed it and rides the next pin).
+# Cargo-side pin stays 5073f316 (no zeolite-server code change; app TS
+# and the workspace version stamps only moved).
+# sw.js 97d0269a7ff264e7 -> f7a3d29691b1847b (954413 bytes);
+# bootstrap.js unchanged 0a3e47fd0bcfbba3 (51347 bytes).
+# Deploy with a cleared Render build cache.
+# Pin 195 (2026-11-23): dist abf2399 (build 45130303332; Zeolite
+# main cf20acca, all five jobs green). Stack since pin 194: the #696
+# 4 MiB wasm AST bound, the #688 persistent asset cache, the #708
+# pre-dispatch netlog rows, the #516 member-gap reasons, and the
+# #519/#520/#523 extension member slices. sw.js sha re-derived
+# f7a3d29691b1847b -> a110739b1756ec01 (964648 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (no zeolite-server/wisp-core/wisp-extensions source change).
+# Pin 196 (2026-11-23): dist 2bbe5b88 (build 45137973707; Zeolite main
+# 6efdd5a1, all five jobs green). On top of pin 195 the epoxy transport
+# now rides the sha-pinned epoxy-tls fork artifact (lyrebird identity
+# seam, real-browser ClientHello shaping) with the UA-synced voice.
+# Pin 195's beta clearCache deploy failed the served-sha gate by
+# design: dist republished two minutes after the pin commits and the
+# builder fetches refs/heads/dist HEAD, so this pin takes the current
+# bundle on its own verified shas. sw.js re-derived
+# a110739b1756ec01 -> 4756af33df4de184 (964745 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (5209ad8d touched app, CI and docs only; no crate change).
+# Pin 197 (2026-11-23): dist 0e109fb3 (build 45148055568; Zeolite main
+# f76eee61, all five jobs green, the voice seam 85783e65 plus the
+# extensions removeCSS slice). On top of pin 196 the engine carries
+# the explicit TLS voice seam: the zl:fingerprint profile may now
+# carry tlsVoice (chromium | firefox | native; absent = UA-synced
+# derivation), applied on the next transport init; the beta UI ships
+# the Settings transit picker that pushes it. This pin also makes
+# the epoxy vendor honest: pin 196's comment claimed the fork
+# artifact but the RUN still copied the npm package, so the shipped
+# epoxy ignored the identity arm entirely. The vendor now fetches
+# the sha-pinned epoxy-tls fork artifact (lyrebird ClientHello
+# profiles) with a sha256sum gate. sw.js re-derived
+# 4756af33df4de184 -> 2e41369452f851c3 (973788 bytes), bootstrap.js
+# unchanged 0a3e47fd0bcfbba3 (51347 bytes). Cargo-side pin stays
+# 5073f316 (app TS and tests only; no crate changed).
+# Pin 198 (2026-11-23): dist 4dd6ed50 (build 45156263793; Zeolite
+# main e1c8a67d, all five jobs green): the Chromium-shaped h2
+# epoxy transport artifact plus the 0a5e7f82 breakout mark push
+# (#706) - the engine stamps the breakout-required mark into the
+# netlog and tracing ring and pushes zl:breakout with {dest, rule}
+# to the host pages, where the beta shell opens the real top-level
+# window. The epoxy-tls release moved under its tag (the h2
+# handshake bytes), so the vendor gates follow: epoxy.js
+# c3f79beb -> 5a707545 and epoxy.wasm 5bee4469 -> 9fcab511
+# (a rebuild with the old gate fails sha256sum -c honestly).
+# sw.js re-derived 2e41369452f851c3 -> 801a773ab7b21bb3
+# (974005 bytes), bootstrap.js unchanged 0a3e47fd0bcfbba3
+# (51347 bytes). Cargo-side pin stays 5073f316 (no crate changed).
+# Pin 199 (2026-11-23): dist 3322f39 (Zeolite 8e9f445 signed module runtime:
+# manifest schema, Ed25519 verify against compiled-in signer keys, modules idb
+# store install/revoke/revokeKey/list, boot bind seam with typed permission
+# gating, zl:modules* control verbs; c374c1d fixture trim; 2ce7b399 docs
+# alignment; run 45183716622 all five green). sw.js 801a773ab7b21bb3 ->
+# 23119912d4117837 (983330 bytes); bootstrap.js unchanged (0a3e47fd0bcfbba3).
+# Epoxy artifact pair unchanged (the Chromium-shaped h2 fix rides on):
+# epoxy.js 5a707545, epoxy.wasm 9fcab511. Cargo-side pin unchanged.
+# Pin 200 (2026-11-23): dist af80c688 (Zeolite 7eb4a1d: the #706 breakout
+# lane is removed end-to-end by operator order - the policy route and
+# validator, the three interactive-auth marks in policy.kdl, the
+# fetch-handler stamp and the zl:breakout host-page push, docs,
+# both breakout regression suites; run 45210987282 all five green).
+# sw.js 23119912d4117837 -> dd98f6516554b102 (982465 bytes);
+# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair
+# unchanged (epoxy.js 5a707545, epoxy.wasm 9fcab511). Cargo-side pin
+# unchanged.
+# Pin 201 (2026-11-24): dist 86876d7 (Zeolite 189a3fc9 coi arm: the
+# engine stamps cross-origin-embedder-policy: credentialless on its
+# worker-served responses when the host arms coi via zl:config - the
+# LB pair (server COI env arm behind ZL_CROSS_ORIGIN_ISOLATION plus
+# the App.tsx coi parity push) drives it; dist also carries aa8c994
+# devtools netlog wire-header and pre-dispatch stage (#713); run
+# 45391313372 all five green). sw.js dd98f6516554b102 ->
+# febbf2ba70635ebd (982741 bytes); bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy artifact pair unchanged (epoxy.js
+# 5a707545, epoxy.wasm 9fcab511). Cargo-side pin unchanged.
+# Pin 202 (2026-11-25): dist 56296e2 (Zeolite 9b4be2b #716 fingerprint
+# native-toString shield incl. worker script + userAgentData builders; ci
+# d328262 epoxy pair moved with #718 wire-shape fix - page headers lead,
+# accept-encoding gains deflate; run 45579574103 all five green). sw.js
+# febbf2ba70635ebd -> 52bac384b5c03014 (983968 bytes); bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy artifact pair moved with the #718 rebuild:
+# epoxy.js 5a707545 -> 0a632707, epoxy.wasm 9fcab511 -> 1f5588aa.
+# Cargo-side pin unchanged.
+# Pin 203 (2026-11-25): dist 4f5eb43 (Zeolite 76c4e7ee ci pair-pin
+# for the lyrebird ad1ef42 rebuild - the #712 conviction: lyrebird
+# statically offered TLS extensions rustls cannot honor (ALPS 0x44cd
+# and SCT 0x0012 on the brave profile, SCT plus delegated credentials
+# on firefox), so every real upstream aborted the epoxy handshake
+# with a fatal DecodeError alert while the tls.peet.ws CI oracle
+# never parsed those extensions and stayed green; lyrebird ad1ef42
+# drops them from the static profile arms and repins the fixtures;
+# run 45615585837 all five green). sw.js 52bac384b5c03014 ->
+# d4eff6408c0c32d5 (983968 bytes); bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy artifact pair moved with the rebuild:
+# epoxy.js 0a632707 -> b69924f0, epoxy.wasm 1f5588aa -> 675b4a6a.
+# Pin 204 (2026-11-25): dist 4ad22653 (Zeolite 0910233, the TLS
+# voice auto-fallback: a UA-derived epoxy voice whose shaped hello
+# is refused at the TLS layer - peer alert or handshake parse
+# failure, the #712 class - switches the worker to the native
+# hello and retries the request once, with a TRANSPORT diagnosis
+# event; an explicitly pinned voice keeps its honest failure;
+# workspace patch 3.4.6; run 45647908049 all five green). sw.js
+# d4eff6408c0c32d5 -> 18ae34eaa466e199 (984603 bytes);
+# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy artifact pair
+# unchanged (epoxy.js b69924f0, epoxy.wasm 675b4a6a).
+# Cargo-side pin unchanged.
+# Pin 205 (2026-11-25): epoxy glue pin only. The speed-build merge
+# (epoxy-tls multiplexed b9eeea0a, fork PR #1) adds the SPEED flag to
+# the glue info line; the shipped size variant is otherwise identical
+# (epoxy.wasm rebuilt byte-identical 675b4a6a, proven twice by CI), so
+# only the js gate moves: epoxy.js b69924f0 -> 09f8eb5a.
+# sw.js/bootstrap unchanged (18ae34eaa466e199/0a3e47fd0bcfbba3).
+# Cargo-side pin unchanged.
+# Pin 206 (2026-11-25): dist restamp ride after pin 205. Zeolite ci
+# run 45709794995 (the ci-side 09f8eb5a glue swing) republished dist
+# d87ae394; engine source unchanged, only the per-run build-id stamp
+# moved sw.js 18ae34eaa466e199 -> 930ea991ddd665b1 (984603 bytes).
+# bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair unchanged
+# (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
+# Pin 207 (2026-11-26): dist restamp ride after the Zeolite
+# mirror.yml removal. Zeolite ci run 45770306307 (b0b296c1, the
+# GitLab mirror workflow deletion - engine source unchanged)
+# republished dist 577030a6; only the per-run build-id stamp
+# moved sw.js 930ea991ddd665b1 -> e7093292fb3fd366 (984603
+# bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair
+# unchanged (epoxy.js 09f8eb5a, epoxy.wasm 675b4a6a).
+# Cargo-side pin unchanged.
+# Pin 208 (2026-11-26): Zeolite #721 - YouTube live_chat embed_domain=
+# loaders name the engine origin (LegacyUnforgeable hostname); the
+# request seam virtualizes embed_domain= to the embedding page's
+# hostname. Zeolite ci run 45778457137 (8ebf4091) republished dist
+# 0a3b8480; engine source changed, sw.js e7093292fb3fd366 ->
+# 9f3217905807e213 (985501 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,
+# epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
+# Pin 209 (2026-11-26): Zeolite #715 - the rewriter folds constant
+# computed location keys ('loc'+'ation', parenthesized literals,
+# no-substitution templates) to the virtual view, closing the
+# obfuscated computed-read gap behind the MI613e [13] sign-in
+# refusal; rules.kdl allows play.google.com fetch telemetry
+# (#720 hygiene). Zeolite ci run 45900040052 (0e18bc2e) republished
+# dist 1f0a4ef0; engine source changed, sw.js 9f3217905807e213 ->
+# 12c82b13f105c58b (985501 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 09f8eb5a,
+# epoxy.wasm 675b4a6a). Cargo-side pin unchanged.
+# Pin 210 (2026-11-26): epoxy per-identity h2 wire profiles - the
+# transport (epoxy-tls multiplexed 9f5f4c35, h2-wasm master 5d57b1d1)
+# wires EpoxyIdentity into the h2 fork's process-global client wire
+# profile: Native keeps the Chromium handshake shape shipped
+# 2026-11-23, Brave/Firefox speak their capture-pinned h2 handshakes
+# (lyrebird tools/capture/h2shapes.py). Zeolite ci run 45903412631
+# (01a35c72) republished dist 8720d9ed; build-stamp only, sw.js
+# 12c82b13f105c58b -> 8d4c26d1942efbfb (985501 bytes). bootstrap.js
+# unchanged (0a3e47fd0bcfbba3). Epoxy pair bumped (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin unchanged.
+# Pin 211 (2026-11-27): debugger wave slice 3 (Zeolite #723) - a
+# host-only zl:config bodyCapture toggle records the first 16KB of the
+# outgoing upstream request body, post-surgery, redacted at netLogPush,
+# surfaced in the devtools detail and the KDL export as request_body;
+# the #717 MI613e body discriminator for the Google sign-in chase.
+# Zeolite ci run 45960904023 (98a10d80) republished dist e2075e6c;
+# engine source changed, sw.js 8d4c26d1942efbfb -> d9dc95ab6a472a4d
+# (986261 bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy
+# pair unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side
+# pin unchanged.
+# Pin 212 (2026-11-27): Zeolite #708 - the bscframe same-origin
+# escape class: the Google sign-in page committed at the content
+# origin root with ?zlNavh= builds its botguard iframe with a
+# relative /_/bscframe src no rewriter arm minted; the
+# parser-initiated subframe navigation arrives context-less and the
+# SW answered "escape: same-origin unknown home", so the content
+# origin SPA catch-all served the LB shell into the botguard frame.
+# Fix: referrerDest (codec.ts) gains a query-handle arm - a bare
+# same-origin src resolves against the referrer's committed query
+# handle (MAC-verified, live-token-only, engine-shaped pathnames
+# refused, prel tails peeled), engine 3.4.8 -> 3.4.9 Ferrierite.
+# Zeolite ci run 46036186877 (97f2f358, test-contract fix abaa8788,
+# all five jobs green) republished dist 3106558e; engine source
+# changed, sw.js d9dc95ab6a472a4d -> 3c7ed692dce99520 (986261
+# bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair
+# unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side pin
+# unchanged.
+ARG ZEOLITE_COMMIT=3106558e0ca51e2525b12e0e6ba16f8f6320901c
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates npm \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /bundle
+# GitHub archive 503/504 truncations killed pin builds; the pipe to
+# tar also silently disables curl --retry (stdout is not rewindable), so
+# fetch to a file first, retry, then extract.
+# Per-sha archives 404 for CI-created dist commits (codeload cannot
+# generate them; the pin 171 deploy failed 5x404 on the archive/<sha>
+# URL). The dist branch head IS the pinned commit at bump time; the
+# sha-verification gate below fails the build honestly if it moved.
+RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /zlsrc.tar.gz "https://codeload.github.com/lobsterbs/Zeolite/tar.gz/refs/heads/dist" \
+ && tar xzf /zlsrc.tar.gz --strip-components=1 && rm -f /zlsrc.tar.gz
+# The libcurl transport (TLS termination for the wisp hop): pulled
+# from npm at build time, same pinned version the Zeolite CI vendors.
+RUN mkdir -p /bundle/libcurl \
+ && npm install --prefix /zlvendor --no-audit --no-fund @mercuryworkshop/libcurl-transport@2.0.5 \
+ && cp -r /zlvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/. /bundle/libcurl/
+# The epoxy transport (selectable second engine, Zeolite #64):
+# pulled from the lobsterbs/epoxy-tls fork artifact release, the
+# lyrebird-patched rustls that signs real-browser ClientHello
+# profiles (the identity arm: chromium, firefox, or native shapes).
+# Same never-committed vendoring rule as libcurl - the bundle is
+# AGPL-3.0-only, fetched pinned at build time only; the sha256 pair
+# IS the pin and the -c gate fails the build honestly if a release
+# asset moves. Same full variant the npm package exposed (the
+# WebSocket bridge + gzip/brotli + HTTP/2 sit behind "full"). The SW
+# resolves it at the origin root (/epoxy/epoxy.js + epoxy.wasm); the
+# server serves /epoxy from this bundle directory.
+RUN mkdir -p /bundle/epoxy \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /bundle/epoxy/epoxy.js "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.js" \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+      -o /bundle/epoxy/epoxy.wasm "https://github.com/lobsterbs/epoxy-tls/releases/download/zeolite/epoxy.wasm" \
+ && echo "633a94d51f22b6818fff80d5e5b07dd0abe43025d6bd5ef7e49f8603bc3040f2  /bundle/epoxy/epoxy.js" | sha256sum -c - \
+ && echo "6938320f271dd266e36a49dba5d43fba82e5797bae5a1589ecc4ba39b1f85ec6  /bundle/epoxy/epoxy.wasm" | sha256sum -c -
+
+# ScramJet engine bundle (upstream MercuryWorkshop, the newest
+# published build), vendored with the same never-committed rule as
+# the Zeolite bundle and served same-origin at /sj/. Pin:
+# scramjet 2.0.67-alpha.2 + controller 0.0.14 + utils 0.0.3 +
+# libcurl-transport 2.0.5 (the same libcurl pin the zl-builder
+# vendors). The controller worker scope is /sj/ (default from the
+# script path), so it never competes with the Zeolite root worker.
+# Bump these pins together with SCRAMJET_VERSION in the final stage.
+FROM node:22-slim AS sj-builder
+RUN npm install --prefix /sjvendor --no-audit --no-fund \
+      @mercuryworkshop/scramjet@2.0.67-alpha.2 \
+      @mercuryworkshop/scramjet-controller@0.0.14 \
+      @mercuryworkshop/scramjet-utils@0.0.3 \
+      @mercuryworkshop/libcurl-transport@2.0.5 \
+ && mkdir -p /sj \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.js /sj/scramjet.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet/dist/scramjet.wasm /sj/scramjet.wasm \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js /sj/controller.api.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js /sj/controller.inject.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-controller/dist/controller.sw.js /sj/controller.sw.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/scramjet-utils/dist/scramjet-utils.js /sj/scramjet-utils.js \
+ && cp /sjvendor/node_modules/@mercuryworkshop/libcurl-transport/dist/index.js /sj/libcurl-client.js 
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /build/target/release/lobster-server /app/lobster-server
+COPY --from=ui-builder /ui/dist /app/ui
+COPY --from=zl-builder /bundle /app/zlsw
+COPY --from=sj-builder /sj /app/sj
+# Bundle-stale alarm pins: sha256-8 prefixes of the dist artifacts at
+# ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
+# at startup and flags /build stale when the zl-builder layer cache
+# serves an older tarball.
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3c7ed692dce99520 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+# #129/#143: verify the SERVED artifacts against the pins at build
+# time: a mismatch (poisoned or stale cached tarball) fails the
+# Docker build itself instead of shipping silently. Stronger than
+# hashing the tarball: this proves what /zlsw/ actually serves.
+RUN set -e; \
+    sw_sha=$(sha256sum /app/zlsw/sw.js | cut -c1-16); \
+    boot_sha=$(sha256sum /app/zlsw/bootstrap.js | cut -c1-16); \
+    if [ "$sw_sha" != "$ZEOLITE_SW_SHA" ] || [ "$boot_sha" != "$ZEOLITE_BOOTSTRAP_SHA" ]; then \
+      echo "FATAL: zlsw bundle sha mismatch (sw $sw_sha, bootstrap $boot_sha)" >&2; \
+      exit 1; \
+    fi
+EXPOSE 6001
+# #132: drop root - the server needs no privilege to read /app.
+RUN useradd --system --uid 10001 --no-create-home appuser \
+ && chown -R appuser:appuser /app
+USER appuser
+ENTRYPOINT ["/app/lobster-server"]
+
+
+
