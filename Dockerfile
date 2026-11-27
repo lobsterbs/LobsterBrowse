@@ -2831,7 +2831,23 @@ FROM debian:bookworm-slim AS zl-builder
 # bytes). bootstrap.js unchanged (0a3e47fd0bcfbba3). Epoxy pair
 # unchanged (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side pin
 # unchanged.
-ARG ZEOLITE_COMMIT=3106558e0ca51e2525b12e0e6ba16f8f6320901c
+# Pin 213 (2026-11-27): Zeolite #708 recurrence - the pin-212 referrer
+# query-handle arm fires only when the subframe navigation carries a
+# decodable referrer; the run-8 live capture shows the botguard
+# /_/bscframe navigation arrives with neither a bearing clientId nor
+# any decodable referrer, so the escape still served the host SPA
+# catch-all into the botguard frame. Fix: navRealmDest (vctx.ts) - a
+# GET iframe-navigation-only fallback resolving the bare same-origin
+# path against the unambiguous live window realm (#687 rule: every
+# live window context on one upstream origin, else the honest escape);
+# engine assets and the boot guest-host page never ride the arm.
+# Engine 3.4.9 Ferrierite -> 3.4.10 Gismondine. Zeolite ci run
+# 46045468976 (f0cc1efc, all five jobs green) republished dist
+# 460cdaee; engine source changed, sw.js 3c7ed692dce99520 ->
+# eb21169240e8c3cd (986615 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=f0cc1efce83697b7c2ae3eece2652f3082fa81fd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2906,7 +2922,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=3c7ed692dce99520 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=eb21169240e8c3cd ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
