@@ -17,7 +17,7 @@ import {
 } from "./settings";
 import * as store from "./store";
 import { parseTabsCreateOp, toTabsUi } from "./browser/tabsHost";
-import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
+import { engineSwSource, zlContentConfig, zlContentOrigin, zlContentQuery, zlContentRegister, zlGuestHost, zlRelayInit, zlSend, zlAnnounceContentOrigin, zlWispAuthArm, zlWispInit } from "./zeolite";
 import { parseNavTab } from "./frameNav";
 import { sjInit } from "./scramjet";
 import { createPortal } from "react-dom";
@@ -616,21 +616,25 @@ export default function App() {
        mid-session restart must re-send both, not just the next
        settings edit. */
     const post = () => {
-      void zlSend({ type: "zl:adblock", enabled: settings.adblock }, 8000);
-      void zlSend(
-        {
-          type: "zl:rules",
-          /* Hosts without a rule get the resolved global UA
-             (resolveUa with no rule hit). */
-          ua: resolveUa(settings, rules, "") ?? undefined,
-          rules: rules.map((r) => ({
-            host: r.domain,
-            adblock: r.adblock === false ? false : undefined,
-            ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
-          })),
-        },
-        8000,
-      );
+      const adblockMsg = { type: "zl:adblock", enabled: settings.adblock };
+      const rulesMsg = {
+        type: "zl:rules",
+        /* Hosts without a rule get the resolved global UA
+           (resolveUa with no rule hit). */
+        ua: resolveUa(settings, rules, "") ?? undefined,
+        rules: rules.map((r) => ({
+          host: r.domain,
+          adblock: r.adblock === false ? false : undefined,
+          ua: r.uaPreset ? resolveUa(settings, rules, r.domain) ?? undefined : undefined,
+        })),
+      };
+      /* #286: the content worker rewrites and serves every proxied
+         document on split-origin deployments, so these control-plane
+         pushes must reach it too (the zl:wispAuth parity pattern). */
+      void zlSend(adblockMsg, 8000);
+      void zlSend(rulesMsg, 8000);
+      void zlContentQuery(adblockMsg, 8000);
+      void zlContentQuery(rulesMsg, 8000);
     };
     post();
     navigator.serviceWorker?.addEventListener("controllerchange", post);
@@ -702,16 +706,28 @@ export default function App() {
      sanely. */
   useEffect(() => {
     const post = () => {
-      void zlSend({ type: "zl:sameSite", policy: settings.sameSitePolicy }, 8000);
+      const sameSiteMsg = { type: "zl:sameSite", policy: settings.sameSitePolicy };
+      /* #286: the content worker serves every proxied document on
+         split-origin deployments; without this relay its fingerprint
+         profile stays unset, the JS client-hints surface stays native
+         and contradicts the profile the wire claims. */
+      void zlSend(sameSiteMsg, 8000);
+      void zlContentQuery(sameSiteMsg, 8000);
       /* The fingerprint profile picker is gone from Settings; the
          default match-the-User-Agent profile is always on. */
       const profile = { userAgent: resolveUa(settings, rules, "") ?? navigator.userAgent };
-      void zlSend({ type: "zl:fingerprint", profile }, 8000).then((r) => {
+      const fpMsg = { type: "zl:fingerprint", profile };
+      void zlSend(fpMsg, 8000).then((r) => {
         /* A rejected profile must not silently read as spoofed: the
            engine answers ok:false (e.g. a custom UA it cannot derive a
            platform from) and the toggle would lie. */
         if (profile && r && r.ok === false) {
           store.pushLog("warn", "zeolite rejected the fingerprint profile: " + String(r.error ?? "unknown reason"));
+        }
+      });
+      void zlContentQuery(fpMsg, 8000).then((r) => {
+        if (profile && r && r.ok === false) {
+          store.pushLog("warn", "zeolite content worker rejected the fingerprint profile: " + String(r.error ?? "unknown reason"));
         }
       });
     };
