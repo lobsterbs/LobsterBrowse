@@ -709,6 +709,13 @@ export function zlContentRegState(): "none" | "ready" | "failed" {
 }
 
 export async function zlContentConfig(cfg: Record<string, unknown>): Promise<boolean> {
+  /* #286 recurrence (boot race): the parity effects fire at mount,
+     before the /build fetch announces the content origin; reading
+     contentOrigin before the announce silently returns false and the
+     push is never retried. Wait for the announce first - it resolves
+     with "" on single-origin deployments, so the empty-origin path
+     below still holds, and instantly when already announced. */
+  await zlContentAnnounced();
   await zlContentReady();
   const co = contentOrigin;
   const w = contentFrameWin;
@@ -756,6 +763,12 @@ export async function zlContentQuery(
   msg: Record<string, unknown>,
   boundMs = 8000,
 ): Promise<Record<string, unknown> | null> {
+  /* #286 recurrence (boot race): mount-time control pushes (config,
+     adblock, rules, sameSite, fingerprint) arrive before the /build
+     announce; without this wait they read an empty contentOrigin,
+     silently return null and the content worker never receives them
+     on a fresh session. */
+  await zlContentAnnounced();
   await zlContentReady();
   const co = contentOrigin;
   const w = contentFrameWin;
