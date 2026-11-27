@@ -1,4 +1,4 @@
-
+successfully downloaded text file (SHA: c53d96372d26ae51924477b6c1cb710c5b5bf605)
 
 
 # syntax=docker/dockerfile:1
@@ -2772,6 +2772,26 @@ FROM debian:bookworm-slim AS zl-builder
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin follows the 3.4.11 workspace
 # version bump.
+# Pin 216 (2026-11-27): Zeolite #725 - origin-computing page code
+# (Google sign-in BotGuard) read the engine content origin off the
+# renamed location members, so the attestation and RPC bodies named
+# lobsterbrowse-content-t189 instead of accounts.google.com (the
+# lab-convicted MI613e(13) quiet-refusal lane, evidence #714).
+# siteconfig gains location-origin "virtual" (accounts.google.com
+# only): the __zl origin members report the #130 marker's true
+# upstream origin, lazy and fail-closed; internal re-anchoring
+# keeps the native engine origin; the adopted /_/bscframe realm
+# resolves its virtual origin from the destination the #708 nav
+# seam recorded (worker memory, bounded LRU). Honest residual:
+# bare location reads inside runtime-eval'd strings (the bg VM)
+# stay native. Engine 3.4.12 Heulandite -> 3.4.13 Stilbite.
+# Zeolite ci run 46079845358 (045bc95b, all five jobs green)
+# republished dist 2ed935f7; sw.js f9f8a74a9a2deb29 ->
+# e470d89e93be2d29 (988707 bytes). bootstrap.js 0a3e47fd0bcfbba3
+# -> e977606194ae26e9 (the vloc origin members grew the artifact;
+# Zeolite bootstrap budget 51600 -> 52224). Epoxy pair unchanged
+# (epoxy.js 633a94d5, epoxy.wasm 6938320f). Cargo-side pin
+# unchanged.
 # Pin 215 (2026-11-27): Zeolite #540 follow-up - the pin-214
 # instance patch never reached later reads: Chromium hands out a
 # fresh NavigatorUAData on every navigator.userAgentData read, so
@@ -2785,7 +2805,7 @@ FROM debian:bookworm-slim AS zl-builder
 # f9f8a74a9a2deb29 (988097 bytes). bootstrap.js unchanged
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=9e41ca41a1fe852bc33d69dfb7e83646aa83760a
+ARG ZEOLITE_COMMIT=2ed935f785c1a2d49fa0410d448214ed70c23479
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2860,7 +2880,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f9f8a74a9a2deb29 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e470d89e93be2d29 ZEOLITE_BOOTSTRAP_SHA=e977606194ae26e9 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
