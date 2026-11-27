@@ -1,6 +1,3 @@
-successfully downloaded text file (SHA: c53d96372d26ae51924477b6c1cb710c5b5bf605)
-
-
 # syntax=docker/dockerfile:1
 # Multi-stage build for the LobsterBrowse single-site service:
 # the Rust Wisp server and the static M3E UI it serves from one origin.
