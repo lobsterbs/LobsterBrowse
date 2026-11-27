@@ -2847,7 +2847,31 @@ FROM debian:bookworm-slim AS zl-builder
 # eb21169240e8c3cd (986615 bytes). bootstrap.js unchanged
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=f0cc1efce83697b7c2ae3eece2652f3082fa81fd
+# Pin 214 (2026-11-27): Zeolite #540 + LB #286 - the JS client-hints
+# surface contradicted the wire: run-9 showed the upstream request
+# carrying sec-ch-ua "Google Chrome";v="159" while the page's
+# getHighEntropyValues answered native Chromium-only brands, because
+# on split-origin deployments the zl:fingerprint push never reached
+# the content worker that serves every proxied document. Fixes:
+# ui/src/App.tsx relays zl:fingerprint/zl:sameSite/zl:adblock/zl:rules
+# through zlContentQuery too (the zl:wispAuth parity pattern, both
+# channels' replies checked); Zeolite useragent.ts derives
+# platformVersion (Windows NT 10.0 -> 10.0.0, Android -> N.0.0,
+# Mac OS X -> X.Y.Z), model "" on desktop and wow64 false on Win64,
+# and takes a same-major fullVersionHint so a reduced Chrome/159.0.0.0
+# claim reports the runtime's real 4-part build instead of the
+# implausible 159.0.0.0; origin.ts applyChUa serves
+# sec-ch-ua-platform-version/-model/-wow64 when requested;
+# fingerprint.ts bakes the hint at both userAgentDataScript compile
+# sites so page and wire stay in exact agreement.
+# Engine 3.4.10 Gismondine -> 3.4.11 Harmotome. Zeolite ci run
+# 46052007439 (da069b44, all five jobs green) republished dist
+# d0fdd141; engine source changed, sw.js eb21169240e8c3cd ->
+# e1695085ff39e88d (987663 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin follows the 3.4.11 workspace
+# version bump.
+ARG ZEOLITE_COMMIT=da069b4497825383a02e9add100971754f83b8fe
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2922,7 +2946,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=eb21169240e8c3cd ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e1695085ff39e88d ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
