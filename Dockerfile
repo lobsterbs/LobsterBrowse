@@ -2772,7 +2772,20 @@ FROM debian:bookworm-slim AS zl-builder
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin follows the 3.4.11 workspace
 # version bump.
-ARG ZEOLITE_COMMIT=da069b4497825383a02e9add100971754f83b8fe
+# Pin 215 (2026-11-27): Zeolite #540 follow-up - the pin-214
+# instance patch never reached later reads: Chromium hands out a
+# fresh NavigatorUAData on every navigator.userAgentData read, so
+# the compiled script now patches the shared prototype (guarded
+# against a base Object.prototype, staying native on shims), and
+# every fresh instance reports the persona brands end to end; the
+# vm test stubs got real class shapes so the patch cannot land on
+# the host Object.prototype. Engine 3.4.11 Harmotome -> 3.4.12
+# Heulandite. Zeolite ci run 46058465005 (8856b6c9, all five jobs
+# green) republished dist 9e41ca41; sw.js e1695085ff39e88d ->
+# f9f8a74a9a2deb29 (988097 bytes). bootstrap.js unchanged
+# (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin unchanged.
+ARG ZEOLITE_COMMIT=9e41ca41a1fe852bc33d69dfb7e83646aa83760a
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2847,7 +2860,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e1695085ff39e88d ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=f9f8a74a9a2deb29 ZEOLITE_BOOTSTRAP_SHA=0a3e47fd0bcfbba3 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
