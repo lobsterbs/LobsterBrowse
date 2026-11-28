@@ -2769,6 +2769,25 @@ FROM debian:bookworm-slim AS zl-builder
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin follows the 3.4.11 workspace
 # version bump.
+# Pin 217 (2026-11-28): Zeolite #708 race fix - the nav-realm
+# unambiguity rule failed closed whenever the sign-in page's
+# accounts.youtube.com CheckConnection iframe (itself an
+# iframe-destination navigation, so the establish seam installs a
+# window context for it) landed before the botguard /_/bscframe
+# navigation, so the frame escaped to the origin SPA shell (live
+# runs 10, 11, 12; run 9 resolved only because its warm page cache
+# ordered the race the other way). navRealmDest now tiers: contexts
+# stamped subframe (destination iframe at both establish seams,
+# frameType nested at rehydration) are children of the tab's
+# proxied surface, not independent surfaces, so the tiered pass
+# skips them before failing; the cdn-cgi capability arm stays
+# strict and two top-level windows on different origins still
+# fail closed. Engine 3.4.13 Stilbite -> 3.4.14 Thomsonite.
+# Zeolite ci run 46143572899 (9625aa06, all five jobs green)
+# republished dist 7e1e9f3b; sw.js e470d89e93be2d29 ->
+# d6754eb5ed786e1a (988913 bytes). bootstrap.js unchanged
+# (e977606194ae26e9). Epoxy pair unchanged (epoxy.js 633a94d5,
+# epoxy.wasm 6938320f). Cargo-side pin unchanged.
 # Pin 216 (2026-11-27): Zeolite #725 - origin-computing page code
 # (Google sign-in BotGuard) read the engine content origin off the
 # renamed location members, so the attestation and RPC bodies named
@@ -2802,7 +2821,7 @@ FROM debian:bookworm-slim AS zl-builder
 # f9f8a74a9a2deb29 (988097 bytes). bootstrap.js unchanged
 # (0a3e47fd0bcfbba3). Epoxy pair unchanged (epoxy.js 633a94d5,
 # epoxy.wasm 6938320f). Cargo-side pin unchanged.
-ARG ZEOLITE_COMMIT=2ed935f785c1a2d49fa0410d448214ed70c23479
+ARG ZEOLITE_COMMIT=7e1e9f3b53e31aa6f64ffaefd9dfc9c8daa8a041
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates npm \
  && rm -rf /var/lib/apt/lists/*
@@ -2877,7 +2896,7 @@ COPY --from=sj-builder /sj /app/sj
 # ZEOLITE_COMMIT above (sw.js, bootstrap.js). The server compares them
 # at startup and flags /build stale when the zl-builder layer cache
 # serves an older tarball.
-ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=e470d89e93be2d29 ZEOLITE_BOOTSTRAP_SHA=e977606194ae26e9 SCRAMJET_VERSION=2.0.67-alpha.2
+ENV PORT=6001 WISP_PATH=/wisp/ ZEOLITE_SW_SHA=d6754eb5ed786e1a ZEOLITE_BOOTSTRAP_SHA=e977606194ae26e9 SCRAMJET_VERSION=2.0.67-alpha.2
 # #129/#143: verify the SERVED artifacts against the pins at build
 # time: a mismatch (poisoned or stale cached tarball) fails the
 # Docker build itself instead of shipping silently. Stronger than
