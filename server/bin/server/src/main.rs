@@ -3327,8 +3327,8 @@ fn zeolite_version(js: &str) -> String {
             continue;
         }
         /* #287: engine versions are three-component
-           ("MAJOR.MINOR.PATCH Substance"), so an optional second
-           dot-digit group sits between the minor and the space. */
+        ("MAJOR.MINOR.PATCH Substance"), so an optional second
+        dot-digit group sits between the minor and the space. */
         if p < b.len() && b[p] == b'.' {
             p += 1;
             let start_patch = p;
@@ -4163,7 +4163,8 @@ mod version_tests {
         // ("MAJOR.MINOR.PATCH Substance") for a long time; the live
         // 3.4.13 and 3.4.14 dist bundles both reported "unknown"
         // under the two-component scan.
-        let js = r#"const fe=[];const pt="3.4.14 Thomsonite";console.info("[Zeolite] runtime "+pt);"#;
+        let js =
+            r#"const fe=[];const pt="3.4.14 Thomsonite";console.info("[Zeolite] runtime "+pt);"#;
         assert_eq!(zeolite_version(js), "3.4.14 Thomsonite");
         assert_eq!(zeolite_version("x=\"3.4.13 Stilbite\";"), "3.4.13 Stilbite");
         assert_eq!(zeolite_version("x=\"1.10 Fullerene\";"), "1.10 Fullerene");
