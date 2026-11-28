@@ -3292,8 +3292,9 @@ async fn build_endpoint(headers: axum::http::HeaderMap) -> Response {
 }
 
 /// Zeolite version out of the vendored engine worker source. The dist
-/// sw.js keeps its identity as the only quoted "MAJOR.MINOR Substance"
-/// string (e.g. "1.0 Nitride"). The scan anchors the shape check at
+/// sw.js keeps its identity as the only quoted "MAJOR.MINOR[.PATCH]
+/// Substance" string (e.g. "3.4.14 Thomsonite"; the patch group is
+/// optional, "1.0 Nitride" stays readable). The scan anchors the shape check at
 /// every quote: pairing quotes (split parity or quote-to-quote
 /// skipping) desyncs on real minified bundles, whose escaped and
 /// unpaired quotes made both earlier cuts report "unknown" against a
@@ -3321,7 +3322,25 @@ fn zeolite_version(js: &str) -> String {
         while p < b.len() && b[p].is_ascii_digit() {
             p += 1;
         }
-        if p == start_min || p >= b.len() || b[p] != b' ' {
+        if p == start_min {
+            i += 1;
+            continue;
+        }
+        /* #287: engine versions are three-component
+           ("MAJOR.MINOR.PATCH Substance"), so an optional second
+           dot-digit group sits between the minor and the space. */
+        if p < b.len() && b[p] == b'.' {
+            p += 1;
+            let start_patch = p;
+            while p < b.len() && b[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == start_patch {
+                i += 1;
+                continue;
+            }
+        }
+        if p >= b.len() || b[p] != b' ' {
             i += 1;
             continue;
         }
@@ -4136,6 +4155,18 @@ mod version_tests {
             "unknown"
         );
         assert_eq!(zeolite_version(""), "unknown");
+    }
+
+    #[test]
+    fn reads_the_three_component_identity() {
+        // #287: engine versions have been three-component
+        // ("MAJOR.MINOR.PATCH Substance") for a long time; the live
+        // 3.4.13 and 3.4.14 dist bundles both reported "unknown"
+        // under the two-component scan.
+        let js = r#"const fe=[];const pt="3.4.14 Thomsonite";console.info("[Zeolite] runtime "+pt);"#;
+        assert_eq!(zeolite_version(js), "3.4.14 Thomsonite");
+        assert_eq!(zeolite_version("x=\"3.4.13 Stilbite\";"), "3.4.13 Stilbite");
+        assert_eq!(zeolite_version("x=\"1.10 Fullerene\";"), "1.10 Fullerene");
     }
 }
 
